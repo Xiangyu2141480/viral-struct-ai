@@ -17,3 +17,12 @@ covers
 *.mkv
 *.avi
 *.webm
+
+# Build and cache artifacts
+.turbo/
+**/.turbo/
+*.tsbuildinfo
+apps/web/.next/
+apps/api/dist/
+packages/shared/dist/
+packages/remotion-video/dist/
