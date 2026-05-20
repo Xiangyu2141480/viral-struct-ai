@@ -25,7 +25,94 @@ export type GapRepairStrategy =
   | 'cta_card'
   | 'crop_zoom'
   | 'reuse_asset'
-  | 'aigc_background';
+  | 'aigc_background'
+  | 'aigc_voiceover'
+  | 'hand_demo'
+  | 'product_closeup_replacement'
+  | 'texture_card'
+  | 'swatch_card'
+  | 'before_after_card'
+  | 'trust_card'
+  | 'style_filter_suggestion'
+  | 'ask_user_for_human_demo';
+
+export type CreativeIngredientType =
+  | 'human_presence'
+  | 'face_closeup'
+  | 'host_talking'
+  | 'hand_demo'
+  | 'beauty_demo'
+  | 'makeup_application'
+  | 'skin_texture_display'
+  | 'before_after_comparison'
+  | 'product_closeup_trait'
+  | 'texture_display'
+  | 'swatch_demo'
+  | 'scene_style'
+  | 'soft_light'
+  | 'clean_background'
+  | 'premium_visual'
+  | 'trust_building'
+  | 'social_proof'
+  | 'professional_review'
+  | 'lifestyle_context'
+  | 'unknown';
+
+export type IngredientTransferability =
+  | 'directly_transferable'
+  | 'requires_user_asset'
+  | 'can_be_recreated_by_packaging'
+  | 'can_be_replaced_by_repair'
+  | 'not_transferable';
+
+export type HumanRole = 'host' | 'model' | 'user' | 'hand_only' | 'none';
+
+export type AssetHumanRole = Exclude<HumanRole, 'none'> | 'unknown';
+
+export type HumanFraming =
+  | 'face_closeup'
+  | 'half_body'
+  | 'full_body'
+  | 'hands'
+  | 'skin_macro'
+  | 'product_only';
+
+export type HumanAction =
+  | 'talking'
+  | 'applying_product'
+  | 'showing_result'
+  | 'swatching'
+  | 'holding_product'
+  | 'none';
+
+export type AssetHumanAction = Exclude<HumanAction, 'none'>;
+
+export type VisualStyleTag =
+  | 'soft_light'
+  | 'clean_background'
+  | 'premium_visual'
+  | 'lifestyle_context'
+  | 'beauty_style'
+  | 'professional_review';
+
+export type CreativeIngredientEvidence = {
+  type: 'frame' | 'timestamp' | 'transcript' | 'model_observation';
+  value: string;
+};
+
+export interface CreativeIngredient {
+  id: string;
+  type: CreativeIngredientType;
+  name: string;
+  description: string;
+  segmentIds: string[];
+  requiredForSlotIds: string[];
+  transferability: IngredientTransferability;
+  requiredAssets?: string[];
+  fallbackStrategies: GapRepairStrategy[];
+  evidence: CreativeIngredientEvidence[];
+  confidence: number;
+}
 
 export interface VideoMetadata {
   videoId: string;
@@ -87,7 +174,15 @@ export interface ShotSlotNode {
     motion?: 'static' | 'push_in' | 'pan' | 'fast_cut' | 'hand_operation' | 'unknown';
     minDuration?: number;
   };
+  visualIngredientRequirements?: CreativeIngredientType[];
+  humanRequirement?: {
+    required: boolean;
+    role?: HumanRole;
+    framing?: HumanFraming;
+    action?: HumanAction;
+  };
   fallbackStrategies: GapRepairStrategy[];
+  importance?: 1 | 2 | 3 | 4 | 5;
 }
 
 export interface RhythmStructure {
@@ -125,6 +220,7 @@ export interface ViralStructureGraph {
   shotSlots: ShotSlotNode[];
   rhythm: RhythmStructure;
   packaging: PackagingStructure;
+  creativeIngredients: CreativeIngredient[];
   edges: GraphEdge[];
 }
 
@@ -147,22 +243,50 @@ export interface AssetCard {
   detectedObjects: string[];
   suitableSlots: ShotSlotRole[];
   qualityScore: number;
+  detectedIngredients?: CreativeIngredientType[];
+  humanPresence?: {
+    hasHuman: boolean;
+    role?: AssetHumanRole;
+    framing?: HumanFraming[];
+    actions?: AssetHumanAction[];
+  };
+  visualStyleTags?: VisualStyleTag[];
 }
 
 export interface SlotMatch {
   slotId: string;
   assetId?: string;
   score: number;
+  ingredientMatchScore?: number;
+  missingIngredients?: CreativeIngredientType[];
   status: 'matched' | 'partial' | 'missing';
   reason: string;
 }
 
+export type MaterialGapType =
+  | 'missing_opening_visual'
+  | 'missing_product_closeup'
+  | 'missing_usage_demo'
+  | 'missing_comparison'
+  | 'missing_cta_visual'
+  | 'missing_human_host'
+  | 'missing_face_closeup'
+  | 'missing_usage_action'
+  | 'missing_beauty_demo'
+  | 'missing_before_after'
+  | 'missing_trust_element'
+  | 'missing_scene_style'
+  | 'missing_visual_ingredient';
+
 export interface MaterialGap {
   slotId: string;
   role: ShotSlotRole;
+  type?: MaterialGapType;
   severity: 'low' | 'medium' | 'high';
   reason: string;
   impact: string;
+  affectedSegmentId?: string;
+  missingIngredients?: CreativeIngredientType[];
 }
 
 export interface GapRepair {

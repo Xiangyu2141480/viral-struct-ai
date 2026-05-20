@@ -62,6 +62,23 @@ VideoAnalysis
   -> QualityReport
 ```
 
+`ViralStructureGraph` 现在还必须包含：
+
+```txt
+creativeIngredients
+```
+
+这一层也可以在产品话术中称为 visualTraits，用于描述样例视频中的可迁移创作要素，例如真人出镜、脸部近景、上脸试用、妆效对比、手部试色、柔光画面、干净背景、场景风格和信任建立方式。
+
+重要边界：
+
+```txt
+creativeIngredients 不是颜值识别，不允许做 beauty_score、美女程度、颜值评分等字段或结论。
+系统识别的是中性的画面创作条件、人物出镜方式、动作方式、场景风格和信任建立方式。
+```
+
+这些要素必须参与 ShotSlotNode 的素材要求、AssetCard 的素材理解、SlotMatch 的匹配评分、MaterialGap 的缺口识别、GapRepair 的补全策略，以及 `/graph` 和 `/gaps` 的可视化展示。
+
 ## 4. 必须优先覆盖的评分点
 
 优先级从高到低：
@@ -123,6 +140,15 @@ real mode 用于展示技术能力。
 系统为什么认为缺
 系统选择了什么补全策略
 最终时间线如何生成
+```
+
+新增 creativeIngredients 后，还必须让评委看见：
+
+```txt
+样例中有哪些爆款视频要素
+这些要素需要什么用户素材
+当前素材满足了哪些要素
+缺失的人物出镜、动作、对比或场景风格如何补全或降级
 ```
 
 ## 9. 推荐 Prompt 原则

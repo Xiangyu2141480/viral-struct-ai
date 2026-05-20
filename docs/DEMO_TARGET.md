@@ -67,6 +67,7 @@ Hook -> 痛点 -> 卖点 -> 证明 -> CTA
 
 - 节奏结构
 - 包装结构
+- 爆款视频要素：真人出镜、脸部近景、手部试色、试用动作、柔光画面、信任建立方式
 - 封面风格
 - 转场建议
 - 字幕密度
@@ -98,6 +99,25 @@ Hook -> 痛点 -> 卖点 -> 证明 -> CTA
   -> fallback: cta_card
 ```
 
+同时展示 Creative Ingredients：
+
+```txt
+[真人博主近脸出镜]
+  -> required asset: 授权真人口播或近脸演示素材
+  -> affects: Hook / 使用过程 / CTA
+  -> fallback: ask_user_for_human_demo / product_closeup_replacement / caption_rewrite
+
+[上脸试用展示]
+  -> required asset: 上脸试用、手部试色或前后对比素材
+  -> affects: 使用过程 / 证明
+  -> fallback: hand_demo / swatch_card / before_after_card
+
+[柔光高亮画面]
+  -> required asset: 柔光拍摄、干净背景或高质感产品特写
+  -> affects: 商品特写 / 结果展示
+  -> fallback: style_filter_suggestion / product_closeup_replacement
+```
+
 ### Step 4：输入新商品和素材
 
 展示用户只上传了少量素材。
@@ -112,6 +132,15 @@ Hook -> 痛点 -> 卖点 -> 证明 -> CTA
 文案：适合脚本和字幕生成
 ```
 
+同时展示要素检测：
+
+```txt
+产品图：detectedIngredients = product_closeup_trait / clean_background
+手持图：detectedIngredients = hand_demo / product_closeup_trait
+文案：detectedIngredients = trust_building
+缺少：human_presence / face_closeup / beauty_demo / before_after_comparison
+```
+
 ### Step 6：缺口识别
 
 展示 GapBoard：
@@ -123,6 +152,15 @@ Hook -> 痛点 -> 卖点 -> 证明 -> CTA
 | 使用过程 | 操作视频 | 手持图 | partial |
 | 对比证明 | 对比镜头 | 无 | missing |
 | CTA | 结尾镜头 | 无 | missing |
+
+要素缺口：
+
+| 缺失要素 | 影响段落 | 补全方式 |
+|---|---|---|
+| 真人博主近脸出镜 | Hook / 使用过程 | 补拍授权口播，或降级为产品特写 + 字幕 |
+| 上脸试用展示 | 使用过程 / 证明 | 手部试色、试色卡、before_after_card |
+| 妆前妆后对比 | 证明 | comparison_card / before_after_card |
+| 柔光高质感画面 | 商品特写 | style_filter_suggestion |
 
 ### Step 7：补全策略
 
@@ -178,3 +216,7 @@ Hook -> 痛点 -> 卖点 -> 证明 -> CTA
 ## 4. 答辩核心话术
 
 > 我们不是复制爆款视频，而是把爆款里的创作结构抽象成可迁移的 ViralStructureGraph。系统会把结构映射到新商品和用户素材上，并检查每个结构槽位是否有素材支撑。当素材不足时，系统会通过标题卡、卖点卡、裁切放大、字幕补全、对比卡和 CTA 卡等方式补全，最后生成脚本、分镜、时间线和可播放 demo。
+
+新增 creativeIngredients 后的补充话术：
+
+> 除了 Hook、节奏和包装，我们还会抽取真人出镜、脸部近景、上脸试用、手部试色、妆效对比、柔光画面和信任口播等创作要素。这不是颜值评分，而是判断新素材是否具备同样创作条件；缺失时系统会建议补拍、手部替代、对比卡或字幕包装等安全补全方案。

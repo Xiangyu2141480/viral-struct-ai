@@ -89,6 +89,9 @@ ViralStructureGraph
 - 脚本结构：Hook / 痛点 / 卖点 / 证明 / CTA
 - 节奏结构：镜头频率、快慢段、高潮位置
 - 包装结构：字幕密度、标题条、卖点卡、转场、封面风格
+- 爆款视频要素：真人出镜、脸部近景、上脸试用、妆效对比、手部试色、柔光画面、场景风格、信任建立方式
+
+注意：爆款视频要素层用于识别可迁移的创作条件，不用于评价人的外貌。不要设计或输出 `beauty_score`、美女程度、颜值评分等字段。
 
 ### 4.3 Asset Analyzer
 
@@ -105,6 +108,8 @@ AssetCard
 - 素材类型
 - 空间描述
 - 时间动作描述
+- 检测到的创作要素：human_presence / face_closeup / beauty_demo / soft_light 等
+- 人物出镜方式：是否有人、是否手部、是否近脸、是否在讲解或试用
 - 适合的结构槽位
 - 质量分
 - 是否适合做 Hook / 商品特写 / 使用过程 / 对比 / CTA
@@ -132,6 +137,17 @@ matched / partial / missing
 5. 裁切放大和现有素材复用
 6. 字幕和文案补全
 7. AIGC 背景或封面补全
+
+对 creativeIngredients 缺失的推荐策略：
+
+```txt
+缺真人博主出镜：ask_user_for_human_demo / product_closeup_replacement / caption_rewrite / trust_card
+缺上脸试用：hand_demo / swatch_card / before_after_card / caption_rewrite
+缺妆前妆后：before_after_card / comparison_card
+缺柔光高质感：style_filter_suggestion / product_closeup_replacement
+```
+
+不要默认用 AIGC 生成真人替代。涉及虚拟人物或模特时，必须要求用户授权并确认素材权利。
 
 ### 4.6 Timeline Generator
 

@@ -20,6 +20,125 @@ export const ShotSlotRoleSchema = z.enum([
   'cta_visual'
 ]);
 
+export const GapRepairStrategySchema = z.enum([
+  'structure_reorder',
+  'caption_rewrite',
+  'text_card',
+  'selling_point_card',
+  'comparison_card',
+  'cta_card',
+  'crop_zoom',
+  'reuse_asset',
+  'aigc_background',
+  'aigc_voiceover',
+  'hand_demo',
+  'product_closeup_replacement',
+  'texture_card',
+  'swatch_card',
+  'before_after_card',
+  'trust_card',
+  'style_filter_suggestion',
+  'ask_user_for_human_demo'
+]);
+
+export const CreativeIngredientTypeSchema = z.enum([
+  'human_presence',
+  'face_closeup',
+  'host_talking',
+  'hand_demo',
+  'beauty_demo',
+  'makeup_application',
+  'skin_texture_display',
+  'before_after_comparison',
+  'product_closeup_trait',
+  'texture_display',
+  'swatch_demo',
+  'scene_style',
+  'soft_light',
+  'clean_background',
+  'premium_visual',
+  'trust_building',
+  'social_proof',
+  'professional_review',
+  'lifestyle_context',
+  'unknown'
+]);
+
+export const IngredientTransferabilitySchema = z.enum([
+  'directly_transferable',
+  'requires_user_asset',
+  'can_be_recreated_by_packaging',
+  'can_be_replaced_by_repair',
+  'not_transferable'
+]);
+
+export const HumanRoleSchema = z.enum(['host', 'model', 'user', 'hand_only', 'none']);
+export const AssetHumanRoleSchema = z.enum(['host', 'model', 'user', 'hand_only', 'unknown']);
+export const HumanFramingSchema = z.enum([
+  'face_closeup',
+  'half_body',
+  'full_body',
+  'hands',
+  'skin_macro',
+  'product_only'
+]);
+export const HumanActionSchema = z.enum([
+  'talking',
+  'applying_product',
+  'showing_result',
+  'swatching',
+  'holding_product',
+  'none'
+]);
+export const AssetHumanActionSchema = z.enum([
+  'talking',
+  'applying_product',
+  'showing_result',
+  'swatching',
+  'holding_product'
+]);
+export const VisualStyleTagSchema = z.enum([
+  'soft_light',
+  'clean_background',
+  'premium_visual',
+  'lifestyle_context',
+  'beauty_style',
+  'professional_review'
+]);
+
+export const CreativeIngredientSchema = z.object({
+  id: z.string(),
+  type: CreativeIngredientTypeSchema,
+  name: z.string(),
+  description: z.string(),
+  segmentIds: z.array(z.string()),
+  requiredForSlotIds: z.array(z.string()),
+  transferability: IngredientTransferabilitySchema,
+  requiredAssets: z.array(z.string()).optional(),
+  fallbackStrategies: z.array(GapRepairStrategySchema),
+  evidence: z.array(z.object({
+    type: z.enum(['frame', 'timestamp', 'transcript', 'model_observation']),
+    value: z.string()
+  })),
+  confidence: z.number().min(0).max(1)
+});
+
+export const MaterialGapTypeSchema = z.enum([
+  'missing_opening_visual',
+  'missing_product_closeup',
+  'missing_usage_demo',
+  'missing_comparison',
+  'missing_cta_visual',
+  'missing_human_host',
+  'missing_face_closeup',
+  'missing_usage_action',
+  'missing_beauty_demo',
+  'missing_before_after',
+  'missing_trust_element',
+  'missing_scene_style',
+  'missing_visual_ingredient'
+]);
+
 export const ContentBriefSchema = z.object({
   productName: z.string().min(1),
   targetAudience: z.string().min(1),
@@ -38,7 +157,15 @@ export const AssetCardSchema = z.object({
   temporalDescription: z.string().optional(),
   detectedObjects: z.array(z.string()),
   suitableSlots: z.array(ShotSlotRoleSchema),
-  qualityScore: z.number().min(0).max(1)
+  qualityScore: z.number().min(0).max(1),
+  detectedIngredients: z.array(CreativeIngredientTypeSchema).optional(),
+  humanPresence: z.object({
+    hasHuman: z.boolean(),
+    role: AssetHumanRoleSchema.optional(),
+    framing: z.array(HumanFramingSchema).optional(),
+    actions: z.array(AssetHumanActionSchema).optional()
+  }).optional(),
+  visualStyleTags: z.array(VisualStyleTagSchema).optional()
 });
 
 export const ViralStructureGraphSchema = z.object({
@@ -72,17 +199,15 @@ export const ViralStructureGraphSchema = z.object({
       motion: z.enum(['static', 'push_in', 'pan', 'fast_cut', 'hand_operation', 'unknown']).optional(),
       minDuration: z.number().optional()
     }),
-    fallbackStrategies: z.array(z.enum([
-      'structure_reorder',
-      'caption_rewrite',
-      'text_card',
-      'selling_point_card',
-      'comparison_card',
-      'cta_card',
-      'crop_zoom',
-      'reuse_asset',
-      'aigc_background'
-    ]))
+    visualIngredientRequirements: z.array(CreativeIngredientTypeSchema).optional(),
+    humanRequirement: z.object({
+      required: z.boolean(),
+      role: HumanRoleSchema.optional(),
+      framing: HumanFramingSchema.optional(),
+      action: HumanActionSchema.optional()
+    }).optional(),
+    fallbackStrategies: z.array(GapRepairStrategySchema),
+    importance: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]).optional()
   })),
   rhythm: z.object({
     avgShotDuration: z.number(),
@@ -98,6 +223,7 @@ export const ViralStructureGraphSchema = z.object({
     transitions: z.array(z.string()),
     coverStyle: z.string()
   }),
+  creativeIngredients: z.array(CreativeIngredientSchema),
   edges: z.array(z.object({
     from: z.string(),
     to: z.string(),

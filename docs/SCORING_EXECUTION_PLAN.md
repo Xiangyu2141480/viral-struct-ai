@@ -35,6 +35,7 @@
 - 脚本结构：Hook / 痛点 / 卖点 / 证明 / CTA
 - 节奏结构：镜头频率、段落快慢、高潮位置
 - 包装结构：字幕密度、标题条、卖点卡、转场、封面风格
+- 爆款视频要素：真人出镜、脸部近景、上脸试用、妆效对比、手部试色、柔光画面、场景风格、信任建立
 
 目标得分：9-10/10
 
@@ -56,10 +57,13 @@
 实现证据：
 
 - 每个结构槽位都有 matched / partial / missing 状态
+- 每个结构槽位可以声明 visualIngredientRequirements
+- AssetCard 可以展示 detectedIngredients 和 humanPresence
 - 展示缺少开头吸引镜头
 - 展示缺少使用过程镜头
 - 展示缺少对比镜头
 - 展示缺少 CTA 镜头
+- 展示缺少真人博主、脸部近景、上脸试用、妆前妆后、信任素材等要素级缺口
 - 说明缺口影响哪个段落
 
 目标得分：7-8/8
@@ -74,6 +78,9 @@
 - CTA 卡补全
 - 裁切放大
 - 字幕补全
+- 手部试色 / 产品特写替代
+- 妆前妆后卡 / 信任卡
+- 补拍真人试用素材建议
 - 可选 AIGC 背景或封面补全
 
 目标得分：10-12/12
@@ -85,8 +92,10 @@
 实现证据：
 
 - StructureGraph
+- Creative Ingredients
 - MappingTable
 - GapBoard
+- Ingredient Gap Board
 - RepairBoard
 - 样例结构到新内容的映射线
 
@@ -175,6 +184,35 @@
 - AIGC 背景 / 封面补全
 - 质量评分面板
 - 强可解释图谱
+- 可解释的 creativeIngredients / visualTraits 迁移展示
 - 工程质量和交互细节
 
 目标加分：5-10
+
+## 7. Creative Ingredients 安全边界
+
+新增的 creativeIngredients / visualTraits 层只用于识别可迁移创作要素，不用于评价人物外貌。
+
+允许识别：
+
+```txt
+human_presence
+face_closeup
+host_talking
+makeup_application
+skin_texture_display
+before_after_comparison
+hand_demo
+soft_light
+clean_background
+trust_building
+```
+
+禁止识别或输出：
+
+```txt
+beauty_score
+美女程度
+颜值评分
+这个人够不够好看
+```

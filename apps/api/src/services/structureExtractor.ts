@@ -1,9 +1,11 @@
 import type { VideoAnalysis, ViralStructureGraph } from '@viral-struct/shared';
+import { extractCreativeIngredientsMock } from './visualIngredientExtractor';
 
 export async function extractStructureMock(
   videoAnalysis?: VideoAnalysis
 ): Promise<ViralStructureGraph> {
   const duration = videoAnalysis?.metadata.duration ?? 15;
+  const creativeIngredients = extractCreativeIngredientsMock(videoAnalysis);
 
   return {
     meta: {
@@ -77,35 +79,57 @@ export async function extractStructureMock(
         segmentId: 'seg_hook',
         role: 'opening_attention',
         requiredAsset: { type: 'video', subject: '强视觉开头或冲突场景', motion: 'fast_cut', minDuration: 1.5 },
-        fallbackStrategies: ['text_card', 'crop_zoom', 'aigc_background']
+        visualIngredientRequirements: ['human_presence', 'face_closeup', 'host_talking'],
+        humanRequirement: {
+          required: true,
+          role: 'host',
+          framing: 'face_closeup',
+          action: 'talking'
+        },
+        fallbackStrategies: ['ask_user_for_human_demo', 'product_closeup_replacement', 'caption_rewrite'],
+        importance: 5
       },
       {
         id: 'slot_product_closeup',
         segmentId: 'seg_sp1',
         role: 'product_closeup',
         requiredAsset: { type: 'image', subject: '商品清晰特写', camera: 'closeup' },
-        fallbackStrategies: ['crop_zoom', 'selling_point_card']
+        visualIngredientRequirements: ['product_closeup_trait', 'soft_light', 'clean_background'],
+        fallbackStrategies: ['crop_zoom', 'selling_point_card', 'style_filter_suggestion'],
+        importance: 4
       },
       {
         id: 'slot_usage_demo',
         segmentId: 'seg_sp1',
         role: 'usage_demo',
         requiredAsset: { type: 'video', subject: '用户使用商品过程', motion: 'hand_operation', minDuration: 2 },
-        fallbackStrategies: ['caption_rewrite', 'crop_zoom', 'reuse_asset']
+        visualIngredientRequirements: ['human_presence', 'face_closeup', 'beauty_demo', 'soft_light'],
+        humanRequirement: {
+          required: true,
+          role: 'host',
+          framing: 'face_closeup',
+          action: 'applying_product'
+        },
+        fallbackStrategies: ['ask_user_for_human_demo', 'hand_demo', 'swatch_card', 'caption_rewrite'],
+        importance: 5
       },
       {
         id: 'slot_comparison',
         segmentId: 'seg_proof',
         role: 'comparison',
         requiredAsset: { type: 'video', subject: '使用前后或竞品对比', minDuration: 2 },
-        fallbackStrategies: ['comparison_card', 'text_card']
+        visualIngredientRequirements: ['before_after_comparison', 'trust_building'],
+        fallbackStrategies: ['before_after_card', 'comparison_card', 'trust_card'],
+        importance: 4
       },
       {
         id: 'slot_cta',
         segmentId: 'seg_cta',
         role: 'cta_visual',
         requiredAsset: { type: 'generated', subject: '结尾行动卡' },
-        fallbackStrategies: ['cta_card', 'selling_point_card']
+        visualIngredientRequirements: ['trust_building', 'social_proof'],
+        fallbackStrategies: ['cta_card', 'selling_point_card', 'trust_card'],
+        importance: 4
       }
     ],
     rhythm: {
@@ -122,6 +146,7 @@ export async function extractStructureMock(
       transitions: ['quick_cut', 'zoom_in', 'push'],
       coverStyle: 'product_left_big_headline_right'
     },
+    creativeIngredients,
     edges: [
       { from: 'seg_hook', to: 'seg_pain', type: 'sequence' },
       { from: 'seg_pain', to: 'seg_sp1', type: 'sequence' },
