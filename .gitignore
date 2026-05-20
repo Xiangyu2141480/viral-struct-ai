@@ -11,6 +11,7 @@ out
 .env
 .env.*
 !.env.example
+cookies/
 .DS_Store
 uploads
 renders
@@ -29,6 +30,7 @@ covers
 seed_assets/**/*.part
 seed_assets/**/*.ytdl
 seed_assets/**/*.temp
+seed_assets/cookies/
 
 # Build and cache artifacts
 .turbo/
