@@ -9,9 +9,14 @@ on:
 permissions:
   contents: read
 
+env:
+  TURBO_TELEMETRY_DISABLED: "1"
+  NEXT_TELEMETRY_DISABLED: "1"
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -27,6 +32,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --no-frozen-lockfile
+
+      - name: Build shared package first
+        run: pnpm --filter @viral-struct/shared build
 
       - name: Typecheck
         run: pnpm typecheck
