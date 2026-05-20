@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { mkdirSync } from 'node:fs';
 import cors from 'cors';
 import express from 'express';
 import { videosRouter } from './routes/videos';
@@ -8,12 +9,35 @@ import { slotsRouter } from './routes/slots';
 import { gapsRouter } from './routes/gaps';
 import { timelineRouter } from './routes/timeline';
 import { qualityRouter } from './routes/quality';
+import { getCoverDir, getFrameDir, getUploadDir } from './services/videoPaths';
 
 const app = express();
 const port = Number(process.env.API_PORT ?? 4000);
+const uploadDir = getUploadDir();
+const frameDir = getFrameDir();
+const coverDir = getCoverDir();
+const allowedOrigins = (process.env.WEB_ORIGIN ?? 'http://localhost:3000,http://localhost:3001')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
-app.use(cors({ origin: process.env.WEB_ORIGIN ?? 'http://localhost:3000' }));
+mkdirSync(uploadDir, { recursive: true });
+mkdirSync(frameDir, { recursive: true });
+mkdirSync(coverDir, { recursive: true });
+
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error(`Origin ${origin} is not allowed by CORS`));
+  }
+}));
 app.use(express.json({ limit: '10mb' }));
+app.use('/media/frames', express.static(frameDir));
+app.use('/media/covers', express.static(coverDir));
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'viral-struct-api' });

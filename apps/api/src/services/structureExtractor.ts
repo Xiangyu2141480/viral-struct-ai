@@ -5,12 +5,21 @@ export async function extractStructureMock(
   videoAnalysis?: VideoAnalysis
 ): Promise<ViralStructureGraph> {
   const duration = videoAnalysis?.metadata.duration ?? 15;
+  const time = (seconds: number) => round((seconds / 15) * duration);
+  const segment = (start: number, end: number) => ({
+    start: time(start),
+    end: time(end),
+    duration: round(time(end) - time(start))
+  });
+  const avgShotDuration = videoAnalysis?.shots.length
+    ? round(duration / videoAnalysis.shots.length)
+    : 1.2;
   const creativeIngredients = extractCreativeIngredientsMock(videoAnalysis);
 
   return {
     meta: {
       duration,
-      aspectRatio: '9:16',
+      aspectRatio: videoAnalysis?.metadata.aspectRatio ?? '9:16',
       videoType: 'ecommerce',
       style: 'high_click'
     },
@@ -20,9 +29,7 @@ export async function extractStructureMock(
       {
         id: 'seg_hook',
         role: 'hook',
-        start: 0,
-        end: 2,
-        duration: 2,
+        ...segment(0, 2),
         purpose: '制造注意力和冲突',
         caption: '你还在这样选 XX？',
         transferRule: '替换为新商品的高频痛点或反常识问题。',
@@ -31,9 +38,7 @@ export async function extractStructureMock(
       {
         id: 'seg_pain',
         role: 'pain_point',
-        start: 2,
-        end: 4,
-        duration: 2,
+        ...segment(2, 4),
         purpose: '让用户意识到当前方案的问题',
         caption: '普通方案的问题',
         transferRule: '用新商品目标用户最常见的使用痛点展开。',
@@ -42,9 +47,7 @@ export async function extractStructureMock(
       {
         id: 'seg_sp1',
         role: 'selling_point',
-        start: 4,
-        end: 8,
-        duration: 4,
+        ...segment(4, 8),
         purpose: '展示核心卖点',
         caption: '核心功能 / 核心卖点',
         transferRule: '优先映射到新商品最能带来转化的卖点。',
@@ -53,9 +56,7 @@ export async function extractStructureMock(
       {
         id: 'seg_proof',
         role: 'comparison',
-        start: 8,
-        end: 12,
-        duration: 4,
+        ...segment(8, 12),
         purpose: '通过对比或证明增强可信度',
         caption: '对比证明',
         transferRule: '使用对比、数据卡或用户评价证明卖点。',
@@ -64,9 +65,7 @@ export async function extractStructureMock(
       {
         id: 'seg_cta',
         role: 'cta',
-        start: 12,
-        end: 15,
-        duration: 3,
+        ...segment(12, 15),
         purpose: '促成行动',
         caption: '立即行动',
         transferRule: '用新商品场景化 CTA 收束。',
@@ -133,9 +132,9 @@ export async function extractStructureMock(
       }
     ],
     rhythm: {
-      avgShotDuration: 1.2,
+      avgShotDuration,
       cutFrequency: 'high',
-      peakAt: 8,
+      peakAt: time(8),
       pattern: 'fast_hook_medium_selling_point_fast_cta'
     },
     packaging: {
@@ -154,4 +153,8 @@ export async function extractStructureMock(
       { from: 'seg_proof', to: 'seg_cta', type: 'sequence' }
     ]
   };
+}
+
+function round(value: number): number {
+  return Number(value.toFixed(2));
 }

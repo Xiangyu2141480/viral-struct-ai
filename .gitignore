@@ -18,6 +18,7 @@ renders
 frames
 covers
 .cache
+.codex-run-logs/
 *.mp4
 *.mov
 *.mkv
