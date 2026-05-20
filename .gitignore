@@ -1,5 +1,10 @@
 node_modules
 .pnpm-store
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
 .next
 dist
 out
@@ -18,6 +23,13 @@ covers
 *.avi
 *.webm
 
+# Seed case assets are intentional project inputs.
+!seed_assets/
+!seed_assets/**
+seed_assets/**/*.part
+seed_assets/**/*.ytdl
+seed_assets/**/*.temp
+
 # Build and cache artifacts
 .turbo/
 **/.turbo/
@@ -26,3 +38,4 @@ apps/web/.next/
 apps/api/dist/
 packages/shared/dist/
 packages/remotion-video/dist/
+personal_workspace/
