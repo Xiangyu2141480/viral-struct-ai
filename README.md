@@ -96,6 +96,7 @@ QualityReport
 
 详细见：
 
+- `docs/PROJECT_PLAN.md`
 - `docs/product-requirements.md`
 - `docs/scoring-matrix.md`
 - `docs/ARCHITECTURE.md`
