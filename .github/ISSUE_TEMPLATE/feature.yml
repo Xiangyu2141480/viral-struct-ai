@@ -1,0 +1,28 @@
+name: Feature Task
+about: Create a scoring-oriented feature task
+labels: ["type/frontend"]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What scoring item does this feature cover?
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: Concrete demo-ready acceptance criteria.
+    validations:
+      required: true
+  - type: textarea
+    id: inputs_outputs
+    attributes:
+      label: Inputs / Outputs
+      description: Describe the structured input and output.
+  - type: textarea
+    id: risks
+    attributes:
+      label: Demo Risks
+      description: What could fail in live demo and what fallback exists?
