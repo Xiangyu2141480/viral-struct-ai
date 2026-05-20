@@ -51,6 +51,41 @@ Renderer
 Visualization & Quality Report
 ```
 
+## Provider 策略
+
+系统按 provider 抽象 AI 能力，避免把项目绑定到单一模型或单一网络环境。
+
+```txt
+mock provider
+  - 默认可演示
+  - 用固定 case 保证答辩稳定
+  - 覆盖结构抽取、缺口识别、补全和时间线生成
+
+ark provider
+  - 火山方舟 Doubao 优先
+  - OpenAI-compatible 调用风格
+  - 用于 real mode 展示真实结构理解与生成能力
+
+optional providers
+  - OpenAI / local ASR / VLM
+  - 只作为扩展，不阻断主 demo
+```
+
+所有 provider 输出都必须回到共享协议：
+
+```txt
+VideoAnalysis
+ViralStructureGraph
+AssetCard[]
+SlotMatch[]
+MaterialGap[]
+GapRepair[]
+TimelineItem[]
+QualityReport
+```
+
+模型失败时必须降级到 mock provider，并在 UI 中标记结果来源。
+
 ## 核心设计：ViralStructureGraph
 
 ```ts
@@ -95,3 +130,14 @@ clip selection + clip ranking + grounded script + subtitle segmentation
 包装层生成
 迁移过程可视化
 ```
+
+## 工具协议与安全边界
+
+工具协议详见 `docs/TOOL_PROTOCOL.md`。所有工具输入/输出都应是结构化 JSON，并经过共享 schema 校验。
+
+安全边界详见 `docs/safety-and-ai-tools.md` 和 `docs/SAFETY_BOUNDARY.md`。核心原则：
+
+- 只迁移结构方法，不复制样例内容结果。
+- API key 只允许存在于本地服务端 `.env`。
+- 营销强事实必须有用户输入或证据来源。
+- AIGC 补全要在 demo 和文档中标记。

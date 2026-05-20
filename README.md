@@ -96,11 +96,30 @@ QualityReport
 
 详细见：
 
+- `docs/product-requirements.md`
+- `docs/scoring-matrix.md`
+- `docs/ARCHITECTURE.md`
+- `docs/safety-and-ai-tools.md`
+- `docs/demo-cases.md`
 - `docs/TEAM_HANDOFF.md`
 - `docs/AI_CONTEXT.md`
 - `docs/SCORING_EXECUTION_PLAN.md`
 - `docs/DEMO_TARGET.md`
 - `docs/ISSUE_INDEX.md`
+
+## 当前分支策略
+
+- `main`：稳定主线。
+- `zsy`：已有协作分支。
+- `cxy`：当前拿奖冲刺分支；需求沉淀、评分映射和后续实现都先在该分支推进。
+
+## 拿奖执行原则
+
+1. P0 必须先做成评委可打分的闭环，而不是只做一个最终生成页。
+2. 每个评分点都要对应页面、代码、文档或 demo 证据。
+3. Demo 要故意展示素材不足，突出缺口识别与补全能力。
+4. AI 能力必须支持 mock / real 双模式，答辩现场不能因为 key 或网络失败而断链。
+5. 火山方舟 Doubao 作为 real mode 优先 provider；真实 key 只放本地 `.env`，不进入仓库。
 
 ## 安全边界
 
