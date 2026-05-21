@@ -31,6 +31,8 @@ seed_assets/**/*.part
 seed_assets/**/*.ytdl
 seed_assets/**/*.temp
 seed_assets/cookies/
+seed_assets/processed_videos/
+seed_assets/analysis/
 
 # Build and cache artifacts
 .turbo/
@@ -41,3 +43,4 @@ apps/api/dist/
 packages/shared/dist/
 packages/remotion-video/dist/
 personal_workspace/
+docs/
