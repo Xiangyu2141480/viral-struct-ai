@@ -1,6 +1,6 @@
 # Fine Structure Scan Prompt v0
 
-用途：第二阶段视频精分析。输入为单个片段的精细采样视频（策略自适应），结合第一阶段粗扫上下文，输出 `FineSegmentScan.json`。  
+用途：第二阶段视频精分析。输入为单个片段的精细采样视频（策略自适应），结合第一阶段粗扫上下文，输出 `FineSegmentScan.json`。
 目标：彻底理解每个片段的可迁移制作配方，为结构迁移系统提供帧级可操作细节。
 
 ## System Prompt

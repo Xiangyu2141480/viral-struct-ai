@@ -556,8 +556,19 @@ def run_fine_scan(args: argparse.Namespace) -> int:
     if missing:
         raise SystemExit(f"Missing required config: {', '.join(missing)}")
 
+    rough_scan_path = Path(args.rough_scan)
+    if not rough_scan_path.exists():
+        raise SystemExit(
+            f"Rough scan file not found: {rough_scan_path}. "
+            "Run scripts/doubao_rough_scan.py first or pass --rough-scan."
+        )
+
+    video_path = Path(args.video)
+    if not video_path.exists():
+        raise SystemExit(f"Source video file not found: {video_path}. Pass --video with a valid file.")
+
     rough_scan: dict[str, Any] = json.loads(
-        Path(args.rough_scan).read_text(encoding="utf-8")
+        rough_scan_path.read_text(encoding="utf-8")
     )
     video_id = args.video_id or rough_scan.get("videoId", "video")
     segments: list[dict[str, Any]] = rough_scan.get("roughSegments", [])
@@ -576,6 +587,7 @@ def run_fine_scan(args: argparse.Namespace) -> int:
     work_dir.mkdir(parents=True, exist_ok=True)
 
     results: list[dict[str, Any]] = []
+    failures: list[dict[str, str]] = []
 
     for segment in segments:
         seg_id = segment["id"]
@@ -666,7 +678,10 @@ def run_fine_scan(args: argparse.Namespace) -> int:
         try:
             parsed = extract_json_object(response_text)
         except Exception as exc:
-            print(f"   [WARN] JSON parse failed for {seg_id}: {exc} — skipping segment")
+            error_message = str(exc)
+            print(f"   [ERROR] JSON parse failed for {seg_id}: {error_message}")
+            failures.append({"segmentId": seg_id, "error": error_message})
+            write_text(out_dir / f"{seg_id}_fine_scan_response_text.txt", response_text)
             continue
 
         if audio_result and isinstance(parsed, dict) and "audioAnalysis" not in parsed:
@@ -690,6 +705,19 @@ def run_fine_scan(args: argparse.Namespace) -> int:
         write_json(combined_path, combined)
         print(f"\nSaved combined scan → {combined_path}")
 
+    if failures:
+        failure_path = out_dir / "fine_scan_failures.json"
+        write_json(
+            failure_path,
+            {
+                "videoId": video_id,
+                "failedSegmentCount": len(failures),
+                "failures": failures,
+            },
+        )
+        print(f"\nFine scan failed for {len(failures)} segment(s); details → {failure_path}")
+        return 1
+
     return 0
 
 
@@ -701,13 +729,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--rough-scan",
-        default="tests/rough_structure_scan.json",
-        help="Stage-1 rough scan JSON (default: tests/rough_structure_scan.json).",
+        default="seed_assets/analysis/macbook_neo/rough_structure_scan.json",
+        help="Stage-1 rough scan JSON.",
     )
     parser.add_argument(
         "--video",
-        default="tests/macbook_neo.mp4",
-        help="Source video file (default: tests/macbook_neo.mp4).",
+        default="seed_assets/raw_videos/macbook_neo.mp4",
+        help="Source video file.",
     )
     parser.add_argument("--video-id", default="", help="Override videoId (default: read from rough scan).")
     parser.add_argument(
@@ -717,12 +745,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--out-dir",
-        default="tests/fine_scan",
+        default="seed_assets/analysis/macbook_neo/fine_scan",
         help="Directory for per-segment result JSON files.",
     )
     parser.add_argument(
         "--work-dir",
-        default="tests/fine_scan/clips",
+        default="seed_assets/analysis/macbook_neo/fine_scan/clips",
         help="Working directory for temporary segment clips.",
     )
     parser.add_argument(
@@ -738,14 +766,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--env", default=".env")
     parser.add_argument(
         "--base-url",
-        default="https://ark.cn-beijing.volces.com/api/v3",
-        help="ModelArk API base URL.",
+        default="",
+        help="ModelArk API base URL (or set LLM_BASE_URL in .env).",
     )
     parser.add_argument("--api-key", default="", help="API key (or set LLM_API_KEY in .env).")
     parser.add_argument(
         "--model",
-        default="ep-20260508213828-7ntjl",
-        help="Endpoint / model ID (Doubao-Seed-2.0-lite).",
+        default="",
+        help="Endpoint / model ID (or set LLM_MODEL in .env).",
     )
     parser.add_argument("--poll-interval", type=float, default=5)
     parser.add_argument("--max-wait-seconds", type=float, default=300)
