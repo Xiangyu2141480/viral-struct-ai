@@ -127,7 +127,7 @@ class ModelGateway:
   "sample_id": "sample_001",
   "duration": 28.5,
   "shots": [
-    {"shot_id": "s1", "start": 0, "end": 2.3, "scale": "close-up", 
+    {"shot_id": "s1", "start": 0, "end": 2.3, "scale": "close-up",
      "content": "product", "ocr_text": "全网最低价", "asr_text": "..."}
   ],
   "audio": {"has_bgm": true, "bgm_bpm": 128, "asr_full": "..."}
@@ -148,12 +148,12 @@ class ModelGateway:
   "structure_id": "struct_001",
   "template_type": "种草型",
   "slots": [
-    {"slot_id": "hook", "type": "pain_point", "duration_range": [2,4], 
+    {"slot_id": "hook", "type": "pain_point", "duration_range": [2,4],
      "shot_requirement": "close-up", "text_style": "question"},
-    {"slot_id": "product_intro", "type": "showcase", "duration_range": [3,5], 
+    {"slot_id": "product_intro", "type": "showcase", "duration_range": [3,5],
      "shot_requirement": "medium-shot", "must_have_product": true},
     {"slot_id": "selling_point_1", ...},
-    {"slot_id": "cta", "type": "call_to_action", "duration_range": [2,3], 
+    {"slot_id": "cta", "type": "call_to_action", "duration_range": [2,3],
      "text_style": "imperative"}
   ],
   "rhythm": {"avg_shot_duration": 2.8, "cuts_per_10s": 4.2},
@@ -392,7 +392,7 @@ GET  /api/projects/:id/visualize  迁移过程可视化数据
 ┌──────────┐  ┌──────────┐   ┌──────────────────┐
 │PostgreSQL│  │  Redis   │   │  Qdrant + MinIO  │
 └──────────┘  └──────────┘   └──────────────────┘
-        
+
 外部模型 API:
   - 火山方舟 Doubao（比赛资源）
   - 即梦 T2I/T2V API
@@ -464,4 +464,3 @@ services:
 - Case 集准备（至少 5 个跨品类成功案例）
 
 ---
-

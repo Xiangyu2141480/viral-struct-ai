@@ -1,6 +1,6 @@
 # Rough Structure Scan Prompt v0
 
-用途：第一阶段视频粗扫。输入为 5 FPS 压缩预览视频，输出 `RoughStructureScan.json`。  
+用途：第一阶段视频粗扫。输入为 5 FPS 压缩预览视频，输出 `RoughStructureScan.json`。
 目标：让模型画出全片粗结构地图，不要直接生成最终 `StructureIR-Core`。
 
 ## System Prompt
