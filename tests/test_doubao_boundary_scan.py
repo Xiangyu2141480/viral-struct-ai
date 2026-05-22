@@ -138,7 +138,7 @@ class DoubaoBoundaryScanTests(unittest.TestCase):
                 "techniqueTags": ["object_fragmentation", "impact_cut"],
                 "confidence": 0.9,
             },
-            "suggestedContentBoundaryMicroscopeTime": 19.8,
+            "semanticPivotMicroscopeTime": 19.8,
         }
 
         normalized = self.module.normalize_boundary_model_output(model_output, normalized_input)
@@ -152,7 +152,6 @@ class DoubaoBoundaryScanTests(unittest.TestCase):
             normalized["transitionCandidate"]["originalTimeRange"],
             {"start": 44.1, "end": 45.3},
         )
-        self.assertNotIn("suggestedContentBoundary", normalized)
         self.assertEqual(normalized["timelinePatch"]["patchType"], "insert_transition_unit")
         self.assertEqual(normalized["timelinePatch"]["fromBlockPatch"]["timeRangePatch"]["end"], 44.1)
         self.assertEqual(normalized["timelinePatch"]["transitionUnit"]["id"], "transition_boundary_003")

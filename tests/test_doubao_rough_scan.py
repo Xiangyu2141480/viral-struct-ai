@@ -135,13 +135,22 @@ class DoubaoRoughScanTests(unittest.TestCase):
         self.assertEqual(len(normalized["boundaryCandidates"]), 1)
         self.assertEqual(normalized["boundaryCandidates"][0]["id"], "boundary_001")
         self.assertEqual(normalized["boundaryCandidates"][0]["roughBoundaryTime"], 9.5)
-        self.assertNotIn("timelineUnits", normalized)
-        self.assertNotIn("roughSegments", normalized)
-        self.assertNotIn("candidateTransitions", normalized)
 
     def test_normalize_rough_scan_requires_content_blocks(self):
         with self.assertRaisesRegex(ValueError, "contentBlocks"):
-            self.module.normalize_rough_scan({"videoId": "demo", "timelineUnits": []})
+            self.module.normalize_rough_scan({"videoId": "demo"})
+
+    def test_normalize_rough_scan_requires_boundary_candidates(self):
+        with self.assertRaisesRegex(ValueError, "boundaryCandidates"):
+            self.module.normalize_rough_scan({
+                "videoId": "demo",
+                "contentBlocks": [
+                    {
+                        "id": "block_001",
+                        "timeRange": {"start": 0, "end": 1},
+                    }
+                ],
+            })
 
     def test_rough_prompt_uses_segmentation_plan_as_primary_schema(self):
         prompt = (ROOT / "prompts" / "video_understanding" / "rough_structure_scan_v0.md").read_text(

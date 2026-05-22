@@ -255,8 +255,6 @@ def normalize_time_range_field(value: dict[str, Any], mapping: dict[str, Any]) -
 def semantic_pivot_original_time(model_output: dict[str, Any], mapping: dict[str, Any]) -> float | None:
     pivot = model_output.get("semanticPivotMicroscopeTime")
     if pivot is None:
-        pivot = model_output.get("suggestedContentBoundaryMicroscopeTime")
-    if pivot is None:
         return None
     return microscope_to_original(float(pivot), mapping)
 
@@ -308,7 +306,7 @@ def build_timeline_patch(
         "patchType": "adjust_content_boundary",
         "fromBlockId": from_block_id,
         "toBlockId": to_block_id,
-        "semanticBoundaryTime": pivot,
+        "contentBoundaryTime": pivot,
         "fromBlockPatch": {
             "id": from_block_id,
             "timeRangePatch": {"end": pivot},

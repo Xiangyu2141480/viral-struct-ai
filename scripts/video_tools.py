@@ -167,6 +167,50 @@ def build_clip_command(
     ]
 
 
+def build_preview_clip_command(
+    input_path: str | Path,
+    output_path: str | Path,
+    *,
+    start: float,
+    end: float,
+    fps: float = 5,
+    max_width: int | None = 480,
+    crf: int = 23,
+) -> list[str]:
+    start = clamp_start(float(start))
+    end = float(end)
+    ensure_end_after_start(start, end)
+    if fps <= 0:
+        raise ValueError("fps must be positive")
+
+    duration = end - start
+    filters = combine_filters([f"fps={fps:g}", scale_filter(max_width)])
+    return [
+        "ffmpeg",
+        "-y",
+        "-ss",
+        fmt_time(start),
+        "-t",
+        fmt_time(duration),
+        "-i",
+        str(input_path),
+        "-vf",
+        filters,
+        "-an",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        str(crf),
+        "-pix_fmt",
+        "yuv420p",
+        "-movflags",
+        "+faststart",
+        str(output_path),
+    ]
+
+
 def build_microscope_command(
     input_path: str | Path,
     output_path: str | Path,
@@ -337,150 +381,6 @@ def build_audio_beat_map(
     }
 
 
-def nearest_event(events: list[dict[str, Any]], target_time: float) -> dict[str, Any] | None:
-    if not events:
-        return None
-    return min(events, key=lambda event: abs(float(event["time"]) - target_time))
-
-
-def classify_alignment(
-    *,
-    beat_delta_ms: int | None,
-    downbeat_delta_ms: int | None,
-    on_beat_ms: int = 80,
-    near_beat_ms: int = 160,
-) -> str:
-    if downbeat_delta_ms is not None and downbeat_delta_ms <= on_beat_ms:
-        return "on_downbeat"
-    if beat_delta_ms is not None and beat_delta_ms <= on_beat_ms:
-        return "on_beat"
-    if beat_delta_ms is not None and beat_delta_ms <= near_beat_ms:
-        return "near_beat"
-    return "off_beat"
-
-
-def align_transitions_to_beats(
-    rough_scan: dict[str, Any],
-    beat_map: dict[str, Any],
-    *,
-    on_beat_ms: int = 80,
-    near_beat_ms: int = 160,
-) -> list[dict[str, Any]]:
-    beats = beat_map.get("beats", [])
-    downbeats = beat_map.get("downbeats", [])
-    alignments: list[dict[str, Any]] = []
-
-    for transition in rough_scan.get("candidateTransitions", []) or []:
-        approx_time = float(transition["approxTime"])
-        nearest_beat = nearest_event(beats, approx_time)
-        nearest_downbeat = nearest_event(downbeats, approx_time)
-        beat_delta_ms = (
-            int(round(abs(float(nearest_beat["time"]) - approx_time) * 1000))
-            if nearest_beat
-            else None
-        )
-        downbeat_delta_ms = (
-            int(round(abs(float(nearest_downbeat["time"]) - approx_time) * 1000))
-            if nearest_downbeat
-            else None
-        )
-        alignment = classify_alignment(
-            beat_delta_ms=beat_delta_ms,
-            downbeat_delta_ms=downbeat_delta_ms,
-            on_beat_ms=on_beat_ms,
-            near_beat_ms=near_beat_ms,
-        )
-        evidence = "no beat detected near transition"
-        if nearest_beat:
-            evidence = f"candidate transition occurs {beat_delta_ms}ms from nearest beat"
-        if alignment == "on_downbeat" and nearest_downbeat:
-            evidence = f"candidate transition occurs {downbeat_delta_ms}ms from nearest downbeat"
-
-        alignments.append(
-            {
-                "transitionId": transition.get("id"),
-                "candidateTime": approx_time,
-                "fromPossibleRole": transition.get("fromPossibleRole"),
-                "toPossibleRole": transition.get("toPossibleRole"),
-                "nearestBeatTime": nearest_beat["time"] if nearest_beat else None,
-                "nearestDownbeatTime": nearest_downbeat["time"] if nearest_downbeat else None,
-                "deltaMs": beat_delta_ms,
-                "downbeatDeltaMs": downbeat_delta_ms,
-                "alignment": alignment,
-                "audioEvidence": evidence,
-                "questionForModel": (
-                    f"请结合原速视频判断，{approx_time:g}s 附近的转场是否利用 BGM 卡点"
-                    f"完成 {transition.get('fromPossibleRole', 'unknown')} 到 "
-                    f"{transition.get('toPossibleRole', 'unknown')} 的结构推进。"
-                ),
-            }
-        )
-    return alignments
-
-
-def output_path(out_dir: str | Path, prefix: str, suffix: str) -> str:
-    return str(Path(out_dir) / f"{prefix}_{suffix}.mp4")
-
-
-def build_inspection_pack(
-    input_path: str | Path,
-    *,
-    out_dir: str | Path,
-    prefix: str,
-    boundary: float,
-    context_radius: float = 1.2,
-    microscope_radius: float = 0.4,
-    playback_fps: float = 5,
-    max_width: int | None = 720,
-) -> dict[str, Any]:
-    boundary = float(boundary)
-    context_start = clamp_start(boundary - context_radius)
-    context_end = boundary + context_radius
-    microscope_start = clamp_start(boundary - microscope_radius)
-    microscope_end = boundary + microscope_radius
-
-    real_output = output_path(out_dir, prefix, "real")
-    slow_output = output_path(out_dir, prefix, "slow")
-
-    return {
-        "input": str(input_path),
-        "boundary": round(boundary, 3),
-        "realSpeedClip": {
-            "output": real_output,
-            "sourceTimeRange": {
-                "start": round(context_start, 3),
-                "end": round(context_end, 3),
-            },
-            "purpose": "preserve perceived rhythm, semantic flow, and audio cues",
-            "command": build_clip_command(
-                input_path,
-                real_output,
-                start=context_start,
-                end=context_end,
-                mode="accurate",
-            ),
-        },
-        "slowMicroscopeClip": {
-            "output": slow_output,
-            "sourceTimeRange": {
-                "start": round(microscope_start, 3),
-                "end": round(microscope_end, 3),
-            },
-            "purpose": "preserve transition frames while slowing playback for inspection",
-            "playbackFps": playback_fps,
-            "timeMapping": f"sourceTime = {microscope_start:.3f} + inspectionTime * {playback_fps:g} / sourceFps",
-            "command": build_microscope_command(
-                input_path,
-                slow_output,
-                start=microscope_start,
-                end=microscope_end,
-                playback_fps=playback_fps,
-                max_width=max_width,
-            ),
-        },
-    }
-
-
 def run(command: Sequence[str], *, dry_run: bool = False) -> None:
     if dry_run:
         print(json.dumps({"command": list(command)}, ensure_ascii=False, indent=2))
@@ -545,30 +445,6 @@ def run_microscope(args: argparse.Namespace) -> None:
     run(command, dry_run=args.dry_run)
 
 
-def run_inspection_pack(args: argparse.Namespace) -> None:
-    pack = build_inspection_pack(
-        args.input,
-        out_dir=args.out_dir,
-        prefix=args.prefix,
-        boundary=args.boundary,
-        context_radius=args.context_radius,
-        microscope_radius=args.microscope_radius,
-        playback_fps=args.playback_fps,
-        max_width=args.max_width,
-    )
-
-    if args.dry_run:
-        print(json.dumps(pack, ensure_ascii=False, indent=2))
-        return
-
-    Path(args.out_dir).mkdir(parents=True, exist_ok=True)
-    run(pack["realSpeedClip"]["command"])
-    run(pack["slowMicroscopeClip"]["command"])
-    manifest = Path(args.out_dir) / f"{args.prefix}_inspection.json"
-    write_json(manifest, pack)
-    print(str(manifest))
-
-
 def run_extract_audio(args: argparse.Namespace) -> None:
     command = build_extract_audio_command(
         args.input,
@@ -627,31 +503,6 @@ def run_beat_map(args: argparse.Namespace) -> None:
     print(str(output))
 
 
-def run_align_transitions(args: argparse.Namespace) -> None:
-    rough_scan = json.loads(Path(args.rough_scan).read_text(encoding="utf-8"))
-    beat_map = json.loads(Path(args.beat_map).read_text(encoding="utf-8"))
-    alignments = align_transitions_to_beats(
-        rough_scan,
-        beat_map,
-        on_beat_ms=args.on_beat_ms,
-        near_beat_ms=args.near_beat_ms,
-    )
-    payload = {
-        "videoId": rough_scan.get("videoId") or beat_map.get("videoId"),
-        "method": {
-            "beatMap": beat_map.get("method", {}),
-            "onBeatMs": args.on_beat_ms,
-            "nearBeatMs": args.near_beat_ms,
-        },
-        "transitionAlignments": alignments,
-    }
-    if args.dry_run:
-        print(json.dumps(payload, ensure_ascii=False, indent=2))
-        return
-    write_json(args.output, payload)
-    print(str(args.output))
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Prepare video inputs for Viral Struct AI understanding agents.",
@@ -698,21 +549,6 @@ def build_parser() -> argparse.ArgumentParser:
     microscope.add_argument("--dry-run", action="store_true")
     microscope.set_defaults(func=run_microscope)
 
-    pack = subparsers.add_parser(
-        "inspection-pack",
-        help="Create real-speed and slow microscope clips around one boundary.",
-    )
-    pack.add_argument("input")
-    pack.add_argument("--boundary", type=parse_time, required=True)
-    pack.add_argument("--out-dir", required=True)
-    pack.add_argument("--prefix", default="boundary")
-    pack.add_argument("--context-radius", type=float, default=1.2)
-    pack.add_argument("--microscope-radius", type=float, default=0.4)
-    pack.add_argument("--playback-fps", type=float, default=5)
-    pack.add_argument("--max-width", type=int, default=720)
-    pack.add_argument("--dry-run", action="store_true")
-    pack.set_defaults(func=run_inspection_pack)
-
     extract_audio = subparsers.add_parser("extract-audio", help="Extract mono WAV audio for beat tracking.")
     extract_audio.add_argument("input")
     extract_audio.add_argument("output")
@@ -735,18 +571,6 @@ def build_parser() -> argparse.ArgumentParser:
     beat_map.add_argument("--dbn", action="store_true")
     beat_map.add_argument("--dry-run", action="store_true")
     beat_map.set_defaults(func=run_beat_map)
-
-    align = subparsers.add_parser(
-        "align-transitions",
-        help="Align RoughStructureScan candidate transitions to an AudioBeatMap.",
-    )
-    align.add_argument("rough_scan")
-    align.add_argument("beat_map")
-    align.add_argument("output")
-    align.add_argument("--on-beat-ms", type=int, default=80)
-    align.add_argument("--near-beat-ms", type=int, default=160)
-    align.add_argument("--dry-run", action="store_true")
-    align.set_defaults(func=run_align_transitions)
 
     return parser
 

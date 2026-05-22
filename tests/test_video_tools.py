@@ -84,22 +84,23 @@ class VideoToolsCommandBuilderTests(unittest.TestCase):
         self.assertEqual(command[command.index("-ss") + 1], "24.000")
         self.assertEqual(command[command.index("-t") + 1], "5.000")
 
-    def test_build_inspection_pack_manifest_uses_boundary_context(self):
-        pack = self.tools.build_inspection_pack(
+    def test_build_preview_clip_command_cuts_and_lowers_segment_fps(self):
+        command = self.tools.build_preview_clip_command(
             "input.mp4",
-            out_dir="out",
-            prefix="boundary_001",
-            boundary=3.4,
-            context_radius=1.2,
-            microscope_radius=0.4,
-            playback_fps=5,
+            "clip_preview.mp4",
+            start=12.0,
+            end=18.5,
+            fps=5,
+            max_width=480,
         )
 
-        self.assertEqual(pack["boundary"], 3.4)
-        self.assertEqual(pack["realSpeedClip"]["sourceTimeRange"], {"start": 2.2, "end": 4.6})
-        self.assertEqual(pack["slowMicroscopeClip"]["sourceTimeRange"], {"start": 3.0, "end": 3.8})
-        self.assertTrue(pack["realSpeedClip"]["output"].endswith("boundary_001_real.mp4"))
-        self.assertTrue(pack["slowMicroscopeClip"]["output"].endswith("boundary_001_slow.mp4"))
+        input_index = command.index("-i")
+        self.assertLess(command.index("-ss"), input_index)
+        self.assertLess(command.index("-t"), input_index)
+        self.assertIn("-vf", command)
+        self.assertIn("fps=5", command[command.index("-vf") + 1])
+        self.assertIn("scale=w=min(480\\,iw):h=-2", command[command.index("-vf") + 1])
+        self.assertEqual(command[-1], "clip_preview.mp4")
 
     def test_build_extract_audio_command_outputs_wav_for_beat_tracking(self):
         command = self.tools.build_extract_audio_command(
@@ -167,40 +168,6 @@ class VideoToolsCommandBuilderTests(unittest.TestCase):
         self.assertEqual(len(beat_map["beats"]), 4)
         self.assertEqual(len(beat_map["downbeats"]), 2)
 
-    def test_align_transitions_to_beats_classifies_downbeat_alignment(self):
-        rough_scan = {
-            "candidateTransitions": [
-                {
-                    "id": "rough_trans_001",
-                    "approxTime": 9.0,
-                    "fromPossibleRole": "hook",
-                    "toPossibleRole": "product_reveal",
-                },
-                {
-                    "id": "rough_trans_002",
-                    "approxTime": 9.22,
-                    "fromPossibleRole": "selling_point",
-                    "toPossibleRole": "usage_scene",
-                },
-            ]
-        }
-        beat_map = {
-            "beats": [
-                {"time": 8.96, "beatNumber": 1, "isDownbeat": True},
-                {"time": 9.50, "beatNumber": 2, "isDownbeat": False},
-            ],
-            "downbeats": [
-                {"time": 8.96, "beatNumber": 1, "isDownbeat": True},
-            ],
-        }
-
-        alignments = self.tools.align_transitions_to_beats(rough_scan, beat_map)
-
-        self.assertEqual(alignments[0]["transitionId"], "rough_trans_001")
-        self.assertEqual(alignments[0]["alignment"], "on_downbeat")
-        self.assertEqual(alignments[0]["deltaMs"], 40)
-        self.assertEqual(alignments[1]["alignment"], "off_beat")
-
 
 class VideoToolsCliTests(unittest.TestCase):
     def test_cli_help_exits_successfully(self):
@@ -214,10 +181,8 @@ class VideoToolsCliTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0)
         self.assertIn("preview", result.stdout)
-        self.assertIn("inspection-pack", result.stdout)
         self.assertIn("extract-audio", result.stdout)
         self.assertIn("beat-map", result.stdout)
-        self.assertIn("align-transitions", result.stdout)
 
 
 if __name__ == "__main__":

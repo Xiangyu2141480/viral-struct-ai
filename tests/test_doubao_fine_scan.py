@@ -32,7 +32,7 @@ class DoubaoFineScanTests(unittest.TestCase):
         self.assertEqual(args.base_url, "")
         self.assertEqual(args.model, "")
 
-    def test_build_segment_audio_analysis_uses_beat_this_relative_times(self):
+    def test_build_block_audio_analysis_uses_beat_this_relative_times(self):
         beat_map = {
             "method": {"primary": "beat_this"},
             "tempo": {"bpm": 83.33, "confidence": None},
@@ -48,7 +48,7 @@ class DoubaoFineScanTests(unittest.TestCase):
             ],
         }
 
-        result = self.module.build_segment_audio_analysis(
+        result = self.module.build_block_audio_analysis(
             beat_map,
             start=9.0,
             end=13.0,
@@ -63,28 +63,31 @@ class DoubaoFineScanTests(unittest.TestCase):
         self.assertEqual(result["beatMarkers"][0]["absTime"], 9.2)
         self.assertEqual(result["beatMarkers"][0]["segRelTime"], 0.2)
 
-    def test_prompt_variables_describe_missing_beat_this_map(self):
-        segment = {
-            "id": "rough_seg_001",
-            "approxTimeRange": {"start": 0, "end": 3},
-            "possibleRole": "hook",
-            "purpose": "test purpose",
-            "whatHappens": "test happens",
-            "inspectionQuestions": ["q1"],
+    def test_block_prompt_variables_use_content_block_contract(self):
+        block = {
+            "id": "block_001",
+            "timeRange": {"start": 0, "end": 3},
+            "coarseRoleGuess": "attention_grab",
+            "boundaryReason": "opening attention block",
+            "observableSummary": "hands reveal product",
+            "fineScanFocusQuestions": ["q1"],
         }
         strategy = {"mode": "preview", "target_fps": 5, "upload_fps": 5, "max_width": 480}
 
-        variables = self.module.build_segment_prompt_variables(
-            segment,
+        variables = self.module.build_block_prompt_variables(
+            block,
             strategy,
             audio_result=None,
             video_id="demo",
         )
 
+        self.assertEqual(variables["blockId"], "block_001")
+        self.assertEqual(variables["coarseRoleGuess"], "attention_grab")
+        self.assertEqual(variables["observableSummary"], "hands reveal product")
+        self.assertIn("q1", variables["fineScanFocusQuestions"])
         self.assertIn("Beat-This", variables["audioAnalysis"])
-        self.assertNotIn("librosa", variables["audioAnalysis"].lower())
 
-    def test_run_fine_scan_returns_failure_when_segment_json_cannot_parse(self):
+    def test_run_fine_scan_returns_failure_when_content_block_json_cannot_parse(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_dir = Path(tmp)
             rough_scan_path = tmp_dir / "rough_structure_scan.json"
@@ -94,14 +97,14 @@ class DoubaoFineScanTests(unittest.TestCase):
                 json.dumps(
                     {
                         "videoId": "demo",
-                        "roughSegments": [
+                        "contentBlocks": [
                             {
-                                "id": "rough_seg_001",
-                                "approxTimeRange": {"start": 0, "end": 1},
-                                "possibleRole": "hook",
-                                "purpose": "test",
-                                "whatHappens": "test",
-                                "inspectionQuestions": [],
+                                "id": "block_001",
+                                "timeRange": {"start": 0, "end": 1},
+                                "coarseRoleGuess": "attention_grab",
+                                "boundaryReason": "test",
+                                "observableSummary": "test",
+                                "fineScanFocusQuestions": [],
                             }
                         ],
                     }
@@ -130,13 +133,13 @@ class DoubaoFineScanTests(unittest.TestCase):
             )
 
             originals = {
-                "prepare_segment_clip": self.module.prepare_segment_clip,
+                "prepare_block_clip": self.module.prepare_block_clip,
                 "upload_file": self.module.upload_file,
                 "wait_for_file": self.module.wait_for_file,
                 "create_response": self.module.create_response,
             }
             try:
-                self.module.prepare_segment_clip = lambda *args, **kwargs: ROOT / "seed_assets" / "raw_videos" / "TVC.mp4"
+                self.module.prepare_block_clip = lambda *args, **kwargs: ROOT / "seed_assets" / "raw_videos" / "TVC.mp4"
                 self.module.upload_file = lambda **kwargs: {"id": "file-test"}
                 self.module.wait_for_file = lambda **kwargs: {"status": "processed"}
                 self.module.create_response = lambda **kwargs: {"output_text": "not json"}
@@ -151,7 +154,7 @@ class DoubaoFineScanTests(unittest.TestCase):
             self.assertTrue(failure_path.exists())
             failures = json.loads(failure_path.read_text(encoding="utf-8"))
             self.assertEqual(failures["failedSegmentCount"], 1)
-            self.assertEqual(failures["failures"][0]["segmentId"], "rough_seg_001")
+            self.assertEqual(failures["failures"][0]["blockId"], "block_001")
 
 
 if __name__ == "__main__":

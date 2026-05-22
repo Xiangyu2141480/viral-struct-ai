@@ -285,18 +285,7 @@ def _time_range_start(value: dict[str, Any]) -> float:
     time_range = value.get("timeRange") or {}
     if isinstance(time_range, dict) and time_range.get("start") is not None:
         return float(time_range["start"])
-    if value.get("anchorTime") is not None:
-        return float(value["anchorTime"])
-    if value.get("approxTime") is not None:
-        return float(value["approxTime"])
     return 0.0
-
-
-def _time_range_end(value: dict[str, Any]) -> float:
-    time_range = value.get("timeRange") or {}
-    if isinstance(time_range, dict) and time_range.get("end") is not None:
-        return float(time_range["end"])
-    return _time_range_start(value)
 
 
 def normalize_content_blocks(content_blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -319,49 +308,14 @@ def normalize_content_blocks(content_blocks: list[dict[str, Any]]) -> list[dict[
 
 
 def _boundary_anchor_time(boundary: dict[str, Any]) -> float:
-    if boundary.get("roughBoundaryTime") is not None:
-        return float(boundary["roughBoundaryTime"])
-    window = boundary.get("inspectionWindow") or {}
-    if isinstance(window, dict):
-        start = window.get("start")
-        end = window.get("end")
-        if start is not None and end is not None:
-            return round((float(start) + float(end)) / 2, 3)
-        if start is not None:
-            return float(start)
-    return 0.0
-
-
-def derive_boundary_candidates_from_content_blocks(content_blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    boundaries: list[dict[str, Any]] = []
-    for index, (previous, current) in enumerate(zip(content_blocks, content_blocks[1:]), start=1):
-        previous_end = _time_range_end(previous)
-        current_start = _time_range_start(current)
-        boundary_time = round((previous_end + current_start) / 2, 3)
-        boundaries.append(
-            {
-                "id": f"boundary_{index:03d}",
-                "fromBlockId": previous.get("id"),
-                "toBlockId": current.get("id"),
-                "roughBoundaryTime": boundary_time,
-                "inspectionWindow": {
-                    "start": round(max(0.0, boundary_time - 2.5), 3),
-                    "end": round(boundary_time + 2.5, 3),
-                },
-                "visibleBoundaryCue": "unknown",
-                "whyNeedsMicroscope": "相邻内容块边界，需要 Stage 1.5 精看确认是否存在转场以及具体做法。",
-                "confidence": None,
-            }
-        )
-    return boundaries
+    return float(boundary["roughBoundaryTime"])
 
 
 def normalize_boundary_candidates(
     boundary_candidates: list[dict[str, Any]],
-    content_blocks: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     if not boundary_candidates:
-        return derive_boundary_candidates_from_content_blocks(content_blocks)
+        raise ValueError("Stage 1 rough scan output must include boundaryCandidates.")
 
     normalized_boundaries: list[dict[str, Any]] = []
     for index, boundary in enumerate(sorted(boundary_candidates, key=_boundary_anchor_time), start=1):
@@ -389,7 +343,6 @@ def normalize_rough_scan(parsed: dict[str, Any]) -> dict[str, Any]:
     content_blocks = normalize_content_blocks(content_blocks)
     boundary_candidates = normalize_boundary_candidates(
         normalized.get("boundaryCandidates", []) or [],
-        content_blocks,
     )
 
     normalized["contentBlocks"] = content_blocks
