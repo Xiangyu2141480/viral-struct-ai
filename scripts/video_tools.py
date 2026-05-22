@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import statistics
 import subprocess
 from pathlib import Path
 from typing import Any, Sequence
@@ -166,6 +167,50 @@ def build_clip_command(
     ]
 
 
+def build_preview_clip_command(
+    input_path: str | Path,
+    output_path: str | Path,
+    *,
+    start: float,
+    end: float,
+    fps: float = 5,
+    max_width: int | None = 480,
+    crf: int = 23,
+) -> list[str]:
+    start = clamp_start(float(start))
+    end = float(end)
+    ensure_end_after_start(start, end)
+    if fps <= 0:
+        raise ValueError("fps must be positive")
+
+    duration = end - start
+    filters = combine_filters([f"fps={fps:g}", scale_filter(max_width)])
+    return [
+        "ffmpeg",
+        "-y",
+        "-ss",
+        fmt_time(start),
+        "-t",
+        fmt_time(duration),
+        "-i",
+        str(input_path),
+        "-vf",
+        filters,
+        "-an",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        str(crf),
+        "-pix_fmt",
+        "yuv420p",
+        "-movflags",
+        "+faststart",
+        str(output_path),
+    ]
+
+
 def build_microscope_command(
     input_path: str | Path,
     output_path: str | Path,
@@ -188,12 +233,12 @@ def build_microscope_command(
     return [
         "ffmpeg",
         "-y",
-        "-i",
-        str(input_path),
         "-ss",
         fmt_time(start),
         "-t",
         fmt_time(duration),
+        "-i",
+        str(input_path),
         "-vf",
         filters,
         "-an",
@@ -222,66 +267,117 @@ def build_probe_command(input_path: str | Path) -> list[str]:
     ]
 
 
-def output_path(out_dir: str | Path, prefix: str, suffix: str) -> str:
-    return str(Path(out_dir) / f"{prefix}_{suffix}.mp4")
-
-
-def build_inspection_pack(
+def build_extract_audio_command(
     input_path: str | Path,
+    output_path: str | Path,
     *,
-    out_dir: str | Path,
-    prefix: str,
-    boundary: float,
-    context_radius: float = 1.2,
-    microscope_radius: float = 0.4,
-    playback_fps: float = 5,
-    max_width: int | None = 720,
+    sample_rate: int = 44100,
+    channels: int = 1,
+) -> list[str]:
+    if sample_rate <= 0:
+        raise ValueError("sample_rate must be positive")
+    if channels <= 0:
+        raise ValueError("channels must be positive")
+
+    return [
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(input_path),
+        "-vn",
+        "-ac",
+        str(channels),
+        "-ar",
+        str(sample_rate),
+        "-c:a",
+        "pcm_s16le",
+        str(output_path),
+    ]
+
+
+def build_beat_this_command(
+    audio_path: str | Path,
+    beats_output_path: str | Path,
+    *,
+    beat_this_bin: str = "beat_this",
+    gpu: int | None = -1,
+    model: str | None = None,
+    dbn: bool = False,
+) -> list[str]:
+    command = [beat_this_bin, str(audio_path), "-o", str(beats_output_path)]
+    if gpu is not None:
+        command += ["--gpu", str(gpu)]
+    if model:
+        command += ["--model", model]
+    if dbn:
+        command += ["--dbn"]
+    return command
+
+
+def parse_beat_number(value: str) -> int:
+    text = value.strip().lower()
+    if text in {"downbeat", "down"}:
+        return 1
+    if text in {"beat", ""}:
+        return 0
+    return int(float(text))
+
+
+def parse_beat_this_file(path: str | Path) -> list[dict[str, Any]]:
+    beats: list[dict[str, Any]] = []
+    for raw_line in Path(path).read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.replace(",", "\t").split()
+        if not parts:
+            continue
+        time = float(parts[0])
+        beat_number = parse_beat_number(parts[1]) if len(parts) > 1 else 0
+        beats.append(
+            {
+                "time": round(time, 3),
+                "beatNumber": beat_number,
+                "isDownbeat": beat_number == 1,
+            }
+        )
+    return beats
+
+
+def estimate_tempo_bpm(beats: list[dict[str, Any]]) -> float | None:
+    if len(beats) < 2:
+        return None
+    intervals = [
+        beats[i + 1]["time"] - beats[i]["time"]
+        for i in range(len(beats) - 1)
+        if beats[i + 1]["time"] > beats[i]["time"]
+    ]
+    if not intervals:
+        return None
+    return round(60.0 / statistics.median(intervals), 2)
+
+
+def build_audio_beat_map(
+    *,
+    video_id: str,
+    audio_source: str | Path,
+    beats: list[dict[str, Any]],
+    method: str = "beat_this",
 ) -> dict[str, Any]:
-    boundary = float(boundary)
-    context_start = clamp_start(boundary - context_radius)
-    context_end = boundary + context_radius
-    microscope_start = clamp_start(boundary - microscope_radius)
-    microscope_end = boundary + microscope_radius
-
-    real_output = output_path(out_dir, prefix, "real")
-    slow_output = output_path(out_dir, prefix, "slow")
-
+    downbeats = [beat for beat in beats if beat.get("isDownbeat")]
     return {
-        "input": str(input_path),
-        "boundary": round(boundary, 3),
-        "realSpeedClip": {
-            "output": real_output,
-            "sourceTimeRange": {
-                "start": round(context_start, 3),
-                "end": round(context_end, 3),
-            },
-            "purpose": "preserve perceived rhythm, semantic flow, and audio cues",
-            "command": build_clip_command(
-                input_path,
-                real_output,
-                start=context_start,
-                end=context_end,
-                mode="accurate",
-            ),
+        "videoId": video_id,
+        "audioSource": str(audio_source),
+        "method": {
+            "primary": method,
+            "outputFormat": "beat_this .beats TSV; beatNumber=1 means downbeat",
         },
-        "slowMicroscopeClip": {
-            "output": slow_output,
-            "sourceTimeRange": {
-                "start": round(microscope_start, 3),
-                "end": round(microscope_end, 3),
-            },
-            "purpose": "preserve transition frames while slowing playback for inspection",
-            "playbackFps": playback_fps,
-            "timeMapping": f"sourceTime = {microscope_start:.3f} + inspectionTime * {playback_fps:g} / sourceFps",
-            "command": build_microscope_command(
-                input_path,
-                slow_output,
-                start=microscope_start,
-                end=microscope_end,
-                playback_fps=playback_fps,
-                max_width=max_width,
-            ),
+        "tempo": {
+            "bpm": estimate_tempo_bpm(beats),
+            "confidence": None,
         },
+        "beats": beats,
+        "downbeats": downbeats,
     }
 
 
@@ -349,28 +445,62 @@ def run_microscope(args: argparse.Namespace) -> None:
     run(command, dry_run=args.dry_run)
 
 
-def run_inspection_pack(args: argparse.Namespace) -> None:
-    pack = build_inspection_pack(
+def run_extract_audio(args: argparse.Namespace) -> None:
+    command = build_extract_audio_command(
         args.input,
-        out_dir=args.out_dir,
-        prefix=args.prefix,
-        boundary=args.boundary,
-        context_radius=args.context_radius,
-        microscope_radius=args.microscope_radius,
-        playback_fps=args.playback_fps,
-        max_width=args.max_width,
+        args.output,
+        sample_rate=args.sample_rate,
+        channels=args.channels,
+    )
+    run(command, dry_run=args.dry_run)
+
+
+def run_beat_map(args: argparse.Namespace) -> None:
+    output = Path(args.output)
+    audio_output = Path(args.audio_output) if args.audio_output else output.with_suffix(".wav")
+    beats_output = Path(args.beats_output) if args.beats_output else output.with_suffix(".beats")
+
+    extract_command = build_extract_audio_command(
+        args.input,
+        audio_output,
+        sample_rate=args.sample_rate,
+        channels=args.channels,
+    )
+    beat_command = build_beat_this_command(
+        audio_output,
+        beats_output,
+        beat_this_bin=args.beat_this_bin,
+        gpu=args.gpu,
+        model=args.model,
+        dbn=args.dbn,
     )
 
     if args.dry_run:
-        print(json.dumps(pack, ensure_ascii=False, indent=2))
+        print(
+            json.dumps(
+                {
+                    "extractAudioCommand": extract_command,
+                    "beatThisCommand": beat_command,
+                    "output": str(output),
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
         return
 
-    Path(args.out_dir).mkdir(parents=True, exist_ok=True)
-    run(pack["realSpeedClip"]["command"])
-    run(pack["slowMicroscopeClip"]["command"])
-    manifest = Path(args.out_dir) / f"{args.prefix}_inspection.json"
-    write_json(manifest, pack)
-    print(str(manifest))
+    audio_output.parent.mkdir(parents=True, exist_ok=True)
+    beats_output.parent.mkdir(parents=True, exist_ok=True)
+    run(extract_command)
+    run(beat_command)
+    beat_map = build_audio_beat_map(
+        video_id=args.video_id,
+        audio_source=audio_output,
+        beats=parse_beat_this_file(beats_output),
+        method="beat_this",
+    )
+    write_json(output, beat_map)
+    print(str(output))
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -419,20 +549,28 @@ def build_parser() -> argparse.ArgumentParser:
     microscope.add_argument("--dry-run", action="store_true")
     microscope.set_defaults(func=run_microscope)
 
-    pack = subparsers.add_parser(
-        "inspection-pack",
-        help="Create real-speed and slow microscope clips around one boundary.",
-    )
-    pack.add_argument("input")
-    pack.add_argument("--boundary", type=parse_time, required=True)
-    pack.add_argument("--out-dir", required=True)
-    pack.add_argument("--prefix", default="boundary")
-    pack.add_argument("--context-radius", type=float, default=1.2)
-    pack.add_argument("--microscope-radius", type=float, default=0.4)
-    pack.add_argument("--playback-fps", type=float, default=5)
-    pack.add_argument("--max-width", type=int, default=720)
-    pack.add_argument("--dry-run", action="store_true")
-    pack.set_defaults(func=run_inspection_pack)
+    extract_audio = subparsers.add_parser("extract-audio", help="Extract mono WAV audio for beat tracking.")
+    extract_audio.add_argument("input")
+    extract_audio.add_argument("output")
+    extract_audio.add_argument("--sample-rate", type=int, default=44100)
+    extract_audio.add_argument("--channels", type=int, default=1)
+    extract_audio.add_argument("--dry-run", action="store_true")
+    extract_audio.set_defaults(func=run_extract_audio)
+
+    beat_map = subparsers.add_parser("beat-map", help="Run Beat-This and write AudioBeatMap JSON.")
+    beat_map.add_argument("input")
+    beat_map.add_argument("output")
+    beat_map.add_argument("--video-id", default="unknown")
+    beat_map.add_argument("--audio-output")
+    beat_map.add_argument("--beats-output")
+    beat_map.add_argument("--sample-rate", type=int, default=44100)
+    beat_map.add_argument("--channels", type=int, default=1)
+    beat_map.add_argument("--beat-this-bin", default="beat_this")
+    beat_map.add_argument("--gpu", type=int, default=-1)
+    beat_map.add_argument("--model")
+    beat_map.add_argument("--dbn", action="store_true")
+    beat_map.add_argument("--dry-run", action="store_true")
+    beat_map.set_defaults(func=run_beat_map)
 
     return parser
 

@@ -281,6 +281,76 @@ def extract_json_object(text: str) -> Any:
         raise
 
 
+def _time_range_start(value: dict[str, Any]) -> float:
+    time_range = value.get("timeRange") or {}
+    if isinstance(time_range, dict) and time_range.get("start") is not None:
+        return float(time_range["start"])
+    return 0.0
+
+
+def normalize_content_blocks(content_blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    for index, block in enumerate(sorted(content_blocks, key=_time_range_start), start=1):
+        item = dict(block)
+        item.setdefault("id", f"block_{index:03d}")
+        item.setdefault("timeRange", {})
+        item.setdefault("coarseRoleGuess", "unknown")
+        item.setdefault("boundaryReason", "")
+        item.setdefault("observableSummary", "")
+        item.setdefault("visualSignals", [])
+        item.setdefault("textSignals", [])
+        item.setdefault("audioOrRhythmSignals", [])
+        item.setdefault("hasInternalTransition", False)
+        item.setdefault("confidence", None)
+        item.setdefault("fineScanFocusQuestions", [])
+        normalized.append(item)
+    return normalized
+
+
+def _boundary_anchor_time(boundary: dict[str, Any]) -> float:
+    return float(boundary["roughBoundaryTime"])
+
+
+def normalize_boundary_candidates(
+    boundary_candidates: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if not boundary_candidates:
+        raise ValueError("Stage 1 rough scan output must include boundaryCandidates.")
+
+    normalized_boundaries: list[dict[str, Any]] = []
+    for index, boundary in enumerate(sorted(boundary_candidates, key=_boundary_anchor_time), start=1):
+        normalized_boundary = dict(boundary)
+        normalized_boundary.setdefault("id", f"boundary_{index:03d}")
+        boundary_time = _boundary_anchor_time(normalized_boundary)
+        normalized_boundary.setdefault("roughBoundaryTime", boundary_time)
+        normalized_boundary.setdefault(
+            "inspectionWindow",
+            {"start": round(max(0.0, boundary_time - 2.5), 3), "end": round(boundary_time + 2.5, 3)},
+        )
+        normalized_boundaries.append(normalized_boundary)
+    return normalized_boundaries
+
+
+def normalize_rough_scan(parsed: dict[str, Any]) -> dict[str, Any]:
+    """Normalize the Stage 1 content-block contract."""
+    normalized = json.loads(json.dumps(parsed, ensure_ascii=False))
+
+    content_blocks = normalized.get("contentBlocks")
+    if not isinstance(content_blocks, list):
+        raise ValueError("Stage 1 rough scan output must include contentBlocks.")
+
+    normalized["schemaVersion"] = normalized.get("schemaVersion") or "rough_content_blocks_v1"
+    content_blocks = normalize_content_blocks(content_blocks)
+    boundary_candidates = normalize_boundary_candidates(
+        normalized.get("boundaryCandidates", []) or [],
+    )
+
+    normalized["contentBlocks"] = content_blocks
+    normalized["boundaryCandidates"] = boundary_candidates
+
+    return normalized
+
+
 def write_json(path: str | Path, value: Any) -> None:
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -379,7 +449,7 @@ def run_scan(args: argparse.Namespace) -> int:
     )
 
     response_text = extract_response_text(response)
-    parsed = extract_json_object(response_text)
+    parsed = normalize_rough_scan(extract_json_object(response_text))
 
     write_json(args.out, parsed)
     write_json(args.raw_out, response)

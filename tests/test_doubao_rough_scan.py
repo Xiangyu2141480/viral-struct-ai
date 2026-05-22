@@ -88,6 +88,85 @@ class DoubaoRoughScanTests(unittest.TestCase):
 
         self.assertEqual(parsed, {"videoId": "macbook_neo"})
 
+    def test_normalize_rough_scan_keeps_only_stage_one_contract(self):
+        parsed = {
+            "videoId": "demo",
+            "contentBlocks": [
+                {
+                    "id": "block_001",
+                    "timeRange": {"start": 0, "end": 9},
+                    "coarseRoleGuess": "attention_grab",
+                    "boundaryReason": "opening block ends before a visual reset",
+                    "observableSummary": "fast product reveal opening",
+                    "visualSignals": ["hands", "product"],
+                    "textSignals": ["headline"],
+                    "audioOrRhythmSignals": ["fast beat"],
+                    "confidence": 0.86,
+                    "fineScanFocusQuestions": ["what is the hook mechanism?"],
+                },
+                {
+                    "id": "block_002",
+                    "timeRange": {"start": 10, "end": 27},
+                    "coarseRoleGuess": "product_or_brand_intro",
+                    "observableSummary": "product assembly",
+                    "confidence": 0.9,
+                },
+            ],
+            "boundaryCandidates": [
+                {
+                    "id": "boundary_001",
+                    "fromBlockId": "block_001",
+                    "toBlockId": "block_002",
+                    "roughBoundaryTime": 9.5,
+                    "inspectionWindow": {"start": 7.0, "end": 12.0},
+                    "visibleBoundaryCue": "white flash between blocks",
+                    "whyNeedsMicroscope": "possible flash transition",
+                    "confidence": 0.78,
+                }
+            ],
+        }
+
+        normalized = self.module.normalize_rough_scan(parsed)
+
+        self.assertEqual(normalized["schemaVersion"], "rough_content_blocks_v1")
+        self.assertEqual(len(normalized["contentBlocks"]), 2)
+        self.assertEqual(normalized["contentBlocks"][0]["id"], "block_001")
+        self.assertEqual(normalized["contentBlocks"][0]["coarseRoleGuess"], "attention_grab")
+        self.assertEqual(len(normalized["boundaryCandidates"]), 1)
+        self.assertEqual(normalized["boundaryCandidates"][0]["id"], "boundary_001")
+        self.assertEqual(normalized["boundaryCandidates"][0]["roughBoundaryTime"], 9.5)
+
+    def test_normalize_rough_scan_requires_content_blocks(self):
+        with self.assertRaisesRegex(ValueError, "contentBlocks"):
+            self.module.normalize_rough_scan({"videoId": "demo"})
+
+    def test_normalize_rough_scan_requires_boundary_candidates(self):
+        with self.assertRaisesRegex(ValueError, "boundaryCandidates"):
+            self.module.normalize_rough_scan({
+                "videoId": "demo",
+                "contentBlocks": [
+                    {
+                        "id": "block_001",
+                        "timeRange": {"start": 0, "end": 1},
+                    }
+                ],
+            })
+
+    def test_rough_prompt_uses_segmentation_plan_as_primary_schema(self):
+        prompt = (ROOT / "prompts" / "video_understanding" / "rough_structure_scan_v0.md").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('"contentBlocks"', prompt)
+        self.assertIn('"boundaryCandidates"', prompt)
+        self.assertIn('"roughBoundaryTime"', prompt)
+        self.assertIn('"coarseRoleGuess"', prompt)
+        self.assertIn("第一阶段只负责识别内容块", prompt)
+        self.assertIn("不要在第一阶段判断转场类型", prompt)
+        self.assertIn("请不要做深度角色分类", prompt)
+        self.assertNotIn('"unitType": "segment | transition"', prompt)
+        self.assertNotIn('"role": "hook | brand_opening', prompt)
+
     def test_build_multipart_body_contains_file_and_fps(self):
         body, content_type = self.module.build_multipart_body(
             fields={

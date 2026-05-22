@@ -1,375 +1,108 @@
 #!/usr/bin/env python
-"""Run Doubao/ModelArk second-pass fine segment structure scanning.
-
-For each rough segment from stage-1, the script:
-1. Prepares an adaptive video clip via FFmpeg:
-     ≤8 s  → microscope (setpts slowdown, 5 fps) — every original frame visible to VLM.
-     ≤30 s → segment preview re-encoded at 15 fps / 480p.
-     >30 s → segment preview re-encoded at 5 fps / 360p.
-2. Optionally extracts audio beat data with librosa (requires: pip install librosa).
-3. Uploads the clip via the Files API with matching fps preprocessing.
-4. Calls the Responses API with the fine-structure prompt and audio context.
-5. Saves per-segment results and a combined FineStructureScan JSON.
-"""
+"""Run Stage 2 fine analysis for Stage 1 content blocks."""
 
 from __future__ import annotations
 
 import argparse
 import json
-import mimetypes
-import os
-import re
 import subprocess
-import time
-import uuid
+import sys
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 
-DONE_FILE_STATUSES = {"processed", "completed", "success", "ready", "available"}
-WAIT_FILE_STATUSES = {"processing", "pending", "queued", "running"}
-FAILED_FILE_STATUSES = {"failed", "error", "expired", "cancelled"}
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from doubao_rough_scan import (  # noqa: E402
+    build_responses_payload,
+    create_response,
+    env_value,
+    extract_json_object,
+    extract_response_text,
+    load_dotenv,
+    load_prompt_sections,
+    upload_file,
+    wait_for_file,
+    write_json,
+    write_text,
+)
+from video_tools import build_microscope_command, build_preview_clip_command  # noqa: E402
 
 
-# ── .env / config ──────────────────────────────────────────────────────────────
-
-def load_dotenv(path: str | Path) -> dict[str, str]:
-    values: dict[str, str] = {}
-    env_path = Path(path)
-    if not env_path.exists():
-        return values
-    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        value = value.strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
-            value = value[1:-1]
-        values[key.strip()] = value
-    return values
+def block_time_range(block: dict[str, Any]) -> tuple[float, float]:
+    time_range = block["timeRange"]
+    start = float(time_range["start"])
+    end = float(time_range["end"])
+    if end <= start:
+        raise ValueError(f"content block end must be after start: {block.get('id')}")
+    return start, end
 
 
-def env_value(name: str, env_file_values: dict[str, str], default: str = "") -> str:
-    return os.environ.get(name) or env_file_values.get(name) or default
-
-
-# ── Prompt helpers ─────────────────────────────────────────────────────────────
-
-def render_prompt(template: str, values: dict[str, Any]) -> str:
-    rendered = template
-    for key, value in values.items():
-        rendered = rendered.replace("{{" + key + "}}", str(value))
-    return rendered
-
-
-def extract_fenced_block_after_heading(markdown: str, heading: str) -> str | None:
-    pattern = re.compile(
-        rf"^##\s+{re.escape(heading)}\s*$.*?```(?:text)?\s*(.*?)```",
-        flags=re.MULTILINE | re.DOTALL,
-    )
-    match = pattern.search(markdown)
-    if not match:
+def load_beat_map(path: str | Path) -> dict[str, Any] | None:
+    beat_map_path = Path(path)
+    if not beat_map_path.exists():
         return None
-    return match.group(1).strip()
+    return json.loads(beat_map_path.read_text(encoding="utf-8"))
 
 
-def load_prompt_sections(
-    prompt_path: str | Path, variables: dict[str, Any]
-) -> tuple[str | None, str]:
-    markdown = Path(prompt_path).read_text(encoding="utf-8")
-    rendered = render_prompt(markdown, variables)
-    system_prompt = extract_fenced_block_after_heading(rendered, "System Prompt")
-    user_prompt = extract_fenced_block_after_heading(rendered, "User Prompt")
-    if user_prompt:
-        return system_prompt, user_prompt
-    return None, rendered
+def _tempo_bpm(beat_map: dict[str, Any]) -> float | None:
+    tempo = beat_map.get("tempo")
+    if isinstance(tempo, dict) and tempo.get("bpm") is not None:
+        return float(tempo["bpm"])
+    return None
 
 
-# ── HTTP / API helpers ─────────────────────────────────────────────────────────
+def _beat_source(beat_map: dict[str, Any]) -> str:
+    method = beat_map.get("method")
+    if isinstance(method, dict) and method.get("primary"):
+        return str(method["primary"])
+    return "beat_this"
 
-def build_multipart_body(
+
+def build_block_audio_analysis(
+    beat_map: dict[str, Any],
     *,
-    fields: dict[str, str],
-    files: dict[str, tuple[str, bytes, str]],
-    boundary: str | None = None,
-) -> tuple[bytes, str]:
-    boundary = boundary or f"----viral-struct-{uuid.uuid4().hex}"
-    lines: list[bytes] = []
-    for name, value in fields.items():
-        lines.append(f"--{boundary}\r\n".encode("utf-8"))
-        lines.append(f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode("utf-8"))
-        lines.append(str(value).encode("utf-8"))
-        lines.append(b"\r\n")
-    for name, (filename, content, mime_type) in files.items():
-        lines.append(f"--{boundary}\r\n".encode("utf-8"))
-        lines.append(
-            f'Content-Disposition: form-data; name="{name}"; filename="{filename}"\r\n'.encode("utf-8")
-        )
-        lines.append(f"Content-Type: {mime_type}\r\n\r\n".encode("utf-8"))
-        lines.append(content)
-        lines.append(b"\r\n")
-    lines.append(f"--{boundary}--\r\n".encode("utf-8"))
-    return b"".join(lines), f"multipart/form-data; boundary={boundary}"
-
-
-def request_json(
-    *,
-    method: str,
-    url: str,
-    api_key: str,
-    body: bytes | None = None,
-    content_type: str | None = None,
-    timeout: int = 120,
+    start: float,
+    end: float,
+    beat_map_ref: str,
 ) -> dict[str, Any]:
-    from urllib import error, request
+    beat_markers: list[dict[str, Any]] = []
+    for beat in beat_map.get("beats", []) or []:
+        abs_time = float(beat["time"])
+        if start <= abs_time <= end:
+            seg_rel_time = round(abs_time - start, 3)
+            beat_markers.append(
+                {
+                    "segRelTime": seg_rel_time,
+                    "absTime": round(abs_time, 3),
+                    "beatNumber": beat.get("beatNumber"),
+                    "isDownbeat": bool(beat.get("isDownbeat")),
+                }
+            )
 
-    headers = {"Authorization": f"Bearer {api_key}"}
-    if content_type:
-        headers["Content-Type"] = content_type
-    req = request.Request(url, data=body, headers=headers, method=method)
-    try:
-        with request.urlopen(req, timeout=timeout) as response:
-            payload = response.read().decode("utf-8")
-    except error.HTTPError as exc:
-        details = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"HTTP {exc.code} {exc.reason}: {details}") from exc
-    if not payload:
-        return {}
-    return json.loads(payload)
-
-
-def api_url(base_url: str, path: str) -> str:
-    return f"{base_url.rstrip('/')}/{path.lstrip('/')}"
-
-
-def upload_file(
-    *,
-    base_url: str,
-    api_key: str,
-    video_path: str | Path,
-    fps: float,
-    timeout: int = 300,
-) -> dict[str, Any]:
-    path = Path(video_path)
-    mime_type = mimetypes.guess_type(path.name)[0] or "video/mp4"
-    body, content_type = build_multipart_body(
-        fields={
-            "purpose": "user_data",
-            "preprocess_configs[video][fps]": f"{fps:g}",
-        },
-        files={"file": (path.name, path.read_bytes(), mime_type)},
-    )
-    return request_json(
-        method="POST",
-        url=api_url(base_url, "/files"),
-        api_key=api_key,
-        body=body,
-        content_type=content_type,
-        timeout=timeout,
-    )
-
-
-def retrieve_file(
-    *, base_url: str, api_key: str, file_id: str, timeout: int = 60
-) -> dict[str, Any]:
-    return request_json(
-        method="GET",
-        url=api_url(base_url, f"/files/{file_id}"),
-        api_key=api_key,
-        timeout=timeout,
-    )
-
-
-def wait_for_file(
-    *,
-    base_url: str,
-    api_key: str,
-    file_id: str,
-    poll_interval: float = 5.0,
-    max_wait_seconds: float = 300.0,
-) -> dict[str, Any]:
-    deadline = time.time() + max_wait_seconds
-    last: dict[str, Any] = {}
-    while time.time() < deadline:
-        last = retrieve_file(base_url=base_url, api_key=api_key, file_id=file_id)
-        status = str(last.get("status", "")).lower()
-        if status in DONE_FILE_STATUSES:
-            return last
-        if status in FAILED_FILE_STATUSES:
-            raise RuntimeError(f"file preprocessing failed: {json.dumps(last, ensure_ascii=False)}")
-        if status and status not in WAIT_FILE_STATUSES:
-            return last
-        time.sleep(poll_interval)
-    raise TimeoutError(f"file {file_id} was not ready after {max_wait_seconds:g}s; last={last}")
-
-
-def build_responses_payload(
-    *,
-    model: str,
-    file_id: str,
-    prompt_text: str,
-    instructions: str | None = None,
-    store: bool = True,
-) -> dict[str, Any]:
-    payload: dict[str, Any] = {
-        "model": model,
-        "input": [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "input_video", "file_id": file_id},
-                    {"type": "input_text", "text": prompt_text},
-                ],
-            }
+    return {
+        "source": _beat_source(beat_map),
+        "sourceBeatMapRef": beat_map_ref,
+        "timeBasis": "content_block_relative_seconds",
+        "bpm": _tempo_bpm(beat_map),
+        "beatTimestamps": [marker["segRelTime"] for marker in beat_markers],
+        "downbeatTimestamps": [
+            marker["segRelTime"] for marker in beat_markers if marker["isDownbeat"]
         ],
-        "store": store,
+        "beatMarkers": beat_markers,
     }
-    if instructions:
-        payload["instructions"] = instructions
-    return payload
 
 
-def create_response(
-    *,
-    base_url: str,
-    api_key: str,
-    payload: dict[str, Any],
-    timeout: int = 600,
-) -> dict[str, Any]:
-    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    return request_json(
-        method="POST",
-        url=api_url(base_url, "/responses"),
-        api_key=api_key,
-        body=body,
-        content_type="application/json",
-        timeout=timeout,
-    )
-
-
-def extract_response_text(response: dict[str, Any]) -> str:
-    if isinstance(response.get("output_text"), str):
-        return response["output_text"]
-    texts: list[str] = []
-    for item in response.get("output", []) or []:
-        if isinstance(item, dict):
-            for content in item.get("content", []) or []:
-                if isinstance(content, dict) and isinstance(content.get("text"), str):
-                    texts.append(content["text"])
-    if texts:
-        return "".join(texts)
-    choices = response.get("choices")
-    if choices and isinstance(choices, list):
-        content = choices[0].get("message", {}).get("content")
-        if isinstance(content, str):
-            return content
-    return json.dumps(response, ensure_ascii=False)
-
-
-def extract_json_object(text: str) -> Any:
-    stripped = text.strip()
-    fence = re.match(r"^```(?:json)?\s*(.*?)\s*```$", stripped, flags=re.DOTALL)
-    if fence:
-        stripped = fence.group(1).strip()
-    try:
-        return json.loads(stripped)
-    except json.JSONDecodeError:
-        start = stripped.find("{")
-        end = stripped.rfind("}")
-        if start >= 0 and end > start:
-            return json.loads(stripped[start: end + 1])
-        raise
-
-
-def write_json(path: str | Path, value: Any) -> None:
-    target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-
-
-def write_text(path: str | Path, value: str) -> None:
-    target = Path(path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(value, encoding="utf-8")
-
-
-def redact_config(values: dict[str, str]) -> dict[str, str]:
-    result = dict(values)
-    if result.get("LLM_API_KEY"):
-        result["LLM_API_KEY"] = "***"
-    return result
-
-
-# ── FFmpeg helpers ─────────────────────────────────────────────────────────────
-
-def _fmt_time(seconds: float) -> str:
-    return f"{seconds:.3f}"
-
-
-def _scale_filter(max_width: int | None) -> str:
-    if max_width is None:
-        return ""
-    return f"scale=w=min({max_width}\\,iw):h=-2"
-
-
-def _combine_filters(filters: Sequence[str]) -> str:
-    return ",".join(f for f in filters if f)
-
-
-def build_segment_microscope_command(
-    input_path: str | Path,
-    output_path: str | Path,
-    *,
-    start: float,
-    end: float,
-    playback_fps: float = 5,
-    max_width: int | None = 720,
-    crf: int = 18,
-) -> list[str]:
-    """Cut segment and stretch PTS so the API's fps sampler keeps every original frame."""
+def determine_clip_strategy(block: dict[str, Any]) -> dict[str, Any]:
+    start, end = block_time_range(block)
     duration = end - start
-    filters = _combine_filters([f"setpts=N/({playback_fps:g}*TB)", _scale_filter(max_width)])
-    return [
-        "ffmpeg", "-y",
-        "-i", str(input_path),
-        "-ss", _fmt_time(start),
-        "-t", _fmt_time(duration),
-        "-vf", filters,
-        "-an",
-        "-c:v", "libx264", "-preset", "veryfast",
-        "-crf", str(crf),
-        "-pix_fmt", "yuv420p",
-        str(output_path),
-    ]
-
-
-def build_segment_preview_command(
-    input_path: str | Path,
-    output_path: str | Path,
-    *,
-    start: float,
-    end: float,
-    fps: float = 15,
-    max_width: int | None = 480,
-    crf: int = 23,
-) -> list[str]:
-    """Cut segment and reduce fps/resolution in one FFmpeg pass."""
-    duration = end - start
-    filters = _combine_filters([f"fps={fps:g}", _scale_filter(max_width)])
-    return [
-        "ffmpeg", "-y",
-        "-i", str(input_path),
-        "-ss", _fmt_time(start),
-        "-t", _fmt_time(duration),
-        "-vf", filters,
-        "-an",
-        "-c:v", "libx264", "-preset", "veryfast",
-        "-crf", str(crf),
-        "-pix_fmt", "yuv420p",
-        "-movflags", "+faststart",
-        str(output_path),
-    ]
+    if duration <= 8:
+        return {"mode": "microscope", "upload_fps": 5, "target_fps": None, "max_width": 720, "crf": 18}
+    if duration <= 30:
+        return {"mode": "preview", "upload_fps": 5, "target_fps": 5, "max_width": 480, "crf": 23}
+    return {"mode": "preview", "upload_fps": 5, "target_fps": 5, "max_width": 360, "crf": 28}
 
 
 def run_ffmpeg(command: list[str], *, dry_run: bool = False) -> None:
@@ -379,59 +112,38 @@ def run_ffmpeg(command: list[str], *, dry_run: bool = False) -> None:
     subprocess.run(command, check=True, capture_output=True)
 
 
-# ── Clip strategy ──────────────────────────────────────────────────────────────
-
-def determine_clip_strategy(segment: dict[str, Any]) -> dict[str, Any]:
-    """Return clip preparation parameters based on segment duration.
-
-    API constraint: preprocess_configs[video][fps] must be in (0.20, 5.00].
-
-    ≤8 s  → microscope slowdown at 5 fps / 720p — setpts trick keeps every original frame.
-    ≤30 s → preview at 5 fps / 480p  — VLM focuses on this segment at higher resolution.
-    >30 s → preview at 5 fps / 360p  — lower resolution to stay within file-size budget.
-    """
-    start = float(segment["approxTimeRange"]["start"])
-    end = float(segment["approxTimeRange"]["end"])
-    duration = end - start
-    if duration <= 8:
-        return {"mode": "microscope", "upload_fps": 5, "target_fps": None, "max_width": 720, "crf": 18}
-    if duration <= 30:
-        return {"mode": "preview", "upload_fps": 5, "target_fps": 5, "max_width": 480, "crf": 23}
-    return {"mode": "preview", "upload_fps": 5, "target_fps": 5, "max_width": 360, "crf": 28}
-
-
-def prepare_segment_clip(
+def prepare_block_clip(
     video_path: str | Path,
-    segment: dict[str, Any],
+    block: dict[str, Any],
     strategy: dict[str, Any],
     work_dir: Path,
     *,
     dry_run: bool = False,
 ) -> Path:
-    seg_id = segment["id"]
-    start = float(segment["approxTimeRange"]["start"])
-    end = float(segment["approxTimeRange"]["end"])
-    suffix = (
-        "microscope"
-        if strategy["mode"] == "microscope"
-        else f"preview_{strategy['target_fps']}fps"
-    )
-    output_path = work_dir / f"{seg_id}_{suffix}.mp4"
+    block_id = block["id"]
+    start, end = block_time_range(block)
+    suffix = "microscope" if strategy["mode"] == "microscope" else f"preview_{strategy['target_fps']}fps"
+    output_path = work_dir / f"{block_id}_{suffix}.mp4"
     if output_path.exists() and not dry_run:
         return output_path
     work_dir.mkdir(parents=True, exist_ok=True)
+
     if strategy["mode"] == "microscope":
-        command = build_segment_microscope_command(
-            video_path, output_path,
-            start=start, end=end,
+        command = build_microscope_command(
+            video_path,
+            output_path,
+            start=start,
+            end=end,
             playback_fps=strategy["upload_fps"],
             max_width=strategy["max_width"],
             crf=strategy["crf"],
         )
     else:
-        command = build_segment_preview_command(
-            video_path, output_path,
-            start=start, end=end,
+        command = build_preview_clip_command(
+            video_path,
+            output_path,
+            start=start,
+            end=end,
             fps=strategy["target_fps"],
             max_width=strategy["max_width"],
             crf=strategy["crf"],
@@ -440,145 +152,78 @@ def prepare_segment_clip(
     return output_path
 
 
-# ── Audio analysis (librosa) ───────────────────────────────────────────────────
-
-def analyze_audio(
-    video_path: str | Path,
-    start: float,
-    end: float,
-    work_dir: Path,
-) -> dict[str, Any] | None:
-    """Extract beat/onset/energy data from the segment's audio track via librosa.
-
-    Returns None if librosa is not installed or the video has no audio.
-    All timestamps are relative to segment start (0 = segment begin).
-    """
-    try:
-        import librosa  # type: ignore
-    except ImportError:
-        return None
-
-    audio_path = work_dir / "tmp_audio_segment.wav"
-    work_dir.mkdir(parents=True, exist_ok=True)
-    extract_cmd = [
-        "ffmpeg", "-y",
-        "-i", str(video_path),
-        "-ss", _fmt_time(start),
-        "-t", _fmt_time(end - start),
-        "-vn", "-acodec", "pcm_s16le", "-ar", "22050",
-        str(audio_path),
-    ]
-    result = subprocess.run(extract_cmd, capture_output=True)
-    if result.returncode != 0 or not audio_path.exists():
-        return None
-
-    try:
-        y, sr = librosa.load(str(audio_path), sr=22050)
-    except Exception:
-        return None
-
-    tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr)
-    import numpy as _np
-    tempo_val = float(_np.asarray(tempo).flat[0])
-    beat_times = librosa.frames_to_time(beat_frames, sr=sr).tolist()
-
-    onset_frames = librosa.onset.onset_detect(y=y, sr=sr)
-    onset_times = librosa.frames_to_time(onset_frames, sr=sr).tolist()
-
-    hop = sr // 5
-    rms = librosa.feature.rms(y=y, hop_length=hop)[0]
-    rms_times = librosa.frames_to_time(range(len(rms)), sr=sr, hop_length=hop).tolist()
-
-    return {
-        "source": "librosa",
-        "bpm": round(tempo_val, 2),
-        "beatTimestamps": [round(t, 3) for t in beat_times],
-        "onsetTimestamps": [round(t, 3) for t in onset_times],
-        "energyCurve": {
-            "times": [round(t, 3) for t in rms_times],
-            "rms": [round(float(v), 4) for v in rms],
-        },
-    }
-
-
-# ── Prompt variable assembly ───────────────────────────────────────────────────
-
-def build_segment_prompt_variables(
-    segment: dict[str, Any],
+def build_block_prompt_variables(
+    block: dict[str, Any],
     strategy: dict[str, Any],
     audio_result: dict[str, Any] | None,
     video_id: str,
 ) -> dict[str, Any]:
-    start = float(segment["approxTimeRange"]["start"])
-    end = float(segment["approxTimeRange"]["end"])
+    start, end = block_time_range(block)
     clip_mode = (
         "microscope_slowdown"
         if strategy["mode"] == "microscope"
-        else f"segment_preview_{strategy['target_fps']}fps"
+        else f"content_block_preview_{strategy['target_fps']}fps"
     )
     audio_text = (
         json.dumps(audio_result, ensure_ascii=False, indent=2)
         if audio_result
-        else "unavailable（librosa 未安装或视频无音轨）"
+        else "unavailable（Beat-This beat map 未提供或未生成；可先运行 scripts/video_tools.py beat-map）"
     )
     return {
         "videoId": video_id,
-        "segmentId": segment["id"],
+        "blockId": block["id"],
         "sourceStart": start,
         "sourceEnd": end,
-        "segmentDuration": round(end - start, 3),
+        "blockDuration": round(end - start, 3),
         "clipMode": clip_mode,
         "uploadFps": strategy["upload_fps"],
         "clipWidth": strategy["max_width"],
-        "segmentRole": segment.get("possibleRole", "unknown"),
-        "segmentPurpose": segment.get("purpose", ""),
-        "whatHappens": segment.get("whatHappens", ""),
-        "inspectionQuestions": json.dumps(
-            segment.get("inspectionQuestions", []), ensure_ascii=False
+        "coarseRoleGuess": block.get("coarseRoleGuess", "unknown"),
+        "boundaryReason": block.get("boundaryReason", ""),
+        "observableSummary": block.get("observableSummary", ""),
+        "fineScanFocusQuestions": json.dumps(
+            block.get("fineScanFocusQuestions", []), ensure_ascii=False
         ),
         "audioAnalysis": audio_text,
     }
 
 
-# ── Main scan logic ────────────────────────────────────────────────────────────
+def selected_blocks(blocks: list[dict[str, Any]], block_ids: str) -> list[dict[str, Any]]:
+    if not block_ids:
+        return blocks
+    wanted = {item.strip() for item in block_ids.split(",") if item.strip()}
+    return [block for block in blocks if block["id"] in wanted]
+
 
 def run_fine_scan(args: argparse.Namespace) -> int:
     env_values = load_dotenv(args.env)
     base_url = args.base_url or env_value("LLM_BASE_URL", env_values)
     api_key = args.api_key or env_value("LLM_API_KEY", env_values)
     model = args.model or env_value("LLM_MODEL", env_values)
-
     missing = [
         name
-        for name, val in {"LLM_BASE_URL": base_url, "LLM_API_KEY": api_key, "LLM_MODEL": model}.items()
-        if not val
+        for name, value in {"LLM_BASE_URL": base_url, "LLM_API_KEY": api_key, "LLM_MODEL": model}.items()
+        if not value
     ]
     if missing:
         raise SystemExit(f"Missing required config: {', '.join(missing)}")
 
     rough_scan_path = Path(args.rough_scan)
     if not rough_scan_path.exists():
-        raise SystemExit(
-            f"Rough scan file not found: {rough_scan_path}. "
-            "Run scripts/doubao_rough_scan.py first or pass --rough-scan."
-        )
+        raise SystemExit(f"Rough scan file not found: {rough_scan_path}")
 
     video_path = Path(args.video)
     if not video_path.exists():
-        raise SystemExit(f"Source video file not found: {video_path}. Pass --video with a valid file.")
+        raise SystemExit(f"Source video file not found: {video_path}")
 
-    rough_scan: dict[str, Any] = json.loads(
-        rough_scan_path.read_text(encoding="utf-8")
-    )
+    rough_scan = json.loads(rough_scan_path.read_text(encoding="utf-8"))
     video_id = args.video_id or rough_scan.get("videoId", "video")
-    segments: list[dict[str, Any]] = rough_scan.get("roughSegments", [])
-
-    if args.segment_ids:
-        wanted = {s.strip() for s in args.segment_ids.split(",") if s.strip()}
-        segments = [s for s in segments if s["id"] in wanted]
-
-    if not segments:
-        print("No segments to process.")
+    blocks = rough_scan.get("contentBlocks")
+    if not isinstance(blocks, list):
+        raise SystemExit("Fine scan requires Stage 1 contentBlocks.")
+    blocks = selected_blocks(blocks, args.block_ids)
+    if not blocks:
+        print("No content blocks to process.")
         return 0
 
     out_dir = Path(args.out_dir)
@@ -586,69 +231,61 @@ def run_fine_scan(args: argparse.Namespace) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
     work_dir.mkdir(parents=True, exist_ok=True)
 
+    beat_map = None if args.skip_audio else load_beat_map(args.beat_map)
+    if not args.skip_audio and beat_map is None:
+        print(f"Beat-This beat map not found: {args.beat_map}")
+
     results: list[dict[str, Any]] = []
     failures: list[dict[str, str]] = []
 
-    for segment in segments:
-        seg_id = segment["id"]
-        start = float(segment["approxTimeRange"]["start"])
-        end = float(segment["approxTimeRange"]["end"])
-        print(f"\n── {seg_id}  ({start}s ~ {end}s, role={segment.get('possibleRole')}) ──")
+    for block in blocks:
+        block_id = block["id"]
+        start, end = block_time_range(block)
+        print(f"\n-- {block_id} ({start}s ~ {end}s, coarseRole={block.get('coarseRoleGuess')}) --")
 
-        strategy = determine_clip_strategy(segment)
-        print(
-            f"   strategy={strategy['mode']}  upload_fps={strategy['upload_fps']}"
-            f"  width={strategy['max_width']}p"
-        )
+        strategy = determine_clip_strategy(block)
+        print(f"   strategy={strategy['mode']} upload_fps={strategy['upload_fps']} width={strategy['max_width']}p")
 
         if args.dry_run:
-            clip_path = work_dir / f"{seg_id}_dry.mp4"
-            if strategy["mode"] == "microscope":
-                cmd = build_segment_microscope_command(
-                    args.video, clip_path, start=start, end=end
-                )
-            else:
-                cmd = build_segment_preview_command(
-                    args.video, clip_path,
-                    start=start, end=end,
+            dry_path = work_dir / f"{block_id}_dry.mp4"
+            command = (
+                build_microscope_command(args.video, dry_path, start=start, end=end)
+                if strategy["mode"] == "microscope"
+                else build_preview_clip_command(
+                    args.video,
+                    dry_path,
+                    start=start,
+                    end=end,
                     fps=strategy["target_fps"],
+                    max_width=strategy["max_width"],
+                    crf=strategy["crf"],
                 )
-            print(json.dumps(
-                {"segment": seg_id, "strategy": strategy, "ffmpegCommand": cmd},
-                ensure_ascii=False, indent=2,
-            ))
+            )
+            print(json.dumps({"block": block_id, "strategy": strategy, "ffmpegCommand": command}, ensure_ascii=False, indent=2))
             continue
 
-        clip_path = prepare_segment_clip(args.video, segment, strategy, work_dir)
-        print(f"   clip → {clip_path}")
+        clip_path = prepare_block_clip(args.video, block, strategy, work_dir)
+        print(f"   clip -> {clip_path}")
 
-        audio_result: dict[str, Any] | None = None
-        if not args.skip_audio:
-            print("   running audio analysis...")
-            audio_result = analyze_audio(args.video, start, end, work_dir)
-            if audio_result:
-                print(
-                    f"   bpm={audio_result['bpm']}"
-                    f"  beats={len(audio_result['beatTimestamps'])}"
-                    f"  onsets={len(audio_result['onsetTimestamps'])}"
-                )
-            else:
-                print("   audio analysis unavailable (librosa not installed or no audio)")
+        audio_result = (
+            build_block_audio_analysis(beat_map, start=start, end=end, beat_map_ref=args.beat_map)
+            if beat_map
+            else None
+        )
+        if audio_result:
+            print(
+                f"   bpm={audio_result['bpm']} beats={len(audio_result['beatTimestamps'])}"
+                f" downbeats={len(audio_result['downbeatTimestamps'])}"
+            )
 
-        variables = build_segment_prompt_variables(segment, strategy, audio_result, video_id)
+        variables = build_block_prompt_variables(block, strategy, audio_result, video_id)
         instructions, prompt_text = load_prompt_sections(args.prompt, variables)
 
-        print(f"   uploading clip...")
-        file_info = upload_file(
-            base_url=base_url,
-            api_key=api_key,
-            video_path=clip_path,
-            fps=strategy["upload_fps"],
-        )
+        print("   uploading clip...")
+        file_info = upload_file(base_url=base_url, api_key=api_key, video_path=clip_path, fps=strategy["upload_fps"])
         file_id = file_info["id"]
         print(f"   file_id={file_id}")
 
-        print("   waiting for preprocessing...")
         ready_file = wait_for_file(
             base_url=base_url,
             api_key=api_key,
@@ -658,52 +295,50 @@ def run_fine_scan(args: argparse.Namespace) -> int:
         )
         print(f"   status={ready_file.get('status', 'unknown')}")
 
-        payload = build_responses_payload(
-            model=model,
-            file_id=file_id,
-            prompt_text=prompt_text,
-            instructions=instructions,
-            store=True,
-        )
-        print("   calling VLM for fine structure scan...")
         response = create_response(
             base_url=base_url,
             api_key=api_key,
-            payload=payload,
+            payload=build_responses_payload(
+                model=model,
+                file_id=file_id,
+                prompt_text=prompt_text,
+                instructions=instructions,
+                store=True,
+            ),
             timeout=args.response_timeout,
         )
-
         response_text = extract_response_text(response)
 
         try:
             parsed = extract_json_object(response_text)
         except Exception as exc:
             error_message = str(exc)
-            print(f"   [ERROR] JSON parse failed for {seg_id}: {error_message}")
-            failures.append({"segmentId": seg_id, "error": error_message})
-            write_text(out_dir / f"{seg_id}_fine_scan_response_text.txt", response_text)
+            print(f"   [ERROR] JSON parse failed for {block_id}: {error_message}")
+            failures.append({"blockId": block_id, "error": error_message})
+            write_text(out_dir / f"{block_id}_fine_scan_response_text.txt", response_text)
             continue
 
         if audio_result and isinstance(parsed, dict) and "audioAnalysis" not in parsed:
             parsed["audioAnalysis"] = audio_result
 
-        seg_out = out_dir / f"{seg_id}_fine_scan.json"
-        write_json(seg_out, parsed)
-        print(f"   saved → {seg_out}")
-
+        block_out = out_dir / f"{block_id}_fine_scan.json"
+        write_json(block_out, parsed)
+        print(f"   saved -> {block_out}")
         results.append(parsed)
 
     if results:
-        combined: dict[str, Any] = {
-            "videoId": video_id,
-            "scanMode": "fine_segments",
-            "roughScanRef": str(args.rough_scan),
-            "segmentCount": len(results),
-            "segments": results,
-        }
         combined_path = out_dir / "fine_structure_scan.json"
-        write_json(combined_path, combined)
-        print(f"\nSaved combined scan → {combined_path}")
+        write_json(
+            combined_path,
+            {
+                "videoId": video_id,
+                "scanMode": "fine_content_blocks",
+                "roughScanRef": str(args.rough_scan),
+                "blockCount": len(results),
+                "contentBlocks": results,
+            },
+        )
+        print(f"\nSaved combined scan -> {combined_path}")
 
     if failures:
         failure_path = out_dir / "fine_scan_failures.json"
@@ -711,81 +346,41 @@ def run_fine_scan(args: argparse.Namespace) -> int:
             failure_path,
             {
                 "videoId": video_id,
+                "failedBlockCount": len(failures),
                 "failedSegmentCount": len(failures),
                 "failures": failures,
             },
         )
-        print(f"\nFine scan failed for {len(failures)} segment(s); details → {failure_path}")
+        print(f"\nFine scan failed for {len(failures)} content block(s); details -> {failure_path}")
         return 1
 
     return 0
 
 
-# ── CLI ────────────────────────────────────────────────────────────────────────
-
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Second-pass fine segment analysis using Doubao/ModelArk.",
-    )
-    parser.add_argument(
-        "--rough-scan",
-        default="seed_assets/analysis/macbook_neo/rough_structure_scan.json",
-        help="Stage-1 rough scan JSON.",
-    )
-    parser.add_argument(
-        "--video",
-        default="seed_assets/raw_videos/macbook_neo.mp4",
-        help="Source video file.",
-    )
-    parser.add_argument("--video-id", default="", help="Override videoId (default: read from rough scan).")
-    parser.add_argument(
-        "--prompt",
-        default="prompts/video_understanding/fine_structure_scan_v0.md",
-        help="Fine scan prompt markdown file.",
-    )
-    parser.add_argument(
-        "--out-dir",
-        default="seed_assets/analysis/macbook_neo/fine_scan",
-        help="Directory for per-segment result JSON files.",
-    )
-    parser.add_argument(
-        "--work-dir",
-        default="seed_assets/analysis/macbook_neo/fine_scan/clips",
-        help="Working directory for temporary segment clips.",
-    )
-    parser.add_argument(
-        "--segment-ids",
-        default="",
-        help="Comma-separated segment IDs to process (default: all).",
-    )
-    parser.add_argument(
-        "--skip-audio",
-        action="store_true",
-        help="Skip librosa audio beat analysis.",
-    )
+    parser = argparse.ArgumentParser(description="Stage 2 fine content-block analysis using Doubao/ModelArk.")
+    parser.add_argument("--rough-scan", default="seed_assets/analysis/macbook_neo/rough_structure_scan.json")
+    parser.add_argument("--video", default="seed_assets/raw_videos/macbook_neo.mp4")
+    parser.add_argument("--beat-map", default="seed_assets/analysis/macbook_neo/audio_beat_map.json")
+    parser.add_argument("--video-id", default="")
+    parser.add_argument("--prompt", default="prompts/video_understanding/fine_structure_scan_v0.md")
+    parser.add_argument("--out-dir", default="seed_assets/analysis/macbook_neo/fine_scan")
+    parser.add_argument("--work-dir", default="seed_assets/analysis/macbook_neo/fine_scan/clips")
+    parser.add_argument("--block-ids", default="", help="Comma-separated content block IDs to process.")
+    parser.add_argument("--skip-audio", action="store_true")
     parser.add_argument("--env", default=".env")
-    parser.add_argument(
-        "--base-url",
-        default="",
-        help="ModelArk API base URL (or set LLM_BASE_URL in .env).",
-    )
-    parser.add_argument("--api-key", default="", help="API key (or set LLM_API_KEY in .env).")
-    parser.add_argument(
-        "--model",
-        default="",
-        help="Endpoint / model ID (or set LLM_MODEL in .env).",
-    )
+    parser.add_argument("--base-url", default="")
+    parser.add_argument("--api-key", default="")
+    parser.add_argument("--model", default="")
     parser.add_argument("--poll-interval", type=float, default=5)
     parser.add_argument("--max-wait-seconds", type=float, default=300)
     parser.add_argument("--response-timeout", type=int, default=600)
-    parser.add_argument("--dry-run", action="store_true", help="Print FFmpeg commands without executing.")
+    parser.add_argument("--dry-run", action="store_true")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = build_parser()
-    args = parser.parse_args(argv)
-    return run_fine_scan(args)
+    return run_fine_scan(build_parser().parse_args(argv))
 
 
 if __name__ == "__main__":

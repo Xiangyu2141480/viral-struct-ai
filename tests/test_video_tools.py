@@ -69,22 +69,104 @@ class VideoToolsCommandBuilderTests(unittest.TestCase):
         self.assertIn("-an", command)
         self.assertEqual(command[-1], "slow.mp4")
 
-    def test_build_inspection_pack_manifest_uses_boundary_context(self):
-        pack = self.tools.build_inspection_pack(
+    def test_build_microscope_command_limits_source_window_before_slowing(self):
+        command = self.tools.build_microscope_command(
             "input.mp4",
-            out_dir="out",
-            prefix="boundary_001",
-            boundary=3.4,
-            context_radius=1.2,
-            microscope_radius=0.4,
+            "slow.mp4",
+            start=24.0,
+            end=29.0,
             playback_fps=5,
         )
 
-        self.assertEqual(pack["boundary"], 3.4)
-        self.assertEqual(pack["realSpeedClip"]["sourceTimeRange"], {"start": 2.2, "end": 4.6})
-        self.assertEqual(pack["slowMicroscopeClip"]["sourceTimeRange"], {"start": 3.0, "end": 3.8})
-        self.assertTrue(pack["realSpeedClip"]["output"].endswith("boundary_001_real.mp4"))
-        self.assertTrue(pack["slowMicroscopeClip"]["output"].endswith("boundary_001_slow.mp4"))
+        input_index = command.index("-i")
+        self.assertLess(command.index("-ss"), input_index)
+        self.assertLess(command.index("-t"), input_index)
+        self.assertEqual(command[command.index("-ss") + 1], "24.000")
+        self.assertEqual(command[command.index("-t") + 1], "5.000")
+
+    def test_build_preview_clip_command_cuts_and_lowers_segment_fps(self):
+        command = self.tools.build_preview_clip_command(
+            "input.mp4",
+            "clip_preview.mp4",
+            start=12.0,
+            end=18.5,
+            fps=5,
+            max_width=480,
+        )
+
+        input_index = command.index("-i")
+        self.assertLess(command.index("-ss"), input_index)
+        self.assertLess(command.index("-t"), input_index)
+        self.assertIn("-vf", command)
+        self.assertIn("fps=5", command[command.index("-vf") + 1])
+        self.assertIn("scale=w=min(480\\,iw):h=-2", command[command.index("-vf") + 1])
+        self.assertEqual(command[-1], "clip_preview.mp4")
+
+    def test_build_extract_audio_command_outputs_wav_for_beat_tracking(self):
+        command = self.tools.build_extract_audio_command(
+            "input.mp4",
+            "audio.wav",
+            sample_rate=44100,
+            channels=1,
+        )
+
+        self.assertEqual(command[:3], ["ffmpeg", "-y", "-i"])
+        self.assertIn("-vn", command)
+        self.assertIn("-ac", command)
+        self.assertEqual(command[command.index("-ac") + 1], "1")
+        self.assertIn("-ar", command)
+        self.assertEqual(command[command.index("-ar") + 1], "44100")
+        self.assertIn("pcm_s16le", command)
+        self.assertEqual(command[-1], "audio.wav")
+
+    def test_build_beat_this_command_uses_cli_output_path(self):
+        command = self.tools.build_beat_this_command(
+            "audio.wav",
+            "audio.beats",
+            beat_this_bin="beat_this",
+            gpu=-1,
+        )
+
+        self.assertEqual(command[:2], ["beat_this", "audio.wav"])
+        self.assertIn("-o", command)
+        self.assertEqual(command[command.index("-o") + 1], "audio.beats")
+        self.assertIn("--gpu", command)
+        self.assertEqual(command[command.index("--gpu") + 1], "-1")
+
+    def test_parse_beat_this_file_marks_downbeats(self):
+        beats_path = ROOT / "tests" / "tmp_sample.beats"
+        beats_path.write_text("0.50\t1\n1.00\t2\n1.50\t3\n2.00\t1\n", encoding="utf-8")
+        try:
+            beats = self.tools.parse_beat_this_file(beats_path)
+        finally:
+            beats_path.unlink()
+
+        self.assertEqual(len(beats), 4)
+        self.assertEqual(beats[0]["time"], 0.5)
+        self.assertTrue(beats[0]["isDownbeat"])
+        self.assertFalse(beats[1]["isDownbeat"])
+        self.assertEqual(beats[1]["beatNumber"], 2)
+
+    def test_build_audio_beat_map_computes_tempo_and_downbeats(self):
+        beats = [
+            {"time": 0.5, "beatNumber": 1, "isDownbeat": True},
+            {"time": 1.0, "beatNumber": 2, "isDownbeat": False},
+            {"time": 1.5, "beatNumber": 3, "isDownbeat": False},
+            {"time": 2.0, "beatNumber": 1, "isDownbeat": True},
+        ]
+
+        beat_map = self.tools.build_audio_beat_map(
+            video_id="demo",
+            audio_source="audio.wav",
+            beats=beats,
+            method="beat_this",
+        )
+
+        self.assertEqual(beat_map["videoId"], "demo")
+        self.assertEqual(beat_map["method"]["primary"], "beat_this")
+        self.assertEqual(beat_map["tempo"]["bpm"], 120.0)
+        self.assertEqual(len(beat_map["beats"]), 4)
+        self.assertEqual(len(beat_map["downbeats"]), 2)
 
 
 class VideoToolsCliTests(unittest.TestCase):
@@ -99,7 +181,8 @@ class VideoToolsCliTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0)
         self.assertIn("preview", result.stdout)
-        self.assertIn("inspection-pack", result.stdout)
+        self.assertIn("extract-audio", result.stdout)
+        self.assertIn("beat-map", result.stdout)
 
 
 if __name__ == "__main__":
