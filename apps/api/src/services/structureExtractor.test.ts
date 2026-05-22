@@ -44,6 +44,36 @@ test('extractStructureGraph falls back to shots and keyframes without transcript
   ));
 });
 
+test('extractStructureGraph distributes one long transcript across shot-backed segments', async () => {
+  const graph = await extractStructureGraph(buildAnalysis({
+    transcript: [
+      {
+        start: 0,
+        end: 15,
+        text: '你还在这样选杯子吗？普通杯不保温还容易漏。这款杯子保温八小时。我们做了倒置实测，一滴都不漏。点击下单今天就用上。'
+      }
+    ]
+  }));
+
+  const parsed = ViralStructureGraphSchema.parse(graph);
+  assert.equal(parsed.segments.length, 5);
+  assert.equal(parsed.segments[0]?.role, 'hook');
+  assert.equal(parsed.segments.at(-1)?.role, 'cta');
+  assert.ok(parsed.segments.some((segment) => segment.purpose.includes('keyframe /mock/frame_3.jpg 卖点卡片')));
+});
+
+test('extractStructureGraph ignores empty transcript rows for density and evidence', async () => {
+  const graph = await extractStructureGraph(buildAnalysis({
+    transcript: [{ start: 0, end: 15, text: '   ' }]
+  }));
+
+  const parsed = ViralStructureGraphSchema.parse(graph);
+  assert.equal(parsed.packaging.captionDensity, 'low');
+  assert.ok(parsed.creativeIngredients.every((ingredient) =>
+    ingredient.evidence.every((evidence) => evidence.type !== 'transcript' || evidence.value.trim().length > 0)
+  ));
+});
+
 test('extractStructureGraph handles short videos without invalid timing', async () => {
   const graph = await extractStructureGraph(buildAnalysis({
     metadata: {
@@ -93,6 +123,20 @@ test('extractStructureGraph returns schema-valid mock fallback without videoAnal
   assert.equal(parsed.meta.duration, 15);
   assert.equal(parsed.segments[0]?.role, 'hook');
   assert.ok(parsed.creativeIngredients.length > 0);
+});
+
+test('extractStructureGraph fallback avoids appearance and sensitive-attribute requirements', async () => {
+  const graph = await extractStructureGraph();
+  const parsed = ViralStructureGraphSchema.parse(graph);
+  const slotRequirements = parsed.shotSlots.flatMap((slot) => slot.visualIngredientRequirements ?? []);
+  const ingredientTypes = parsed.creativeIngredients.map((ingredient) => ingredient.type);
+  const humanFramings = parsed.shotSlots.map((slot) => slot.humanRequirement?.framing).filter(Boolean);
+
+  assert.ok(!slotRequirements.includes('face_closeup'));
+  assert.ok(!slotRequirements.includes('beauty_demo'));
+  assert.ok(!ingredientTypes.includes('face_closeup'));
+  assert.ok(!ingredientTypes.includes('beauty_demo'));
+  assert.ok(!humanFramings.includes('face_closeup'));
 });
 
 function buildAnalysis(overrides: Partial<VideoAnalysis> = {}): VideoAnalysis {

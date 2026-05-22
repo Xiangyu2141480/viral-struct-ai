@@ -5,44 +5,44 @@ export function extractCreativeIngredientsMock(
 ): CreativeIngredient[] {
   return [
     {
-      id: 'ing_human_host_face',
-      type: 'human_presence',
-      name: '真人博主近脸出镜',
+      id: 'ing_product_closeup',
+      type: 'product_closeup_trait',
+      name: '商品特写与卖点画面',
       description:
-        '样例中开头和试用段落大量使用真人博主近脸出镜，增强亲近感和信任感。',
-      segmentIds: ['seg_hook', 'seg_sp1', 'seg_cta'],
-      requiredForSlotIds: ['slot_hook_visual', 'slot_usage_demo'],
+        '样例使用清晰的商品特写和卖点画面承接核心信息，迁移时优先补足新商品的可识别视觉。',
+      segmentIds: ['seg_hook', 'seg_sp1', 'seg_proof'],
+      requiredForSlotIds: ['slot_hook_visual', 'slot_product_closeup'],
       transferability: 'requires_user_asset',
-      requiredAssets: ['face_closeup_video', 'talking_head_video'],
+      requiredAssets: ['product_closeup_video', 'selling_point_visual'],
       fallbackStrategies: [
-        'ask_user_for_human_demo',
         'product_closeup_replacement',
         'caption_rewrite',
+        'selling_point_card',
         'trust_card'
       ],
       evidence: [
         {
           type: 'model_observation',
-          value: 'mock: sample contains close-up host shots'
+          value: 'mock: sample contains clear product-focused shots'
         }
       ],
       confidence: 0.86
     },
     {
-      id: 'ing_beauty_usage_demo',
-      type: 'beauty_demo',
-      name: '上脸试用展示',
+      id: 'ing_operation_demo',
+      type: 'hand_demo',
+      name: '手部操作演示',
       description:
-        '样例通过上脸试用展示产品效果，属于证明和转化的重要视觉要素。',
+        '样例通过操作或使用动作展示卖点，迁移时可用手部演示、步骤卡或产品操作镜头替代。',
       segmentIds: ['seg_sp1', 'seg_proof'],
       requiredForSlotIds: ['slot_usage_demo', 'slot_comparison'],
       transferability: 'requires_user_asset',
-      requiredAssets: ['applying_product_video', 'before_after_image'],
-      fallbackStrategies: ['hand_demo', 'swatch_card', 'before_after_card', 'caption_rewrite'],
+      requiredAssets: ['hand_operation_video', 'usage_demo_video'],
+      fallbackStrategies: ['hand_demo', 'selling_point_card', 'comparison_card', 'caption_rewrite'],
       evidence: [
         {
           type: 'model_observation',
-          value: 'mock: sample includes makeup application and result display'
+          value: 'mock: sample includes product operation and proof-oriented shots'
         }
       ],
       confidence: 0.82
@@ -52,7 +52,7 @@ export function extractCreativeIngredientsMock(
       type: 'soft_light',
       name: '柔光高亮画面',
       description:
-        '样例使用柔和光线和干净背景突出肤质、妆容和产品质感。',
+        '样例使用柔和光线和干净背景突出商品轮廓、材质和信息卡层级。',
       segmentIds: ['seg_hook', 'seg_sp1', 'seg_proof'],
       requiredForSlotIds: ['slot_product_closeup', 'slot_usage_demo'],
       transferability: 'can_be_recreated_by_packaging',

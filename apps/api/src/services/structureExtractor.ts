@@ -153,14 +153,9 @@ function buildMockFallbackGraph(): ViralStructureGraph {
         segmentId: 'seg_hook',
         role: 'opening_attention',
         requiredAsset: { type: 'video', subject: '强视觉开头或冲突场景', motion: 'fast_cut', minDuration: 1.5 },
-        visualIngredientRequirements: ['human_presence', 'face_closeup', 'host_talking'],
-        humanRequirement: {
-          required: true,
-          role: 'host',
-          framing: 'face_closeup',
-          action: 'talking'
-        },
-        fallbackStrategies: ['ask_user_for_human_demo', 'product_closeup_replacement', 'caption_rewrite'],
+        visualIngredientRequirements: ['scene_style', 'product_closeup_trait'],
+        humanRequirement: { required: false },
+        fallbackStrategies: ['product_closeup_replacement', 'caption_rewrite', 'text_card'],
         importance: 5
       },
       {
@@ -176,15 +171,15 @@ function buildMockFallbackGraph(): ViralStructureGraph {
         id: 'slot_usage_demo',
         segmentId: 'seg_sp1',
         role: 'usage_demo',
-        requiredAsset: { type: 'video', subject: '用户使用商品过程', motion: 'hand_operation', minDuration: 2 },
-        visualIngredientRequirements: ['human_presence', 'face_closeup', 'beauty_demo', 'soft_light'],
+        requiredAsset: { type: 'video', subject: '手部操作或商品使用过程', motion: 'hand_operation', minDuration: 2 },
+        visualIngredientRequirements: ['hand_demo', 'product_closeup_trait', 'soft_light'],
         humanRequirement: {
           required: true,
-          role: 'host',
-          framing: 'face_closeup',
-          action: 'applying_product'
+          role: 'hand_only',
+          framing: 'hands',
+          action: 'holding_product'
         },
-        fallbackStrategies: ['ask_user_for_human_demo', 'hand_demo', 'swatch_card', 'caption_rewrite'],
+        fallbackStrategies: ['hand_demo', 'selling_point_card', 'caption_rewrite'],
         importance: 5
       },
       {
@@ -242,6 +237,27 @@ function isUsableVideoAnalysis(value: VideoAnalysis | undefined): value is Video
 
 function buildStructureSources(videoAnalysis: VideoAnalysis, duration: number): StructureSource[] {
   const transcript = normalizeTranscript(videoAnalysis.transcript, duration);
+  const shots = normalizeShots(videoAnalysis.shots, duration);
+
+  if (transcript.length > 0 && transcript.length < 3 && shots.length >= 3) {
+    const transcriptChunks = splitTranscriptForShots(transcript, shots.length);
+    return shots.map((shot, index) => {
+      const center = midpoint(shot.start, shot.end);
+      const keyframe = findKeyframeForTime(videoAnalysis, center);
+      const chunk = transcriptChunks[index];
+      const text = [shot.description, chunk].filter(Boolean).join('：') || `镜头 ${index + 1}`;
+
+      return {
+        start: shot.start,
+        end: shot.end,
+        text,
+        transcript: transcript[Math.min(index, transcript.length - 1)],
+        shot,
+        keyframeUrl: shot.keyframeUrl || keyframe?.url,
+        keyframeDescription: keyframe?.description
+      };
+    });
+  }
 
   if (transcript.length) {
     return transcript.map((segment) => {
@@ -261,7 +277,6 @@ function buildStructureSources(videoAnalysis: VideoAnalysis, duration: number): 
     });
   }
 
-  const shots = normalizeShots(videoAnalysis.shots, duration);
   return shots.map((shot, index) => {
     const center = midpoint(shot.start, shot.end);
     const keyframe = findKeyframeForTime(videoAnalysis, center);
@@ -275,6 +290,39 @@ function buildStructureSources(videoAnalysis: VideoAnalysis, duration: number): 
       keyframeDescription: keyframe?.description
     };
   });
+}
+
+function splitTranscriptForShots(transcript: TranscriptSegment[], count: number): string[] {
+  const text = transcript.map((segment) => segment.text).join(' ').trim();
+  const sentences = text
+    .replace(/([。！？!?；;])/g, '$1\n')
+    .split(/\s*\n\s*/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  if (sentences.length >= count) {
+    return sentences.slice(0, count - 1).concat(sentences.slice(count - 1).join(' '));
+  }
+
+  if (sentences.length > 1) {
+    return distributeItems(sentences, count);
+  }
+
+  const chunkSize = Math.max(1, Math.ceil(text.length / count));
+  return Array.from({ length: count }, (_value, index) =>
+    text.slice(index * chunkSize, (index + 1) * chunkSize).trim()
+  );
+}
+
+function distributeItems(items: string[], count: number): string[] {
+  const buckets = Array.from({ length: count }, () => [] as string[]);
+
+  items.forEach((item, index) => {
+    const bucketIndex = Math.min(count - 1, Math.floor((index * count) / items.length));
+    buckets[bucketIndex].push(item);
+  });
+
+  return buckets.map((bucket) => bucket.join(' '));
 }
 
 function normalizeTranscript(transcript: TranscriptSegment[], duration: number): TranscriptSegment[] {
@@ -408,8 +456,9 @@ function buildCreativeIngredients(
 ): CreativeIngredient[] {
   const text = searchableText(videoAnalysis);
   const ingredients: CreativeIngredient[] = [];
+  const transcriptEvidenceItems = transcriptEvidence(videoAnalysis);
 
-  if (videoAnalysis.transcript.length) {
+  if (transcriptEvidenceItems.length) {
     ingredients.push(buildIngredient({
       id: 'ing_caption_driven_structure',
       type: 'scene_style',
@@ -419,7 +468,7 @@ function buildCreativeIngredients(
       requiredForSlotIds: shotSlots.map((slot) => slot.id),
       transferability: 'can_be_recreated_by_packaging',
       fallbackStrategies: ['caption_rewrite', 'text_card'],
-      evidence: transcriptEvidence(videoAnalysis),
+      evidence: transcriptEvidenceItems,
       confidence: 0.78
     }));
   }
@@ -546,7 +595,7 @@ function buildIngredient(input: {
 }
 
 function buildPackaging(videoAnalysis: VideoAnalysis, duration: number): ViralStructureGraph['packaging'] {
-  const captionDensity = classifyCaptionDensity(videoAnalysis.transcript.length, duration);
+  const captionDensity = classifyCaptionDensity(normalizeTranscript(videoAnalysis.transcript, duration).length, duration);
   const isVertical = videoAnalysis.metadata.aspectRatio === '9:16';
   const keyframeCount = videoAnalysis.keyframes.length;
 
@@ -716,7 +765,7 @@ function buildEvidenceText(source: StructureSource): string {
   const pieces = [
     source.transcript ? `transcript ${formatSeconds(source.transcript.start)}-${formatSeconds(source.transcript.end)}` : '',
     source.shot ? `shot ${source.shot.id} ${formatSeconds(source.shot.start)}-${formatSeconds(source.shot.end)}` : '',
-    source.keyframeUrl ? `keyframe ${source.keyframeUrl}` : ''
+    source.keyframeUrl ? `keyframe ${source.keyframeUrl}${source.keyframeDescription ? ` ${source.keyframeDescription}` : ''}` : ''
   ].filter(Boolean);
 
   return pieces.join('；') || '规则保底切分';
@@ -728,8 +777,9 @@ function buildSummary(
   cutFrequency: ViralStructureGraph['rhythm']['cutFrequency']
 ): string {
   const roles = segments.map((segment) => roleName(segment.role)).join(' → ');
-  const source = videoAnalysis.transcript.length
-    ? `${videoAnalysis.transcript.length} 段字幕`
+  const transcriptCount = normalizeTranscript(videoAnalysis.transcript, safeDuration(videoAnalysis.metadata.duration)).length;
+  const source = transcriptCount
+    ? `${transcriptCount} 段字幕`
     : `${videoAnalysis.shots.length || segments.length} 段镜头`;
   return `基于 M1 的 ${source} 和 ${videoAnalysis.keyframes.length} 张关键帧，规则引擎生成「${roles}」结构；节奏为 ${cutFrequency}，可迁移重点是开头表达、卖点承接、证明方式和 CTA 收束。`;
 }
@@ -837,10 +887,12 @@ function idsForSlotRoles(slots: ShotSlotNode[], roles: ShotSlotRole[]): string[]
 }
 
 function transcriptEvidence(videoAnalysis: VideoAnalysis): CreativeIngredientEvidence[] {
-  return videoAnalysis.transcript.slice(0, 3).map((segment) => ({
-    type: 'transcript',
-    value: `${formatSeconds(segment.start)}-${formatSeconds(segment.end)} ${segment.text}`
-  }));
+  return normalizeTranscript(videoAnalysis.transcript, safeDuration(videoAnalysis.metadata.duration))
+    .slice(0, 3)
+    .map((segment) => ({
+      type: 'transcript',
+      value: `${formatSeconds(segment.start)}-${formatSeconds(segment.end)} ${segment.text}`
+    }));
 }
 
 function frameEvidence(videoAnalysis: VideoAnalysis): CreativeIngredientEvidence[] {

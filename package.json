@@ -7,7 +7,7 @@
     "build": "turbo build",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
-    "test": "python3 -m unittest discover -s tests -v && pnpm --filter @viral-struct/api test",
+    "test": "node scripts/run-tests.mjs",
     "format": "prettier --write ."
   },
   "devDependencies": {

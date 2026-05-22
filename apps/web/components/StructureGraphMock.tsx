@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { VideoAnalysis, ViralStructureGraph } from '@viral-struct/shared';
 import { apiPost } from '../lib/api';
 import { useWorkflowStore } from '../lib/workflowStore';
@@ -23,6 +23,7 @@ export function StructureGraphMock() {
   const setStructureGraph = useWorkflowStore((state) => state.setStructureGraph);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const autoExtractedSignature = useRef<string | null>(null);
 
   async function extractGraph(analysis: VideoAnalysis | null) {
     setLoading(true);
@@ -41,7 +42,9 @@ export function StructureGraphMock() {
   }
 
   useEffect(() => {
-    if (videoAnalysis && !structureGraph && !loading) {
+    const signature = videoAnalysis ? analysisSignature(videoAnalysis) : null;
+    if (videoAnalysis && signature && !structureGraph && !loading && autoExtractedSignature.current !== signature) {
+      autoExtractedSignature.current = signature;
       void extractGraph(videoAnalysis);
     }
   }, [videoAnalysis, structureGraph, loading]);
@@ -72,6 +75,7 @@ export function StructureGraphMock() {
           <SegmentStrip graph={graph} />
           <SlotTable graph={graph} />
           <CreativeIngredients graph={graph} />
+          <EdgeList graph={graph} />
         </>
       ) : (
         <DefaultGraphView />
@@ -128,7 +132,7 @@ function SegmentStrip({ graph }: { graph: ViralStructureGraph }) {
   return (
     <div style={{ display: 'flex', gap: 12, alignItems: 'stretch', flexWrap: 'wrap' }}>
       {graph.segments.map((segment, index) => (
-        <article className="card" key={segment.id} style={{ width: 220 }}>
+        <article className="card" key={segment.id} style={{ width: 220, overflowWrap: 'anywhere' }}>
           <strong>
             {index + 1}. {segment.role}
           </strong>
@@ -161,12 +165,12 @@ function SlotTable({ graph }: { graph: ViralStructureGraph }) {
         <tbody>
           {graph.shotSlots.map((slot) => (
             <tr key={slot.id}>
-              <td style={{ padding: 8 }}>{slot.role}</td>
-              <td style={{ padding: 8 }}>
+              <td style={{ padding: 8, verticalAlign: 'top' }}>{slot.role}</td>
+              <td style={{ padding: 8, verticalAlign: 'top', overflowWrap: 'anywhere' }}>
                 {slot.requiredAsset.type} · {slot.requiredAsset.subject}
               </td>
-              <td style={{ padding: 8 }}>{slot.visualIngredientRequirements?.join(' / ') || '无'}</td>
-              <td style={{ padding: 8 }}>{slot.fallbackStrategies.join(' / ')}</td>
+              <td style={{ padding: 8, verticalAlign: 'top', overflowWrap: 'anywhere' }}>{slot.visualIngredientRequirements?.join(' / ') || '无'}</td>
+              <td style={{ padding: 8, verticalAlign: 'top', overflowWrap: 'anywhere' }}>{slot.fallbackStrategies.join(' / ')}</td>
             </tr>
           ))}
         </tbody>
@@ -188,7 +192,8 @@ function CreativeIngredients({ graph }: { graph: ViralStructureGraph }) {
               border: '1px solid rgba(255,255,255,0.12)',
               borderRadius: 12,
               padding: 14,
-              background: 'rgba(255,255,255,0.04)'
+              background: 'rgba(255,255,255,0.04)',
+              overflowWrap: 'anywhere'
             }}
           >
             <strong>{ingredient.name}</strong>
@@ -216,8 +221,46 @@ function CreativeIngredients({ graph }: { graph: ViralStructureGraph }) {
   );
 }
 
+function EdgeList({ graph }: { graph: ViralStructureGraph }) {
+  return (
+    <section className="card" style={{ marginTop: 16 }}>
+      <h2>结构关系</h2>
+      <div style={{ display: 'grid', gap: 8 }}>
+        {graph.edges.map((edge, index) => (
+          <div
+            key={`${edge.from}-${edge.to}-${index}`}
+            style={{
+              borderBottom: '1px solid rgba(255,255,255,0.08)',
+              paddingBottom: 8,
+              overflowWrap: 'anywhere'
+            }}
+          >
+            <strong>{edge.type}</strong> · {edge.from} → {edge.to}
+            {edge.explanation ? <p style={{ margin: '4px 0 0' }}>{edge.explanation}</p> : null}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function formatSeconds(value: number): string {
   return `${Number(value.toFixed(2))}s`;
+}
+
+function analysisSignature(analysis: VideoAnalysis): string {
+  const firstTranscript = analysis.transcript[0]?.text ?? '';
+  const lastTranscript = analysis.transcript.at(-1)?.text ?? '';
+  return [
+    analysis.metadata.videoId,
+    analysis.metadata.duration,
+    analysis.metadata.aspectRatio,
+    analysis.shots.length,
+    analysis.keyframes.length,
+    analysis.transcript.length,
+    firstTranscript,
+    lastTranscript
+  ].join('|');
 }
 
 function errorMessage(error: unknown): string {
