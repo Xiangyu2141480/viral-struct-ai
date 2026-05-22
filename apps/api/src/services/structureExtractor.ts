@@ -3,6 +3,7 @@ import type {
   CreativeIngredientEvidence,
   CreativeIngredientType,
   GapRepairStrategy,
+  Keyframe,
   SegmentNode,
   SegmentRole,
   Shot,
@@ -12,34 +13,72 @@ import type {
   VideoAnalysis,
   ViralStructureGraph
 } from '@viral-struct/shared';
+import { ViralStructureGraphSchema } from '@viral-struct/shared';
 import { extractCreativeIngredientsMock } from './visualIngredientExtractor';
+
+type IndexedTranscriptSegment = TranscriptSegment & { index: number };
+type IndexedShot = Shot & { index: number };
+type IndexedKeyframe = Keyframe & { index: number };
 
 type StructureSource = {
   start: number;
   end: number;
   text: string;
-  transcript?: TranscriptSegment;
-  shot?: Shot;
-  keyframeUrl?: string;
-  keyframeDescription?: string;
+  transcripts: IndexedTranscriptSegment[];
+  shots: IndexedShot[];
+  keyframes: IndexedKeyframe[];
+};
+
+export type StructureExtractionDebug = {
+  fallbackUsed: boolean;
+  segmentCount: number;
+  evidenceCount: number;
+  warnings: string[];
+};
+
+export type StructureExtractionResult = {
+  structureGraph: ViralStructureGraph;
+  debug: StructureExtractionDebug;
+};
+
+type RhythmMetrics = {
+  shotCount: number;
+  avgShotDuration: number;
+  cutsPer10Sec: number;
 };
 
 export async function extractStructureGraph(
-  videoAnalysis?: VideoAnalysis
+  videoAnalysis?: unknown
 ): Promise<ViralStructureGraph> {
-  if (!isUsableVideoAnalysis(videoAnalysis)) {
-    return buildMockFallbackGraph();
+  const result = await extractStructureGraphWithDebug(videoAnalysis);
+  return result.structureGraph;
+}
+
+export async function extractStructureGraphWithDebug(
+  videoAnalysis?: unknown
+): Promise<StructureExtractionResult> {
+  const normalized = normalizeVideoAnalysisInput(videoAnalysis);
+
+  if (!normalized.analysis) {
+    const fallbackGraph = ViralStructureGraphSchema.parse(buildMockFallbackGraph());
+    return buildExtractionResult(fallbackGraph, true, normalized.warnings);
   }
 
   try {
-    return buildRuleBasedGraph(videoAnalysis);
-  } catch {
-    return buildMockFallbackGraph();
+    const graph = ViralStructureGraphSchema.parse(buildRuleBasedGraph(normalized.analysis));
+    return buildExtractionResult(graph, false, normalized.warnings);
+  } catch (error) {
+    const fallbackGraph = ViralStructureGraphSchema.parse(buildMockFallbackGraph());
+    return buildExtractionResult(
+      fallbackGraph,
+      true,
+      normalized.warnings.concat(`规则抽取失败，已使用 mock fallback：${errorMessage(error)}`)
+    );
   }
 }
 
 export async function extractStructureMock(
-  videoAnalysis?: VideoAnalysis
+  videoAnalysis?: unknown
 ): Promise<ViralStructureGraph> {
   return extractStructureGraph(videoAnalysis);
 }
@@ -51,8 +90,8 @@ function buildRuleBasedGraph(videoAnalysis: VideoAnalysis): ViralStructureGraph 
   const shotSlots = segments.map((segment, index) =>
     buildShotSlot(segment, sources[index], index, segments.length)
   );
-  const avgShotDuration = getAverageShotDuration(videoAnalysis.shots, duration, segments.length);
-  const cutFrequency = classifyCutFrequency(avgShotDuration);
+  const rhythmMetrics = buildRhythmMetrics(videoAnalysis.shots, duration, segments.length);
+  const cutFrequency = classifyCutFrequency(rhythmMetrics.avgShotDuration, rhythmMetrics.cutsPer10Sec);
   const creativeIngredients = buildCreativeIngredients(videoAnalysis, segments, shotSlots);
 
   return {
@@ -62,14 +101,14 @@ function buildRuleBasedGraph(videoAnalysis: VideoAnalysis): ViralStructureGraph 
       videoType: inferVideoType(videoAnalysis),
       style: inferStyle(videoAnalysis, cutFrequency)
     },
-    structureSummary: buildSummary(videoAnalysis, segments, cutFrequency),
+    structureSummary: buildSummary(videoAnalysis, segments, cutFrequency, rhythmMetrics),
     segments,
     shotSlots,
     rhythm: {
-      avgShotDuration,
+      avgShotDuration: rhythmMetrics.avgShotDuration,
       cutFrequency,
       peakAt: findPeakAt(segments),
-      pattern: buildRhythmPattern(segments, cutFrequency)
+      pattern: buildRhythmPattern(segments, cutFrequency, rhythmMetrics)
     },
     packaging: buildPackaging(videoAnalysis, duration),
     creativeIngredients,
@@ -225,25 +264,111 @@ function buildMockFallbackGraph(): ViralStructureGraph {
   };
 }
 
-function isUsableVideoAnalysis(value: VideoAnalysis | undefined): value is VideoAnalysis {
-  return Boolean(
-    value?.metadata &&
-    Number.isFinite(value.metadata.duration) &&
-    Array.isArray(value.shots) &&
-    Array.isArray(value.keyframes) &&
-    Array.isArray(value.transcript)
+function buildExtractionResult(
+  structureGraph: ViralStructureGraph,
+  fallbackUsed: boolean,
+  warnings: string[]
+): StructureExtractionResult {
+  return {
+    structureGraph,
+    debug: {
+      fallbackUsed,
+      segmentCount: structureGraph.segments.length,
+      evidenceCount: countEvidenceItems(structureGraph),
+      warnings
+    }
+  };
+}
+
+function countEvidenceItems(graph: ViralStructureGraph): number {
+  const segmentEvidence = graph.segments.filter((segment) =>
+    /来源：|依据：|原样例证据/.test(`${segment.purpose} ${segment.transferRule}`)
+  ).length;
+  const ingredientEvidence = graph.creativeIngredients.reduce(
+    (total, ingredient) => total + ingredient.evidence.length,
+    0
   );
+  return segmentEvidence + ingredientEvidence;
+}
+
+function normalizeVideoAnalysisInput(value: unknown): { analysis: VideoAnalysis | null; warnings: string[] } {
+  const warnings: string[] = [];
+
+  if (!isRecord(value)) {
+    return { analysis: null, warnings: ['未收到 videoAnalysis，返回 mock fallback。'] };
+  }
+
+  const rawMetadata = isRecord(value.metadata) ? value.metadata : value;
+  const duration = safeDuration(readNumber(rawMetadata.duration) ?? readNumber(value.duration) ?? 15);
+  const width = readNumber(rawMetadata.width) ?? readNumber(value.width) ?? 0;
+  const height = readNumber(rawMetadata.height) ?? readNumber(value.height) ?? 0;
+  const aspectRatio = normalizeAspectRatio(readString(rawMetadata.aspectRatio) ?? readString(value.aspectRatio), width, height);
+  const transcript = normalizeTranscriptInput(readUnknown(value, ['transcript', 'transcripts', 'manualTranscript']), duration);
+  const shots = normalizeShotsInput(readUnknown(value, ['shots', 'scenes']), duration);
+  const keyframes = normalizeKeyframesInput(readUnknown(value, ['keyframes', 'frames']), duration);
+  const videoId =
+    readString(rawMetadata.videoId) ??
+    readString(rawMetadata.filename) ??
+    readString(rawMetadata.originalName) ??
+    readString(value.videoId) ??
+    readString(value.filename) ??
+    readString(value.originalName) ??
+    'unknown-video';
+
+  if (!readUnknown(value, ['transcript', 'transcripts', 'manualTranscript'])) {
+    warnings.push('transcript 缺失，使用 shots/duration 生成结构。');
+  }
+  if (!Array.isArray(readUnknown(value, ['shots', 'scenes'])) || shots.length === 0) {
+    warnings.push('shots 缺失或无有效镜头，使用 duration 自动切分。');
+  }
+  if (!Array.isArray(readUnknown(value, ['keyframes', 'frames'])) || keyframes.length === 0) {
+    warnings.push('keyframes 缺失或无有效关键帧，证据链将只使用 transcript/shots。');
+  }
+
+  const hasSignal = transcript.length > 0 || shots.length > 0 || keyframes.length > 0 || readString(value.videoId) || readString(value.filename);
+
+  if (!hasSignal) {
+    return { analysis: null, warnings: warnings.concat('videoAnalysis 没有可用信号，返回 mock fallback。') };
+  }
+
+  return {
+    analysis: {
+      metadata: {
+        videoId,
+        duration,
+        fps: readNumber(rawMetadata.fps) ?? readNumber(value.fps) ?? 0,
+        width,
+        height,
+        aspectRatio
+      },
+      transcript,
+      shots,
+      keyframes
+    },
+    warnings
+  };
 }
 
 function buildStructureSources(videoAnalysis: VideoAnalysis, duration: number): StructureSource[] {
-  const transcript = normalizeTranscript(videoAnalysis.transcript, duration);
-  const shots = normalizeShots(videoAnalysis.shots, duration);
+  const transcript = normalizeTranscript(videoAnalysis.transcript, duration).map((segment, index) => ({
+    ...segment,
+    index: index + 1
+  }));
+  const shots = normalizeShots(videoAnalysis.shots, duration).map((shot, index) => ({
+    ...shot,
+    index: index + 1
+  }));
+  const keyframes = normalizeKeyframes(videoAnalysis.keyframes, duration).map((keyframe, index) => ({
+    ...keyframe,
+    index: index + 1
+  }));
 
   if (transcript.length > 0 && transcript.length < 3 && shots.length >= 3) {
+    const targetCount = Math.min(5, shots.length);
     const transcriptChunks = splitTranscriptForShots(transcript, shots.length);
-    return shots.map((shot, index) => {
+    const shotSources = groupSources(shots.map((shot, index) => {
       const center = midpoint(shot.start, shot.end);
-      const keyframe = findKeyframeForTime(videoAnalysis, center);
+      const matchedKeyframes = findKeyframesForRange(keyframes, shot.start, shot.end, center);
       const chunk = transcriptChunks[index];
       const text = [shot.description, chunk].filter(Boolean).join('：') || `镜头 ${index + 1}`;
 
@@ -251,45 +376,49 @@ function buildStructureSources(videoAnalysis: VideoAnalysis, duration: number): 
         start: shot.start,
         end: shot.end,
         text,
-        transcript: transcript[Math.min(index, transcript.length - 1)],
-        shot,
-        keyframeUrl: shot.keyframeUrl || keyframe?.url,
-        keyframeDescription: keyframe?.description
+        transcripts: [transcript[Math.min(index, transcript.length - 1)]].filter(Boolean),
+        shots: [shot],
+        keyframes: matchedKeyframes
       };
-    });
+    }), targetCount);
+
+    return shotSources;
   }
 
   if (transcript.length) {
-    return transcript.map((segment) => {
+    const transcriptSources = transcript.map((segment) => {
       const center = midpoint(segment.start, segment.end);
-      const shot = findShotForTime(videoAnalysis.shots, center);
-      const keyframe = findKeyframeForTime(videoAnalysis, center);
+      const matchedShots = findShotsForRange(shots, segment.start, segment.end, center);
+      const matchedKeyframes = findKeyframesForRange(keyframes, segment.start, segment.end, center);
 
       return {
         start: segment.start,
         end: segment.end,
         text: segment.text,
-        transcript: segment,
-        shot,
-        keyframeUrl: keyframe?.url,
-        keyframeDescription: keyframe?.description
+        transcripts: [segment],
+        shots: matchedShots,
+        keyframes: matchedKeyframes
       };
     });
+
+    return groupSources(transcriptSources, targetSegmentCount(duration, transcriptSources.length, true));
   }
 
-  return shots.map((shot, index) => {
+  const shotSources = shots.map((shot, index) => {
     const center = midpoint(shot.start, shot.end);
-    const keyframe = findKeyframeForTime(videoAnalysis, center);
+    const matchedKeyframes = findKeyframesForRange(keyframes, shot.start, shot.end, center);
 
     return {
       start: shot.start,
       end: shot.end,
       text: shot.description || `镜头 ${index + 1}`,
-      shot,
-      keyframeUrl: shot.keyframeUrl || keyframe?.url,
-      keyframeDescription: keyframe?.description
+      transcripts: [],
+      shots: [shot],
+      keyframes: matchedKeyframes
     };
   });
+
+  return groupSources(shotSources, targetSegmentCount(duration, shotSources.length, false));
 }
 
 function splitTranscriptForShots(transcript: TranscriptSegment[], count: number): string[] {
@@ -325,6 +454,171 @@ function distributeItems(items: string[], count: number): string[] {
   return buckets.map((bucket) => bucket.join(' '));
 }
 
+function groupSources(sources: StructureSource[], targetCount: number): StructureSource[] {
+  if (sources.length <= targetCount) {
+    return sources;
+  }
+
+  const buckets = Array.from({ length: targetCount }, () => [] as StructureSource[]);
+
+  sources.forEach((source, index) => {
+    const bucketIndex = Math.min(targetCount - 1, Math.floor((index * targetCount) / sources.length));
+    buckets[bucketIndex].push(source);
+  });
+
+  return buckets
+    .filter((bucket) => bucket.length > 0)
+    .map((bucket, index) => mergeSourceBucket(bucket, index));
+}
+
+function mergeSourceBucket(bucket: StructureSource[], index: number): StructureSource {
+  const start = bucket[0]?.start ?? 0;
+  const end = bucket.at(-1)?.end ?? start + 1;
+
+  return {
+    start,
+    end,
+    text: bucket.map((source) => source.text).filter(Boolean).join(' / ') || `结构段 ${index + 1}`,
+    transcripts: uniqueByIndex(bucket.flatMap((source) => source.transcripts)),
+    shots: uniqueByIndex(bucket.flatMap((source) => source.shots)),
+    keyframes: uniqueByIndex(bucket.flatMap((source) => source.keyframes))
+  };
+}
+
+function targetSegmentCount(duration: number, signalCount: number, hasTranscript: boolean): number {
+  if (hasTranscript) {
+    return clampInteger(signalCount, 3, 6);
+  }
+
+  if (duration <= 15) {
+    return 3;
+  }
+
+  return Math.min(Math.max(signalCount, 5), 6);
+}
+
+function normalizeTranscriptInput(input: unknown, duration: number): TranscriptSegment[] {
+  if (typeof input === 'string') {
+    return splitTranscriptText(input, duration);
+  }
+
+  if (!Array.isArray(input)) {
+    return [];
+  }
+
+  const drafts = input
+    .map((item) => transcriptDraftFromUnknown(item))
+    .filter((item): item is { start?: number; end?: number; text: string } => Boolean(item?.text.trim()));
+
+  if (!drafts.length) {
+    return [];
+  }
+
+  return drafts
+    .map((draft, index) => {
+      const fallbackStart = round((duration * index) / drafts.length);
+      const fallbackEnd = round(index === drafts.length - 1 ? duration : (duration * (index + 1)) / drafts.length);
+      const start = Number.isFinite(draft.start) ? clamp(round(draft.start as number), 0, duration) : fallbackStart;
+      const end = Number.isFinite(draft.end) && (draft.end as number) > start
+        ? clamp(round(draft.end as number), 0, duration)
+        : fallbackEnd;
+
+      return {
+        start,
+        end: Math.max(end, Math.min(duration, start + 0.1)),
+        text: draft.text.trim()
+      };
+    })
+    .filter((segment) => segment.text && segment.end > segment.start);
+}
+
+function transcriptDraftFromUnknown(item: unknown): { start?: number; end?: number; text: string } | null {
+  if (typeof item === 'string') {
+    return { text: item };
+  }
+
+  if (!isRecord(item)) {
+    return null;
+  }
+
+  const text =
+    readString(item.text) ??
+    readString(item.content) ??
+    readString(item.caption) ??
+    readString(item.sentence) ??
+    '';
+
+  return {
+    start: readNumber(item.start) ?? readNumber(item.startTime) ?? readNumber(item.from) ?? readNumber(item.begin),
+    end: readNumber(item.end) ?? readNumber(item.endTime) ?? readNumber(item.to) ?? readNumber(item.finish),
+    text
+  };
+}
+
+function splitTranscriptText(text: string, duration: number): TranscriptSegment[] {
+  const segments = text
+    .trim()
+    .replace(/([。！？!?；;])/g, '$1\n')
+    .split(/\s*\n\s*/)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+
+  const items = segments.length ? segments : [text.trim()].filter(Boolean);
+
+  return items.map((item, index) => ({
+    start: round((duration * index) / items.length),
+    end: round(index === items.length - 1 ? duration : (duration * (index + 1)) / items.length),
+    text: item
+  }));
+}
+
+function normalizeShotsInput(input: unknown, duration: number): Shot[] {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+
+  return input
+    .map<Shot | null>((item, index) => {
+      if (!isRecord(item)) {
+        return null;
+      }
+
+      const fallbackStart = round((duration * index) / input.length);
+      const fallbackEnd = round(index === input.length - 1 ? duration : (duration * (index + 1)) / input.length);
+      const start = clamp(round(readNumber(item.start) ?? readNumber(item.startTime) ?? fallbackStart), 0, duration);
+      const end = clamp(round(readNumber(item.end) ?? readNumber(item.endTime) ?? fallbackEnd), 0, duration);
+
+      return {
+        id: readString(item.id) ?? `shot_${index + 1}`,
+        start,
+        end,
+        keyframeUrl: readString(item.keyframeUrl) ?? readString(item.frameUrl),
+        description: readString(item.description) ?? readString(item.caption) ?? readString(item.text)
+      };
+    })
+    .filter((shot): shot is Shot => Boolean(shot && shot.end > shot.start));
+}
+
+function normalizeKeyframesInput(input: unknown, duration: number): Keyframe[] {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+
+  return input
+    .map<Keyframe | null>((item, index) => {
+      if (!isRecord(item)) {
+        return null;
+      }
+
+      return {
+        time: clamp(round(readNumber(item.time) ?? readNumber(item.timestamp) ?? 0), 0, duration),
+        url: readString(item.url) ?? readString(item.path) ?? readString(item.keyframeUrl) ?? `keyframe_${index + 1}`,
+        description: readString(item.description) ?? readString(item.caption) ?? readString(item.text)
+      };
+    })
+    .filter((keyframe): keyframe is Keyframe => Boolean(keyframe));
+}
+
 function normalizeTranscript(transcript: TranscriptSegment[], duration: number): TranscriptSegment[] {
   return transcript
     .map((segment) => ({
@@ -357,8 +651,18 @@ function normalizeShots(shots: Shot[], duration: number): Shot[] {
   }));
 }
 
+function normalizeKeyframes(keyframes: Keyframe[], duration: number): Keyframe[] {
+  return keyframes
+    .map((keyframe) => ({
+      ...keyframe,
+      time: clamp(round(keyframe.time), 0, duration)
+    }))
+    .filter((keyframe) => keyframe.url);
+}
+
 function buildSegment(source: StructureSource, index: number, total: number): SegmentNode {
-  const role = inferSegmentRole(source.text, index, total);
+  const roleDecision = inferSegmentRole(source, index, total);
+  const role = roleDecision.role;
   const evidence = buildEvidenceText(source);
   const caption = summarize(source.text, 32);
 
@@ -368,10 +672,10 @@ function buildSegment(source: StructureSource, index: number, total: number): Se
     start: source.start,
     end: source.end,
     duration: round(source.end - source.start),
-    purpose: `${purposeForRole(role)}；依据：${evidence}`,
-    narration: source.transcript?.text,
+    purpose: `${purposeForRole(role)}；来源：${evidence}；判断依据：${roleDecision.reason}`,
+    narration: source.transcripts.length ? source.transcripts.map((segment) => segment.text).join(' ') : undefined,
     caption,
-    transferRule: `${transferRuleForRole(role)} 原样例证据：${evidence}`,
+    transferRule: `${transferRuleForRole(role)} 保留的结构能力：${roleDecision.reason}；原样例证据：${evidence}`,
     importance: importanceForRole(role)
   };
 }
@@ -403,31 +707,56 @@ function buildShotSlot(
   };
 }
 
-function inferSegmentRole(text: string, index: number, total: number): SegmentRole {
+const HOOK_KEYWORDS = ['你是不是', '有没有', '别再', '千万别', '注意', '很多人不知道', '为什么', '原来', '?', '？', '!', '！', '还在'];
+const PAIN_KEYWORDS = ['痛点', '问题', '麻烦', '不会', '太难', '太贵', '浪费', '焦虑', '担心', '卡住', '低效', '失败', '踩坑', '不够', '容易', '普通'];
+const SELLING_POINT_KEYWORDS = ['这个', '我们', '产品', '商品', '功能', '解决', '只需要', '支持', '适合', '可以', '一键', '自动', '高效', '提升', '卖点', '核心', '优势'];
+const PROOF_KEYWORDS = ['实测', '数据', '案例', '对比', '前后', '真实', '用户', '证明', '效果', '结果', '测试', '反馈', '评价', '口碑', '不漏'];
+const CTA_KEYWORDS = ['点击', '关注', '下单', '购买', '私信', '领取', '评论', '收藏', '转发', '马上', '现在', '了解更多', '咨询'];
+const USAGE_KEYWORDS = ['使用', '试用', '演示', '步骤', '打开', '拿', '倒', '操作', '安装', '上手', '手持'];
+
+function inferSegmentRole(
+  source: StructureSource,
+  index: number,
+  total: number
+): { role: SegmentRole; reason: string } {
+  const text = source.text;
   const normalized = text.toLowerCase();
 
   if (index === 0) {
-    return 'hook';
+    return { role: 'hook', reason: '位于开头，并承担第一眼注意力/问题引入。' };
   }
   if (index === total - 1) {
-    return 'cta';
+    return { role: 'cta', reason: '位于结尾，用于行动召唤或收束。' };
   }
-  if (/痛点|问题|普通|不够|容易|麻烦|困扰|尴尬|还在/.test(normalized)) {
-    return 'pain_point';
+
+  const position = total <= 1 ? 0 : index / (total - 1);
+  const scores: Record<SegmentRole, number> = {
+    hook: scoreByKeywords(normalized, HOOK_KEYWORDS) + (position <= 0.2 ? 2 : 0),
+    pain_point: scoreByKeywords(normalized, PAIN_KEYWORDS) + (position > 0.1 && position <= 0.45 ? 2 : 0),
+    selling_point: scoreByKeywords(normalized, SELLING_POINT_KEYWORDS) + (position > 0.25 && position <= 0.7 ? 2 : 0),
+    proof: scoreByKeywords(normalized, PROOF_KEYWORDS) + (position > 0.45 && position < 0.9 ? 2 : 0),
+    usage: scoreByKeywords(normalized, USAGE_KEYWORDS) + (source.shots.length ? 0.5 : 0),
+    comparison: /对比|前后|before|after/i.test(text) ? 4 : 0,
+    cta: scoreByKeywords(normalized, CTA_KEYWORDS) + (position >= 0.8 ? 2 : 0)
+  };
+
+  const role = (Object.entries(scores) as Array<[SegmentRole, number]>)
+    .sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'selling_point';
+
+  if (scores[role] <= 0) {
+    return index >= Math.max(1, total - 2)
+      ? { role: 'proof', reason: '缺少明确关键词，按后段位置承担证明或可信度增强。' }
+      : { role: 'selling_point', reason: '缺少明确关键词，按中段位置承担卖点承接。' };
   }
-  if (/对比|证明|实测|测试|评价|口碑|数据|前后|不漏|效果/.test(normalized)) {
-    return 'proof';
-  }
-  if (/使用|试用|演示|步骤|打开|涂|拿|倒|操作|安装|上手/.test(normalized)) {
-    return 'usage';
-  }
-  if (/卖点|核心|功能|保温|优势|升级|成分|设计|清晰|特写/.test(normalized)) {
-    return 'selling_point';
-  }
-  if (index >= Math.max(1, total - 2)) {
-    return 'proof';
-  }
-  return 'selling_point';
+
+  return {
+    role,
+    reason: `关键词/位置综合评分最高：${roleName(role)}=${scores[role]}，位置约 ${Math.round(position * 100)}%。`
+  };
+}
+
+function scoreByKeywords(text: string, keywords: string[]): number {
+  return keywords.reduce((score, keyword) => score + (text.includes(keyword.toLowerCase()) ? 2 : 0), 0);
 }
 
 function slotRoleForSegment(role: SegmentRole, index: number, total: number): ShotSlotRole {
@@ -595,21 +924,25 @@ function buildIngredient(input: {
 }
 
 function buildPackaging(videoAnalysis: VideoAnalysis, duration: number): ViralStructureGraph['packaging'] {
-  const captionDensity = classifyCaptionDensity(normalizeTranscript(videoAnalysis.transcript, duration).length, duration);
-  const isVertical = videoAnalysis.metadata.aspectRatio === '9:16';
+  const transcript = normalizeTranscript(videoAnalysis.transcript, duration);
+  const transcriptCharCount = transcript.reduce((total, segment) => total + segment.text.length, 0);
+  const captionDensity = classifyCaptionDensity(transcriptCharCount, duration);
+  const aspectStyle = packagingStyleForAspectRatio(videoAnalysis.metadata.aspectRatio);
   const keyframeCount = videoAnalysis.keyframes.length;
+  const shotCount = normalizeShots(videoAnalysis.shots, duration).length;
+  const visualRichness = keyframeCount >= 4 || shotCount >= 5 ? 'visually_rich' : 'simple_visual_structure';
 
   return {
     captionDensity,
-    captionPosition: isVertical ? 'bottom_center' : 'mixed',
-    titleStyle: captionDensity === 'high' ? 'caption_led_key_points' : 'shot_led_summary_cards',
+    captionPosition: videoAnalysis.metadata.aspectRatio === '9:16' ? 'bottom_center' : 'mixed',
+    titleStyle: `${aspectStyle}_${captionDensity === 'high' ? 'caption_heavy' : captionDensity === 'medium' ? 'balanced_captions' : 'visual_led'}_${visualRichness}`,
     cardTypes: keyframeCount >= 4
       ? ['title_card', 'selling_point_card', 'comparison_card', 'cta_card']
       : ['title_card', 'selling_point_card', 'cta_card'],
     transitions: getAverageShotDuration(videoAnalysis.shots, duration, 5) <= 2
       ? ['quick_cut', 'zoom_in', 'push']
       : ['clean_cut', 'caption_card'],
-    coverStyle: `${videoAnalysis.metadata.aspectRatio}_cover_${keyframeCount}_keyframes`
+    coverStyle: `${aspectStyle}_${videoAnalysis.metadata.aspectRatio}_cover_${keyframeCount}_keyframes_${shotCount}_shots`
   };
 }
 
@@ -763,25 +1096,62 @@ function slotLabel(role: ShotSlotRole): string {
 
 function buildEvidenceText(source: StructureSource): string {
   const pieces = [
-    source.transcript ? `transcript ${formatSeconds(source.transcript.start)}-${formatSeconds(source.transcript.end)}` : '',
-    source.shot ? `shot ${source.shot.id} ${formatSeconds(source.shot.start)}-${formatSeconds(source.shot.end)}` : '',
-    source.keyframeUrl ? `keyframe ${source.keyframeUrl}${source.keyframeDescription ? ` ${source.keyframeDescription}` : ''}` : ''
+    summarizeTranscriptEvidence(source.transcripts),
+    summarizeShotEvidence(source.shots),
+    summarizeKeyframeEvidence(source.keyframes)
   ].filter(Boolean);
 
   return pieces.join('；') || '规则保底切分';
 }
 
+function summarizeTranscriptEvidence(transcripts: IndexedTranscriptSegment[]): string {
+  if (!transcripts.length) {
+    return '';
+  }
+
+  const first = transcripts[0];
+  const last = transcripts.at(-1) ?? first;
+  const range = transcripts.length === 1
+    ? `transcript #${first.index} ${formatSeconds(first.start)}-${formatSeconds(first.end)}`
+    : `transcript #${first.index}-#${last.index} ${formatSeconds(first.start)}-${formatSeconds(last.end)}`;
+  const snippet = summarize(transcripts.map((segment) => segment.text).join(' '), 48);
+  return `${range}「${snippet}」`;
+}
+
+function summarizeShotEvidence(shots: IndexedShot[]): string {
+  if (!shots.length) {
+    return '';
+  }
+
+  const first = shots[0];
+  const last = shots.at(-1) ?? first;
+  return shots.length === 1
+    ? `shot #${first.index} ${first.id} ${formatSeconds(first.start)}-${formatSeconds(first.end)}`
+    : `shots #${first.index}-#${last.index} ${formatSeconds(first.start)}-${formatSeconds(last.end)}`;
+}
+
+function summarizeKeyframeEvidence(keyframes: IndexedKeyframe[]): string {
+  if (!keyframes.length) {
+    return '';
+  }
+
+  return keyframes.slice(0, 2).map((keyframe) =>
+    `keyframe #${keyframe.index} ${formatSeconds(keyframe.time)} ${keyframe.url}${keyframe.description ? ` ${keyframe.description}` : ''}`
+  ).join(' / ');
+}
+
 function buildSummary(
   videoAnalysis: VideoAnalysis,
   segments: SegmentNode[],
-  cutFrequency: ViralStructureGraph['rhythm']['cutFrequency']
+  cutFrequency: ViralStructureGraph['rhythm']['cutFrequency'],
+  rhythmMetrics: RhythmMetrics
 ): string {
   const roles = segments.map((segment) => roleName(segment.role)).join(' → ');
   const transcriptCount = normalizeTranscript(videoAnalysis.transcript, safeDuration(videoAnalysis.metadata.duration)).length;
   const source = transcriptCount
     ? `${transcriptCount} 段字幕`
     : `${videoAnalysis.shots.length || segments.length} 段镜头`;
-  return `基于 M1 的 ${source} 和 ${videoAnalysis.keyframes.length} 张关键帧，规则引擎生成「${roles}」结构；节奏为 ${cutFrequency}，可迁移重点是开头表达、卖点承接、证明方式和 CTA 收束。`;
+  return `基于 M1 的 ${source} 和 ${videoAnalysis.keyframes.length} 张关键帧，规则引擎生成「${roles}」结构；视频约 ${formatSeconds(videoAnalysis.metadata.duration)}，检测到 ${rhythmMetrics.shotCount} 个 shots，平均镜头 ${formatSeconds(rhythmMetrics.avgShotDuration)}，约 ${rhythmMetrics.cutsPer10Sec} cuts/10s，节奏为 ${cutFrequency}；可迁移重点是开头表达、卖点承接、证明方式和 CTA 收束。`;
 }
 
 function roleName(role: SegmentRole): string {
@@ -828,8 +1198,8 @@ function inferStyle(
   return 'unknown';
 }
 
-function classifyCutFrequency(avgShotDuration: number): ViralStructureGraph['rhythm']['cutFrequency'] {
-  if (avgShotDuration <= 2) {
+function classifyCutFrequency(avgShotDuration: number, cutsPer10Sec: number): ViralStructureGraph['rhythm']['cutFrequency'] {
+  if (avgShotDuration <= 1.2 || cutsPer10Sec >= 8) {
     return 'high';
   }
   if (avgShotDuration <= 4) {
@@ -839,21 +1209,35 @@ function classifyCutFrequency(avgShotDuration: number): ViralStructureGraph['rhy
 }
 
 function classifyCaptionDensity(count: number, duration: number): ViralStructureGraph['packaging']['captionDensity'] {
-  const perTenSeconds = duration > 0 ? (count / duration) * 10 : count;
-  if (perTenSeconds >= 2) {
+  const charsPerSecond = duration > 0 ? count / duration : count;
+  if (charsPerSecond >= 8) {
     return 'high';
   }
-  if (perTenSeconds >= 0.8) {
+  if (charsPerSecond >= 3) {
     return 'medium';
   }
   return 'low';
 }
 
+function packagingStyleForAspectRatio(aspectRatio: VideoAnalysis['metadata']['aspectRatio']): string {
+  if (aspectRatio === '9:16') {
+    return 'vertical_mobile_short_video';
+  }
+  if (aspectRatio === '16:9') {
+    return 'horizontal_presentation_or_brand_video';
+  }
+  if (aspectRatio === '1:1') {
+    return 'square_social_feed_card';
+  }
+  return 'unknown_aspect_packaging';
+}
+
 function buildRhythmPattern(
   segments: SegmentNode[],
-  cutFrequency: ViralStructureGraph['rhythm']['cutFrequency']
+  cutFrequency: ViralStructureGraph['rhythm']['cutFrequency'],
+  rhythmMetrics: RhythmMetrics
 ): string {
-  return `${cutFrequency}_${segments.map((segment) => segment.role).join('_')}`;
+  return `${cutFrequency}_avg_${rhythmMetrics.avgShotDuration}s_cuts_${rhythmMetrics.cutsPer10Sec}_per10s_${segments.map((segment) => segment.role).join('_')}`;
 }
 
 function findPeakAt(segments: SegmentNode[]): number | undefined {
@@ -867,6 +1251,19 @@ function getAverageShotDuration(shots: Shot[], duration: number, fallbackCount: 
     return round(validDurations.reduce((total, value) => total + value, 0) / validDurations.length);
   }
   return round(duration / Math.max(fallbackCount, 1));
+}
+
+function buildRhythmMetrics(shots: Shot[], duration: number, fallbackCount: number): RhythmMetrics {
+  const validShots = normalizeShots(shots, duration);
+  const shotCount = validShots.length || Math.max(fallbackCount, 1);
+  const avgShotDuration = getAverageShotDuration(validShots, duration, fallbackCount);
+  const cutsPer10Sec = round((shotCount / Math.max(duration, 1)) * 10);
+
+  return {
+    shotCount,
+    avgShotDuration,
+    cutsPer10Sec
+  };
 }
 
 function searchableText(videoAnalysis: VideoAnalysis): string {
@@ -913,18 +1310,45 @@ function frameAndTextEvidence(videoAnalysis: VideoAnalysis): CreativeIngredientE
   return transcriptEvidence(videoAnalysis).concat(frameEvidence(videoAnalysis), timestampEvidence(videoAnalysis)).slice(0, 4);
 }
 
-function findShotForTime(shots: Shot[], time: number): Shot | undefined {
-  return shots.find((shot) => time >= shot.start && time <= shot.end);
-}
+function findShotsForRange(shots: IndexedShot[], start: number, end: number, center: number): IndexedShot[] {
+  const overlapping = shots.filter((shot) => rangesOverlap(shot.start, shot.end, start, end));
 
-function findKeyframeForTime(videoAnalysis: VideoAnalysis, time: number): VideoAnalysis['keyframes'][number] | undefined {
-  if (!videoAnalysis.keyframes.length) {
-    return undefined;
+  if (overlapping.length) {
+    return overlapping;
   }
 
-  return videoAnalysis.keyframes.reduce((best, keyframe) =>
-    Math.abs(keyframe.time - time) < Math.abs(best.time - time) ? keyframe : best
-  );
+  const nearest = nearestBy(shots, (shot) => Math.abs(midpoint(shot.start, shot.end) - center));
+  return nearest ? [nearest] : [];
+}
+
+function findKeyframesForRange(
+  keyframes: IndexedKeyframe[],
+  start: number,
+  end: number,
+  center: number
+): IndexedKeyframe[] {
+  const inside = keyframes.filter((keyframe) => keyframe.time >= start && keyframe.time <= end);
+
+  if (inside.length) {
+    return inside.slice(0, 2);
+  }
+
+  const nearest = nearestBy(keyframes, (keyframe) => Math.abs(keyframe.time - center));
+  return nearest ? [nearest] : [];
+}
+
+function rangesOverlap(aStart: number, aEnd: number, bStart: number, bEnd: number): boolean {
+  return aStart < bEnd && bStart < aEnd;
+}
+
+function nearestBy<T>(items: T[], score: (item: T) => number): T | undefined {
+  return items.reduce<T | undefined>((best, item) => {
+    if (!best) {
+      return item;
+    }
+
+    return score(item) < score(best) ? item : best;
+  }, undefined);
 }
 
 function safeDuration(duration: number): number {
@@ -937,6 +1361,79 @@ function midpoint(start: number, end: number): number {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
+}
+
+function clampInteger(value: number, min: number, max: number): number {
+  return Math.min(Math.max(Math.round(value), min), max);
+}
+
+function uniqueByIndex<T extends { index: number }>(items: T[]): T[] {
+  const seen = new Set<number>();
+  return items.filter((item) => {
+    if (seen.has(item.index)) {
+      return false;
+    }
+
+    seen.add(item.index);
+    return true;
+  });
+}
+
+function normalizeAspectRatio(
+  value: string | undefined,
+  width: number,
+  height: number
+): VideoAnalysis['metadata']['aspectRatio'] {
+  if (value === '9:16' || value === '16:9' || value === '1:1' || value === 'unknown') {
+    return value;
+  }
+
+  if (width > 0 && height > 0) {
+    const ratio = width / height;
+
+    if (Math.abs(ratio - 9 / 16) < 0.12) {
+      return '9:16';
+    }
+    if (Math.abs(ratio - 16 / 9) < 0.2) {
+      return '16:9';
+    }
+    if (Math.abs(ratio - 1) < 0.12) {
+      return '1:1';
+    }
+  }
+
+  return 'unknown';
+}
+
+function readUnknown(record: Record<string, unknown>, keys: string[]): unknown {
+  for (const key of keys) {
+    if (record[key] !== undefined) {
+      return record[key];
+    }
+  }
+
+  return undefined;
+}
+
+function readNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  return undefined;
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }
 
 function summarize(value: string, maxLength: number): string {
@@ -953,4 +1450,8 @@ function formatSeconds(value: number): string {
 
 function round(value: number): number {
   return Number(value.toFixed(2));
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

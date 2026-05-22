@@ -24,8 +24,9 @@ test('extractStructureGraph derives segments from transcript keywords and valida
     'cta'
   ]);
   assert.equal(parsed.meta.aspectRatio, '9:16');
-  assert.equal(parsed.packaging.captionDensity, 'high');
-  assert.ok(parsed.segments[0]?.purpose.includes('transcript 0s-2s'));
+  assert.equal(parsed.packaging.captionDensity, 'medium');
+  assert.ok(parsed.segments[0]?.purpose.includes('transcript #1 0s-2s'));
+  assert.ok(parsed.segments[0]?.purpose.includes('判断依据'));
   assert.ok(parsed.creativeIngredients.some((ingredient) =>
     ingredient.evidence.some((evidence) => evidence.type === 'transcript')
   ));
@@ -35,10 +36,11 @@ test('extractStructureGraph falls back to shots and keyframes without transcript
   const graph = await extractStructureGraph(buildAnalysis({ transcript: [] }));
 
   const parsed = ViralStructureGraphSchema.parse(graph);
-  assert.equal(parsed.segments.length, 5);
+  assert.equal(parsed.segments.length, 3);
   assert.equal(parsed.segments[0]?.role, 'hook');
+  assert.equal(parsed.segments[1]?.role, 'selling_point');
   assert.equal(parsed.segments.at(-1)?.role, 'cta');
-  assert.ok(parsed.segments.some((segment) => segment.transferRule.includes('shot shot_3')));
+  assert.ok(parsed.segments.some((segment) => segment.transferRule.includes('shot #')));
   assert.ok(parsed.creativeIngredients.some((ingredient) =>
     ingredient.evidence.some((evidence) => evidence.type === 'frame')
   ));
@@ -59,7 +61,7 @@ test('extractStructureGraph distributes one long transcript across shot-backed s
   assert.equal(parsed.segments.length, 5);
   assert.equal(parsed.segments[0]?.role, 'hook');
   assert.equal(parsed.segments.at(-1)?.role, 'cta');
-  assert.ok(parsed.segments.some((segment) => segment.purpose.includes('keyframe /mock/frame_3.jpg 卖点卡片')));
+  assert.ok(parsed.segments.some((segment) => segment.purpose.includes('keyframe #3 6s /mock/frame_3.jpg 卖点卡片')));
 });
 
 test('extractStructureGraph ignores empty transcript rows for density and evidence', async () => {
@@ -96,7 +98,8 @@ test('extractStructureGraph handles short videos without invalid timing', async 
   assert.equal(parsed.meta.duration, 5);
   assert.ok(parsed.segments.length >= 3);
   assert.ok(parsed.segments.every((segment) => segment.duration > 0));
-  assert.equal(parsed.rhythm.cutFrequency, 'high');
+  assert.equal(parsed.rhythm.cutFrequency, 'medium');
+  assert.match(parsed.rhythm.pattern, /cuts_/);
 });
 
 test('extractStructureGraph preserves horizontal aspect ratio in meta and packaging', async () => {
@@ -113,7 +116,67 @@ test('extractStructureGraph preserves horizontal aspect ratio in meta and packag
 
   const parsed = ViralStructureGraphSchema.parse(graph);
   assert.equal(parsed.meta.aspectRatio, '16:9');
-  assert.match(parsed.packaging.coverStyle, /^16:9_cover_/);
+  assert.match(parsed.packaging.coverStyle, /^horizontal_presentation_or_brand_video_16:9_cover_/);
+  assert.match(parsed.packaging.titleStyle, /^horizontal_presentation_or_brand_video_/);
+});
+
+test('extractStructureGraph normalizes string and alternate transcript shapes', async () => {
+  const graph = await extractStructureGraph({
+    metadata: {
+      videoId: 'adapter-demo.mp4',
+      duration: '18',
+      width: 1080,
+      height: 1920
+    },
+    transcript: [
+      { startTime: 0, endTime: 3, content: '为什么很多人做视频没有转化？' },
+      { startTime: 3, endTime: 8, content: '问题是卖点没有讲清楚。' },
+      { startTime: 8, endTime: 14, content: '这个产品可以自动生成结构图。' },
+      { startTime: 14, endTime: 18, content: '现在点击了解更多。' }
+    ],
+    shots: [],
+    keyframes: [{ timestamp: 2, path: '/frame.jpg', caption: '标题卡' }]
+  });
+
+  const parsed = ViralStructureGraphSchema.parse(graph);
+  assert.equal(parsed.meta.aspectRatio, '9:16');
+  assert.ok(parsed.segments.length >= 3 && parsed.segments.length <= 6);
+  assert.equal(parsed.segments[0]?.role, 'hook');
+  assert.equal(parsed.segments.at(-1)?.role, 'cta');
+  assert.ok(parsed.segments.some((segment) => segment.purpose.includes('transcript #')));
+});
+
+test('extractStructureGraph compresses dense transcripts to displayable segments', async () => {
+  const transcript = Array.from({ length: 12 }, (_value, index) => ({
+    start: index,
+    end: index + 1,
+    text: index === 0 ? '你是不是也遇到这个问题？' : `第 ${index + 1} 个卖点说明`
+  }));
+
+  const graph = await extractStructureGraph(buildAnalysis({ transcript }));
+  const parsed = ViralStructureGraphSchema.parse(graph);
+
+  assert.ok(parsed.segments.length >= 3 && parsed.segments.length <= 6);
+  assert.equal(parsed.segments[0]?.role, 'hook');
+  assert.equal(parsed.segments.at(-1)?.role, 'cta');
+});
+
+test('extractStructureGraph uses partial videoAnalysis instead of full mock fallback', async () => {
+  const graph = await extractStructureGraph({
+    duration: 12,
+    aspectRatio: '1:1',
+    shots: [
+      { start: 0, end: 4, description: '开头镜头' },
+      { start: 4, end: 8, description: '商品展示' },
+      { start: 8, end: 12, description: '行动召唤' }
+    ]
+  });
+
+  const parsed = ViralStructureGraphSchema.parse(graph);
+  assert.equal(parsed.meta.aspectRatio, '1:1');
+  assert.equal(parsed.meta.duration, 12);
+  assert.equal(parsed.segments.length, 3);
+  assert.ok(parsed.segments.some((segment) => segment.purpose.includes('shot #2')));
 });
 
 test('extractStructureGraph returns schema-valid mock fallback without videoAnalysis', async () => {

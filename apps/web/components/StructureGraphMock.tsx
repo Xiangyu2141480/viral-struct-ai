@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState } from 'react';
 import type { VideoAnalysis, ViralStructureGraph } from '@viral-struct/shared';
 import { apiPost } from '../lib/api';
-import { useWorkflowStore } from '../lib/workflowStore';
+import { type StructureDebug, useWorkflowStore } from '../lib/workflowStore';
 
 interface StructureResponse {
   structureGraph: ViralStructureGraph;
+  debug?: StructureDebug;
 }
 
 const defaultNodes = [
@@ -20,7 +21,12 @@ const defaultNodes = [
 export function StructureGraphMock() {
   const videoAnalysis = useWorkflowStore((state) => state.videoAnalysis);
   const structureGraph = useWorkflowStore((state) => state.structureGraph);
+  const structureStatus = useWorkflowStore((state) => state.structureStatus);
+  const structureError = useWorkflowStore((state) => state.structureError);
+  const structureDebug = useWorkflowStore((state) => state.structureDebug);
   const setStructureGraph = useWorkflowStore((state) => state.setStructureGraph);
+  const setStructureExtracting = useWorkflowStore((state) => state.setStructureExtracting);
+  const setStructureError = useWorkflowStore((state) => state.setStructureError);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const autoExtractedSignature = useRef<string | null>(null);
@@ -28,14 +34,17 @@ export function StructureGraphMock() {
   async function extractGraph(analysis: VideoAnalysis | null) {
     setLoading(true);
     setError(null);
+    setStructureExtracting();
 
     try {
       const result = await apiPost<StructureResponse>('/api/structure/extract', {
         videoAnalysis: analysis
       });
-      setStructureGraph(result.structureGraph);
+      setStructureGraph(result.structureGraph, result.debug);
     } catch (err) {
-      setError(errorMessage(err));
+      const message = errorMessage(err);
+      setError(message);
+      setStructureError(message);
     } finally {
       setLoading(false);
     }
@@ -63,6 +72,7 @@ export function StructureGraphMock() {
             ? `${videoAnalysis.metadata.videoId} · ${formatSeconds(videoAnalysis.metadata.duration)} · ${videoAnalysis.metadata.aspectRatio}`
             : '尚未解析样例视频；当前展示默认 mock 视图，也可以抽取 mock fallback。'}
         </p>
+        <p>抽取状态：{structureStatus}{structureError ? ` · ${structureError}` : ''}</p>
         <button type="button" onClick={() => extractGraph(videoAnalysis)} disabled={loading}>
           {loading ? '抽取中...' : graph ? '重新抽取结构' : '抽取结构图谱'}
         </button>
@@ -71,9 +81,10 @@ export function StructureGraphMock() {
 
       {graph ? (
         <>
-          <GraphSummary graph={graph} videoAnalysis={videoAnalysis} />
+          <GraphSummary graph={graph} videoAnalysis={videoAnalysis} debug={structureDebug} />
           <SegmentStrip graph={graph} />
           <SlotTable graph={graph} />
+          <PackagingPanel graph={graph} />
           <CreativeIngredients graph={graph} />
           <EdgeList graph={graph} />
         </>
@@ -108,22 +119,33 @@ function DefaultGraphView() {
 
 function GraphSummary({
   graph,
-  videoAnalysis
+  videoAnalysis,
+  debug
 }: {
   graph: ViralStructureGraph;
   videoAnalysis: VideoAnalysis | null;
+  debug: StructureDebug | null;
 }) {
   return (
     <div className="card" style={{ marginBottom: 16 }}>
       <h2>结构摘要</h2>
       <p>{graph.structureSummary}</p>
       <ul>
-        <li>结构来源：{videoAnalysis ? 'M1 VideoAnalysis 规则抽取' : 'Mock fallback'}</li>
+        <li>结构来源：{debug?.fallbackUsed ? 'Mock fallback' : videoAnalysis ? 'M1 VideoAnalysis 规则抽取' : '默认展示'}</li>
         <li>视频类型：{graph.meta.videoType}</li>
         <li>风格：{graph.meta.style}</li>
-        <li>节奏：{graph.rhythm.cutFrequency} · 平均镜头 {formatSeconds(graph.rhythm.avgShotDuration)}</li>
+        <li>节奏：{graph.rhythm.cutFrequency} · 平均镜头 {formatSeconds(graph.rhythm.avgShotDuration)} · {graph.rhythm.pattern}</li>
         <li>包装：{graph.packaging.titleStyle} · 字幕密度 {graph.packaging.captionDensity}</li>
+        {debug ? <li>证据量：{debug.evidenceCount} · segments：{debug.segmentCount}</li> : null}
       </ul>
+      {debug?.warnings.length ? (
+        <div>
+          <strong>抽取提示</strong>
+          <ul>
+            {debug.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+          </ul>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -179,11 +201,27 @@ function SlotTable({ graph }: { graph: ViralStructureGraph }) {
   );
 }
 
+function PackagingPanel({ graph }: { graph: ViralStructureGraph }) {
+  return (
+    <section className="card" style={{ marginTop: 16 }}>
+      <h2>节奏与包装</h2>
+      <dl style={{ display: 'grid', gap: 8, margin: 0 }}>
+        <div><dt>节奏模式</dt><dd>{graph.rhythm.pattern}</dd></div>
+        <div><dt>字幕密度</dt><dd>{graph.packaging.captionDensity}</dd></div>
+        <div><dt>标题样式</dt><dd>{graph.packaging.titleStyle}</dd></div>
+        <div><dt>封面风格</dt><dd>{graph.packaging.coverStyle}</dd></div>
+        <div><dt>信息卡</dt><dd>{graph.packaging.cardTypes.join(' / ')}</dd></div>
+        <div><dt>转场</dt><dd>{graph.packaging.transitions.join(' / ')}</dd></div>
+      </dl>
+    </section>
+  );
+}
+
 function CreativeIngredients({ graph }: { graph: ViralStructureGraph }) {
   return (
     <div style={{ marginTop: 24 }}>
       <h2>爆款视频要素</h2>
-      <p>creativeIngredients 描述中性的画面创作条件、动作方式、场景风格和信任建立方式，不做颜值或敏感属性判断。</p>
+      <p>creativeIngredients 描述中性的画面创作条件、动作方式、场景风格和信任建立方式，不做外貌或敏感属性判断。</p>
       <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
         {graph.creativeIngredients.map((ingredient) => (
           <article

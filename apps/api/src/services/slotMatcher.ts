@@ -50,7 +50,7 @@ export function matchSlots(
         assetId: best.asset.id,
         score,
         ingredientMatchScore: best.ingredientMatchScore,
-        missingIngredients: best.missingIngredients,
+        missingIngredients: sanitizeMissingIngredients(best.missingIngredients),
         status: 'matched',
         reason: '素材类型、槽位语义、关键创作要素和质量均满足。'
       };
@@ -62,10 +62,10 @@ export function matchSlots(
         assetId: best.asset.id,
         score,
         ingredientMatchScore: best.ingredientMatchScore,
-        missingIngredients: best.missingIngredients,
+        missingIngredients: sanitizeMissingIngredients(best.missingIngredients),
         status: 'partial',
         reason: humanBlocked
-          ? '槽位需要真人出镜或指定动作，但当前素材缺少对应人物/动作要素，最多只能部分满足。'
+          ? '槽位需要授权演示或指定动作，但当前素材缺少对应动作要素，最多只能部分满足。'
           : '素材语义部分满足，但类型、动作、时长或创作要素不足，需要补全。'
       };
     }
@@ -74,7 +74,7 @@ export function matchSlots(
       slotId: slot.id,
       score,
       ingredientMatchScore: best?.ingredientMatchScore ?? 0,
-      missingIngredients: best?.missingIngredients ?? slot.visualIngredientRequirements ?? [],
+      missingIngredients: sanitizeMissingIngredients(best?.missingIngredients ?? slot.visualIngredientRequirements ?? []),
       status: 'missing',
       reason: '没有找到能支撑该结构槽位的素材。'
     };
@@ -84,11 +84,12 @@ export function matchSlots(
     .filter((match) => match.status !== 'matched')
     .map((match) => {
       const slot = graph.shotSlots.find((s) => s.id === match.slotId)!;
-      const missingIngredients = match.missingIngredients ?? slot.visualIngredientRequirements ?? [];
+      const rawMissingIngredients = match.missingIngredients ?? slot.visualIngredientRequirements ?? [];
+      const missingIngredients = sanitizeMissingIngredients(rawMissingIngredients);
       return {
         slotId: slot.id,
         role: slot.role,
-        type: getGapType(slot.role, missingIngredients),
+        type: getGapType(slot.role, rawMissingIngredients),
         severity: match.status === 'missing' ? 'high' : 'medium',
         reason: getGapReason(match.reason, missingIngredients),
         impact: `该缺口会影响 ${slot.segmentId} 段落的画面表达，需要使用 ${slot.fallbackStrategies.join(' / ')} 补足。`,
@@ -159,9 +160,9 @@ function getGapType(
   if (missingIngredients.includes('human_presence') || missingIngredients.includes('host_talking')) {
     return 'missing_human_host';
   }
-  if (missingIngredients.includes('face_closeup')) return 'missing_face_closeup';
+  if (missingIngredients.includes('face_closeup')) return 'missing_human_host';
   if (missingIngredients.includes('beauty_demo') || missingIngredients.includes('makeup_application')) {
-    return 'missing_beauty_demo';
+    return 'missing_usage_action';
   }
   if (missingIngredients.includes('before_after_comparison')) return 'missing_before_after';
   if (missingIngredients.includes('trust_building') || missingIngredients.includes('social_proof')) {
@@ -184,4 +185,18 @@ function getGapReason(
 ): string {
   if (missingIngredients.length === 0) return baseReason;
   return `${baseReason} 缺失关键创作要素：${missingIngredients.join(' / ')}。`;
+}
+
+function sanitizeMissingIngredients(missingIngredients: CreativeIngredientType[]): CreativeIngredientType[] {
+  return missingIngredients
+    .map((ingredient) => {
+      if (ingredient === 'face_closeup') {
+        return 'human_presence';
+      }
+      if (ingredient === 'beauty_demo' || ingredient === 'makeup_application' || ingredient === 'skin_texture_display') {
+        return 'hand_demo';
+      }
+      return ingredient;
+    })
+    .filter((ingredient, index, items) => items.indexOf(ingredient) === index);
 }
