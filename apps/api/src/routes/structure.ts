@@ -1,12 +1,12 @@
 import { Router } from 'express';
 import { ViralStructureGraphSchema } from '@viral-struct/shared';
-import { extractStructureGraphWithDebug, extractStructureMock } from '../services/structureExtractor';
+import { extractStructureFromVideoAnalysis, extractStructureMock } from '../services/structureExtractor';
 
 export const structureRouter = Router();
 
 structureRouter.post('/extract', async (req, res) => {
   try {
-    const result = await extractStructureGraphWithDebug(req.body?.videoAnalysis);
+    const result = await extractStructureFromVideoAnalysis(req.body?.videoAnalysis);
     res.json({
       structureGraph: ViralStructureGraphSchema.parse(result.structureGraph),
       debug: result.debug

@@ -77,6 +77,12 @@ export async function extractStructureGraphWithDebug(
   }
 }
 
+export async function extractStructureFromVideoAnalysis(
+  videoAnalysis?: unknown
+): Promise<StructureExtractionResult> {
+  return extractStructureGraphWithDebug(videoAnalysis);
+}
+
 export async function extractStructureMock(
   videoAnalysis?: unknown
 ): Promise<ViralStructureGraph> {

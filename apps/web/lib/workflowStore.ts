@@ -34,6 +34,8 @@ export const useWorkflowStore = create<WorkflowState>()(
       structureStatus: 'idle',
       structureError: null,
       structureDebug: null,
+      // Fine Scan handoff point: once Fine Scan produces a VideoAnalysis,
+      // call setVideoAnalysis(output); /graph will extract and cache M2.
       setVideoAnalysis: (videoAnalysis) => set({
         videoAnalysis,
         structureGraph: null,
