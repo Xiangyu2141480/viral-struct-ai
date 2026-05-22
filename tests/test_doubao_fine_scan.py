@@ -72,11 +72,8 @@ class DoubaoFineScanTests(unittest.TestCase):
             "observableSummary": "hands reveal product",
             "fineScanFocusQuestions": ["q1"],
         }
-        strategy = {"mode": "preview", "target_fps": 5, "upload_fps": 5, "max_width": 480}
-
         variables = self.module.build_block_prompt_variables(
             block,
-            strategy,
             audio_result=None,
             video_id="demo",
         )
@@ -84,8 +81,39 @@ class DoubaoFineScanTests(unittest.TestCase):
         self.assertEqual(variables["blockId"], "block_001")
         self.assertEqual(variables["coarseRoleGuess"], "attention_grab")
         self.assertEqual(variables["observableSummary"], "hands reveal product")
+        self.assertEqual(variables["clipMode"], "source_quality_clip")
+        self.assertEqual(variables["uploadSampling"], "provider_default_source_video")
+        self.assertEqual(variables["clipResolution"], "source")
         self.assertIn("q1", variables["fineScanFocusQuestions"])
         self.assertIn("Beat-This", variables["audioAnalysis"])
+
+    def test_prepare_block_clip_uses_source_quality_stream_copy(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            work_dir = Path(tmp)
+            block = {"id": "block_001", "timeRange": {"start": 2.0, "end": 5.5}}
+            commands = []
+
+            original_run_ffmpeg = self.module.run_ffmpeg
+            try:
+                self.module.run_ffmpeg = lambda command, *, dry_run=False: commands.append(command)
+
+                output_path = self.module.prepare_block_clip(
+                    ROOT / "seed_assets" / "raw_videos" / "TVC.mp4",
+                    block,
+                    work_dir,
+                )
+            finally:
+                self.module.run_ffmpeg = original_run_ffmpeg
+
+            self.assertEqual(output_path.name, "block_001_source.mp4")
+            self.assertEqual(len(commands), 1)
+            command = commands[0]
+            self.assertNotIn("-vf", command)
+            self.assertNotIn("libx264", command)
+            self.assertNotIn("-crf", command)
+            self.assertNotIn("-an", command)
+            self.assertIn("-c", command)
+            self.assertEqual(command[command.index("-c") + 1], "copy")
 
     def test_run_fine_scan_returns_failure_when_content_block_json_cannot_parse(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -138,9 +166,10 @@ class DoubaoFineScanTests(unittest.TestCase):
                 "wait_for_file": self.module.wait_for_file,
                 "create_response": self.module.create_response,
             }
+            upload_calls = []
             try:
                 self.module.prepare_block_clip = lambda *args, **kwargs: ROOT / "seed_assets" / "raw_videos" / "TVC.mp4"
-                self.module.upload_file = lambda **kwargs: {"id": "file-test"}
+                self.module.upload_file = lambda **kwargs: upload_calls.append(kwargs) or {"id": "file-test"}
                 self.module.wait_for_file = lambda **kwargs: {"status": "processed"}
                 self.module.create_response = lambda **kwargs: {"output_text": "not json"}
 
@@ -153,8 +182,9 @@ class DoubaoFineScanTests(unittest.TestCase):
             failure_path = out_dir / "fine_scan_failures.json"
             self.assertTrue(failure_path.exists())
             failures = json.loads(failure_path.read_text(encoding="utf-8"))
-            self.assertEqual(failures["failedSegmentCount"], 1)
+            self.assertEqual(failures["failedBlockCount"], 1)
             self.assertEqual(failures["failures"][0]["blockId"], "block_001")
+            self.assertEqual(upload_calls[0]["fps"], None)
 
 
 if __name__ == "__main__":

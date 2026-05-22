@@ -84,24 +84,6 @@ class VideoToolsCommandBuilderTests(unittest.TestCase):
         self.assertEqual(command[command.index("-ss") + 1], "24.000")
         self.assertEqual(command[command.index("-t") + 1], "5.000")
 
-    def test_build_preview_clip_command_cuts_and_lowers_segment_fps(self):
-        command = self.tools.build_preview_clip_command(
-            "input.mp4",
-            "clip_preview.mp4",
-            start=12.0,
-            end=18.5,
-            fps=5,
-            max_width=480,
-        )
-
-        input_index = command.index("-i")
-        self.assertLess(command.index("-ss"), input_index)
-        self.assertLess(command.index("-t"), input_index)
-        self.assertIn("-vf", command)
-        self.assertIn("fps=5", command[command.index("-vf") + 1])
-        self.assertIn("scale=w=min(480\\,iw):h=-2", command[command.index("-vf") + 1])
-        self.assertEqual(command[-1], "clip_preview.mp4")
-
     def test_build_extract_audio_command_outputs_wav_for_beat_tracking(self):
         command = self.tools.build_extract_audio_command(
             "input.mp4",

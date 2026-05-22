@@ -28,7 +28,12 @@ from doubao_rough_scan import (  # noqa: E402
     write_json,
     write_text,
 )
-from video_tools import build_microscope_command, build_preview_clip_command  # noqa: E402
+from video_tools import build_clip_command  # noqa: E402
+
+
+SOURCE_CLIP_MODE = "source_quality_clip"
+SOURCE_UPLOAD_SAMPLING = "provider_default_source_video"
+SOURCE_CLIP_RESOLUTION = "source"
 
 
 def block_time_range(block: dict[str, Any]) -> tuple[float, float]:
@@ -95,16 +100,6 @@ def build_block_audio_analysis(
     }
 
 
-def determine_clip_strategy(block: dict[str, Any]) -> dict[str, Any]:
-    start, end = block_time_range(block)
-    duration = end - start
-    if duration <= 8:
-        return {"mode": "microscope", "upload_fps": 5, "target_fps": None, "max_width": 720, "crf": 18}
-    if duration <= 30:
-        return {"mode": "preview", "upload_fps": 5, "target_fps": 5, "max_width": 480, "crf": 23}
-    return {"mode": "preview", "upload_fps": 5, "target_fps": 5, "max_width": 360, "crf": 28}
-
-
 def run_ffmpeg(command: list[str], *, dry_run: bool = False) -> None:
     if dry_run:
         print(json.dumps({"ffmpeg": command}, ensure_ascii=False))
@@ -115,55 +110,35 @@ def run_ffmpeg(command: list[str], *, dry_run: bool = False) -> None:
 def prepare_block_clip(
     video_path: str | Path,
     block: dict[str, Any],
-    strategy: dict[str, Any],
     work_dir: Path,
     *,
     dry_run: bool = False,
 ) -> Path:
     block_id = block["id"]
     start, end = block_time_range(block)
-    suffix = "microscope" if strategy["mode"] == "microscope" else f"preview_{strategy['target_fps']}fps"
+    suffix = "source"
     output_path = work_dir / f"{block_id}_{suffix}.mp4"
     if output_path.exists() and not dry_run:
         return output_path
     work_dir.mkdir(parents=True, exist_ok=True)
 
-    if strategy["mode"] == "microscope":
-        command = build_microscope_command(
-            video_path,
-            output_path,
-            start=start,
-            end=end,
-            playback_fps=strategy["upload_fps"],
-            max_width=strategy["max_width"],
-            crf=strategy["crf"],
-        )
-    else:
-        command = build_preview_clip_command(
-            video_path,
-            output_path,
-            start=start,
-            end=end,
-            fps=strategy["target_fps"],
-            max_width=strategy["max_width"],
-            crf=strategy["crf"],
-        )
+    command = build_clip_command(
+        video_path,
+        output_path,
+        start=start,
+        end=end,
+        mode="copy",
+    )
     run_ffmpeg(command, dry_run=dry_run)
     return output_path
 
 
 def build_block_prompt_variables(
     block: dict[str, Any],
-    strategy: dict[str, Any],
     audio_result: dict[str, Any] | None,
     video_id: str,
 ) -> dict[str, Any]:
     start, end = block_time_range(block)
-    clip_mode = (
-        "microscope_slowdown"
-        if strategy["mode"] == "microscope"
-        else f"content_block_preview_{strategy['target_fps']}fps"
-    )
     audio_text = (
         json.dumps(audio_result, ensure_ascii=False, indent=2)
         if audio_result
@@ -175,9 +150,9 @@ def build_block_prompt_variables(
         "sourceStart": start,
         "sourceEnd": end,
         "blockDuration": round(end - start, 3),
-        "clipMode": clip_mode,
-        "uploadFps": strategy["upload_fps"],
-        "clipWidth": strategy["max_width"],
+        "clipMode": SOURCE_CLIP_MODE,
+        "uploadSampling": SOURCE_UPLOAD_SAMPLING,
+        "clipResolution": SOURCE_CLIP_RESOLUTION,
         "coarseRoleGuess": block.get("coarseRoleGuess", "unknown"),
         "boundaryReason": block.get("boundaryReason", ""),
         "observableSummary": block.get("observableSummary", ""),
@@ -243,28 +218,21 @@ def run_fine_scan(args: argparse.Namespace) -> int:
         start, end = block_time_range(block)
         print(f"\n-- {block_id} ({start}s ~ {end}s, coarseRole={block.get('coarseRoleGuess')}) --")
 
-        strategy = determine_clip_strategy(block)
-        print(f"   strategy={strategy['mode']} upload_fps={strategy['upload_fps']} width={strategy['max_width']}p")
+        print("   strategy=source_quality cut=stream_copy resolution=source sampling=provider_default")
 
         if args.dry_run:
             dry_path = work_dir / f"{block_id}_dry.mp4"
-            command = (
-                build_microscope_command(args.video, dry_path, start=start, end=end)
-                if strategy["mode"] == "microscope"
-                else build_preview_clip_command(
-                    args.video,
-                    dry_path,
-                    start=start,
-                    end=end,
-                    fps=strategy["target_fps"],
-                    max_width=strategy["max_width"],
-                    crf=strategy["crf"],
-                )
+            command = build_clip_command(
+                args.video,
+                dry_path,
+                start=start,
+                end=end,
+                mode="copy",
             )
-            print(json.dumps({"block": block_id, "strategy": strategy, "ffmpegCommand": command}, ensure_ascii=False, indent=2))
+            print(json.dumps({"block": block_id, "ffmpegCommand": command}, ensure_ascii=False, indent=2))
             continue
 
-        clip_path = prepare_block_clip(args.video, block, strategy, work_dir)
+        clip_path = prepare_block_clip(args.video, block, work_dir)
         print(f"   clip -> {clip_path}")
 
         audio_result = (
@@ -278,11 +246,11 @@ def run_fine_scan(args: argparse.Namespace) -> int:
                 f" downbeats={len(audio_result['downbeatTimestamps'])}"
             )
 
-        variables = build_block_prompt_variables(block, strategy, audio_result, video_id)
+        variables = build_block_prompt_variables(block, audio_result, video_id)
         instructions, prompt_text = load_prompt_sections(args.prompt, variables)
 
         print("   uploading clip...")
-        file_info = upload_file(base_url=base_url, api_key=api_key, video_path=clip_path, fps=strategy["upload_fps"])
+        file_info = upload_file(base_url=base_url, api_key=api_key, video_path=clip_path, fps=None)
         file_id = file_info["id"]
         print(f"   file_id={file_id}")
 
@@ -347,7 +315,6 @@ def run_fine_scan(args: argparse.Namespace) -> int:
             {
                 "videoId": video_id,
                 "failedBlockCount": len(failures),
-                "failedSegmentCount": len(failures),
                 "failures": failures,
             },
         )
