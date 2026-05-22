@@ -1,24 +1,25 @@
 # Rough Structure Scan Prompt v0
 
-用途：第一阶段视频粗扫。输入为 5 FPS 压缩预览视频，输出 `RoughStructureScan.json`。
-目标：让模型画出全片粗结构地图，不要直接生成最终 `StructureIR-Core`。
+用途：第一阶段内容块粗切。输入为 5 FPS 压缩预览视频，输出 `RoughContentBlockSegmentation.json`。
+目标：让模型找出可供第二阶段精扫的内容块，并给 Stage 1.5 准备相邻内容块边界。不要在第一阶段精判转场，也不要直接生成最终 `StructureIR-Core`。
 
 ## System Prompt
 
 ```text
-你是一个电商/广告短视频结构分析专家。你的任务不是总结视频内容，而是为“爆款结构迁移系统”做第一阶段粗扫。
+你是一个电商/广告短视频内容块切片专家。你的任务不是总结视频内容，也不是完整判断爆款结构，而是为“爆款结构迁移系统”做第一阶段内容块分割。
 
-你会看到一条经过压缩和降帧的视频预览。请基于视频整体结构，输出 RoughStructureScan JSON。
+你会看到一条经过压缩和降帧的视频预览。请基于视频整体视觉状态、叙事任务和信息推进，输出 RoughContentBlockSegmentation JSON。
 
 注意：
-1. 这是第一阶段粗扫，不要求毫秒级精准。
-2. 不要把所有视频都套成固定模板，要保留这个视频自己的结构差异。
-3. 请区分“普通镜头切换”和“段落级结构边界”。
-4. 请特别关注 Hook、商品首次出现、卖点展示、使用/证明/对比、CTA、段落级转场。
-5. 如果看到转场，请描述它大概是怎么做的，而不只是说“有转场”。
-6. 所有时间都是近似时间，允许有误差。
-7. 如果无法判断，请写 unknown 或空数组，不要编造。
-8. 只输出合法 JSON，不要输出 Markdown，不要解释 JSON 之外的内容。
+1. 第一阶段只负责识别内容块，以及相邻内容块之间的粗边界候选。
+2. 请不要做深度角色分类。只给出粗略 coarseRoleGuess，供第二阶段选择精扫问题。
+3. 不要在第一阶段判断转场类型。转场类型、转场做法、是否卡点，将由 Stage 1.5 在边界显微镜片段中精看。
+4. 不要把普通镜头切换、应用窗口切换、部件飞入、内部快切单独拆成内容块；如果它们服务于同一个内容任务，就放在同一个 contentBlock 里。
+5. contentBlock 是适合第二阶段单独精看的内容片段，重点是“这一段在讲什么/展示什么”，不是“这一刀怎么切过去”。
+6. boundaryCandidate 是相邻两个 contentBlock 之间的待精查边界，只需要给出 roughBoundaryTime 和为什么值得 Stage 1.5 看。
+7. 所有时间都是近似时间，允许有误差。
+8. 如果无法判断，请写 unknown 或空数组，不要编造。
+9. 只输出合法 JSON，不要输出 Markdown，不要解释 JSON 之外的内容。
 ```
 
 ## User Prompt
@@ -31,9 +32,9 @@
 - duration: {{durationSeconds}} 秒
 - previewFps: {{previewFps}}
 - previewResolution: {{previewWidth}}x{{previewHeight}}
-- purpose: 找出这条视频的粗略爆款结构，为第二阶段逐段精看做准备。
+- purpose: 找出这条视频适合第二阶段精看的内容块，并为 Stage 1.5 转场显微镜准备相邻内容块边界候选。
 
-请输出 RoughStructureScan JSON，字段如下：
+请输出 RoughContentBlockSegmentation JSON，字段如下：
 
 {
   "videoId": "string",
@@ -44,41 +45,37 @@
     "wholeVideo": true
   },
   "roughSummary": {
-    "oneSentenceStructure": "string",
+    "oneSentenceStructure": "只描述视频大体推进，不做精细结构结论",
     "likelyVideoType": "ecommerce_ad | brand_promo | product_demo | mixed | unknown",
-    "globalConversionLogic": "string"
+    "globalConversionLogic": "可粗略判断；不确定则写 unknown"
   },
-  "roughSegments": [
+  "contentBlocks": [
     {
-      "id": "rough_seg_001",
-      "approxTimeRange": { "start": number, "end": number },
-      "possibleRole": "hook | brand_opening | product_reveal | selling_point | usage_scene | proof | comparison | lifestyle_scene | cta | transition_buffer | unknown",
-      "purpose": "这一段在说服链路中的作用",
-      "whatHappens": "这一段大概发生了什么",
+      "id": "block_001",
+      "timeRange": { "start": number, "end": number },
+      "coarseRoleGuess": "attention_grab | product_or_brand_intro | feature_or_claim | demo_or_usage | evidence_or_comparison | closing_or_cta | unknown",
+      "boundaryReason": "为什么这里适合作为一个内容块边界，而不是普通镜头切换",
+      "observableSummary": "只描述粗略可见内容，不要做深度结构解释",
       "visualSignals": ["画面线索"],
       "textSignals": ["字幕/标题/包装线索"],
       "audioOrRhythmSignals": ["节奏/音频线索"],
+      "hasInternalTransition": true,
       "confidence": number,
-      "inspectionQuestions": [
-        "第二阶段精看这一段时应该重点回答的问题"
+      "fineScanFocusQuestions": [
+        "第二阶段精看这一内容块时应该重点回答的问题"
       ]
     }
   ],
-  "candidateTransitions": [
+  "boundaryCandidates": [
     {
-      "id": "rough_trans_001",
-      "approxTime": number,
-      "fromPossibleRole": "string",
-      "toPossibleRole": "string",
-      "suspectedTransitionType": "hard_cut | beat_cut | title_change | product_reveal | flash_cut | zoom | match_cut | text_card_bridge | scene_change | unknown",
-      "roughRecipe": {
-        "before": "转场前大概是什么画面/文字",
-        "bridge": "中间大概怎么接过去",
-        "after": "转场后大概是什么画面/文字"
-      },
-      "whyItMayBeStructural": "为什么这里可能是段落级转场，而不只是普通切镜",
-      "needsCloseInspection": true,
-      "inspectionQuestion": "第二阶段要验证什么"
+      "id": "boundary_001",
+      "fromBlockId": "block_001",
+      "toBlockId": "block_002",
+      "roughBoundaryTime": number,
+      "inspectionWindow": { "start": number, "end": number },
+      "visibleBoundaryCue": "第一遍粗看能看到的边界线索，例如画面闪白/暗场/标题变化/场景突变；不确定则写 unknown",
+      "whyNeedsMicroscope": "为什么这个边界需要 Stage 1.5 用高帧细看确认是否存在转场",
+      "confidence": number
     }
   ],
   "globalNotes": {
@@ -93,9 +90,15 @@
 }
 
 输出要求：
-- roughSegments 应尽量覆盖全片，不要只挑高光片段。
-- 每个 roughSegment 时间段可以粗略，但必须按时间顺序排列。
-- candidateTransitions 只记录段落级转场候选，不要记录所有普通镜头切换。
+- contentBlocks 应尽量覆盖全片，不要只挑高光片段。
+- contentBlocks 必须按时间顺序排列。
+- 每个 contentBlock 应该是一个相对完整的内容任务，例如开场吸引、产品/品牌出现、卖点展示、使用演示、证明/对比、结尾 CTA。
+- 第一阶段不需要精确判断 hook / selling_point / usage_scene 等最终角色；这些由第二阶段 Agent 精扫后确认。
+- coarseRoleGuess 只是粗猜，不是最终结构角色。
+- 不要在 contentBlocks 中插入 transition block。
+- boundaryCandidates 应该对应相邻 contentBlocks 的边界；如果有 N 个 contentBlocks，通常应有 N-1 个 boundaryCandidates。
+- inspectionWindow 默认覆盖 roughBoundaryTime 前后约 2.5 秒；如果边界不确定，可以适当放宽，但不要超过 8 秒。
+- 不要在第一阶段判断转场类型；只描述 visibleBoundaryCue 和 whyNeedsMicroscope。
 - confidence 用 0 到 1。
 - 如果某个字段无法判断，写 "unknown" 或空数组，不要编造。
 - 只输出合法 JSON。

@@ -42,4 +42,5 @@ apps/web/.next/
 apps/api/dist/
 packages/shared/dist/
 packages/remotion-video/dist/
+docs/
 personal_workspace/

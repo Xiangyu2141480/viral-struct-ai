@@ -39,7 +39,7 @@
 - whatHappens: {{whatHappens}}
 - inspectionQuestions: {{inspectionQuestions}}
 
-音频分析（librosa agent 输出，供卡点对齐参考）：
+音频分析（Beat-This AudioBeatMap 输出，供卡点对齐参考）：
 {{audioAnalysis}}
 
 请对这个片段进行精密分析，输出 FineSegmentScan JSON，字段如下：

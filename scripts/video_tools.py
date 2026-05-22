@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import statistics
 import subprocess
 from pathlib import Path
 from typing import Any, Sequence
@@ -188,12 +189,12 @@ def build_microscope_command(
     return [
         "ffmpeg",
         "-y",
-        "-i",
-        str(input_path),
         "-ss",
         fmt_time(start),
         "-t",
         fmt_time(duration),
+        "-i",
+        str(input_path),
         "-vf",
         filters,
         "-an",
@@ -220,6 +221,201 @@ def build_probe_command(input_path: str | Path) -> list[str]:
         "-show_streams",
         str(input_path),
     ]
+
+
+def build_extract_audio_command(
+    input_path: str | Path,
+    output_path: str | Path,
+    *,
+    sample_rate: int = 44100,
+    channels: int = 1,
+) -> list[str]:
+    if sample_rate <= 0:
+        raise ValueError("sample_rate must be positive")
+    if channels <= 0:
+        raise ValueError("channels must be positive")
+
+    return [
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(input_path),
+        "-vn",
+        "-ac",
+        str(channels),
+        "-ar",
+        str(sample_rate),
+        "-c:a",
+        "pcm_s16le",
+        str(output_path),
+    ]
+
+
+def build_beat_this_command(
+    audio_path: str | Path,
+    beats_output_path: str | Path,
+    *,
+    beat_this_bin: str = "beat_this",
+    gpu: int | None = -1,
+    model: str | None = None,
+    dbn: bool = False,
+) -> list[str]:
+    command = [beat_this_bin, str(audio_path), "-o", str(beats_output_path)]
+    if gpu is not None:
+        command += ["--gpu", str(gpu)]
+    if model:
+        command += ["--model", model]
+    if dbn:
+        command += ["--dbn"]
+    return command
+
+
+def parse_beat_number(value: str) -> int:
+    text = value.strip().lower()
+    if text in {"downbeat", "down"}:
+        return 1
+    if text in {"beat", ""}:
+        return 0
+    return int(float(text))
+
+
+def parse_beat_this_file(path: str | Path) -> list[dict[str, Any]]:
+    beats: list[dict[str, Any]] = []
+    for raw_line in Path(path).read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.replace(",", "\t").split()
+        if not parts:
+            continue
+        time = float(parts[0])
+        beat_number = parse_beat_number(parts[1]) if len(parts) > 1 else 0
+        beats.append(
+            {
+                "time": round(time, 3),
+                "beatNumber": beat_number,
+                "isDownbeat": beat_number == 1,
+            }
+        )
+    return beats
+
+
+def estimate_tempo_bpm(beats: list[dict[str, Any]]) -> float | None:
+    if len(beats) < 2:
+        return None
+    intervals = [
+        beats[i + 1]["time"] - beats[i]["time"]
+        for i in range(len(beats) - 1)
+        if beats[i + 1]["time"] > beats[i]["time"]
+    ]
+    if not intervals:
+        return None
+    return round(60.0 / statistics.median(intervals), 2)
+
+
+def build_audio_beat_map(
+    *,
+    video_id: str,
+    audio_source: str | Path,
+    beats: list[dict[str, Any]],
+    method: str = "beat_this",
+) -> dict[str, Any]:
+    downbeats = [beat for beat in beats if beat.get("isDownbeat")]
+    return {
+        "videoId": video_id,
+        "audioSource": str(audio_source),
+        "method": {
+            "primary": method,
+            "outputFormat": "beat_this .beats TSV; beatNumber=1 means downbeat",
+        },
+        "tempo": {
+            "bpm": estimate_tempo_bpm(beats),
+            "confidence": None,
+        },
+        "beats": beats,
+        "downbeats": downbeats,
+    }
+
+
+def nearest_event(events: list[dict[str, Any]], target_time: float) -> dict[str, Any] | None:
+    if not events:
+        return None
+    return min(events, key=lambda event: abs(float(event["time"]) - target_time))
+
+
+def classify_alignment(
+    *,
+    beat_delta_ms: int | None,
+    downbeat_delta_ms: int | None,
+    on_beat_ms: int = 80,
+    near_beat_ms: int = 160,
+) -> str:
+    if downbeat_delta_ms is not None and downbeat_delta_ms <= on_beat_ms:
+        return "on_downbeat"
+    if beat_delta_ms is not None and beat_delta_ms <= on_beat_ms:
+        return "on_beat"
+    if beat_delta_ms is not None and beat_delta_ms <= near_beat_ms:
+        return "near_beat"
+    return "off_beat"
+
+
+def align_transitions_to_beats(
+    rough_scan: dict[str, Any],
+    beat_map: dict[str, Any],
+    *,
+    on_beat_ms: int = 80,
+    near_beat_ms: int = 160,
+) -> list[dict[str, Any]]:
+    beats = beat_map.get("beats", [])
+    downbeats = beat_map.get("downbeats", [])
+    alignments: list[dict[str, Any]] = []
+
+    for transition in rough_scan.get("candidateTransitions", []) or []:
+        approx_time = float(transition["approxTime"])
+        nearest_beat = nearest_event(beats, approx_time)
+        nearest_downbeat = nearest_event(downbeats, approx_time)
+        beat_delta_ms = (
+            int(round(abs(float(nearest_beat["time"]) - approx_time) * 1000))
+            if nearest_beat
+            else None
+        )
+        downbeat_delta_ms = (
+            int(round(abs(float(nearest_downbeat["time"]) - approx_time) * 1000))
+            if nearest_downbeat
+            else None
+        )
+        alignment = classify_alignment(
+            beat_delta_ms=beat_delta_ms,
+            downbeat_delta_ms=downbeat_delta_ms,
+            on_beat_ms=on_beat_ms,
+            near_beat_ms=near_beat_ms,
+        )
+        evidence = "no beat detected near transition"
+        if nearest_beat:
+            evidence = f"candidate transition occurs {beat_delta_ms}ms from nearest beat"
+        if alignment == "on_downbeat" and nearest_downbeat:
+            evidence = f"candidate transition occurs {downbeat_delta_ms}ms from nearest downbeat"
+
+        alignments.append(
+            {
+                "transitionId": transition.get("id"),
+                "candidateTime": approx_time,
+                "fromPossibleRole": transition.get("fromPossibleRole"),
+                "toPossibleRole": transition.get("toPossibleRole"),
+                "nearestBeatTime": nearest_beat["time"] if nearest_beat else None,
+                "nearestDownbeatTime": nearest_downbeat["time"] if nearest_downbeat else None,
+                "deltaMs": beat_delta_ms,
+                "downbeatDeltaMs": downbeat_delta_ms,
+                "alignment": alignment,
+                "audioEvidence": evidence,
+                "questionForModel": (
+                    f"请结合原速视频判断，{approx_time:g}s 附近的转场是否利用 BGM 卡点"
+                    f"完成 {transition.get('fromPossibleRole', 'unknown')} 到 "
+                    f"{transition.get('toPossibleRole', 'unknown')} 的结构推进。"
+                ),
+            }
+        )
+    return alignments
 
 
 def output_path(out_dir: str | Path, prefix: str, suffix: str) -> str:
@@ -373,6 +569,89 @@ def run_inspection_pack(args: argparse.Namespace) -> None:
     print(str(manifest))
 
 
+def run_extract_audio(args: argparse.Namespace) -> None:
+    command = build_extract_audio_command(
+        args.input,
+        args.output,
+        sample_rate=args.sample_rate,
+        channels=args.channels,
+    )
+    run(command, dry_run=args.dry_run)
+
+
+def run_beat_map(args: argparse.Namespace) -> None:
+    output = Path(args.output)
+    audio_output = Path(args.audio_output) if args.audio_output else output.with_suffix(".wav")
+    beats_output = Path(args.beats_output) if args.beats_output else output.with_suffix(".beats")
+
+    extract_command = build_extract_audio_command(
+        args.input,
+        audio_output,
+        sample_rate=args.sample_rate,
+        channels=args.channels,
+    )
+    beat_command = build_beat_this_command(
+        audio_output,
+        beats_output,
+        beat_this_bin=args.beat_this_bin,
+        gpu=args.gpu,
+        model=args.model,
+        dbn=args.dbn,
+    )
+
+    if args.dry_run:
+        print(
+            json.dumps(
+                {
+                    "extractAudioCommand": extract_command,
+                    "beatThisCommand": beat_command,
+                    "output": str(output),
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return
+
+    audio_output.parent.mkdir(parents=True, exist_ok=True)
+    beats_output.parent.mkdir(parents=True, exist_ok=True)
+    run(extract_command)
+    run(beat_command)
+    beat_map = build_audio_beat_map(
+        video_id=args.video_id,
+        audio_source=audio_output,
+        beats=parse_beat_this_file(beats_output),
+        method="beat_this",
+    )
+    write_json(output, beat_map)
+    print(str(output))
+
+
+def run_align_transitions(args: argparse.Namespace) -> None:
+    rough_scan = json.loads(Path(args.rough_scan).read_text(encoding="utf-8"))
+    beat_map = json.loads(Path(args.beat_map).read_text(encoding="utf-8"))
+    alignments = align_transitions_to_beats(
+        rough_scan,
+        beat_map,
+        on_beat_ms=args.on_beat_ms,
+        near_beat_ms=args.near_beat_ms,
+    )
+    payload = {
+        "videoId": rough_scan.get("videoId") or beat_map.get("videoId"),
+        "method": {
+            "beatMap": beat_map.get("method", {}),
+            "onBeatMs": args.on_beat_ms,
+            "nearBeatMs": args.near_beat_ms,
+        },
+        "transitionAlignments": alignments,
+    }
+    if args.dry_run:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    write_json(args.output, payload)
+    print(str(args.output))
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Prepare video inputs for Viral Struct AI understanding agents.",
@@ -433,6 +712,41 @@ def build_parser() -> argparse.ArgumentParser:
     pack.add_argument("--max-width", type=int, default=720)
     pack.add_argument("--dry-run", action="store_true")
     pack.set_defaults(func=run_inspection_pack)
+
+    extract_audio = subparsers.add_parser("extract-audio", help="Extract mono WAV audio for beat tracking.")
+    extract_audio.add_argument("input")
+    extract_audio.add_argument("output")
+    extract_audio.add_argument("--sample-rate", type=int, default=44100)
+    extract_audio.add_argument("--channels", type=int, default=1)
+    extract_audio.add_argument("--dry-run", action="store_true")
+    extract_audio.set_defaults(func=run_extract_audio)
+
+    beat_map = subparsers.add_parser("beat-map", help="Run Beat-This and write AudioBeatMap JSON.")
+    beat_map.add_argument("input")
+    beat_map.add_argument("output")
+    beat_map.add_argument("--video-id", default="unknown")
+    beat_map.add_argument("--audio-output")
+    beat_map.add_argument("--beats-output")
+    beat_map.add_argument("--sample-rate", type=int, default=44100)
+    beat_map.add_argument("--channels", type=int, default=1)
+    beat_map.add_argument("--beat-this-bin", default="beat_this")
+    beat_map.add_argument("--gpu", type=int, default=-1)
+    beat_map.add_argument("--model")
+    beat_map.add_argument("--dbn", action="store_true")
+    beat_map.add_argument("--dry-run", action="store_true")
+    beat_map.set_defaults(func=run_beat_map)
+
+    align = subparsers.add_parser(
+        "align-transitions",
+        help="Align RoughStructureScan candidate transitions to an AudioBeatMap.",
+    )
+    align.add_argument("rough_scan")
+    align.add_argument("beat_map")
+    align.add_argument("output")
+    align.add_argument("--on-beat-ms", type=int, default=80)
+    align.add_argument("--near-beat-ms", type=int, default=160)
+    align.add_argument("--dry-run", action="store_true")
+    align.set_defaults(func=run_align_transitions)
 
     return parser
 

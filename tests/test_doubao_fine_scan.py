@@ -26,10 +26,63 @@ class DoubaoFineScanTests(unittest.TestCase):
 
         self.assertEqual(args.rough_scan, "seed_assets/analysis/macbook_neo/rough_structure_scan.json")
         self.assertEqual(args.video, "seed_assets/raw_videos/macbook_neo.mp4")
+        self.assertEqual(args.beat_map, "seed_assets/analysis/macbook_neo/audio_beat_map.json")
         self.assertEqual(args.out_dir, "seed_assets/analysis/macbook_neo/fine_scan")
         self.assertEqual(args.work_dir, "seed_assets/analysis/macbook_neo/fine_scan/clips")
         self.assertEqual(args.base_url, "")
         self.assertEqual(args.model, "")
+
+    def test_build_segment_audio_analysis_uses_beat_this_relative_times(self):
+        beat_map = {
+            "method": {"primary": "beat_this"},
+            "tempo": {"bpm": 83.33, "confidence": None},
+            "beats": [
+                {"time": 8.96, "beatNumber": 1, "isDownbeat": True},
+                {"time": 9.20, "beatNumber": 2, "isDownbeat": False},
+                {"time": 10.00, "beatNumber": 3, "isDownbeat": False},
+                {"time": 13.20, "beatNumber": 1, "isDownbeat": True},
+            ],
+            "downbeats": [
+                {"time": 8.96, "beatNumber": 1, "isDownbeat": True},
+                {"time": 13.20, "beatNumber": 1, "isDownbeat": True},
+            ],
+        }
+
+        result = self.module.build_segment_audio_analysis(
+            beat_map,
+            start=9.0,
+            end=13.0,
+            beat_map_ref="beat_map.json",
+        )
+
+        self.assertEqual(result["source"], "beat_this")
+        self.assertEqual(result["bpm"], 83.33)
+        self.assertEqual(result["sourceBeatMapRef"], "beat_map.json")
+        self.assertEqual(result["beatTimestamps"], [0.2, 1.0])
+        self.assertEqual(result["downbeatTimestamps"], [])
+        self.assertEqual(result["beatMarkers"][0]["absTime"], 9.2)
+        self.assertEqual(result["beatMarkers"][0]["segRelTime"], 0.2)
+
+    def test_prompt_variables_describe_missing_beat_this_map(self):
+        segment = {
+            "id": "rough_seg_001",
+            "approxTimeRange": {"start": 0, "end": 3},
+            "possibleRole": "hook",
+            "purpose": "test purpose",
+            "whatHappens": "test happens",
+            "inspectionQuestions": ["q1"],
+        }
+        strategy = {"mode": "preview", "target_fps": 5, "upload_fps": 5, "max_width": 480}
+
+        variables = self.module.build_segment_prompt_variables(
+            segment,
+            strategy,
+            audio_result=None,
+            video_id="demo",
+        )
+
+        self.assertIn("Beat-This", variables["audioAnalysis"])
+        self.assertNotIn("librosa", variables["audioAnalysis"].lower())
 
     def test_run_fine_scan_returns_failure_when_segment_json_cannot_parse(self):
         with tempfile.TemporaryDirectory() as tmp:
