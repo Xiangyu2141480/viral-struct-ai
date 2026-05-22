@@ -167,50 +167,6 @@ def build_clip_command(
     ]
 
 
-def build_preview_clip_command(
-    input_path: str | Path,
-    output_path: str | Path,
-    *,
-    start: float,
-    end: float,
-    fps: float = 5,
-    max_width: int | None = 480,
-    crf: int = 23,
-) -> list[str]:
-    start = clamp_start(float(start))
-    end = float(end)
-    ensure_end_after_start(start, end)
-    if fps <= 0:
-        raise ValueError("fps must be positive")
-
-    duration = end - start
-    filters = combine_filters([f"fps={fps:g}", scale_filter(max_width)])
-    return [
-        "ffmpeg",
-        "-y",
-        "-ss",
-        fmt_time(start),
-        "-t",
-        fmt_time(duration),
-        "-i",
-        str(input_path),
-        "-vf",
-        filters,
-        "-an",
-        "-c:v",
-        "libx264",
-        "-preset",
-        "veryfast",
-        "-crf",
-        str(crf),
-        "-pix_fmt",
-        "yuv420p",
-        "-movflags",
-        "+faststart",
-        str(output_path),
-    ]
-
-
 def build_microscope_command(
     input_path: str | Path,
     output_path: str | Path,

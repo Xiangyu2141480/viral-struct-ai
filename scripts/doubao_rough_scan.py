@@ -169,16 +169,16 @@ def upload_file(
     base_url: str,
     api_key: str,
     video_path: str | Path,
-    fps: float,
+    fps: float | None,
     timeout: int = 300,
 ) -> dict[str, Any]:
     path = Path(video_path)
     mime_type = mimetypes.guess_type(path.name)[0] or "video/mp4"
+    fields = {"purpose": "user_data"}
+    if fps is not None:
+        fields["preprocess_configs[video][fps]"] = f"{fps:g}"
     body, content_type = build_multipart_body(
-        fields={
-            "purpose": "user_data",
-            "preprocess_configs[video][fps]": f"{fps:g}",
-        },
+        fields=fields,
         files={
             "file": (path.name, path.read_bytes(), mime_type),
         },
