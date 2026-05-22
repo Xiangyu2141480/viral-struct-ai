@@ -8,8 +8,8 @@ export async function analyzeAssetsMock(
     const lower = file.originalname.toLowerCase();
     const isVideo = lower.endsWith('.mp4') || lower.endsWith('.mov') || lower.endsWith('.webm');
     const isHand = lower.includes('hand') || lower.includes('手');
-    const hasFace = lower.includes('face') || lower.includes('host') || lower.includes('真人') || lower.includes('脸');
-    const isBeauty = lower.includes('makeup') || lower.includes('beauty') || lower.includes('swatch') || lower.includes('妆') || lower.includes('试色');
+    const hasPresenter = lower.includes('host') || lower.includes('presenter') || lower.includes('真人') || lower.includes('演示');
+    const isSwatchOrTexture = lower.includes('makeup') || lower.includes('beauty') || lower.includes('swatch') || lower.includes('妆') || lower.includes('试色');
     const isBeforeAfter = lower.includes('before') || lower.includes('after') || lower.includes('对比');
 
     return {
@@ -31,21 +31,21 @@ export async function analyzeAssetsMock(
         'product_closeup_trait',
         'clean_background',
         ...(isHand ? ['hand_demo' as const] : []),
-        ...(hasFace ? ['human_presence' as const, 'face_closeup' as const, 'host_talking' as const] : []),
-        ...(isBeauty ? ['beauty_demo' as const, 'swatch_demo' as const] : []),
+        ...(hasPresenter ? ['human_presence' as const, 'host_talking' as const] : []),
+        ...(isSwatchOrTexture ? ['swatch_demo' as const, 'texture_display' as const] : []),
         ...(isBeforeAfter ? ['before_after_comparison' as const] : [])
       ],
       humanPresence: {
-        hasHuman: hasFace || isHand,
-        role: hasFace ? 'host' : isHand ? 'hand_only' : 'unknown',
-        framing: hasFace ? ['face_closeup'] : isHand ? ['hands'] : ['product_only'],
+        hasHuman: hasPresenter || isHand,
+        role: hasPresenter ? 'host' : isHand ? 'hand_only' : 'unknown',
+        framing: hasPresenter ? ['half_body'] : isHand ? ['hands'] : ['product_only'],
         actions: [
-          ...(hasFace && isVideo ? ['talking' as const] : []),
-          ...(isBeauty && isVideo ? ['applying_product' as const, 'showing_result' as const] : []),
+          ...(hasPresenter && isVideo ? ['talking' as const] : []),
+          ...(isSwatchOrTexture && isVideo ? ['applying_product' as const, 'showing_result' as const] : []),
           ...(isHand ? ['holding_product' as const] : [])
         ]
       },
-      visualStyleTags: ['clean_background', ...(isBeauty ? ['beauty_style' as const] : [])]
+      visualStyleTags: ['clean_background']
     };
   });
 

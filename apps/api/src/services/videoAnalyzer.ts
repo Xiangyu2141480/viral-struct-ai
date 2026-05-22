@@ -4,10 +4,6 @@ export async function analyzeVideoMock(
   videoId: string,
   manualTranscript?: string
 ): Promise<VideoAnalysis> {
-  const transcriptText =
-    manualTranscript ||
-    '你还在这样选杯子吗？普通杯不保温还容易漏。这款便携咖啡杯保温八小时，单手开盖，倒置不漏，通勤党放心带。';
-
   return {
     metadata: {
       videoId,
@@ -31,12 +27,46 @@ export async function analyzeVideoMock(
       { time: 10, url: '/mock/frame_4.jpg', description: '对比卡片' },
       { time: 14, url: '/mock/frame_5.jpg', description: 'CTA 卡片' }
     ],
-    transcript: [
-      { start: 0, end: 2, text: transcriptText.slice(0, 12) },
-      { start: 2, end: 4, text: '普通杯不保温还容易漏' },
-      { start: 4, end: 8, text: '这款便携咖啡杯保温八小时' },
-      { start: 8, end: 12, text: '单手开盖，倒置不漏' },
-      { start: 12, end: 15, text: '通勤党放心带' }
-    ]
+    transcript: buildTranscript(manualTranscript, 15)
   };
+}
+
+function buildTranscript(manualTranscript: string | undefined, duration: number): VideoAnalysis['transcript'] {
+  const manualSegments = splitManualTranscript(manualTranscript);
+
+  if (manualSegments.length) {
+    return manualSegments.map((text, index) => ({
+      start: round((duration * index) / manualSegments.length),
+      end: round(index === manualSegments.length - 1 ? duration : (duration * (index + 1)) / manualSegments.length),
+      text
+    }));
+  }
+
+  return [
+    { start: 0, end: 2, text: '你还在这样选杯子吗？' },
+    { start: 2, end: 4, text: '普通杯不保温还容易漏。' },
+    { start: 4, end: 8, text: '这款便携咖啡杯保温八小时。' },
+    { start: 8, end: 12, text: '单手开盖，倒置不漏。' },
+    { start: 12, end: 15, text: '通勤党放心带。' }
+  ];
+}
+
+function splitManualTranscript(value: string | undefined): string[] {
+  const text = typeof value === 'string' ? value.trim() : '';
+
+  if (!text) {
+    return [];
+  }
+
+  const sentenceSegments = text
+    .replace(/([。！？!?；;])/g, '$1\n')
+    .split(/\s*\n\s*/)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+
+  return sentenceSegments.length ? sentenceSegments : [text];
+}
+
+function round(value: number): number {
+  return Number(value.toFixed(2));
 }

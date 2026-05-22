@@ -18,6 +18,11 @@ videosRouter.post('/upload', upload.single('video'), async (req, res) => {
   });
 });
 
+videosRouter.post('/demo/analyze', async (req, res) => {
+  const analysis = await analyzeVideoMock('demo', req.body?.manualTranscript);
+  res.json(analysis);
+});
+
 videosRouter.post('/:id/analyze', async (req, res) => {
   const { id } = req.params;
   const analysis = await analyzeVideoMock(id, req.body?.manualTranscript);
