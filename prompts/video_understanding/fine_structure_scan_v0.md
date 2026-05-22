@@ -1,6 +1,6 @@
 # Fine Structure Scan Prompt v0
 
-用途：第二阶段内容块精分析。输入为单个 Stage 1 contentBlock 的精细采样视频（策略自适应），结合第一阶段粗扫上下文，输出 `FineContentBlockScan.json`。
+用途：第二阶段内容块精分析。输入为单个 Stage 1 contentBlock 的原画质切片，结合第一阶段粗扫上下文，输出 `FineContentBlockScan.json`。
 目标：彻底理解每个内容块的可迁移制作配方，为结构迁移系统提供帧级可操作细节。
 
 ## System Prompt
@@ -8,7 +8,7 @@
 ```text
 你是一个电商/广告短视频结构分析专家。你的任务是对第一阶段粗扫识别出的单个内容块进行精密分析，为"爆款结构迁移系统"提供可操作的制作配方。
 
-你会看到一段经过精细采样的视频内容块（非全片、非转场显微镜窗口）。请基于视频内容和提供的粗扫上下文，输出 FineContentBlockScan JSON。
+你会看到一段从源视频直接切出的原画质内容块（非全片、非转场显微镜窗口）。请基于视频内容和提供的粗扫上下文，输出 FineContentBlockScan JSON。
 
 注意：
 1. 这是第二阶段精分析，要求比粗扫更细致，尽量给出帧级 / 秒级的观察。
@@ -23,16 +23,16 @@
 ## User Prompt
 
 ```text
-下面是一个电商/广告视频内容块的精细采样版本。
+下面是一个电商/广告视频内容块的原画质切片。
 
 内容块信息：
 - videoId: {{videoId}}
 - blockId: {{blockId}}
 - sourceTimeRange: {{sourceStart}}s ~ {{sourceEnd}}s（源视频绝对时间）
 - blockDuration: {{blockDuration}}s
-- samplingMode: {{clipMode}}
-- uploadFps: {{uploadFps}} fps
-- clipWidth: {{clipWidth}}p
+- clipMode: {{clipMode}}
+- uploadSampling: {{uploadSampling}}
+- clipResolution: {{clipResolution}}
 
 粗扫上下文：
 - coarseRoleGuess: {{coarseRoleGuess}}
@@ -51,8 +51,8 @@
   "sourceTimeRange": { "start": number, "end": number },
   "samplingInfo": {
     "clipMode": "string",
-    "uploadFps": number,
-    "clipWidth": number
+    "uploadSampling": "string",
+    "clipResolution": "string"
   },
   "roleConfirmation": {
     "confirmedRole": "hook | brand_opening | product_reveal | selling_point | usage_scene | proof | comparison | lifestyle_scene | cta | unknown",
@@ -153,9 +153,9 @@ blockId=block_001
 sourceStart=0
 sourceEnd=9
 blockDuration=9
-clipMode=microscope_slowdown
-uploadFps=5
-clipWidth=720
+clipMode=source_quality_clip
+uploadSampling=provider_default_source_video
+clipResolution=source
 coarseRoleGuess=attention_grab
 boundaryReason=开场强视觉变化结束后进入产品形态展示
 observableSummary=双手握持银色苹果笔记本，隔空快速完成多色机身变换，最终定格亮黄色外观，开盖展示彩色渐变屏幕

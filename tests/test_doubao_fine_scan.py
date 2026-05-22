@@ -1,7 +1,6 @@
 import importlib.util
 import json
-import subprocess
-import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -18,231 +17,174 @@ def load_module():
     return module
 
 
-class ClipStrategyTests(unittest.TestCase):
+class DoubaoFineScanTests(unittest.TestCase):
     def setUp(self):
-        self.m = load_module()
+        self.module = load_module()
 
-    def _seg(self, start, end):
-        return {"approxTimeRange": {"start": start, "end": end}}
+    def test_parser_defaults_point_to_seed_analysis_flow_and_env_config(self):
+        args = self.module.build_parser().parse_args([])
 
-    def test_short_segment_uses_microscope(self):
-        strategy = self.m.determine_clip_strategy(self._seg(0, 6))
-        self.assertEqual(strategy["mode"], "microscope")
-        self.assertEqual(strategy["upload_fps"], 5)
-        self.assertIsNone(strategy["target_fps"])
-        self.assertEqual(strategy["max_width"], 720)
+        self.assertEqual(args.rough_scan, "seed_assets/analysis/macbook_neo/rough_structure_scan.json")
+        self.assertEqual(args.video, "seed_assets/raw_videos/macbook_neo.mp4")
+        self.assertEqual(args.beat_map, "seed_assets/analysis/macbook_neo/audio_beat_map.json")
+        self.assertEqual(args.out_dir, "seed_assets/analysis/macbook_neo/fine_scan")
+        self.assertEqual(args.work_dir, "seed_assets/analysis/macbook_neo/fine_scan/clips")
+        self.assertEqual(args.base_url, "")
+        self.assertEqual(args.model, "")
 
-    def test_boundary_8s_uses_microscope(self):
-        strategy = self.m.determine_clip_strategy(self._seg(0, 8))
-        self.assertEqual(strategy["mode"], "microscope")
-
-    def test_medium_segment_uses_5fps_480p_preview(self):
-        strategy = self.m.determine_clip_strategy(self._seg(9, 25))
-        self.assertEqual(strategy["mode"], "preview")
-        self.assertEqual(strategy["upload_fps"], 5)
-        self.assertEqual(strategy["target_fps"], 5)
-        self.assertEqual(strategy["max_width"], 480)
-
-    def test_boundary_30s_uses_5fps_480p_preview(self):
-        strategy = self.m.determine_clip_strategy(self._seg(0, 30))
-        self.assertEqual(strategy["mode"], "preview")
-        self.assertEqual(strategy["upload_fps"], 5)
-        self.assertEqual(strategy["max_width"], 480)
-
-    def test_long_segment_uses_5fps_preview(self):
-        strategy = self.m.determine_clip_strategy(self._seg(0, 60))
-        self.assertEqual(strategy["mode"], "preview")
-        self.assertEqual(strategy["upload_fps"], 5)
-        self.assertEqual(strategy["target_fps"], 5)
-        self.assertEqual(strategy["max_width"], 360)
-
-
-class MicroscopeCommandTests(unittest.TestCase):
-    def setUp(self):
-        self.m = load_module()
-
-    def test_uses_setpts_to_stretch_timestamps(self):
-        cmd = self.m.build_segment_microscope_command(
-            "input.mp4", "out.mp4", start=0.0, end=9.0, playback_fps=5
-        )
-        vf = cmd[cmd.index("-vf") + 1]
-        self.assertIn("setpts=N/(5*TB)", vf)
-
-    def test_strips_audio(self):
-        cmd = self.m.build_segment_microscope_command(
-            "input.mp4", "out.mp4", start=0.0, end=9.0
-        )
-        self.assertIn("-an", cmd)
-
-    def test_start_and_duration_are_correct(self):
-        cmd = self.m.build_segment_microscope_command(
-            "input.mp4", "out.mp4", start=2.5, end=7.5
-        )
-        self.assertEqual(cmd[cmd.index("-ss") + 1], "2.500")
-        self.assertEqual(cmd[cmd.index("-t") + 1], "5.000")
-
-    def test_scale_filter_is_applied(self):
-        cmd = self.m.build_segment_microscope_command(
-            "input.mp4", "out.mp4", start=0.0, end=5.0, max_width=720
-        )
-        vf = cmd[cmd.index("-vf") + 1]
-        self.assertIn("scale=w=min(720\\,iw):h=-2", vf)
-
-    def test_output_path_is_last_arg(self):
-        cmd = self.m.build_segment_microscope_command(
-            "input.mp4", "slow.mp4", start=0.0, end=5.0
-        )
-        self.assertEqual(cmd[-1], "slow.mp4")
-
-
-class PreviewCommandTests(unittest.TestCase):
-    def setUp(self):
-        self.m = load_module()
-
-    def test_uses_fps_filter(self):
-        cmd = self.m.build_segment_preview_command(
-            "input.mp4", "out.mp4", start=9.0, end=25.0, fps=15, max_width=480
-        )
-        vf = cmd[cmd.index("-vf") + 1]
-        self.assertIn("fps=15", vf)
-        self.assertIn("scale=w=min(480\\,iw):h=-2", vf)
-
-    def test_start_and_duration_are_correct(self):
-        cmd = self.m.build_segment_preview_command(
-            "input.mp4", "out.mp4", start=10.0, end=30.0, fps=15
-        )
-        self.assertEqual(cmd[cmd.index("-ss") + 1], "10.000")
-        self.assertEqual(cmd[cmd.index("-t") + 1], "20.000")
-
-    def test_strips_audio(self):
-        cmd = self.m.build_segment_preview_command(
-            "input.mp4", "out.mp4", start=0.0, end=20.0, fps=5
-        )
-        self.assertIn("-an", cmd)
-
-    def test_output_path_is_last_arg(self):
-        cmd = self.m.build_segment_preview_command(
-            "input.mp4", "preview.mp4", start=0.0, end=10.0, fps=15
-        )
-        self.assertEqual(cmd[-1], "preview.mp4")
-
-
-class PromptVariableTests(unittest.TestCase):
-    def setUp(self):
-        self.m = load_module()
-        self.segment = {
-            "id": "rough_seg_001",
-            "approxTimeRange": {"start": 0, "end": 9},
-            "possibleRole": "hook",
-            "purpose": "开场抓住注意力",
-            "whatHappens": "变色魔术",
-            "inspectionQuestions": ["节奏是否对齐？"],
+    def test_build_block_audio_analysis_uses_beat_this_relative_times(self):
+        beat_map = {
+            "method": {"primary": "beat_this"},
+            "tempo": {"bpm": 83.33, "confidence": None},
+            "beats": [
+                {"time": 8.96, "beatNumber": 1, "isDownbeat": True},
+                {"time": 9.20, "beatNumber": 2, "isDownbeat": False},
+                {"time": 10.00, "beatNumber": 3, "isDownbeat": False},
+                {"time": 13.20, "beatNumber": 1, "isDownbeat": True},
+            ],
+            "downbeats": [
+                {"time": 8.96, "beatNumber": 1, "isDownbeat": True},
+                {"time": 13.20, "beatNumber": 1, "isDownbeat": True},
+            ],
         }
 
-    def test_basic_fields_are_mapped(self):
-        strategy = {"mode": "microscope", "upload_fps": 5, "target_fps": None, "max_width": 720}
-        v = self.m.build_segment_prompt_variables(self.segment, strategy, None, "macbook_neo")
-        self.assertEqual(v["segmentId"], "rough_seg_001")
-        self.assertEqual(v["videoId"], "macbook_neo")
-        self.assertEqual(v["sourceStart"], 0.0)
-        self.assertEqual(v["sourceEnd"], 9.0)
-        self.assertEqual(v["segmentDuration"], 9.0)
-        self.assertEqual(v["clipMode"], "microscope_slowdown")
-        self.assertEqual(v["uploadFps"], 5)
-        self.assertEqual(v["clipWidth"], 720)
-        self.assertEqual(v["segmentRole"], "hook")
-
-    def test_audio_unavailable_text_when_none(self):
-        strategy = {"mode": "microscope", "upload_fps": 5, "target_fps": None, "max_width": 720}
-        v = self.m.build_segment_prompt_variables(self.segment, strategy, None, "vid")
-        self.assertIn("unavailable", v["audioAnalysis"])
-
-    def test_audio_json_included_when_present(self):
-        strategy = {"mode": "preview", "upload_fps": 15, "target_fps": 15, "max_width": 480}
-        audio = {"source": "librosa", "bpm": 128.0, "beatTimestamps": [0.5, 1.0, 1.5]}
-        v = self.m.build_segment_prompt_variables(self.segment, strategy, audio, "vid")
-        parsed = json.loads(v["audioAnalysis"])
-        self.assertEqual(parsed["bpm"], 128.0)
-        self.assertEqual(len(parsed["beatTimestamps"]), 3)
-
-    def test_preview_clip_mode_label(self):
-        strategy = {"mode": "preview", "upload_fps": 15, "target_fps": 15, "max_width": 480}
-        v = self.m.build_segment_prompt_variables(self.segment, strategy, None, "vid")
-        self.assertEqual(v["clipMode"], "segment_preview_15fps")
-
-    def test_inspection_questions_are_json_string(self):
-        strategy = {"mode": "microscope", "upload_fps": 5, "target_fps": None, "max_width": 720}
-        v = self.m.build_segment_prompt_variables(self.segment, strategy, None, "vid")
-        parsed = json.loads(v["inspectionQuestions"])
-        self.assertIsInstance(parsed, list)
-        self.assertEqual(parsed[0], "节奏是否对齐？")
-
-
-class ApiHelperTests(unittest.TestCase):
-    def setUp(self):
-        self.m = load_module()
-
-    def test_extract_response_text_output_text(self):
-        self.assertEqual(
-            self.m.extract_response_text({"output_text": '{"ok": true}'}),
-            '{"ok": true}',
+        result = self.module.build_block_audio_analysis(
+            beat_map,
+            start=9.0,
+            end=13.0,
+            beat_map_ref="beat_map.json",
         )
 
-    def test_extract_response_text_nested_content(self):
-        nested = {
-            "output": [{"content": [{"type": "output_text", "text": '{"segmentId":"rough_seg_001"}'}]}]
+        self.assertEqual(result["source"], "beat_this")
+        self.assertEqual(result["bpm"], 83.33)
+        self.assertEqual(result["sourceBeatMapRef"], "beat_map.json")
+        self.assertEqual(result["beatTimestamps"], [0.2, 1.0])
+        self.assertEqual(result["downbeatTimestamps"], [])
+        self.assertEqual(result["beatMarkers"][0]["absTime"], 9.2)
+        self.assertEqual(result["beatMarkers"][0]["segRelTime"], 0.2)
+
+    def test_block_prompt_variables_use_content_block_contract(self):
+        block = {
+            "id": "block_001",
+            "timeRange": {"start": 0, "end": 3},
+            "coarseRoleGuess": "attention_grab",
+            "boundaryReason": "opening attention block",
+            "observableSummary": "hands reveal product",
+            "fineScanFocusQuestions": ["q1"],
         }
-        self.assertEqual(
-            self.m.extract_response_text(nested),
-            '{"segmentId":"rough_seg_001"}',
+        variables = self.module.build_block_prompt_variables(
+            block,
+            audio_result=None,
+            video_id="demo",
         )
 
-    def test_extract_json_object_strips_markdown_fence(self):
-        text = '```json\n{"segmentId": "rough_seg_001"}\n```'
-        parsed = self.m.extract_json_object(text)
-        self.assertEqual(parsed["segmentId"], "rough_seg_001")
+        self.assertEqual(variables["blockId"], "block_001")
+        self.assertEqual(variables["coarseRoleGuess"], "attention_grab")
+        self.assertEqual(variables["observableSummary"], "hands reveal product")
+        self.assertEqual(variables["clipMode"], "source_quality_clip")
+        self.assertEqual(variables["uploadSampling"], "provider_default_source_video")
+        self.assertEqual(variables["clipResolution"], "source")
+        self.assertIn("q1", variables["fineScanFocusQuestions"])
+        self.assertIn("Beat-This", variables["audioAnalysis"])
 
-    def test_extract_json_object_plain_json(self):
-        parsed = self.m.extract_json_object('{"bpm": 128.0}')
-        self.assertEqual(parsed["bpm"], 128.0)
+    def test_prepare_block_clip_uses_source_quality_stream_copy(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            work_dir = Path(tmp)
+            block = {"id": "block_001", "timeRange": {"start": 2.0, "end": 5.5}}
+            commands = []
 
-    def test_build_responses_payload_structure(self):
-        payload = self.m.build_responses_payload(
-            model="ep-test",
-            file_id="file-abc",
-            prompt_text="只输出 JSON",
-            store=True,
-        )
-        self.assertEqual(payload["model"], "ep-test")
-        content = payload["input"][0]["content"]
-        self.assertEqual(content[0], {"type": "input_video", "file_id": "file-abc"})
-        self.assertEqual(content[1]["type"], "input_text")
+            original_run_ffmpeg = self.module.run_ffmpeg
+            try:
+                self.module.run_ffmpeg = lambda command, *, dry_run=False: commands.append(command)
 
-    def test_build_multipart_body_contains_fps_field(self):
-        body, content_type = self.m.build_multipart_body(
-            fields={"purpose": "user_data", "preprocess_configs[video][fps]": "5"},
-            files={"file": ("seg.mp4", b"data", "video/mp4")},
-            boundary="test-boundary",
-        )
-        decoded = body.decode("utf-8")
-        self.assertIn("preprocess_configs[video][fps]", decoded)
-        self.assertIn("test-boundary", content_type)
-        self.assertIn('filename="seg.mp4"', decoded)
+                output_path = self.module.prepare_block_clip(
+                    ROOT / "seed_assets" / "raw_videos" / "TVC.mp4",
+                    block,
+                    work_dir,
+                )
+            finally:
+                self.module.run_ffmpeg = original_run_ffmpeg
 
+            self.assertEqual(output_path.name, "block_001_source.mp4")
+            self.assertEqual(len(commands), 1)
+            command = commands[0]
+            self.assertNotIn("-vf", command)
+            self.assertNotIn("libx264", command)
+            self.assertNotIn("-crf", command)
+            self.assertNotIn("-an", command)
+            self.assertIn("-c", command)
+            self.assertEqual(command[command.index("-c") + 1], "copy")
 
-class CliTests(unittest.TestCase):
-    def test_help_exits_successfully(self):
-        result = subprocess.run(
-            [sys.executable, str(MODULE_PATH), "--help"],
-            cwd=ROOT,
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-        self.assertEqual(result.returncode, 0)
-        self.assertIn("rough-scan", result.stdout)
-        self.assertIn("segment-ids", result.stdout)
-        self.assertIn("skip-audio", result.stdout)
+    def test_run_fine_scan_returns_failure_when_content_block_json_cannot_parse(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            rough_scan_path = tmp_dir / "rough_structure_scan.json"
+            out_dir = tmp_dir / "fine_scan"
+            work_dir = tmp_dir / "clips"
+            rough_scan_path.write_text(
+                json.dumps(
+                    {
+                        "videoId": "demo",
+                        "contentBlocks": [
+                            {
+                                "id": "block_001",
+                                "timeRange": {"start": 0, "end": 1},
+                                "coarseRoleGuess": "attention_grab",
+                                "boundaryReason": "test",
+                                "observableSummary": "test",
+                                "fineScanFocusQuestions": [],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            args = self.module.build_parser().parse_args(
+                [
+                    "--rough-scan",
+                    str(rough_scan_path),
+                    "--video",
+                    str(ROOT / "seed_assets" / "raw_videos" / "TVC.mp4"),
+                    "--out-dir",
+                    str(out_dir),
+                    "--work-dir",
+                    str(work_dir),
+                    "--base-url",
+                    "https://example.invalid/api/v3",
+                    "--api-key",
+                    "dummy",
+                    "--model",
+                    "ep-test",
+                    "--skip-audio",
+                ]
+            )
+
+            originals = {
+                "prepare_block_clip": self.module.prepare_block_clip,
+                "upload_file": self.module.upload_file,
+                "wait_for_file": self.module.wait_for_file,
+                "create_response": self.module.create_response,
+            }
+            upload_calls = []
+            try:
+                self.module.prepare_block_clip = lambda *args, **kwargs: ROOT / "seed_assets" / "raw_videos" / "TVC.mp4"
+                self.module.upload_file = lambda **kwargs: upload_calls.append(kwargs) or {"id": "file-test"}
+                self.module.wait_for_file = lambda **kwargs: {"status": "processed"}
+                self.module.create_response = lambda **kwargs: {"output_text": "not json"}
+
+                result = self.module.run_fine_scan(args)
+            finally:
+                for name, value in originals.items():
+                    setattr(self.module, name, value)
+
+            self.assertEqual(result, 1)
+            failure_path = out_dir / "fine_scan_failures.json"
+            self.assertTrue(failure_path.exists())
+            failures = json.loads(failure_path.read_text(encoding="utf-8"))
+            self.assertEqual(failures["failedBlockCount"], 1)
+            self.assertEqual(failures["failures"][0]["blockId"], "block_001")
+            self.assertEqual(upload_calls[0]["fps"], None)
 
 
 if __name__ == "__main__":
