@@ -65,6 +65,27 @@ class DoubaoRoughScanTests(unittest.TestCase):
         self.assertEqual(content[0], {"type": "input_video", "file_id": "file-abc"})
         self.assertEqual(content[1], {"type": "input_text", "text": "只输出 JSON"})
 
+    def test_build_responses_payload_defaults_to_deterministic_temperature(self):
+        payload = self.module.build_responses_payload(
+            model="ep-test",
+            file_id="file-abc",
+            prompt_text="只输出 JSON",
+            store=True,
+        )
+
+        self.assertEqual(payload["temperature"], 0)
+
+    def test_build_responses_payload_allows_temperature_override(self):
+        payload = self.module.build_responses_payload(
+            model="ep-test",
+            file_id="file-abc",
+            prompt_text="只输出 JSON",
+            store=True,
+            temperature=0.3,
+        )
+
+        self.assertEqual(payload["temperature"], 0.3)
+
     def test_extract_response_text_handles_output_text_and_content_array(self):
         self.assertEqual(
             self.module.extract_response_text({"output_text": "{\"ok\": true}"}),

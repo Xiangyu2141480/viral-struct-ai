@@ -142,27 +142,25 @@ def prepare_block_clip(
 
 def build_block_prompt_variables(
     block: dict[str, Any],
-    audio_result: dict[str, Any] | None,
+    *,
     video_id: str,
     video_duration: float,
 ) -> dict[str, Any]:
+    """Render block context for the fine_structure_scan v0.3 prompt.
+
+    v0.3 is semantic-only: no audio beat array, no millisecond timing fields
+    needed by the model. Code-owned timing comes from visual_peak_detector
+    + peak_micro_scan, merged at aggregate time.
+    """
     start, end = block_time_range(block)
     if video_duration <= 0:
         raise ValueError("video_duration must be positive")
-    audio_text = (
-        json.dumps(audio_result, ensure_ascii=False, indent=2)
-        if audio_result
-        else "unavailable（Beat-This beat map 未提供或未生成；可先运行 scripts/video_tools.py beat-map）"
-    )
     return {
         "videoId": video_id,
         "blockId": block["id"],
         "sourceStart": start,
         "sourceEnd": end,
         "blockDuration": round(end - start, 3),
-        "sourceStartMs": int(round(start * 1000)),
-        "sourceEndMs": int(round(end * 1000)),
-        "blockDurationMs": int(round((end - start) * 1000)),
         "sourceVideoDuration": round(video_duration, 3),
         "normalizedStart": round(start / video_duration, 4),
         "normalizedEnd": round(end / video_duration, 4),
@@ -175,7 +173,110 @@ def build_block_prompt_variables(
         "fineScanFocusQuestions": json.dumps(
             block.get("fineScanFocusQuestions", []), ensure_ascii=False
         ),
-        "audioAnalysis": audio_text,
+    }
+
+
+def aggregate_peak_semantics(
+    *,
+    visual_peaks: list[dict[str, Any]],
+    semantic_results: list[dict[str, Any]],
+    audio_beats_ms: list[int],
+    tolerance_ms: int = 120,
+) -> list[dict[str, Any]]:
+    """Join code-owned visual peaks with model-owned semantic results.
+
+    Produces the final actionBeats list with timing entirely owned by the code
+    layer. The model contributes only semantics (semanticAction, actionType,
+    beforeState, afterState, relativePositionBucket, confidence).
+
+    Rules:
+      - Drop semantic results where isMeaningfulAction is False.
+      - Match by peakId; semantic results referencing unknown peakIds are
+        ignored (model hallucination guard).
+      - Final timing (anchorMs, timeRangeMs, nearestAudioBeatMs, deltaMs,
+        isBeatAligned) is computed by code, not by the model.
+      - beatId is assigned sequentially in time order (beat_001, beat_002, ...).
+
+    Each visual_peak must have: peakId, tMs, windowMs={start,end}, prominence,
+    motionScore. Optional: channels, anchorSource (defaults to "visual_peak").
+    """
+    peaks_by_id: dict[str, dict[str, Any]] = {
+        str(peak["peakId"]): peak for peak in visual_peaks
+    }
+
+    kept: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    for result in semantic_results:
+        peak_id = str(result.get("peakId", ""))
+        if not result.get("isMeaningfulAction", False):
+            continue
+        if peak_id not in peaks_by_id:
+            continue
+        kept.append((peaks_by_id[peak_id], result))
+
+    kept.sort(key=lambda pair: int(pair[0]["tMs"]))
+
+    beats: list[dict[str, Any]] = []
+    for order, (peak, result) in enumerate(kept, start=1):
+        anchor_ms = int(peak["tMs"])
+        alignment = align_anchor_to_audio_beat(
+            anchor_ms=anchor_ms,
+            audio_beats_ms=audio_beats_ms,
+            tolerance_ms=tolerance_ms,
+        )
+        beat: dict[str, Any] = {
+            "beatId": f"beat_{order:03d}",
+            "semanticAction": result["semanticAction"],
+            "actionType": result["actionType"],
+            "beforeState": result["beforeState"],
+            "afterState": result["afterState"],
+            "relativePositionBucket": result["relativePositionBucket"],
+            "anchorMs": anchor_ms,
+            "timeRangeMs": dict(peak["windowMs"]),
+            "anchorSource": peak.get("anchorSource", "visual_peak"),
+            "nearestAudioBeatMs": alignment["nearestAudioBeatMs"],
+            "deltaMs": alignment["deltaMs"],
+            "isBeatAligned": alignment["isBeatAligned"],
+            "alignmentToleranceMs": alignment["alignmentToleranceMs"],
+            "anchorConfidence": float(result.get("confidence", 0.0)),
+            "visualPeak": {
+                "peakId": peak["peakId"],
+                "prominence": float(peak.get("prominence", 0.0)),
+                "motionScore": float(peak.get("motionScore", 0.0)),
+                "channels": list(peak.get("channels", [])),
+            },
+        }
+        beats.append(beat)
+    return beats
+
+
+def align_anchor_to_audio_beat(
+    *,
+    anchor_ms: int,
+    audio_beats_ms: list[int],
+    tolerance_ms: int = 120,
+) -> dict[str, Any]:
+    """Find the nearest audio beat for a code-owned visual anchor.
+
+    Returns a dict with nearestAudioBeatMs / deltaMs / isBeatAligned /
+    alignmentToleranceMs. deltaMs = anchor - nearest (positive = anchor is later
+    than the beat). When audio_beats_ms is empty, all alignment fields are None
+    and isBeatAligned is False.
+    """
+    if not audio_beats_ms:
+        return {
+            "nearestAudioBeatMs": None,
+            "deltaMs": None,
+            "isBeatAligned": False,
+            "alignmentToleranceMs": int(tolerance_ms),
+        }
+
+    nearest = min(audio_beats_ms, key=lambda value: abs(int(anchor_ms) - int(value)))
+    delta = int(anchor_ms) - int(nearest)
+    return {
+        "nearestAudioBeatMs": int(nearest),
+        "deltaMs": delta,
+        "isBeatAligned": abs(delta) <= int(tolerance_ms),
+        "alignmentToleranceMs": int(tolerance_ms),
     }
 
 
@@ -263,7 +364,11 @@ def run_fine_scan(args: argparse.Namespace) -> int:
                 f" downbeats={len(audio_result['downbeatTimestampsMs'])}"
             )
 
-        variables = build_block_prompt_variables(block, audio_result, video_id, video_duration)
+        variables = build_block_prompt_variables(
+            block,
+            video_id=video_id,
+            video_duration=video_duration,
+        )
         instructions, prompt_text = load_prompt_sections(args.prompt, variables)
 
         print("   uploading clip...")

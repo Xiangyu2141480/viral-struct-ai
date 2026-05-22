@@ -75,15 +75,14 @@ class DoubaoFineScanTests(unittest.TestCase):
         }
         variables = self.module.build_block_prompt_variables(
             block,
-            audio_result=None,
             video_id="demo",
             video_duration=12,
         )
 
         self.assertEqual(variables["blockId"], "block_001")
-        self.assertEqual(variables["sourceStartMs"], 0)
-        self.assertEqual(variables["sourceEndMs"], 3000)
-        self.assertEqual(variables["blockDurationMs"], 3000)
+        self.assertEqual(variables["sourceStart"], 0)
+        self.assertEqual(variables["sourceEnd"], 3)
+        self.assertEqual(variables["blockDuration"], 3.0)
         self.assertEqual(variables["sourceVideoDuration"], 12)
         self.assertEqual(variables["normalizedStart"], 0.0)
         self.assertEqual(variables["normalizedEnd"], 0.25)
@@ -93,7 +92,175 @@ class DoubaoFineScanTests(unittest.TestCase):
         self.assertEqual(variables["uploadSampling"], "provider_default_source_video")
         self.assertEqual(variables["clipResolution"], "source")
         self.assertIn("q1", variables["fineScanFocusQuestions"])
-        self.assertIn("Beat-This", variables["audioAnalysis"])
+        # T4: audio must NOT be injected into the model prompt anymore.
+        self.assertNotIn("audioAnalysis", variables)
+
+    def test_align_anchor_to_audio_beat_finds_nearest_within_tolerance(self):
+        result = self.module.align_anchor_to_audio_beat(
+            anchor_ms=5748,
+            audio_beats_ms=[3600, 5740, 6460],
+            tolerance_ms=120,
+        )
+
+        self.assertEqual(result["nearestAudioBeatMs"], 5740)
+        self.assertEqual(result["deltaMs"], 8)
+        self.assertTrue(result["isBeatAligned"])
+        self.assertEqual(result["alignmentToleranceMs"], 120)
+
+    def test_align_anchor_to_audio_beat_flags_out_of_tolerance(self):
+        result = self.module.align_anchor_to_audio_beat(
+            anchor_ms=5000,
+            audio_beats_ms=[3600, 5740, 6460],
+            tolerance_ms=120,
+        )
+
+        self.assertEqual(result["nearestAudioBeatMs"], 5740)
+        self.assertEqual(result["deltaMs"], -740)
+        self.assertFalse(result["isBeatAligned"])
+
+    def test_align_anchor_to_audio_beat_returns_none_when_no_beats(self):
+        result = self.module.align_anchor_to_audio_beat(
+            anchor_ms=5000,
+            audio_beats_ms=[],
+            tolerance_ms=120,
+        )
+
+        self.assertIsNone(result["nearestAudioBeatMs"])
+        self.assertIsNone(result["deltaMs"])
+        self.assertFalse(result["isBeatAligned"])
+        self.assertEqual(result["alignmentToleranceMs"], 120)
+
+    def test_aggregate_peak_semantics_attaches_code_owned_timing(self):
+        visual_peaks = [
+            {
+                "peakId": "peak_001",
+                "tMs": 5748,
+                "windowMs": {"start": 5148, "end": 6548},
+                "prominence": 4.8,
+                "motionScore": 5.86,
+                "channels": ["hist_delta", "frame_diff", "flow_mag"],
+            },
+        ]
+        semantics = [
+            {
+                "peakId": "peak_001",
+                "isMeaningfulAction": True,
+                "semanticAction": "笔记本变成黄色",
+                "actionType": "color_shift",
+                "beforeState": "银色机身",
+                "afterState": "黄色机身",
+                "relativePositionBucket": "mid",
+                "confidence": 0.91,
+            },
+        ]
+
+        beats = self.module.aggregate_peak_semantics(
+            visual_peaks=visual_peaks,
+            semantic_results=semantics,
+            audio_beats_ms=[5740],
+            tolerance_ms=120,
+        )
+
+        self.assertEqual(len(beats), 1)
+        beat = beats[0]
+        self.assertEqual(beat["beatId"], "beat_001")
+        self.assertEqual(beat["semanticAction"], "笔记本变成黄色")
+        self.assertEqual(beat["actionType"], "color_shift")
+        self.assertEqual(beat["beforeState"], "银色机身")
+        self.assertEqual(beat["afterState"], "黄色机身")
+        self.assertEqual(beat["anchorMs"], 5748)
+        self.assertEqual(beat["timeRangeMs"], {"start": 5148, "end": 6548})
+        self.assertEqual(beat["anchorSource"], "visual_peak")
+        self.assertEqual(beat["nearestAudioBeatMs"], 5740)
+        self.assertEqual(beat["deltaMs"], 8)
+        self.assertTrue(beat["isBeatAligned"])
+        self.assertEqual(beat["alignmentToleranceMs"], 120)
+        self.assertEqual(beat["anchorConfidence"], 0.91)
+        self.assertEqual(beat["visualPeak"]["peakId"], "peak_001")
+        self.assertEqual(beat["visualPeak"]["prominence"], 4.8)
+
+    def test_aggregate_peak_semantics_drops_not_meaningful(self):
+        visual_peaks = [
+            {"peakId": "peak_001", "tMs": 1000, "windowMs": {"start": 400, "end": 1800}, "prominence": 2.0, "motionScore": 2.0},
+            {"peakId": "peak_002", "tMs": 5000, "windowMs": {"start": 4400, "end": 5800}, "prominence": 3.0, "motionScore": 3.0},
+        ]
+        semantics = [
+            {"peakId": "peak_001", "isMeaningfulAction": False, "semanticAction": "无明显动作", "actionType": "none", "beforeState": "静态画面", "afterState": "静态画面", "relativePositionBucket": "early", "confidence": 0.4},
+            {"peakId": "peak_002", "isMeaningfulAction": True, "semanticAction": "开盖", "actionType": "reveal", "beforeState": "盖闭", "afterState": "盖开", "relativePositionBucket": "mid", "confidence": 0.9},
+        ]
+
+        beats = self.module.aggregate_peak_semantics(
+            visual_peaks=visual_peaks,
+            semantic_results=semantics,
+            audio_beats_ms=[],
+            tolerance_ms=120,
+        )
+
+        self.assertEqual(len(beats), 1)
+        self.assertEqual(beats[0]["beatId"], "beat_001")
+        self.assertEqual(beats[0]["visualPeak"]["peakId"], "peak_002")
+
+    def test_aggregate_peak_semantics_ignores_unknown_peak_ids(self):
+        visual_peaks = [
+            {"peakId": "peak_001", "tMs": 1000, "windowMs": {"start": 400, "end": 1800}, "prominence": 2.0, "motionScore": 2.0},
+        ]
+        semantics = [
+            {"peakId": "peak_001", "isMeaningfulAction": True, "semanticAction": "x", "actionType": "reveal", "beforeState": "a", "afterState": "b", "relativePositionBucket": "mid", "confidence": 0.8},
+            {"peakId": "peak_999_hallucinated", "isMeaningfulAction": True, "semanticAction": "phantom", "actionType": "reveal", "beforeState": "x", "afterState": "y", "relativePositionBucket": "early", "confidence": 0.5},
+        ]
+
+        beats = self.module.aggregate_peak_semantics(
+            visual_peaks=visual_peaks,
+            semantic_results=semantics,
+            audio_beats_ms=[],
+            tolerance_ms=120,
+        )
+
+        self.assertEqual(len(beats), 1)
+        self.assertEqual(beats[0]["visualPeak"]["peakId"], "peak_001")
+
+    def test_aggregate_peak_semantics_handles_empty_audio_beats(self):
+        visual_peaks = [
+            {"peakId": "peak_001", "tMs": 5000, "windowMs": {"start": 4400, "end": 5800}, "prominence": 2.0, "motionScore": 2.0},
+        ]
+        semantics = [
+            {"peakId": "peak_001", "isMeaningfulAction": True, "semanticAction": "x", "actionType": "reveal", "beforeState": "a", "afterState": "b", "relativePositionBucket": "mid", "confidence": 0.8},
+        ]
+
+        beats = self.module.aggregate_peak_semantics(
+            visual_peaks=visual_peaks,
+            semantic_results=semantics,
+            audio_beats_ms=[],
+            tolerance_ms=120,
+        )
+
+        self.assertEqual(len(beats), 1)
+        self.assertIsNone(beats[0]["nearestAudioBeatMs"])
+        self.assertIsNone(beats[0]["deltaMs"])
+        self.assertFalse(beats[0]["isBeatAligned"])
+
+    def test_aggregate_peak_semantics_assigns_sequential_beat_ids(self):
+        visual_peaks = [
+            {"peakId": "peak_001", "tMs": 1000, "windowMs": {"start": 400, "end": 1800}, "prominence": 2.0, "motionScore": 2.0},
+            {"peakId": "peak_002", "tMs": 3000, "windowMs": {"start": 2400, "end": 3800}, "prominence": 1.5, "motionScore": 1.5},
+            {"peakId": "peak_003", "tMs": 5000, "windowMs": {"start": 4400, "end": 5800}, "prominence": 3.0, "motionScore": 3.0},
+        ]
+        semantics = [
+            {"peakId": "peak_001", "isMeaningfulAction": True, "semanticAction": "a", "actionType": "reveal", "beforeState": "x", "afterState": "y", "relativePositionBucket": "early", "confidence": 0.7},
+            {"peakId": "peak_002", "isMeaningfulAction": False, "semanticAction": "noise", "actionType": "none", "beforeState": "x", "afterState": "x", "relativePositionBucket": "mid", "confidence": 0.3},
+            {"peakId": "peak_003", "isMeaningfulAction": True, "semanticAction": "c", "actionType": "exit", "beforeState": "y", "afterState": "z", "relativePositionBucket": "late", "confidence": 0.9},
+        ]
+
+        beats = self.module.aggregate_peak_semantics(
+            visual_peaks=visual_peaks,
+            semantic_results=semantics,
+            audio_beats_ms=[],
+            tolerance_ms=120,
+        )
+
+        # peak_002 dropped (not meaningful); remaining beats get beat_001/beat_002.
+        self.assertEqual([b["beatId"] for b in beats], ["beat_001", "beat_002"])
+        self.assertEqual([b["visualPeak"]["peakId"] for b in beats], ["peak_001", "peak_003"])
 
     def test_rough_video_duration_uses_last_content_block_end(self):
         blocks = [
@@ -103,20 +270,52 @@ class DoubaoFineScanTests(unittest.TestCase):
 
         self.assertEqual(self.module.rough_video_duration(blocks), 12.25)
 
-    def test_fine_scan_prompt_uses_v02_compilable_schema(self):
+    def test_fine_scan_prompt_keeps_model_away_from_timing_numbers(self):
         prompt = (ROOT / "prompts" / "video_understanding" / "fine_structure_scan_v0.md").read_text(
             encoding="utf-8"
         )
 
-        self.assertIn("actionBeats", prompt)
+        # v0.3 semantic-only block-level schema fields kept
+        self.assertIn("fine_content_block_semantic_v0_3", prompt)
+        self.assertIn("roleConfirmation", prompt)
         self.assertIn("positionalContext", prompt)
+        self.assertIn("textOverlayBehavior", prompt)
+        self.assertIn("productPresentation", prompt)
         self.assertIn("requiredAssetType", prompt)
         self.assertIn("dominantTone", prompt)
         self.assertIn("transferableMotifs", prompt)
-        self.assertIn("beatAlignedActionBeats", prompt)
+        # Action-beat / shot-level timing now owned by code via peak_micro_scan
+        self.assertNotIn('"actionBeats"', prompt)
+        self.assertNotIn('"shotStructure"', prompt)
+        self.assertNotIn('"beatSyncAnalysis"', prompt)
+        self.assertNotIn('"alignedToAudioBeatMs"', prompt)
+        self.assertNotIn('"audioAnalysis"', prompt)
+        self.assertNotIn("{{audioAnalysis}}", prompt)
+        # Old v0.1 fields stay removed
         self.assertNotIn("keyVisualAction", prompt)
         self.assertNotIn("emotionMicroStructure", prompt)
         self.assertNotIn("additionalFindings", prompt)
+
+    def test_peak_micro_prompt_has_no_timing_fields(self):
+        prompt = (ROOT / "prompts" / "video_understanding" / "peak_micro_scan_v0.md").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("peakId", prompt)
+        self.assertIn("isMeaningfulAction", prompt)
+        self.assertIn("semanticAction", prompt)
+        self.assertIn("actionType", prompt)
+        self.assertIn("beforeState", prompt)
+        self.assertIn("afterState", prompt)
+        self.assertIn("relativePositionBucket", prompt)
+        self.assertIn("confidence", prompt)
+        self.assertIn("peak_semantic_v0_1", prompt)
+        self.assertNotIn('"tMs"', prompt)
+        self.assertNotIn('"anchorMs"', prompt)
+        self.assertNotIn('"timeRangeMs"', prompt)
+        self.assertNotIn('"alignedToAudioBeatMs"', prompt)
+        self.assertNotIn('"nearestAudioBeatMs"', prompt)
+        self.assertNotIn('"beatSyncAnalysis"', prompt)
 
     def test_prepare_block_clip_uses_source_quality_stream_copy(self):
         with tempfile.TemporaryDirectory() as tmp:

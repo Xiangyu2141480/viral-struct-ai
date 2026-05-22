@@ -82,6 +82,7 @@ def build_responses_payload(
     prompt_text: str,
     instructions: str | None = None,
     store: bool = True,
+    temperature: float = 0,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "model": model,
@@ -101,6 +102,7 @@ def build_responses_payload(
             }
         ],
         "store": store,
+        "temperature": temperature,
     }
     if instructions:
         payload["instructions"] = instructions
