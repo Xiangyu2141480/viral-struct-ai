@@ -58,10 +58,11 @@ class DoubaoFineScanTests(unittest.TestCase):
         self.assertEqual(result["source"], "beat_this")
         self.assertEqual(result["bpm"], 83.33)
         self.assertEqual(result["sourceBeatMapRef"], "beat_map.json")
-        self.assertEqual(result["beatTimestamps"], [0.2, 1.0])
-        self.assertEqual(result["downbeatTimestamps"], [])
-        self.assertEqual(result["beatMarkers"][0]["absTime"], 9.2)
-        self.assertEqual(result["beatMarkers"][0]["segRelTime"], 0.2)
+        self.assertEqual(result["timeBasis"], "content_block_relative_ms")
+        self.assertEqual(result["beatTimestampsMs"], [200, 1000])
+        self.assertEqual(result["downbeatTimestampsMs"], [])
+        self.assertEqual(result["beatMarkers"][0]["absTimeMs"], 9200)
+        self.assertEqual(result["beatMarkers"][0]["tMs"], 200)
 
     def test_block_prompt_variables_use_content_block_contract(self):
         block = {
@@ -76,9 +77,16 @@ class DoubaoFineScanTests(unittest.TestCase):
             block,
             audio_result=None,
             video_id="demo",
+            video_duration=12,
         )
 
         self.assertEqual(variables["blockId"], "block_001")
+        self.assertEqual(variables["sourceStartMs"], 0)
+        self.assertEqual(variables["sourceEndMs"], 3000)
+        self.assertEqual(variables["blockDurationMs"], 3000)
+        self.assertEqual(variables["sourceVideoDuration"], 12)
+        self.assertEqual(variables["normalizedStart"], 0.0)
+        self.assertEqual(variables["normalizedEnd"], 0.25)
         self.assertEqual(variables["coarseRoleGuess"], "attention_grab")
         self.assertEqual(variables["observableSummary"], "hands reveal product")
         self.assertEqual(variables["clipMode"], "source_quality_clip")
@@ -86,6 +94,29 @@ class DoubaoFineScanTests(unittest.TestCase):
         self.assertEqual(variables["clipResolution"], "source")
         self.assertIn("q1", variables["fineScanFocusQuestions"])
         self.assertIn("Beat-This", variables["audioAnalysis"])
+
+    def test_rough_video_duration_uses_last_content_block_end(self):
+        blocks = [
+            {"id": "block_001", "timeRange": {"start": 0, "end": 3}},
+            {"id": "block_002", "timeRange": {"start": 3, "end": 12.25}},
+        ]
+
+        self.assertEqual(self.module.rough_video_duration(blocks), 12.25)
+
+    def test_fine_scan_prompt_uses_v02_compilable_schema(self):
+        prompt = (ROOT / "prompts" / "video_understanding" / "fine_structure_scan_v0.md").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("actionBeats", prompt)
+        self.assertIn("positionalContext", prompt)
+        self.assertIn("requiredAssetType", prompt)
+        self.assertIn("dominantTone", prompt)
+        self.assertIn("transferableMotifs", prompt)
+        self.assertIn("beatAlignedActionBeats", prompt)
+        self.assertNotIn("keyVisualAction", prompt)
+        self.assertNotIn("emotionMicroStructure", prompt)
+        self.assertNotIn("additionalFindings", prompt)
 
     def test_prepare_block_clip_uses_source_quality_stream_copy(self):
         with tempfile.TemporaryDirectory() as tmp:

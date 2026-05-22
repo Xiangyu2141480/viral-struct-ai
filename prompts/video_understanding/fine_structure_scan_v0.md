@@ -1,22 +1,21 @@
-# Fine Structure Scan Prompt v0
+# Fine Structure Scan Prompt v0.2
 
-用途：第二阶段内容块精分析。输入为单个 Stage 1 contentBlock 的原画质切片，结合第一阶段粗扫上下文，输出 `FineContentBlockScan.json`。
-目标：彻底理解每个内容块的可迁移制作配方，为结构迁移系统提供帧级可操作细节。
+用途：第二阶段内容块精分析。输入为单个 Stage 1 contentBlock 的原画质切片，结合粗扫上下文与 Beat-This 音频锚点，输出可迁移、可编译的 `FineContentBlockScan`。
 
 ## System Prompt
 
 ```text
-你是一个电商/广告短视频结构分析专家。你的任务是对第一阶段粗扫识别出的单个内容块进行精密分析，为"爆款结构迁移系统"提供可操作的制作配方。
+你是一个电商/广告短视频结构分析专家。你的任务是把单个内容块拆成可以迁移到新商品、并能被 Remotion/Timeline 编译器消费的结构单元。
 
-你会看到一段从源视频直接切出的原画质内容块（非全片、非转场显微镜窗口）。请基于视频内容和提供的粗扫上下文，输出 FineContentBlockScan JSON。
+你会看到一段从源视频直接切出的原画质内容块。这个片段不是全片，也不是 Stage 1.5 的转场显微镜窗口。
 
-注意：
-1. 这是第二阶段精分析，要求比粗扫更细致，尽量给出帧级 / 秒级的观察。
-2. 重点提取可迁移的制作决策，不只是内容描述。例如不要写"展示了键盘"，要写"手从画面外水平滑入，键盘从左侧边缘进入，在画面中央 1.5s 停留后镜头推进到特写"。
-3. 卡点（beat sync）分析只负责视觉侧：镜头切换时机、视觉冲击点的相对时间。音频侧数据已由独立 agent 提供，在 audioAnalysis 字段中。你应当结合该数据描述视觉变化与 beat 的对齐关系。
-4. 所有时间坐标以内容块内相对时间为准（0 = 内容块起始），同时记录对应的源视频绝对时间。
-5. 转场已经由 Stage 1.5 作为独立 transition 单元处理；这里不要把内容块误判为转场单元。
-6. 如果某个字段无法判断，写 "unknown" 或 null 或空数组，不要编造。
+重要原则：
+1. shot 是真实镜头/连续画面单位；actionBeat 是 shot 内部的关键动作/卡点节点。一个 shot 内必须可以有多个 actionBeats。
+2. 时间统一使用整数毫秒。相对时间用内容块内部时间；绝对时间用源视频时间。
+3. Stage 1.5 已负责精确转场时间；本阶段只描述内容块出口的衔接意图，不重新判断转场边界。
+4. 音频 beat 已由 Beat-This 提供。你只负责把视觉 actionBeats 对齐到这些音频 beat，不要自行重算音乐 beat。
+5. 所有枚举字段必须从给定枚举中选择。不要创造新枚举值。
+6. 若无法判断，优先给低 confidence、空数组或 null；不要编造不存在的视觉证据。
 7. 只输出合法 JSON，不要输出 Markdown，不要解释 JSON 之外的内容。
 ```
 
@@ -28,8 +27,13 @@
 内容块信息：
 - videoId: {{videoId}}
 - blockId: {{blockId}}
-- sourceTimeRange: {{sourceStart}}s ~ {{sourceEnd}}s（源视频绝对时间）
+- sourceTimeRange: {{sourceStart}}s ~ {{sourceEnd}}s
 - blockDuration: {{blockDuration}}s
+- sourceTimeRangeMs: {{sourceStartMs}}ms ~ {{sourceEndMs}}ms
+- blockDurationMs: {{blockDurationMs}}ms
+- sourceVideoDuration: {{sourceVideoDuration}}s
+- normalizedStart: {{normalizedStart}}
+- normalizedEnd: {{normalizedEnd}}
 - clipMode: {{clipMode}}
 - uploadSampling: {{uploadSampling}}
 - clipResolution: {{clipResolution}}
@@ -40,109 +44,139 @@
 - observableSummary: {{observableSummary}}
 - fineScanFocusQuestions: {{fineScanFocusQuestions}}
 
-音频分析（Beat-This AudioBeatMap 输出，供卡点对齐参考）：
+音频分析（Beat-This AudioBeatMap 输出，供 actionBeats 对齐参考）：
 {{audioAnalysis}}
 
-请对这个内容块进行精密分析，输出 FineContentBlockScan JSON，字段如下：
+请输出 FineContentBlockScan JSON，字段如下：
 
 {
+  "schemaVersion": "fine_content_block_v0_2",
   "blockId": "string",
   "videoId": "string",
-  "sourceTimeRange": { "start": number, "end": number },
+  "sourceTimeRangeMs": { "start": int, "end": int },
   "samplingInfo": {
-    "clipMode": "string",
-    "uploadSampling": "string",
-    "clipResolution": "string"
+    "clipMode": "source_quality_clip",
+    "uploadSampling": "provider_default_source_video",
+    "clipResolution": "source"
   },
   "roleConfirmation": {
-    "confirmedRole": "hook | brand_opening | product_reveal | selling_point | usage_scene | proof | comparison | lifestyle_scene | cta | unknown",
+    "role": "hook | brand_opening | product_reveal | selling_point | usage_scene | proof | comparison | cta",
     "confidence": number,
     "coarseRoleWas": "string",
-    "roleChanged": true,
-    "reasoning": "string"
+    "correctionFromCoarse": true
+  },
+  "positionalContext": {
+    "normalizedStart": number,
+    "normalizedEnd": number,
+    "narrativeRole": "opening_hook | setup | escalation | climax_or_reveal | resolution | cta_closure"
   },
   "shotStructure": {
-    "shotCount": number,
-    "avgShotDuration": number,
-    "rhythmPattern": "uniform | accelerating | decelerating | burst_then_hold | irregular",
+    "shotCount": int,
+    "avgShotDurationMs": int,
+    "rhythmPattern": "steady | accelerating | decelerating | burst_then_hold | staccato",
     "shots": [
       {
-        "id": "shot_001",
-        "blockRelTime": { "start": number, "end": number },
-        "absTime": { "start": number, "end": number },
-        "duration": number,
-        "cameraMovement": "static | pan | tilt | zoom_in | zoom_out | tracking | handheld | unknown",
-        "shotScale": "extreme_close_up | close_up | medium_close | medium | medium_wide | wide | extreme_wide | unknown",
-        "subjectFocus": "product_only | human_only | human_with_product | environment | text_card | abstract | unknown",
-        "visualKeyAction": "这个镜头里最关键的视觉动作，描述要可迁移"
+        "shotId": "shot_001",
+        "startMs": int,
+        "endMs": int,
+        "absStartMs": int,
+        "absEndMs": int,
+        "durationMs": int,
+        "boundarySource": "model_estimated",
+        "shotScale": "ecu | cu | mcu | ms | mls | ws | ews",
+        "cameraMovement": "static | pan | tilt | dolly_in | dolly_out | zoom_in | zoom_out | tracking | handheld | orbit",
+        "subjectFocus": "product | person | hands | text | environment | mixed | abstract",
+        "actionBeats": [
+          {
+            "beatId": "beat_001",
+            "tMs": int,
+            "beatType": "entry | reveal | state_change | hold | exit | micro_gesture | text_pop",
+            "deltaDescription": "≤80字，描述这一个动作变化，不写泛泛评价",
+            "durationMs": int | null,
+            "alignedToAudioBeatMs": int | null
+          }
+        ]
       }
     ]
   },
-  "beatSyncAnalysis": {
-    "overallRhythmFeel": "tight_beat_sync | loose_rhythm | no_apparent_sync | unknown",
-    "perceivedBeatAlignment": "每拍切 | 每两拍切 | 每小节切 | 不规则 | 无明显节奏 | unknown",
-    "prominentVisualChanges": [
-      {
-        "segRelTime": number,
-        "absTime": number,
-        "changeType": "cut | flash | zoom_punch | text_appear | product_reveal | color_change | motion_burst | unknown",
-        "intensity": "strong | medium | subtle",
-        "nearestBeatOffset": "与最近 beat 的时间差，单位秒，如 +0.05s 或 -0.12s，来自 audioAnalysis.beatTimestamps | unknown"
-      }
-    ],
-    "visualRhythmNotes": "对这段卡点设计的整体描述，包括规律性、是否有爆发-静止节奏等"
-  },
   "textOverlayBehavior": {
-    "hasText": true,
-    "layers": [
+    "textElements": [
       {
-        "role": "main_title | subtitle | caption | price_tag | cta_button | watermark | legal_copy | unknown",
-        "content": "字幕内容或简短描述",
-        "entryBlockRelTime": number,
-        "exitBlockRelTime": number,
-        "entryAnimation": "pop | fade | slide_in | typewriter | none | unknown",
-        "position": "top | center | bottom | overlay_product | corner | unknown",
-        "emphasis": "large_font | color_highlight | outline | shadow | none"
+        "type": "main_title | subtitle | caption | price_tag | cta_button | watermark | legal_copy",
+        "content": "string",
+        "appearTimeMs": int,
+        "durationMs": int,
+        "positionGrid": int,
+        "animationIn": "pop | fade | slide_in | typewriter | none",
+        "animationOut": "fade | slide_out | cut | none",
+        "syncedToBeatIndex": int | null
       }
-    ],
-    "textVisualSyncPattern": "text_leads_cut | text_follows_cut | text_independent | no_text"
+    ]
   },
   "productPresentation": {
-    "hasProduct": true,
-    "revealMechanism": "direct_show | animated_entrance | hands_presenting | zoom_reveal | unboxing | none | unknown",
-    "featureSequence": ["按出现顺序列出展示的卖点"],
-    "comparisonTechnique": "before_after | side_by_side | none | unknown",
-    "humanProductInteraction": "demo_usage | hands_only | full_body | none | unknown"
-  },
-  "emotionMicroStructure": {
-    "openingTension": "high | medium | low | none",
-    "tensionResolutionBeat": { "tensionBlockRelTime": number, "resolutionBlockRelTime": number },
-    "dominantEmotion": "excitement | curiosity | desire | trust | urgency | calm | joy | unknown",
-    "persuasionPattern": "problem_solution | aspiration_fulfillment | social_proof | direct_demo | price_anchor | unknown"
+    "revealMode": "direct_show | animated_entrance | hands_presenting | zoom_reveal | unboxing | none",
+    "salesPointOrdering": "feature_first | benefit_first | before_after | social_proof_led"
   },
   "transitionOut": {
-    "transitionType": "hard_cut | beat_cut | match_cut | zoom_out | fade | flash | scene_change | unknown",
-    "visualBridgeElement": "出口转场的视觉锚点或连接元素描述",
-    "exitAbsTime": number
+    "type": "hard_cut | beat_cut | match_cut | zoom_out | fade | flash | scene_change",
+    "durationMs": int,
+    "outgoingSubjectAnchor": int,
+    "incomingHintForNextBlock": "product_exit | object_transform | camera_motion | text_bridge | beat_hit | none"
   },
+  "requiredAssetType": [
+    {
+      "assetType": "product_still | product_video | lifestyle_shot | hand_demo | text_card | comparison_chart | ugc_clip | voiceover_line",
+      "purpose": "hook_visual | product_reveal | feature_demo | proof | comparison | transition_bridge | cta",
+      "criticality": "must | should | nice"
+    }
+  ],
   "inspectionAnswers": [
     {
       "question": "粗扫 fineScanFocusQuestions 原文",
-      "answer": "精分析后的具体回答",
+      "answer": "具体回答，必须引用可见动作或时间证据",
       "confidence": number
     }
   ],
-  "additionalFindings": [
-    "精分析中发现的、粗扫没有提到的重要可迁移细节"
+  "beatSyncAnalysis": {
+    "beatAlignedActionBeats": [
+      {
+        "audioBeatTimeMs": int,
+        "nearestActionBeatTimeMs": int,
+        "deltaMs": int,
+        "actionBeatId": "string"
+      }
+    ],
+    "avgAlignmentErrorMs": int | null,
+    "alignmentDensity": number
+  },
+  "claimVisualizationPattern": {
+    "pattern": "metaphor_materialization | exploded_assembly | before_after_contrast | scale_zoom | side_by_side_compare | data_overlay | usage_demo | none",
+    "evidenceTimeMs": int | null
+  },
+  "dominantTone": "curious | calm | desire | urgency | aspirational | problem_solution | playful | authoritative",
+  "transferableMotifs": [
+    {
+      "motifType": "visual_metaphor | sound_design_cue | transition_signature | text_choreography | product_handling",
+      "description": "≤120字，必须具体到手法，不写泛泛评价",
+      "timeRangeMs": { "start": int, "end": int },
+      "transferability": "universal | category_specific | product_specific"
+    }
   ]
 }
 
-输出要求：
-- shotStructure.shots 按时间顺序排列，blockRelTime 从 0 开始。
-- beatSyncAnalysis.prominentVisualChanges 按时间顺序排列。如果 audioAnalysis 可用，nearestBeatOffset 必须填写，不要写 unknown。
-- textOverlayBehavior.layers 如果有多层字幕同时出现，全部记录。
-- tensionResolutionBeat 如果该片段无明显张力-释放结构，填 null。
-- 只输出合法 JSON。
+字段约束：
+- sourceTimeRangeMs 必须直接使用上方提供的 sourceTimeRangeMs。
+- positionalContext.normalizedStart / normalizedEnd 必须直接使用上方提供的 normalizedStart / normalizedEnd。
+- shotStructure.shots[].actionBeats 必填；如果整个 shot 只有一个动作，也至少输出 1 个 actionBeat。
+- actionBeats[].tMs 是内容块内部相对毫秒；abs 时间可以用 sourceTimeRangeMs.start + tMs 推得。
+- actionBeats[].deltaDescription 不超过 80 个中文字符。
+- textOverlayBehavior.textElements 没有文字时输出空数组。
+- positionGrid / outgoingSubjectAnchor 使用 1-9 九宫格编号。
+- requiredAssetType 至少输出 1 条。
+- transferableMotifs 最多 3 条；没有高价值可迁移手法时输出空数组。
+- beatSyncAnalysis 只做数值配对，不写自然语言总结。
+- claimVisualizationPattern 仅在 selling_point / proof / comparison / usage_scene 明显存在时填写；否则 pattern 选 none。
+- 只输出本协议中列出的字段，不要添加额外字段。
 ```
 
 ## MacBook Neo 示例变量
@@ -151,8 +185,14 @@
 videoId=macbook_neo
 blockId=block_001
 sourceStart=0
-sourceEnd=9
-blockDuration=9
+sourceEnd=9.5
+blockDuration=9.5
+sourceStartMs=0
+sourceEndMs=9500
+blockDurationMs=9500
+sourceVideoDuration=222
+normalizedStart=0
+normalizedEnd=0.0428
 clipMode=source_quality_clip
 uploadSampling=provider_default_source_video
 clipResolution=source

@@ -52,6 +52,12 @@ def load_beat_map(path: str | Path) -> dict[str, Any] | None:
     return json.loads(beat_map_path.read_text(encoding="utf-8"))
 
 
+def rough_video_duration(blocks: list[dict[str, Any]]) -> float:
+    if not blocks:
+        raise ValueError("contentBlocks cannot be empty")
+    return max(block_time_range(block)[1] for block in blocks)
+
+
 def _tempo_bpm(beat_map: dict[str, Any]) -> float | None:
     tempo = beat_map.get("tempo")
     if isinstance(tempo, dict) and tempo.get("bpm") is not None:
@@ -77,11 +83,12 @@ def build_block_audio_analysis(
     for beat in beat_map.get("beats", []) or []:
         abs_time = float(beat["time"])
         if start <= abs_time <= end:
-            seg_rel_time = round(abs_time - start, 3)
+            rel_ms = int(round((abs_time - start) * 1000))
+            abs_ms = int(round(abs_time * 1000))
             beat_markers.append(
                 {
-                    "segRelTime": seg_rel_time,
-                    "absTime": round(abs_time, 3),
+                    "tMs": rel_ms,
+                    "absTimeMs": abs_ms,
                     "beatNumber": beat.get("beatNumber"),
                     "isDownbeat": bool(beat.get("isDownbeat")),
                 }
@@ -90,11 +97,11 @@ def build_block_audio_analysis(
     return {
         "source": _beat_source(beat_map),
         "sourceBeatMapRef": beat_map_ref,
-        "timeBasis": "content_block_relative_seconds",
+        "timeBasis": "content_block_relative_ms",
         "bpm": _tempo_bpm(beat_map),
-        "beatTimestamps": [marker["segRelTime"] for marker in beat_markers],
-        "downbeatTimestamps": [
-            marker["segRelTime"] for marker in beat_markers if marker["isDownbeat"]
+        "beatTimestampsMs": [marker["tMs"] for marker in beat_markers],
+        "downbeatTimestampsMs": [
+            marker["tMs"] for marker in beat_markers if marker["isDownbeat"]
         ],
         "beatMarkers": beat_markers,
     }
@@ -137,8 +144,11 @@ def build_block_prompt_variables(
     block: dict[str, Any],
     audio_result: dict[str, Any] | None,
     video_id: str,
+    video_duration: float,
 ) -> dict[str, Any]:
     start, end = block_time_range(block)
+    if video_duration <= 0:
+        raise ValueError("video_duration must be positive")
     audio_text = (
         json.dumps(audio_result, ensure_ascii=False, indent=2)
         if audio_result
@@ -150,6 +160,12 @@ def build_block_prompt_variables(
         "sourceStart": start,
         "sourceEnd": end,
         "blockDuration": round(end - start, 3),
+        "sourceStartMs": int(round(start * 1000)),
+        "sourceEndMs": int(round(end * 1000)),
+        "blockDurationMs": int(round((end - start) * 1000)),
+        "sourceVideoDuration": round(video_duration, 3),
+        "normalizedStart": round(start / video_duration, 4),
+        "normalizedEnd": round(end / video_duration, 4),
         "clipMode": SOURCE_CLIP_MODE,
         "uploadSampling": SOURCE_UPLOAD_SAMPLING,
         "clipResolution": SOURCE_CLIP_RESOLUTION,
@@ -193,10 +209,11 @@ def run_fine_scan(args: argparse.Namespace) -> int:
 
     rough_scan = json.loads(rough_scan_path.read_text(encoding="utf-8"))
     video_id = args.video_id or rough_scan.get("videoId", "video")
-    blocks = rough_scan.get("contentBlocks")
-    if not isinstance(blocks, list):
+    all_blocks = rough_scan.get("contentBlocks")
+    if not isinstance(all_blocks, list):
         raise SystemExit("Fine scan requires Stage 1 contentBlocks.")
-    blocks = selected_blocks(blocks, args.block_ids)
+    video_duration = rough_video_duration(all_blocks)
+    blocks = selected_blocks(all_blocks, args.block_ids)
     if not blocks:
         print("No content blocks to process.")
         return 0
@@ -242,11 +259,11 @@ def run_fine_scan(args: argparse.Namespace) -> int:
         )
         if audio_result:
             print(
-                f"   bpm={audio_result['bpm']} beats={len(audio_result['beatTimestamps'])}"
-                f" downbeats={len(audio_result['downbeatTimestamps'])}"
+                f"   bpm={audio_result['bpm']} beats={len(audio_result['beatTimestampsMs'])}"
+                f" downbeats={len(audio_result['downbeatTimestampsMs'])}"
             )
 
-        variables = build_block_prompt_variables(block, audio_result, video_id)
+        variables = build_block_prompt_variables(block, audio_result, video_id, video_duration)
         instructions, prompt_text = load_prompt_sections(args.prompt, variables)
 
         print("   uploading clip...")
