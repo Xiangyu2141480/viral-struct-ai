@@ -131,6 +131,71 @@ class DoubaoFineScanTests(unittest.TestCase):
             self.assertTrue(a_block_contiguous, f"A lines were interleaved: {a_indices}")
             self.assertTrue(b_block_contiguous, f"B lines were interleaved: {b_indices}")
 
+    def test_block_logger_concurrent_log_no_lost_lines(self):
+        """PR #24 review M3 — fix latent race: when L1 candidate workers
+        and the L2 block-metadata worker concurrently call log() on the
+        same logger instance, no lines may be lost or partially written.
+        Pre-M3 BlockLogger had no per-instance lock; this regression test
+        keeps the fix in place."""
+        import io as _io
+        import threading as _threading
+        from contextlib import redirect_stdout as _redir
+
+        logger = self.module.BlockLogger("block_concurrent")
+        n_threads, lines_per_thread = 8, 50
+        total_expected = n_threads * lines_per_thread
+
+        def worker(prefix: str) -> None:
+            for i in range(lines_per_thread):
+                logger.log(f"{prefix}_{i:03d}")
+
+        threads = [
+            _threading.Thread(target=worker, args=(f"T{t}",))
+            for t in range(n_threads)
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        buf = _io.StringIO()
+        with _redir(buf):
+            logger.flush()
+        lines = [l for l in buf.getvalue().splitlines() if l]
+        self.assertEqual(len(lines), total_expected,
+                         f"expected {total_expected} lines, got {len(lines)}")
+        # Every line must match the expected `T{n}_{nnn}` shape (no
+        # partial writes / interleaved character corruption).
+        import re
+        for line in lines:
+            self.assertRegex(line, r"^T\d_\d{3}$",
+                             f"corrupted line: {line!r}")
+
+    def test_block_logger_auto_flushes_after_stale_threshold(self):
+        """PR #24 review M3 — UX fix: log() auto-flushes when the buffer is
+        older than _AUTO_FLUSH_SECONDS so concurrent blocks don't go silent
+        for minutes. We make the threshold testable by reaching in via
+        the class constant."""
+        import io as _io
+        from contextlib import redirect_stdout as _redir
+
+        logger = self.module.BlockLogger("block_stale")
+        # Force the next log() to be "stale" by rewinding _last_flush_t.
+        logger._last_flush_t -= (self.module.BlockLogger._AUTO_FLUSH_SECONDS + 1.0)
+
+        buf = _io.StringIO()
+        with _redir(buf):
+            logger.log("auto-flushed line")
+
+        out = buf.getvalue()
+        self.assertIn("auto-flushed line", out,
+                      "stale log() must auto-flush to stdout")
+        # Buffer reset confirmed: a fresh flush() should write nothing.
+        buf2 = _io.StringIO()
+        with _redir(buf2):
+            logger.flush()
+        self.assertEqual(buf2.getvalue(), "")
+
     def test_align_anchor_to_audio_beat_finds_nearest_within_tolerance(self):
         result = self.module.align_anchor_to_audio_beat(
             anchor_ms=5748,

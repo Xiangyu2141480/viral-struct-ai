@@ -9,6 +9,7 @@ import json
 import subprocess
 import sys
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
@@ -51,38 +52,52 @@ SOURCE_CLIP_RESOLUTION = "source"
 # so concurrent blocks produce contiguous stdout chunks instead of interleaved
 # lines.
 class BlockLogger:
-    """Per-block buffered logger.
+    """Per-block buffered logger with thread-safe log + time-based auto-flush.
 
-    Threading contract (as of this commit):
-      - One BlockLogger instance is owned by exactly one block-worker thread.
-      - log() / flush() are called only from that owner thread.
-      - The class-level _flush_lock serializes stdout writes across different
-        blocks so chunks don't interleave.
-      - self._buf reassignment in flush() is safe without per-instance lock
-        only as long as _buf is never shared across threads.
+    Two-lock design (PR #24 review M3 — fixes the latent race noted in the
+    previous BlockLogger docstring):
 
-    NOTE: this single-owner invariant is challenged when L1 candidate workers
-    in process_block_with_peak_micro share the same block-level logger. A
-    per-logger lock + auto-flush is added in the follow-up M3 fix.
+    - ``self._lock`` (per-instance) protects ``self._buf`` so that L1 candidate
+      workers AND the L2 block-metadata worker can both safely call ``log()``
+      on the same logger instance concurrently. Without it, simultaneous
+      writes to the underlying StringIO could lose characters (CPython's
+      GIL grants atomicity only for short single writes — not multi-step
+      reset-and-swap operations).
+    - ``BlockLogger._flush_lock`` (class-level) serialises stdout writes
+      across different blocks so chunks don't interleave between blocks.
+
+    Auto-flush: ``log()`` checks elapsed time since the last flush. If more
+    than ``_AUTO_FLUSH_SECONDS`` have passed, it flushes after writing —
+    so during the 12 min Fine Scan wall-clock the user sees progress every
+    few seconds instead of three concurrent blocks going silent for ~60s.
     """
 
     _flush_lock = threading.Lock()
+    _AUTO_FLUSH_SECONDS = 2.0
 
     def __init__(self, block_id: str) -> None:
         self.block_id = block_id
         self._buf = io.StringIO()
+        self._lock = threading.Lock()
+        self._last_flush_t = time.monotonic()
 
     def log(self, msg: str) -> None:
-        self._buf.write(msg + "\n")
+        with self._lock:
+            self._buf.write(msg + "\n")
+            stale = (time.monotonic() - self._last_flush_t) > self._AUTO_FLUSH_SECONDS
+        if stale:
+            self.flush()
 
     def flush(self) -> None:
-        chunk = self._buf.getvalue()
+        with self._lock:
+            chunk = self._buf.getvalue()
+            self._buf = io.StringIO()
+            self._last_flush_t = time.monotonic()
         if not chunk:
             return
         with BlockLogger._flush_lock:
             sys.stdout.write(chunk)
             sys.stdout.flush()
-        self._buf = io.StringIO()
 
 
 def block_time_range(block: dict[str, Any]) -> tuple[float, float]:
