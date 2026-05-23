@@ -773,9 +773,9 @@ def process_block_with_peak_micro(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Stage 2 fine content-block analysis using Doubao/ModelArk.")
-    parser.add_argument("--rough-scan", default="seed_assets/analysis/macbook_neo/rough_structure_scan.json")
+    parser.add_argument("--rough-scan", default="seed_assets/analysis/macbook_neo/stage1_rough/rough_structure_scan.json")
     parser.add_argument("--video", default="seed_assets/raw_videos/macbook_neo.mp4")
-    parser.add_argument("--beat-map", default="seed_assets/analysis/macbook_neo/audio_beat_map.json")
+    parser.add_argument("--beat-map", default="seed_assets/analysis/macbook_neo/stage1_media/audio_beat_map.json")
     parser.add_argument("--video-id", default="")
     parser.add_argument("--prompt", default="prompts/video_understanding/fine_structure_scan_v0.md")
     parser.add_argument(

@@ -24,9 +24,9 @@ class DoubaoFineScanTests(unittest.TestCase):
     def test_parser_defaults_point_to_seed_analysis_flow_and_env_config(self):
         args = self.module.build_parser().parse_args([])
 
-        self.assertEqual(args.rough_scan, "seed_assets/analysis/macbook_neo/rough_structure_scan.json")
+        self.assertEqual(args.rough_scan, "seed_assets/analysis/macbook_neo/stage1_rough/rough_structure_scan.json")
         self.assertEqual(args.video, "seed_assets/raw_videos/macbook_neo.mp4")
-        self.assertEqual(args.beat_map, "seed_assets/analysis/macbook_neo/audio_beat_map.json")
+        self.assertEqual(args.beat_map, "seed_assets/analysis/macbook_neo/stage1_media/audio_beat_map.json")
         self.assertEqual(args.out_dir, "seed_assets/analysis/macbook_neo/fine_scan")
         self.assertEqual(args.work_dir, "seed_assets/analysis/macbook_neo/fine_scan/clips")
         self.assertEqual(args.base_url, "")

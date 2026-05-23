@@ -156,6 +156,126 @@ class DoubaoRoughScanTests(unittest.TestCase):
         self.assertEqual(normalized["boundaryCandidates"][0]["id"], "boundary_001")
         self.assertEqual(normalized["boundaryCandidates"][0]["roughBoundaryTime"], 9.5)
 
+    def test_normalize_strips_v0_2_kill_fields_from_content_blocks(self):
+        """v0.2: LLM may still emit audioOrRhythmSignals / hasInternalTransition / confidence
+        from cached prompts; normalize must strip them."""
+        parsed = {
+            "videoId": "demo",
+            "contentBlocks": [
+                {
+                    "id": "block_001",
+                    "timeRange": {"start": 0, "end": 9},
+                    "audioOrRhythmSignals": ["should be stripped"],
+                    "hasInternalTransition": True,
+                    "confidence": 0.9,
+                }
+            ],
+            "boundaryCandidates": [
+                {
+                    "id": "boundary_001",
+                    "fromBlockId": "block_001",
+                    "toBlockId": "block_002",
+                    "roughBoundaryTime": 9.5,
+                }
+            ],
+        }
+
+        normalized = self.module.normalize_rough_scan(parsed)
+        block = normalized["contentBlocks"][0]
+
+        self.assertNotIn("audioOrRhythmSignals", block)
+        self.assertNotIn("hasInternalTransition", block)
+        self.assertNotIn("confidence", block)
+
+    def test_normalize_adds_canonical_boundary_time(self):
+        """v2.5: normalize must add canonicalBoundaryTime field as the single
+        source of truth for boundary time. At rough stage it equals
+        roughBoundaryTime; Stage 1.5 may override it in transition units.
+        See docs/DECISIONS/2026-05-23-rough-scan-v2-audit.md §4.1."""
+        parsed = {
+            "videoId": "demo",
+            "contentBlocks": [{"id": "block_001", "timeRange": {"start": 0, "end": 9}}],
+            "boundaryCandidates": [
+                {
+                    "id": "boundary_001",
+                    "fromBlockId": "block_001",
+                    "toBlockId": "block_002",
+                    "roughBoundaryTime": 9.5,
+                }
+            ],
+        }
+
+        normalized = self.module.normalize_rough_scan(parsed)
+        boundary = normalized["boundaryCandidates"][0]
+
+        self.assertEqual(boundary["canonicalBoundaryTime"], 9.5)
+        # roughBoundaryTime preserved for backward compat
+        self.assertEqual(boundary["roughBoundaryTime"], 9.5)
+
+    def test_normalize_strips_v0_2_kill_fields_from_boundary_candidates(self):
+        """v0.2: boundary KILL fields whyNeedsMicroscope / confidence must be stripped."""
+        parsed = {
+            "videoId": "demo",
+            "contentBlocks": [{"id": "block_001", "timeRange": {"start": 0, "end": 9}}],
+            "boundaryCandidates": [
+                {
+                    "id": "boundary_001",
+                    "fromBlockId": "block_001",
+                    "toBlockId": "block_002",
+                    "roughBoundaryTime": 9.5,
+                    "whyNeedsMicroscope": "should be stripped",
+                    "confidence": 0.78,
+                }
+            ],
+        }
+
+        normalized = self.module.normalize_rough_scan(parsed)
+        boundary = normalized["boundaryCandidates"][0]
+
+        self.assertNotIn("whyNeedsMicroscope", boundary)
+        self.assertNotIn("confidence", boundary)
+
+    def test_normalize_strips_v0_2_kill_fields_from_summary_and_notes(self):
+        """v0.2: roughSummary.globalConversionLogic + globalNotes likely* / importantOpenQuestions
+        must be stripped if LLM emits them."""
+        parsed = {
+            "videoId": "demo",
+            "roughSummary": {
+                "oneSentenceStructure": "summary",
+                "likelyVideoType": "product_demo",
+                "globalConversionLogic": "should be stripped",
+            },
+            "globalNotes": {
+                "likelyProductFirstSeenAt": 0.8,
+                "dominantPackaging": ["headline"],
+                "likelyHookWindow": {"start": 0, "end": 9},
+                "likelyCtaRegion": {"start": 200, "end": 220},
+                "importantOpenQuestions": ["redundant"],
+            },
+            "contentBlocks": [{"id": "block_001", "timeRange": {"start": 0, "end": 9}}],
+            "boundaryCandidates": [
+                {
+                    "id": "boundary_001",
+                    "fromBlockId": "block_001",
+                    "toBlockId": "block_002",
+                    "roughBoundaryTime": 9.5,
+                }
+            ],
+        }
+
+        normalized = self.module.normalize_rough_scan(parsed)
+
+        self.assertNotIn("globalConversionLogic", normalized["roughSummary"])
+        self.assertIn("oneSentenceStructure", normalized["roughSummary"])  # kept
+        self.assertNotIn("likelyHookWindow", normalized["globalNotes"])
+        self.assertNotIn("likelyCtaRegion", normalized["globalNotes"])
+        self.assertNotIn("importantOpenQuestions", normalized["globalNotes"])
+        # Phase 3: likelyProductFirstSeenAt is migrated to likelySubjectFirstSeenAt
+        self.assertNotIn("likelyProductFirstSeenAt", normalized["globalNotes"])
+        self.assertIn("likelySubjectFirstSeenAt", normalized["globalNotes"])
+        self.assertEqual(normalized["globalNotes"]["likelySubjectFirstSeenAt"], 0.8)
+        self.assertIn("dominantPackaging", normalized["globalNotes"])  # kept
+
     def test_normalize_rough_scan_requires_content_blocks(self):
         with self.assertRaisesRegex(ValueError, "contentBlocks"):
             self.module.normalize_rough_scan({"videoId": "demo"})
@@ -186,6 +306,107 @@ class DoubaoRoughScanTests(unittest.TestCase):
         self.assertIn("请不要做深度角色分类", prompt)
         self.assertNotIn('"unitType": "segment | transition"', prompt)
         self.assertNotIn('"role": "hook | brand_opening', prompt)
+
+    def test_rough_prompt_does_not_request_v0_2_kill_fields(self):
+        """v0.2: prompt must no longer request KILL fields from the LLM.
+        See docs/DECISIONS/2026-05-23-rough-scan-v2-audit.md."""
+        prompt = (ROOT / "prompts" / "video_understanding" / "rough_structure_scan_v0.md").read_text(
+            encoding="utf-8"
+        )
+
+        # contentBlocks-level KILL fields (LLM hallucinates audio on silent preview;
+        # hasInternalTransition is always true; confidence is never calibrated)
+        self.assertNotIn('"audioOrRhythmSignals"', prompt)
+        self.assertNotIn('"hasInternalTransition"', prompt)
+
+        # boundaryCandidates-level KILL fields
+        self.assertNotIn('"whyNeedsMicroscope"', prompt)
+
+        # roughSummary / globalNotes KILL fields
+        self.assertNotIn('"globalConversionLogic"', prompt)
+        self.assertNotIn('"likelyHookWindow"', prompt)
+        self.assertNotIn('"likelyCtaRegion"', prompt)
+        self.assertNotIn('"importantOpenQuestions"', prompt)
+
+        # The standalone "confidence 用 0 到 1。" constraint must be gone too
+        self.assertNotIn("confidence 用 0 到 1", prompt)
+
+    def test_rough_prompt_includes_phase3_cross_category_fields(self):
+        """Phase 3: prompt must request detectedCategory + categoryConfidence
+        and rename likelyProductFirstSeenAt → likelySubjectFirstSeenAt.
+        See docs/DECISIONS/2026-05-23-rough-scan-v2-audit.md §5.3 + §6."""
+        prompt = (ROOT / "prompts" / "video_understanding" / "rough_structure_scan_v0.md").read_text(
+            encoding="utf-8"
+        )
+
+        # New cross-category fields
+        self.assertIn('"detectedCategory"', prompt)
+        self.assertIn('"categoryConfidence"', prompt)
+        self.assertIn('"likelySubjectFirstSeenAt"', prompt)
+
+        # Old product-only field must be gone
+        self.assertNotIn('"likelyProductFirstSeenAt"', prompt)
+
+        # likelyVideoType extended enums
+        self.assertIn("tutorial", prompt)
+        self.assertIn("course_preview", prompt)
+        self.assertIn("local_service", prompt)
+        self.assertIn("lifestyle_vlog", prompt)
+
+        # coarseRoleGuess extended enums
+        self.assertIn("tutorial_step", prompt)
+        self.assertIn("testimonial", prompt)
+        self.assertIn("atmosphere_or_context", prompt)
+
+        # Category template instructions present (verify a representative line)
+        self.assertIn("3c", prompt)
+        self.assertIn("beauty", prompt)
+        self.assertIn("food", prompt)
+        self.assertIn("course", prompt)
+
+    def test_normalize_migrates_likely_product_first_seen_at_to_subject(self):
+        """Phase 3: normalize must rename likelyProductFirstSeenAt →
+        likelySubjectFirstSeenAt when LLM still uses the old name."""
+        parsed = {
+            "videoId": "demo",
+            "globalNotes": {
+                "likelyProductFirstSeenAt": 0.8,
+                "dominantPackaging": ["headline"],
+            },
+            "contentBlocks": [{"id": "block_001", "timeRange": {"start": 0, "end": 9}}],
+            "boundaryCandidates": [
+                {"id": "boundary_001", "fromBlockId": "block_001",
+                 "toBlockId": "block_002", "roughBoundaryTime": 9.5}
+            ],
+        }
+
+        normalized = self.module.normalize_rough_scan(parsed)
+        notes = normalized["globalNotes"]
+
+        self.assertNotIn("likelyProductFirstSeenAt", notes)
+        self.assertEqual(notes["likelySubjectFirstSeenAt"], 0.8)
+
+    def test_normalize_prefers_new_name_when_both_present(self):
+        """When LLM emits both names (transition period), prefer the new one."""
+        parsed = {
+            "videoId": "demo",
+            "globalNotes": {
+                "likelyProductFirstSeenAt": 0.8,
+                "likelySubjectFirstSeenAt": 1.2,  # new takes priority
+                "dominantPackaging": [],
+            },
+            "contentBlocks": [{"id": "block_001", "timeRange": {"start": 0, "end": 9}}],
+            "boundaryCandidates": [
+                {"id": "boundary_001", "fromBlockId": "block_001",
+                 "toBlockId": "block_002", "roughBoundaryTime": 9.5}
+            ],
+        }
+
+        normalized = self.module.normalize_rough_scan(parsed)
+        notes = normalized["globalNotes"]
+
+        self.assertNotIn("likelyProductFirstSeenAt", notes)
+        self.assertEqual(notes["likelySubjectFirstSeenAt"], 1.2)
 
     def test_build_multipart_body_contains_file_and_fps(self):
         body, content_type = self.module.build_multipart_body(

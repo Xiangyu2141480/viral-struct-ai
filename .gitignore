@@ -43,3 +43,7 @@ apps/api/dist/
 packages/shared/dist/
 packages/remotion-video/dist/
 personal_workspace/
+
+# Claude Code session-local config + personal plans
+.claude/
+docs/superpowers/

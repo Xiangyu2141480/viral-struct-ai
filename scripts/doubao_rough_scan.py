@@ -375,6 +375,16 @@ def _time_range_start(value: dict[str, Any]) -> float:
     return 0.0
 
 
+# Fields removed in v0.2 (see docs/DECISIONS/2026-05-23-rough-scan-v2-audit.md).
+# We strip them defensively in case the LLM still produces them from old prompts
+# cached in any conversational state.
+_KILL_CONTENT_BLOCK_FIELDS = (
+    "audioOrRhythmSignals",  # 5fps preview has no audio track; LLM hallucinates
+    "hasInternalTransition",  # empirically 100% true, zero information entropy
+    "confidence",  # empirically 0.85-0.98, never calibrated, zero downstream reads
+)
+
+
 def normalize_content_blocks(content_blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     normalized: list[dict[str, Any]] = []
     for index, block in enumerate(sorted(content_blocks, key=_time_range_start), start=1):
@@ -386,16 +396,22 @@ def normalize_content_blocks(content_blocks: list[dict[str, Any]]) -> list[dict[
         item.setdefault("observableSummary", "")
         item.setdefault("visualSignals", [])
         item.setdefault("textSignals", [])
-        item.setdefault("audioOrRhythmSignals", [])
-        item.setdefault("hasInternalTransition", False)
-        item.setdefault("confidence", None)
         item.setdefault("fineScanFocusQuestions", [])
+        for legacy_field in _KILL_CONTENT_BLOCK_FIELDS:
+            item.pop(legacy_field, None)
         normalized.append(item)
     return normalized
 
 
 def _boundary_anchor_time(boundary: dict[str, Any]) -> float:
     return float(boundary["roughBoundaryTime"])
+
+
+# Fields removed in v0.2 (see docs/DECISIONS/2026-05-23-rough-scan-v2-audit.md).
+_KILL_BOUNDARY_FIELDS = (
+    "whyNeedsMicroscope",  # boilerplate generator, redundant with visibleBoundaryCue
+    "confidence",  # zero downstream reads, no consumption contract
+)
 
 
 def normalize_boundary_candidates(
@@ -410,17 +426,60 @@ def normalize_boundary_candidates(
         normalized_boundary.setdefault("id", f"boundary_{index:03d}")
         boundary_time = _boundary_anchor_time(normalized_boundary)
         normalized_boundary.setdefault("roughBoundaryTime", boundary_time)
+        # v2.5: canonicalBoundaryTime is the single source of truth for boundary
+        # time across all stages. At rough stage it equals roughBoundaryTime;
+        # Stage 1.5 may override it with the more accurate semanticPivotTime.
+        # See docs/DECISIONS/2026-05-23-rough-scan-v2-audit.md §4.1 (D1).
+        normalized_boundary["canonicalBoundaryTime"] = boundary_time
         normalized_boundary.setdefault(
             "inspectionWindow",
             {"start": round(max(0.0, boundary_time - 2.5), 3), "end": round(boundary_time + 2.5, 3)},
         )
+        for legacy_field in _KILL_BOUNDARY_FIELDS:
+            normalized_boundary.pop(legacy_field, None)
         normalized_boundaries.append(normalized_boundary)
     return normalized_boundaries
 
 
+def _migrate_global_notes_subject_rename(global_notes: dict[str, Any]) -> None:
+    """v3 (Phase 3): rename ``likelyProductFirstSeenAt`` → ``likelySubjectFirstSeenAt``.
+
+    "Subject" generalizes across categories where the focal entity isn't always
+    a product (course, local service, person, lifestyle moment). The old key
+    is migrated forward and removed; the new key is canonical.
+    """
+    old_key = "likelyProductFirstSeenAt"
+    new_key = "likelySubjectFirstSeenAt"
+    if old_key in global_notes:
+        legacy_value = global_notes.pop(old_key)
+        # Only seed new key if LLM didn't already provide it (prefer new value).
+        global_notes.setdefault(new_key, legacy_value)
+
+
 def normalize_rough_scan(parsed: dict[str, Any]) -> dict[str, Any]:
-    """Normalize the Stage 1 content-block contract."""
+    """Normalize the Stage 1 content-block contract.
+
+    v0.2 (2026-05-23): strip KILL fields from roughSummary and globalNotes
+    if the LLM still produces them. See docs/DECISIONS/2026-05-23-rough-scan-v2-audit.md.
+
+    v3 (Phase 3): migrate likelyProductFirstSeenAt → likelySubjectFirstSeenAt
+    for cross-category support (course, local_service, lifestyle, etc.).
+    """
     normalized = json.loads(json.dumps(parsed, ensure_ascii=False))
+
+    rough_summary = normalized.get("roughSummary")
+    if isinstance(rough_summary, dict):
+        # globalConversionLogic: LLM invents business logic from 5fps preview
+        rough_summary.pop("globalConversionLogic", None)
+
+    global_notes = normalized.get("globalNotes")
+    if isinstance(global_notes, dict):
+        # likelyHookWindow == contentBlocks[0].timeRange (100% redundant)
+        # likelyCtaRegion == contentBlocks[-1].timeRange (100% redundant)
+        # importantOpenQuestions ⊂ Σ contentBlocks[*].fineScanFocusQuestions
+        for legacy_field in ("likelyHookWindow", "likelyCtaRegion", "importantOpenQuestions"):
+            global_notes.pop(legacy_field, None)
+        _migrate_global_notes_subject_rename(global_notes)
 
     content_blocks = normalized.get("contentBlocks")
     if not isinstance(content_blocks, list):
@@ -576,10 +635,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--poll-interval", type=float, default=5)
     parser.add_argument("--max-wait-seconds", type=float, default=300)
     parser.add_argument("--response-timeout", type=int, default=600)
-    parser.add_argument("--out", default="seed_assets/analysis/macbook_neo/rough_structure_scan.json")
-    parser.add_argument("--raw-out", default="seed_assets/analysis/macbook_neo/rough_structure_scan_raw_response.json")
-    parser.add_argument("--text-out", default="seed_assets/analysis/macbook_neo/rough_structure_scan_response_text.txt")
-    parser.add_argument("--file-info-out", default="seed_assets/analysis/macbook_neo/uploaded_file_info.json")
+    # v0.2 directory layout: stage1_rough/ for primary contract, _debug/ for dumps.
+    # See docs/DECISIONS/2026-05-23-rough-scan-v2-audit.md §5.1.
+    parser.add_argument("--out", default="seed_assets/analysis/macbook_neo/stage1_rough/rough_structure_scan.json")
+    parser.add_argument("--raw-out", default="seed_assets/analysis/macbook_neo/_debug/rough_structure_scan_raw_response.json")
+    parser.add_argument("--text-out", default="seed_assets/analysis/macbook_neo/_debug/rough_structure_scan_response_text.txt")
+    parser.add_argument("--file-info-out", default="seed_assets/analysis/macbook_neo/_debug/uploaded_file_info.json")
     parser.add_argument("--dry-run", action="store_true")
     return parser
 

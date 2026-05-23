@@ -527,9 +527,9 @@ def run_boundary_scan(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--rough-scan", default="seed_assets/analysis/macbook_neo/rough_structure_scan.json")
+    parser.add_argument("--rough-scan", default="seed_assets/analysis/macbook_neo/stage1_rough/rough_structure_scan.json")
     parser.add_argument("--video", default="seed_assets/raw_videos/macbook_neo.mp4")
-    parser.add_argument("--beat-map", default="seed_assets/analysis/macbook_neo/audio_beat_map.json")
+    parser.add_argument("--beat-map", default="seed_assets/analysis/macbook_neo/stage1_media/audio_beat_map.json")
     parser.add_argument("--prompt", default="prompts/video_understanding/boundary_micro_scan_v0.md")
     parser.add_argument("--out-dir", default="seed_assets/analysis/macbook_neo/boundary_micro_scan")
     parser.add_argument("--boundary-id", action="append", help="Scan only this boundary id. Repeatable.")
