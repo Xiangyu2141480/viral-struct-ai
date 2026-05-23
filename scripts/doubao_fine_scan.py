@@ -4,9 +4,12 @@
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import subprocess
 import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +24,8 @@ from doubao_rough_scan import (  # noqa: E402
     env_value,
     extract_json_object,
     extract_response_text,
+    gated_call,
+    get_http_semaphore,
     load_dotenv,
     load_prompt_sections,
     upload_file,
@@ -41,6 +46,29 @@ from visual_peak_detector import (  # noqa: E402
 SOURCE_CLIP_MODE = "source_quality_clip"
 SOURCE_UPLOAD_SAMPLING = "provider_default_source_video"
 SOURCE_CLIP_RESOLUTION = "source"
+
+
+# W1.2: per-block buffered logger; flushes atomically under a process-wide lock
+# so concurrent blocks produce contiguous stdout chunks instead of interleaved
+# lines.
+class BlockLogger:
+    _flush_lock = threading.Lock()
+
+    def __init__(self, block_id: str) -> None:
+        self.block_id = block_id
+        self._buf = io.StringIO()
+
+    def log(self, msg: str) -> None:
+        self._buf.write(msg + "\n")
+
+    def flush(self) -> None:
+        chunk = self._buf.getvalue()
+        if not chunk:
+            return
+        with BlockLogger._flush_lock:
+            sys.stdout.write(chunk)
+            sys.stdout.flush()
+        self._buf = io.StringIO()
 
 
 def block_time_range(block: dict[str, Any]) -> tuple[float, float]:
@@ -342,6 +370,9 @@ def run_fine_scan(args: argparse.Namespace) -> int:
     if missing:
         raise SystemExit(f"Missing required config: {', '.join(missing)}")
 
+    # Initialize global HTTP semaphore from CLI before any worker is spawned.
+    get_http_semaphore(max_concurrent=int(args.max_concurrent_http))
+
     rough_scan_path = Path(args.rough_scan)
     if not rough_scan_path.exists():
         raise SystemExit(f"Rough scan file not found: {rough_scan_path}")
@@ -373,23 +404,33 @@ def run_fine_scan(args: argparse.Namespace) -> int:
     results: list[dict[str, Any]] = []
     failures: list[dict[str, Any]] = []
 
-    for block in blocks:
-        block_outcome, block_failure = process_block_with_peak_micro(
-            block,
-            args=args,
-            video_id=video_id,
-            video_duration=video_duration,
-            beat_map=beat_map,
-            base_url=base_url,
-            api_key=api_key,
-            model=model,
-            out_dir=out_dir,
-            work_dir=work_dir,
-        )
-        if block_outcome is not None:
-            results.append(block_outcome)
-        if block_failure is not None:
-            failures.append(block_failure)
+    # L2: cross-block ThreadPoolExecutor. Multiple blocks process in parallel.
+    # All HTTP calls inside still go through the global semaphore + retry layer,
+    # so concurrency cap is enforced regardless of block_workers × candidate_workers.
+    block_workers = max(1, min(int(args.block_workers), len(blocks)))
+    with ThreadPoolExecutor(max_workers=block_workers, thread_name_prefix="block") as block_pool:
+        block_futures = {
+            block_pool.submit(
+                process_block_with_peak_micro,
+                block,
+                args=args,
+                video_id=video_id,
+                video_duration=video_duration,
+                beat_map=beat_map,
+                base_url=base_url,
+                api_key=api_key,
+                model=model,
+                out_dir=out_dir,
+                work_dir=work_dir,
+            ): block
+            for block in blocks
+        }
+        for fut in as_completed(block_futures):
+            block_outcome, block_failure = fut.result()
+            if block_outcome is not None:
+                results.append(block_outcome)
+            if block_failure is not None:
+                failures.append(block_failure)
 
     if results:
         combined_path = out_dir / "fine_structure_scan.json"
@@ -419,6 +460,160 @@ def run_fine_scan(args: argparse.Namespace) -> int:
         return 1
 
     return 0
+
+
+def _process_one_candidate(
+    candidate: dict[str, Any],
+    *,
+    block_start_s: float,
+    block_end_s: float,
+    block_duration_ms: int,
+    block_coarse_role: str,
+    args: argparse.Namespace,
+    base_url: str,
+    api_key: str,
+    model: str,
+    peak_window_dir: Path,
+    logger: "BlockLogger",
+) -> tuple[dict[str, Any], dict[str, Any] | None, dict[str, Any] | None]:
+    """Process one peak/regime candidate: cut window + Doubao peak_micro_scan.
+
+    Designed to run concurrently inside a ThreadPoolExecutor. All HTTP calls
+    are gated by the global semaphore + retry/backoff (gated_call). Returns
+    (visual_peak_record, semantic_or_None, failure_or_None) — failures are
+    captured as dicts, never raised, so one bad candidate cannot kill the block.
+    """
+    candidate_id = str(candidate.get("sourceId") or "")
+    candidate_block_rel_ms = int(candidate["tMs"])
+    candidate_abs_s = block_start_s + (candidate_block_rel_ms / 1000.0)
+    window_clip = peak_window_dir / f"{candidate_id}.mp4"
+    window_start_s = max(block_start_s, candidate_abs_s - args.peak_pre_context)
+    window_end_s = min(block_end_s, candidate_abs_s + args.peak_post_context)
+
+    if not window_clip.exists():
+        run_ffmpeg(
+            build_peak_window_command(
+                args.video,
+                window_clip,
+                block_start=block_start_s,
+                block_end=block_end_s,
+                peak_time=candidate_abs_s,
+                pre_context=args.peak_pre_context,
+                post_context=args.peak_post_context,
+            )
+        )
+
+    position_bucket = relative_position_bucket(
+        candidate_block_rel_ms, block_duration_ms=block_duration_ms,
+    )
+    anchor_source = str(candidate.get("anchorSource", "visual_peak"))
+    event_type = str(candidate.get("eventType", "peak"))
+    channels = (
+        ["hist_delta", "frame_diff", "flow_mag", "area_delta"]
+        if anchor_source == "visual_peak" else []
+    )
+
+    visual_peak_record = {
+        "peakId": candidate_id,
+        "tMs": int(round(candidate_abs_s * 1000)),
+        "prominence": float(candidate.get("prominence", 0.0)),
+        "motionScore": float(candidate.get("motionScore", 0.0)),
+        "channels": channels,
+        "windowMs": {
+            "start": int(round(window_start_s * 1000)),
+            "end": int(round(window_end_s * 1000)),
+        },
+        "anchorSource": anchor_source,
+        "eventType": event_type,
+    }
+
+    try:
+        peak_vars = {
+            "peakId": candidate_id,
+            "relativePositionBucket": position_bucket,
+            "coarseRoleGuess": block_coarse_role,
+        }
+        peak_instructions, peak_text = load_prompt_sections(args.peak_micro_prompt, peak_vars)
+
+        logger.log(f"   [{candidate_id}] ({event_type}) uploading window...")
+        pf = gated_call(
+            upload_file,
+            base_url=base_url, api_key=api_key,
+            video_path=window_clip, fps=args.peak_upload_fps,
+        )
+        wait_for_file(
+            base_url=base_url, api_key=api_key, file_id=pf["id"],
+            poll_interval=args.poll_interval, max_wait_seconds=args.max_wait_seconds,
+        )
+        resp = gated_call(
+            create_response,
+            base_url=base_url, api_key=api_key,
+            payload=build_responses_payload(
+                model=model, file_id=pf["id"],
+                prompt_text=peak_text, instructions=peak_instructions, store=True,
+            ),
+            timeout=args.response_timeout,
+        )
+        parsed = extract_json_object(extract_response_text(resp))
+        if not isinstance(parsed, dict):
+            raise ValueError("peak_micro response is not a JSON object")
+        parsed.setdefault("peakId", candidate_id)
+        logger.log(f"      [{candidate_id}] → {str(parsed.get('semanticAction', '?'))[:40]}")
+        return visual_peak_record, parsed, None
+    except Exception as exc:
+        logger.log(f"   [WARN] {candidate_id} peak_micro failed: {exc}")
+        return visual_peak_record, None, {"peakId": candidate_id, "error": str(exc)}
+
+
+def _process_block_metadata(
+    block: dict[str, Any],
+    clip_path: Path,
+    *,
+    args: argparse.Namespace,
+    base_url: str,
+    api_key: str,
+    model: str,
+    video_id: str,
+    video_duration: float,
+    logger: "BlockLogger",
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """Run block-level fine_structure_scan v0.3.
+
+    Returns (block_metadata_or_None, failure_or_None). Designed to run as a
+    peer task in the same ThreadPoolExecutor as the peak-micro calls.
+    """
+    block_id = str(block["id"])
+    block_variables = build_block_prompt_variables(
+        block, video_id=video_id, video_duration=video_duration,
+    )
+    block_instructions, block_prompt_text = load_prompt_sections(args.prompt, block_variables)
+
+    logger.log(f"   [{block_id}] uploading block clip for fine_structure_scan...")
+    try:
+        block_file_info = gated_call(
+            upload_file,
+            base_url=base_url, api_key=api_key, video_path=clip_path, fps=None,
+        )
+        wait_for_file(
+            base_url=base_url, api_key=api_key, file_id=block_file_info["id"],
+            poll_interval=args.poll_interval, max_wait_seconds=args.max_wait_seconds,
+        )
+        block_response = gated_call(
+            create_response,
+            base_url=base_url, api_key=api_key,
+            payload=build_responses_payload(
+                model=model, file_id=block_file_info["id"],
+                prompt_text=block_prompt_text, instructions=block_instructions, store=True,
+            ),
+            timeout=args.response_timeout,
+        )
+        block_metadata = extract_json_object(extract_response_text(block_response))
+        if not isinstance(block_metadata, dict):
+            raise ValueError("fine_structure_scan response is not a JSON object")
+        return block_metadata, None
+    except Exception as exc:
+        logger.log(f"   [ERROR] [{block_id}] block-level fine_structure_scan failed: {exc}")
+        return None, {"blockId": block_id, "stage": "fine_structure_scan", "error": str(exc)}
 
 
 def process_block_with_peak_micro(
@@ -513,129 +708,66 @@ def process_block_with_peak_micro(
         if beat_map else []
     )
 
-    # Step 4: per-peak window + peak_micro_scan
+    # Step 4: per-peak window + peak_micro_scan (W1.3: concurrent within block)
     peak_window_dir = work_dir / block_id
     peak_window_dir.mkdir(parents=True, exist_ok=True)
+
+    logger = BlockLogger(block_id)
+    block_coarse_role = block.get("coarseRoleGuess", "unknown")
 
     visual_peaks_with_windows: list[dict[str, Any]] = []
     semantic_results: list[dict[str, Any]] = []
     peak_failures: list[dict[str, Any]] = []
+    block_metadata: dict[str, Any] | None = None
+    block_failure: dict[str, Any] | None = None
 
-    for candidate in candidates:
-        # Unified candidates carry sourceId (peak_NNN or boundary_NNN) + eventType + anchorSource.
-        candidate_id = str(candidate.get("sourceId") or "")
-        candidate_block_rel_ms = int(candidate["tMs"])
-        candidate_abs_s = start + (candidate_block_rel_ms / 1000.0)
-        window_clip = peak_window_dir / f"{candidate_id}.mp4"
-        window_start_s = max(start, candidate_abs_s - args.peak_pre_context)
-        window_end_s = min(end, candidate_abs_s + args.peak_post_context)
-
-        if not window_clip.exists():
-            run_ffmpeg(
-                build_peak_window_command(
-                    args.video,
-                    window_clip,
-                    block_start=start,
-                    block_end=end,
-                    peak_time=candidate_abs_s,
-                    pre_context=args.peak_pre_context,
-                    post_context=args.peak_post_context,
-                )
-            )
-
-        position_bucket = relative_position_bucket(
-            candidate_block_rel_ms, block_duration_ms=block_duration_ms,
+    # Submit all candidates + the block-level scan to one pool so they overlap.
+    with ThreadPoolExecutor(max_workers=int(args.candidate_workers)) as pool:
+        candidate_futures = {
+            pool.submit(
+                _process_one_candidate,
+                candidate,
+                block_start_s=start,
+                block_end_s=end,
+                block_duration_ms=block_duration_ms,
+                block_coarse_role=block_coarse_role,
+                args=args,
+                base_url=base_url,
+                api_key=api_key,
+                model=model,
+                peak_window_dir=peak_window_dir,
+                logger=logger,
+            ): candidate
+            for candidate in candidates
+        }
+        block_future = pool.submit(
+            _process_block_metadata,
+            block,
+            clip_path,
+            args=args,
+            base_url=base_url,
+            api_key=api_key,
+            model=model,
+            video_id=video_id,
+            video_duration=video_duration,
+            logger=logger,
         )
 
-        anchor_source = str(candidate.get("anchorSource", "visual_peak"))
-        event_type = str(candidate.get("eventType", "peak"))
-        channels = (
-            ["hist_delta", "frame_diff", "flow_mag", "area_delta"]
-            if anchor_source == "visual_peak" else []
-        )
+        for fut in as_completed(candidate_futures):
+            vp_record, semantic, failure = fut.result()
+            visual_peaks_with_windows.append(vp_record)
+            if semantic is not None:
+                semantic_results.append(semantic)
+            if failure is not None:
+                peak_failures.append(failure)
 
-        visual_peaks_with_windows.append({
-            "peakId": candidate_id,  # unified: works for both peak and regime
-            "tMs": int(round(candidate_abs_s * 1000)),  # absolute for alignment
-            "prominence": float(candidate.get("prominence", 0.0)),
-            "motionScore": float(candidate.get("motionScore", 0.0)),
-            "channels": channels,
-            "windowMs": {
-                "start": int(round(window_start_s * 1000)),
-                "end": int(round(window_end_s * 1000)),
-            },
-            "anchorSource": anchor_source,
-            "eventType": event_type,
-        })
+        block_metadata, block_failure = block_future.result()
 
-        try:
-            peak_vars = {
-                "peakId": candidate_id,
-                "relativePositionBucket": position_bucket,
-                "coarseRoleGuess": block.get("coarseRoleGuess", "unknown"),
-            }
-            peak_instructions, peak_text = load_prompt_sections(args.peak_micro_prompt, peak_vars)
-
-            print(f"   [{candidate_id}] ({event_type}) uploading window...")
-            pf = upload_file(base_url=base_url, api_key=api_key, video_path=window_clip, fps=None)
-            wait_for_file(
-                base_url=base_url, api_key=api_key, file_id=pf["id"],
-                poll_interval=args.poll_interval, max_wait_seconds=args.max_wait_seconds,
-            )
-            resp = create_response(
-                base_url=base_url, api_key=api_key,
-                payload=build_responses_payload(
-                    model=model, file_id=pf["id"],
-                    prompt_text=peak_text, instructions=peak_instructions, store=True,
-                ),
-                timeout=args.response_timeout,
-            )
-            parsed = extract_json_object(extract_response_text(resp))
-            if isinstance(parsed, dict):
-                parsed.setdefault("peakId", candidate_id)
-                semantic_results.append(parsed)
-                print(f"      → {parsed.get('semanticAction', '?')[:40]}")
-            else:
-                raise ValueError("peak_micro response is not a JSON object")
-        except Exception as exc:
-            print(f"   [WARN] {candidate_id} peak_micro failed: {exc}")
-            peak_failures.append({"peakId": candidate_id, "error": str(exc)})
-
-    # Step 5: block-level fine_structure_scan v0.3
-    block_variables = build_block_prompt_variables(
-        block, video_id=video_id, video_duration=video_duration,
-    )
-    block_instructions, block_prompt_text = load_prompt_sections(args.prompt, block_variables)
-
-    print(f"   uploading block clip for fine_structure_scan...")
-    try:
-        block_file_info = upload_file(
-            base_url=base_url, api_key=api_key, video_path=clip_path, fps=None,
-        )
-        wait_for_file(
-            base_url=base_url, api_key=api_key, file_id=block_file_info["id"],
-            poll_interval=args.poll_interval, max_wait_seconds=args.max_wait_seconds,
-        )
-        block_response = create_response(
-            base_url=base_url, api_key=api_key,
-            payload=build_responses_payload(
-                model=model, file_id=block_file_info["id"],
-                prompt_text=block_prompt_text, instructions=block_instructions, store=True,
-            ),
-            timeout=args.response_timeout,
-        )
-        block_response_text = extract_response_text(block_response)
-        block_metadata = extract_json_object(block_response_text)
-        if not isinstance(block_metadata, dict):
-            raise ValueError("fine_structure_scan response is not a JSON object")
-    except Exception as exc:
-        msg = f"block-level fine_structure_scan failed: {exc}"
-        print(f"   [ERROR] {msg}")
-        write_text(
-            out_dir / f"{block_id}_fine_scan_response_text.txt",
-            block_response_text if 'block_response_text' in locals() else "",
-        )
-        return None, {"blockId": block_id, "stage": "fine_structure_scan", "error": str(exc)}
+    # Block-level scan failure aborts the block.
+    if block_failure is not None:
+        logger.flush()
+        return None, block_failure
+    assert block_metadata is not None
 
     # Step 6: aggregate code-owned timing with model semantics
     action_beats = aggregate_peak_semantics(
@@ -686,7 +818,8 @@ def process_block_with_peak_micro(
 
     block_out_path = out_dir / f"{block_id}_fine_scan.json"
     write_json(block_out_path, block_output)
-    print(f"   saved -> {block_out_path}")
+    logger.log(f"   [{block_id}] saved -> {block_out_path}")
+    logger.flush()
     return block_output, None
 
 
@@ -721,12 +854,24 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--regime-penalty", type=float, default=1.0)
     parser.add_argument("--regime-dedup-window-ms", type=int, default=200)
     parser.add_argument("--max-total-candidates", type=int, default=16)
+    # Concurrency controls (W1.3 + W1.4)
+    parser.add_argument("--candidate-workers", type=int, default=10,
+                        help="Concurrent peak_micro_scan calls per block. Default 10.")
+    parser.add_argument("--block-workers", type=int, default=3,
+                        help="Concurrent blocks processed simultaneously. Default 3.")
+    parser.add_argument("--max-concurrent-http", type=int, default=20,
+                        help="Global semaphore cap on simultaneous Doubao API calls "
+                             "(upload + responses combined). Default 20.")
     parser.add_argument("--env", default=".env")
     parser.add_argument("--base-url", default="")
     parser.add_argument("--api-key", default="")
     parser.add_argument("--model", default="")
-    parser.add_argument("--poll-interval", type=float, default=5)
+    parser.add_argument("--poll-interval", type=float, default=2.0,
+                        help="Seconds between file-status polls (default 2.0; was 5.0)")
     parser.add_argument("--max-wait-seconds", type=float, default=300)
+    parser.add_argument("--peak-upload-fps", type=float, default=2.0,
+                        help="fps hint sent to Doubao Files API for peak windows (fewer "
+                             "extracted frames = cheaper + faster inference). Default 2.0.")
     parser.add_argument("--response-timeout", type=int, default=600)
     parser.add_argument("--dry-run", action="store_true")
     return parser

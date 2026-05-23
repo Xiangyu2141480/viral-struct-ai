@@ -312,6 +312,9 @@ def compute_visual_score_series_from_clip(
         prev_fg_ratio = None
 
         for frame in container.decode(stream):
+            # Cheap skip-checks BEFORE the expensive to_ndarray decode.
+            # On 30fps source decoded for 10fps sampling, ~20/30 frames are
+            # skipped here without ever paying the YUV→BGR conversion cost.
             if frame.time is None:
                 continue
             if frame.time + 1e-6 < next_sample_time:

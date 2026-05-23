@@ -209,5 +209,89 @@ class DoubaoRoughScanTests(unittest.TestCase):
         self.assertIn("abc", decoded)
 
 
+class HttpConcurrencyControlsTests(unittest.TestCase):
+    """W1.1: global semaphore + retry/backoff decorator for HTTP calls."""
+
+    def setUp(self):
+        self.module = load_module()
+        # Reset the module-level semaphore between tests (testing internals).
+        self.module._HTTP_SEMAPHORE = None
+
+    def test_get_http_semaphore_creates_with_max_concurrent(self):
+        sem = self.module.get_http_semaphore(max_concurrent=5)
+        # BoundedSemaphore exposes acquire/release; verify it's bounded by trying to
+        # exceed the cap.
+        for _ in range(5):
+            self.assertTrue(sem.acquire(blocking=False))
+        # 6th acquire should fail (non-blocking).
+        self.assertFalse(sem.acquire(blocking=False))
+        for _ in range(5):
+            sem.release()
+
+    def test_get_http_semaphore_is_singleton(self):
+        sem_a = self.module.get_http_semaphore(max_concurrent=3)
+        sem_b = self.module.get_http_semaphore(max_concurrent=10)  # ignored after first
+        self.assertIs(sem_a, sem_b)
+
+    def test_gated_call_returns_value_on_success(self):
+        def fn(x: int) -> int:
+            return x * 2
+        result = self.module.gated_call(fn, 21)
+        self.assertEqual(result, 42)
+
+    def test_gated_call_retries_on_429_then_succeeds(self):
+        attempts = {"count": 0}
+
+        def flaky_fn() -> str:
+            attempts["count"] += 1
+            if attempts["count"] < 3:
+                raise RuntimeError("HTTP 429 Too Many Requests: rate limit")
+            return "ok"
+
+        result = self.module.gated_call(flaky_fn, max_attempts=5, base_delay=0.001)
+        self.assertEqual(result, "ok")
+        self.assertEqual(attempts["count"], 3)
+
+    def test_gated_call_retries_on_5xx(self):
+        attempts = {"count": 0}
+
+        def flaky_fn() -> str:
+            attempts["count"] += 1
+            if attempts["count"] < 2:
+                raise RuntimeError("HTTP 503 Service Unavailable")
+            return "ok"
+
+        result = self.module.gated_call(flaky_fn, max_attempts=4, base_delay=0.001)
+        self.assertEqual(result, "ok")
+        self.assertEqual(attempts["count"], 2)
+
+    def test_gated_call_does_not_retry_on_400(self):
+        attempts = {"count": 0}
+
+        def bad_fn() -> str:
+            attempts["count"] += 1
+            raise RuntimeError("HTTP 400 Bad Request: malformed input")
+
+        with self.assertRaisesRegex(RuntimeError, "HTTP 400"):
+            self.module.gated_call(bad_fn, max_attempts=5, base_delay=0.001)
+        self.assertEqual(attempts["count"], 1, "client errors must not retry")
+
+    def test_gated_call_raises_after_exhausting_attempts(self):
+        attempts = {"count": 0}
+
+        def always_fail() -> str:
+            attempts["count"] += 1
+            raise RuntimeError("HTTP 429 rate limit")
+
+        with self.assertRaisesRegex(RuntimeError, "HTTP 429"):
+            self.module.gated_call(always_fail, max_attempts=3, base_delay=0.001)
+        self.assertEqual(attempts["count"], 3)
+
+    def test_gated_call_passes_args_and_kwargs(self):
+        def fn(a: int, b: int, *, c: int) -> int:
+            return a + b + c
+        self.assertEqual(self.module.gated_call(fn, 1, 2, c=3), 6)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -12,17 +12,94 @@ import argparse
 import json
 import mimetypes
 import os
+import random
 import re
+import threading
 import time
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, TypeVar
 from urllib import error, request
 
 
 DONE_FILE_STATUSES = {"processed", "completed", "success", "ready", "available"}
 WAIT_FILE_STATUSES = {"processing", "pending", "queued", "running"}
 FAILED_FILE_STATUSES = {"failed", "error", "expired", "cancelled"}
+
+
+# ---------------------------------------------------------------------------
+# HTTP concurrency controls (W1.1): global semaphore + retry/backoff.
+# These are foundational for the L1/L2 ThreadPoolExecutor refactor.
+# ---------------------------------------------------------------------------
+
+_RETRYABLE_ERROR_PATTERNS = (
+    "HTTP 429",
+    "HTTP 500",
+    "HTTP 502",
+    "HTTP 503",
+    "HTTP 504",
+    "RequestBurstTooFast",
+    "ServerOverloaded",
+)
+
+_HTTP_SEMAPHORE: threading.BoundedSemaphore | None = None
+_HTTP_SEMAPHORE_LOCK = threading.Lock()
+
+T = TypeVar("T")
+
+
+def get_http_semaphore(max_concurrent: int = 5) -> threading.BoundedSemaphore:
+    """Return the process-global HTTP semaphore (lazy-created).
+
+    First call sets the cap; subsequent calls return the existing semaphore
+    and ignore the requested cap. Reset by setting module-level
+    `_HTTP_SEMAPHORE = None` (intended for tests only).
+    """
+    global _HTTP_SEMAPHORE
+    with _HTTP_SEMAPHORE_LOCK:
+        if _HTTP_SEMAPHORE is None:
+            _HTTP_SEMAPHORE = threading.BoundedSemaphore(value=int(max_concurrent))
+        return _HTTP_SEMAPHORE
+
+
+def _is_retryable_error(message: str) -> bool:
+    return any(pattern in message for pattern in _RETRYABLE_ERROR_PATTERNS)
+
+
+def gated_call(
+    fn: Callable[..., T],
+    *args: Any,
+    max_attempts: int = 5,
+    base_delay: float = 0.5,
+    max_delay: float = 8.0,
+    **kwargs: Any,
+) -> T:
+    """Run an HTTP-bound `fn` through the global semaphore with retry+backoff.
+
+    - Acquires the semaphore once per attempt (released across backoff sleeps,
+      so a retrying caller does not hold a slot during exponential wait).
+    - Retries only on 429 / 5xx / RequestBurstTooFast / ServerOverloaded.
+    - Client errors (4xx other than 429) raise immediately.
+    - Backoff schedule: base_delay * 2**attempt + jitter, capped at max_delay.
+    """
+    sem = get_http_semaphore()
+    last_exc: BaseException | None = None
+    for attempt in range(int(max_attempts)):
+        with sem:
+            try:
+                return fn(*args, **kwargs)
+            except RuntimeError as exc:
+                msg = str(exc)
+                if not _is_retryable_error(msg):
+                    raise
+                last_exc = exc
+        # Released semaphore; sleep with backoff if more attempts remain.
+        if attempt < int(max_attempts) - 1:
+            delay = min(float(max_delay), float(base_delay) * (2 ** attempt))
+            delay += random.uniform(0, min(1.0, delay))  # jitter
+            time.sleep(delay)
+    assert last_exc is not None
+    raise last_exc
 
 
 def load_dotenv(path: str | Path) -> dict[str, str]:

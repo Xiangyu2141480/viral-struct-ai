@@ -95,6 +95,74 @@ class DoubaoFineScanTests(unittest.TestCase):
         # T4: audio must NOT be injected into the model prompt anymore.
         self.assertNotIn("audioAnalysis", variables)
 
+    def test_block_logger_buffers_then_flushes_atomically(self):
+        """W1.2: per-block buffered logger for concurrent runs."""
+        import io
+        from contextlib import redirect_stdout
+
+        logger = self.module.BlockLogger("block_001")
+        logger.log("line A")
+        logger.log("line B")
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            logger.flush()
+
+        output = buf.getvalue()
+        self.assertIn("line A", output)
+        self.assertIn("line B", output)
+        # After flush, buffer is empty
+        buf2 = io.StringIO()
+        with redirect_stdout(buf2):
+            logger.flush()
+        self.assertEqual(buf2.getvalue(), "")
+
+    def test_block_logger_preserves_line_order_within_block(self):
+        import io
+        from contextlib import redirect_stdout
+
+        logger = self.module.BlockLogger("block_x")
+        for i in range(5):
+            logger.log(f"msg_{i}")
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            logger.flush()
+
+        lines = [l for l in buf.getvalue().splitlines() if l.startswith("msg_")]
+        self.assertEqual(lines, ["msg_0", "msg_1", "msg_2", "msg_3", "msg_4"])
+
+    def test_block_logger_two_loggers_do_not_interleave(self):
+        """Concurrent flush from two loggers should not split lines."""
+        import io
+        import threading
+        from contextlib import redirect_stdout
+
+        logger_a = self.module.BlockLogger("block_a")
+        logger_b = self.module.BlockLogger("block_b")
+        for i in range(20):
+            logger_a.log(f"A_{i:02d}")
+            logger_b.log(f"B_{i:02d}")
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            t_a = threading.Thread(target=logger_a.flush)
+            t_b = threading.Thread(target=logger_b.flush)
+            t_a.start(); t_b.start()
+            t_a.join(); t_b.join()
+
+        out = buf.getvalue()
+        # Find first A line and last A line; all A lines must be contiguous
+        lines = out.splitlines()
+        a_indices = [i for i, l in enumerate(lines) if l.startswith("A_")]
+        b_indices = [i for i, l in enumerate(lines) if l.startswith("B_")]
+        # Either all A before B, or all B before A — never interleaved
+        if a_indices and b_indices:
+            a_block_contiguous = (max(a_indices) - min(a_indices) + 1) == len(a_indices)
+            b_block_contiguous = (max(b_indices) - min(b_indices) + 1) == len(b_indices)
+            self.assertTrue(a_block_contiguous, f"A lines were interleaved: {a_indices}")
+            self.assertTrue(b_block_contiguous, f"B lines were interleaved: {b_indices}")
+
     def test_align_anchor_to_audio_beat_finds_nearest_within_tolerance(self):
         result = self.module.align_anchor_to_audio_beat(
             anchor_ms=5748,
