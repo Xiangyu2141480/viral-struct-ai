@@ -8,6 +8,12 @@ The manifest enumerates the known stage1 artifacts that should accompany
 a Fine Scan run, recording each one's path, schemaVersion (if discoverable),
 and existence. Consumers can use this single index to bootstrap reads
 instead of hunting through the filesystem.
+
+NOTE: ``_debug/`` is intentionally NOT indexed in ``ARTIFACTS``. Its
+contents are LLM raw dumps / upload records with no ``schemaVersion`` and
+no downstream consumers — pure human debugging material. Use ``glob
+<analysis_root>/_debug/*`` to enumerate when debugging. See ADR
+``docs/DECISIONS/2026-05-23-rough-scan-v2-audit.md`` §8 for full rationale.
 """
 
 from __future__ import annotations

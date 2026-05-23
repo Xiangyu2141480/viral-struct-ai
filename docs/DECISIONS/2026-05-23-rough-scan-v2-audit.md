@@ -369,3 +369,40 @@ wrote .../analysis_manifest.json
 - **新增 artifact:** `analysis_manifest.json` + `audio_beat_map_v2` 升级
 - **改动文件总数:** 12 个(5 改 + 7 新增)
 - **测试覆盖:** **98/98 ✅** ,**0 regression**
+
+## §8. `_debug/` 不索引到 manifest 的策略(2026-05-23 决议)
+
+**触发**:PR #24 review M4 提出 — `analysis_manifest.json` 自称 single
+index,但不索引 `_debug/`,建议加 `debugArtifactsRoot` 字段。
+
+**决议**:**不加字段,改本 ADR 文档化原因**。`build_analysis_manifest.py`
+顶部 docstring 加一行 NOTE 引用本节即可。
+
+**理由**:
+
+1. **`_debug/` 内容性质 ≠ v2 artifact**
+   - 实测 macbook_neo `_debug/` 4 个文件:`asr_raw_response.json`(LLM 原始
+     dump,114K)、`rough_structure_scan_raw_response.json`(LLM 原始 dump,
+     16K)、`rough_structure_scan_response_text.txt`(纯文本 dump,11K)、
+     `uploaded_file_info.json`(文件上传记录,786B)。
+   - 全部**无 `schemaVersion`、无下游程序消费者**,纯人工调试材料。
+
+2. **Manifest 契约是"index downstream-consumable v2 artifacts"**
+   - 见 §5.1 的 v2 layout:`_debug/` 设计为"调试 dump 隔离"目录。
+   - `ARTIFACTS` tuple 的每项都对应一个有 `schemaVersion` 的 v2 contract。
+     `_debug/` 内容不满足这个 contract。
+
+3. **加 `debugArtifactsRoot` 字段会破坏隔离原意**
+   - 一旦把 `_debug/` 隐式晋升为 first-class artifact,鼓励未来把更多临时
+     产物塞进去并预期 manifest 收录,违反 Phase 1.3 设立 `_debug/` 的初衷。
+   - 滑坡风险:之后会被要求加 `debugArtifactsManifest` 列出 `_debug/`
+     内每个文件 → 退化为"index 一切"反模式。
+
+4. **文件位置已经是约定**
+   - `<analysis_root>/_debug/` 永远是 `_debug/` — 调试发现需要的人
+     `glob _debug/*` 即可枚举,无需 manifest 中介。
+
+**变更**:`scripts/build_analysis_manifest.py` 顶部 docstring 加一句:
+
+> NOTE: `_debug/` is intentionally not indexed in `ARTIFACTS`. See ADR
+> 2026-05-23-rough-scan-v2-audit.md §8 for rationale.
