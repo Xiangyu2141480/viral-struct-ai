@@ -45,5 +45,5 @@ packages/remotion-video/dist/
 personal_workspace/
 
 # Claude Code session-local config + personal plans
-.claude/
+.claude*
 docs/superpowers/
