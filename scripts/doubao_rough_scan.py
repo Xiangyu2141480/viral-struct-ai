@@ -40,6 +40,10 @@ _RETRYABLE_ERROR_PATTERNS = (
     "HTTP 504",
     "RequestBurstTooFast",
     "ServerOverloaded",
+    "timed out",         # urllib.error.URLError("...timed out") on socket timeout
+    "timeout",           # alternate phrasing
+    "Connection reset",  # transient TCP teardown under load
+    "Connection aborted",
 )
 
 _HTTP_SEMAPHORE: threading.BoundedSemaphore | None = None
@@ -88,7 +92,11 @@ def gated_call(
         with sem:
             try:
                 return fn(*args, **kwargs)
-            except RuntimeError as exc:
+            except (RuntimeError, OSError) as exc:
+                # RuntimeError: our wrapped HTTPError messages from request_json.
+                # OSError: covers urllib.error.URLError (subclass of OSError),
+                #          socket.timeout / TimeoutError, ConnectionError, etc.
+                # Filter by message pattern — only retry transient classes.
                 msg = str(exc)
                 if not _is_retryable_error(msg):
                     raise

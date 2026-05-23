@@ -265,6 +265,45 @@ class HttpConcurrencyControlsTests(unittest.TestCase):
         self.assertEqual(result, "ok")
         self.assertEqual(attempts["count"], 2)
 
+    def test_gated_call_retries_on_url_error_timeout(self):
+        """W2-B follow-up: 50-concurrent uploads can hit urllib write timeouts."""
+        from urllib.error import URLError
+
+        attempts = {"count": 0}
+
+        def flaky_fn() -> str:
+            attempts["count"] += 1
+            if attempts["count"] < 2:
+                # Mirrors what request.urlopen raises on socket timeout.
+                raise URLError("The write operation timed out")
+            return "ok"
+
+        result = self.module.gated_call(flaky_fn, max_attempts=4, base_delay=0.001)
+        self.assertEqual(result, "ok")
+        self.assertEqual(attempts["count"], 2)
+
+    def test_gated_call_retries_on_socket_timeout(self):
+        """Plain TimeoutError (Python 3.10+ alias for socket.timeout) should retry."""
+        attempts = {"count": 0}
+
+        def flaky_fn() -> str:
+            attempts["count"] += 1
+            if attempts["count"] < 2:
+                raise TimeoutError("read timed out")
+            return "ok"
+
+        result = self.module.gated_call(flaky_fn, max_attempts=4, base_delay=0.001)
+        self.assertEqual(result, "ok")
+        self.assertEqual(attempts["count"], 2)
+
+    def test_gated_call_does_not_swallow_unrelated_oserror(self):
+        """OSError without a retryable pattern (e.g. FileNotFoundError) must raise."""
+        def bad_fn() -> str:
+            raise FileNotFoundError("/tmp/missing.txt")
+
+        with self.assertRaises(FileNotFoundError):
+            self.module.gated_call(bad_fn, max_attempts=3, base_delay=0.001)
+
     def test_gated_call_does_not_retry_on_400(self):
         attempts = {"count": 0}
 

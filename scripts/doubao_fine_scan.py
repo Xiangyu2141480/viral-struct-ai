@@ -859,9 +859,11 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Concurrent peak_micro_scan calls per block. Default 10.")
     parser.add_argument("--block-workers", type=int, default=3,
                         help="Concurrent blocks processed simultaneously. Default 3.")
-    parser.add_argument("--max-concurrent-http", type=int, default=20,
+    parser.add_argument("--max-concurrent-http", type=int, default=25,
                         help="Global semaphore cap on simultaneous Doubao API calls "
-                             "(upload + responses combined). Default 20.")
+                             "(upload + responses combined). Default 25 (sweet spot "
+                             "from W2-B: 50 caused write timeouts on large block "
+                             "uploads, 20 was the conservative baseline).")
     parser.add_argument("--env", default=".env")
     parser.add_argument("--base-url", default="")
     parser.add_argument("--api-key", default="")
