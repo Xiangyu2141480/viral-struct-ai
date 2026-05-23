@@ -92,55 +92,6 @@ def rough_video_duration(blocks: list[dict[str, Any]]) -> float:
     return max(block_time_range(block)[1] for block in blocks)
 
 
-def _tempo_bpm(beat_map: dict[str, Any]) -> float | None:
-    tempo = beat_map.get("tempo")
-    if isinstance(tempo, dict) and tempo.get("bpm") is not None:
-        return float(tempo["bpm"])
-    return None
-
-
-def _beat_source(beat_map: dict[str, Any]) -> str:
-    method = beat_map.get("method")
-    if isinstance(method, dict) and method.get("primary"):
-        return str(method["primary"])
-    return "beat_this"
-
-
-def build_block_audio_analysis(
-    beat_map: dict[str, Any],
-    *,
-    start: float,
-    end: float,
-    beat_map_ref: str,
-) -> dict[str, Any]:
-    beat_markers: list[dict[str, Any]] = []
-    for beat in beat_map.get("beats", []) or []:
-        abs_time = float(beat["time"])
-        if start <= abs_time <= end:
-            rel_ms = int(round((abs_time - start) * 1000))
-            abs_ms = int(round(abs_time * 1000))
-            beat_markers.append(
-                {
-                    "tMs": rel_ms,
-                    "absTimeMs": abs_ms,
-                    "beatNumber": beat.get("beatNumber"),
-                    "isDownbeat": bool(beat.get("isDownbeat")),
-                }
-            )
-
-    return {
-        "source": _beat_source(beat_map),
-        "sourceBeatMapRef": beat_map_ref,
-        "timeBasis": "content_block_relative_ms",
-        "bpm": _tempo_bpm(beat_map),
-        "beatTimestampsMs": [marker["tMs"] for marker in beat_markers],
-        "downbeatTimestampsMs": [
-            marker["tMs"] for marker in beat_markers if marker["isDownbeat"]
-        ],
-        "beatMarkers": beat_markers,
-    }
-
-
 def run_ffmpeg(command: list[str], *, dry_run: bool = False) -> None:
     if dry_run:
         print(json.dumps({"ffmpeg": command}, ensure_ascii=False))

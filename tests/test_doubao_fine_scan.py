@@ -32,38 +32,6 @@ class DoubaoFineScanTests(unittest.TestCase):
         self.assertEqual(args.base_url, "")
         self.assertEqual(args.model, "")
 
-    def test_build_block_audio_analysis_uses_beat_this_relative_times(self):
-        beat_map = {
-            "method": {"primary": "beat_this"},
-            "tempo": {"bpm": 83.33, "confidence": None},
-            "beats": [
-                {"time": 8.96, "beatNumber": 1, "isDownbeat": True},
-                {"time": 9.20, "beatNumber": 2, "isDownbeat": False},
-                {"time": 10.00, "beatNumber": 3, "isDownbeat": False},
-                {"time": 13.20, "beatNumber": 1, "isDownbeat": True},
-            ],
-            "downbeats": [
-                {"time": 8.96, "beatNumber": 1, "isDownbeat": True},
-                {"time": 13.20, "beatNumber": 1, "isDownbeat": True},
-            ],
-        }
-
-        result = self.module.build_block_audio_analysis(
-            beat_map,
-            start=9.0,
-            end=13.0,
-            beat_map_ref="beat_map.json",
-        )
-
-        self.assertEqual(result["source"], "beat_this")
-        self.assertEqual(result["bpm"], 83.33)
-        self.assertEqual(result["sourceBeatMapRef"], "beat_map.json")
-        self.assertEqual(result["timeBasis"], "content_block_relative_ms")
-        self.assertEqual(result["beatTimestampsMs"], [200, 1000])
-        self.assertEqual(result["downbeatTimestampsMs"], [])
-        self.assertEqual(result["beatMarkers"][0]["absTimeMs"], 9200)
-        self.assertEqual(result["beatMarkers"][0]["tMs"], 200)
-
     def test_block_prompt_variables_use_content_block_contract(self):
         block = {
             "id": "block_001",
