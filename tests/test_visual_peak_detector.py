@@ -80,6 +80,144 @@ class DetectVisualPeaksFromScoresTests(unittest.TestCase):
         self.assertIn(350, times)
 
 
+class DetectRegimeBoundariesFromScoresTests(unittest.TestCase):
+    """T13: ruptures-based regime boundary detection for motion-end events."""
+
+    def setUp(self):
+        self.module = load_module()
+
+    def test_detects_high_to_low_regime_change(self):
+        """A clear high-motion-then-low signal should produce a motion_end boundary."""
+        # 30 samples @ 100ms step: first 15 high, last 15 low
+        samples = [
+            {"tMs": i * 100, "motionScore": (5.0 if i < 15 else 0.1)}
+            for i in range(30)
+        ]
+        boundaries = self.module.detect_regime_boundaries_from_scores(samples, penalty=3)
+
+        self.assertGreaterEqual(len(boundaries), 1)
+        first = boundaries[0]
+        # Regime change should land near index 15 (tMs ~ 1500)
+        self.assertIn(first["eventType"], {"motion_start", "motion_end"})
+        self.assertLessEqual(abs(first["tMs"] - 1500), 200)
+        if first["eventType"] == "motion_end":
+            self.assertGreater(first["magnitude"], 0)
+
+    def test_detects_low_to_high_then_low_pattern(self):
+        """Realistic: baseline → motion segment → baseline."""
+        samples = [
+            {"tMs": i * 100, "motionScore": (
+                0.1 if i < 10 else (4.0 if i < 25 else 0.1)
+            )}
+            for i in range(40)
+        ]
+        boundaries = self.module.detect_regime_boundaries_from_scores(samples, penalty=3)
+
+        # Should find at least 2 boundaries: motion_start near 1000ms and motion_end near 2500ms
+        self.assertGreaterEqual(len(boundaries), 2)
+        starts = [b for b in boundaries if b["eventType"] == "motion_start"]
+        ends = [b for b in boundaries if b["eventType"] == "motion_end"]
+        self.assertGreaterEqual(len(starts), 1)
+        self.assertGreaterEqual(len(ends), 1)
+
+    def test_empty_input_returns_empty(self):
+        self.assertEqual(self.module.detect_regime_boundaries_from_scores([]), [])
+
+    def test_handles_nan_safely(self):
+        samples = [
+            {"tMs": i * 100, "motionScore": (float("nan") if i == 5 else 1.0)}
+            for i in range(20)
+        ]
+        # Should not raise
+        result = self.module.detect_regime_boundaries_from_scores(samples, penalty=10)
+        for b in result:
+            self.assertIsInstance(b["tMs"], int)
+
+    def test_boundary_fields_have_required_shape(self):
+        samples = [
+            {"tMs": i * 100, "motionScore": (5.0 if i < 10 else 0.1)}
+            for i in range(20)
+        ]
+        boundaries = self.module.detect_regime_boundaries_from_scores(samples, penalty=3)
+
+        for b in boundaries:
+            self.assertIn("boundaryId", b)
+            self.assertIn("tMs", b)
+            self.assertIn("eventType", b)
+            self.assertIn("magnitude", b)
+            self.assertIn("anchorSource", b)
+            self.assertEqual(b["anchorSource"], "regime_boundary")
+
+
+class MergePeakAndRegimeCandidatesTests(unittest.TestCase):
+    """T14: unify visual peaks + regime boundaries into one candidate list."""
+
+    def setUp(self):
+        self.module = load_module()
+
+    def test_combines_peaks_and_regimes_into_one_list(self):
+        peaks = [
+            {"peakId": "peak_001", "tMs": 1000, "prominence": 3.0, "motionScore": 3.0},
+            {"peakId": "peak_002", "tMs": 5000, "prominence": 5.0, "motionScore": 5.0},
+        ]
+        regimes = [
+            {"boundaryId": "boundary_001", "tMs": 3000, "eventType": "motion_end",
+             "magnitude": 2.5, "anchorSource": "regime_boundary"},
+        ]
+
+        merged = self.module.merge_peak_and_regime_candidates(peaks, regimes)
+
+        self.assertEqual(len(merged), 3)
+        # All have unified fields
+        for cand in merged:
+            self.assertIn("tMs", cand)
+            self.assertIn("prominence", cand)
+            self.assertIn("anchorSource", cand)
+            self.assertIn("eventType", cand)
+        # Output sorted by tMs
+        self.assertEqual([c["tMs"] for c in merged], [1000, 3000, 5000])
+
+    def test_dedups_regime_when_within_window_of_peak(self):
+        """A regime boundary too close to a peak should be dropped (peak wins)."""
+        peaks = [
+            {"peakId": "peak_001", "tMs": 1000, "prominence": 3.0, "motionScore": 3.0},
+        ]
+        regimes = [
+            {"boundaryId": "b1", "tMs": 1100, "eventType": "motion_start",
+             "magnitude": 2.0, "anchorSource": "regime_boundary"},  # 100ms from peak → drop
+            {"boundaryId": "b2", "tMs": 4000, "eventType": "motion_end",
+             "magnitude": 3.0, "anchorSource": "regime_boundary"},  # far → keep
+        ]
+
+        merged = self.module.merge_peak_and_regime_candidates(
+            peaks, regimes, dedup_window_ms=200,
+        )
+
+        self.assertEqual(len(merged), 2)
+        self.assertEqual({c["tMs"] for c in merged}, {1000, 4000})
+
+    def test_peak_eventType_defaults_to_peak(self):
+        peaks = [
+            {"peakId": "peak_001", "tMs": 500, "prominence": 1.0, "motionScore": 1.0},
+        ]
+        merged = self.module.merge_peak_and_regime_candidates(peaks, [])
+        self.assertEqual(merged[0]["eventType"], "peak")
+        self.assertEqual(merged[0]["anchorSource"], "visual_peak")
+
+    def test_regime_uses_magnitude_as_prominence(self):
+        peaks: list[dict] = []
+        regimes = [
+            {"boundaryId": "b1", "tMs": 3000, "eventType": "motion_end",
+             "magnitude": 4.2, "anchorSource": "regime_boundary"},
+        ]
+        merged = self.module.merge_peak_and_regime_candidates(peaks, regimes)
+        self.assertEqual(merged[0]["prominence"], 4.2)
+        self.assertEqual(merged[0]["eventType"], "motion_end")
+
+    def test_empty_inputs_return_empty(self):
+        self.assertEqual(self.module.merge_peak_and_regime_candidates([], []), [])
+
+
 class SelectPeaksForBlockTests(unittest.TestCase):
     def setUp(self):
         self.module = load_module()
@@ -218,6 +356,17 @@ class ComputeVisualScoreSeriesFromClipTests(unittest.TestCase):
             score = float(entry["motionScore"])
             self.assertFalse(_math.isnan(score), f"NaN at t={entry['tMs']}")
             self.assertFalse(_math.isinf(score), f"Inf at t={entry['tMs']}")
+
+    def test_score_series_includes_area_delta_channel(self):
+        """T12: MOG2 foreground-area derivative as 4th channel for entry/exit events."""
+        series = self.module.compute_visual_score_series_from_clip(self.PROBE_CLIP)
+        for entry in series:
+            self.assertIn("area_delta", entry["channels"])
+
+    def test_first_sample_has_zero_area_delta(self):
+        series = self.module.compute_visual_score_series_from_clip(self.PROBE_CLIP)
+        # First sample's area_delta is 0 (no prior frame to compare).
+        self.assertEqual(series[0]["channels"]["area_delta"], 0.0)
 
     def test_sampling_density_around_target_fps(self):
         # Default target_fps=10 → ~10 samples per second.

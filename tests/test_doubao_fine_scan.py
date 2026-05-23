@@ -130,6 +130,60 @@ class DoubaoFineScanTests(unittest.TestCase):
         self.assertFalse(result["isBeatAligned"])
         self.assertEqual(result["alignmentToleranceMs"], 120)
 
+    def test_audio_beats_ms_in_block_abs_filters_and_converts(self):
+        beat_map = {
+            "beats": [
+                {"time": 0.5, "isDownbeat": True},
+                {"time": 5.74, "isDownbeat": True},
+                {"time": 7.2, "isDownbeat": True},
+                {"time": 20.0, "isDownbeat": False},
+            ],
+        }
+
+        beats = self.module.audio_beats_ms_in_block_abs(
+            beat_map,
+            block_start_s=3.0,
+            block_end_s=10.0,
+        )
+
+        # 0.5 and 20.0 are outside; 5.74 and 7.2 are inside → 5740 and 7200 absolute ms.
+        self.assertEqual(beats, [5740, 7200])
+
+    def test_audio_beats_ms_in_block_abs_handles_empty_map(self):
+        beats = self.module.audio_beats_ms_in_block_abs(
+            {"beats": []},
+            block_start_s=0.0,
+            block_end_s=10.0,
+        )
+        self.assertEqual(beats, [])
+
+    def test_relative_position_bucket_maps_ratio_to_five_buckets(self):
+        # block 10s; tBlockRel in ms
+        cases = [
+            (500, "early"),         # 5%
+            (1500, "early"),        # 15%
+            (2500, "mid_early"),    # 25%
+            (3500, "mid_early"),    # 35%
+            (4500, "mid"),          # 45%
+            (5500, "mid"),          # 55%
+            (6500, "mid_late"),     # 65%
+            (7500, "mid_late"),     # 75%
+            (8500, "late"),         # 85%
+            (9500, "late"),         # 95%
+        ]
+        for t_ms, expected in cases:
+            with self.subTest(t_ms=t_ms):
+                self.assertEqual(
+                    self.module.relative_position_bucket(t_ms, block_duration_ms=10_000),
+                    expected,
+                )
+
+    def test_relative_position_bucket_clamps_when_block_zero(self):
+        self.assertEqual(
+            self.module.relative_position_bucket(0, block_duration_ms=0),
+            "mid",
+        )
+
     def test_aggregate_peak_semantics_attaches_code_owned_timing(self):
         visual_peaks = [
             {

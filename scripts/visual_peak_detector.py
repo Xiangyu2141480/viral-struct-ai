@@ -93,11 +93,123 @@ def detect_visual_peaks_from_scores(
     return peaks
 
 
+def detect_regime_boundaries_from_scores(
+    samples: list[dict[str, Any]],
+    *,
+    penalty: float = 1.0,
+    min_size: int = 3,
+    classify_window: int = 4,
+) -> list[dict[str, Any]]:
+    """Detect regime boundaries (motion_start / motion_end) using PELT change-point detection.
+
+    Complements peak detection: peaks find local maxima, regimes find where a
+    signal transitions from "low" to "high" (motion_start) or "high" to "low"
+    (motion_end). The latter is the textbook tool for "place down" / settling
+    events that classical peak-finding misses entirely.
+
+    Returns: list of {boundaryId, tMs, eventType, magnitude, anchorSource}.
+    """
+    if not samples:
+        return []
+
+    times, scores = _sanitize_scores(samples)
+    if len(times) < min_size * 2:
+        return []
+
+    import numpy as np
+    import ruptures as rpt
+
+    arr = np.asarray(scores, dtype=np.float64)
+    # RBF kernel works well for piecewise-stationary signals with bounded values.
+    algo = rpt.Pelt(model="rbf", min_size=int(min_size)).fit(arr)
+    try:
+        change_indices = algo.predict(pen=float(penalty))
+    except Exception:
+        return []
+
+    # ruptures returns indices of segment ENDS (1-based-ish; last element is len(arr)).
+    # Filter: drop the last (always = len), keep interior change-points.
+    interior = [int(idx) for idx in change_indices if 0 < int(idx) < len(arr)]
+
+    out: list[dict[str, Any]] = []
+    for order, idx in enumerate(interior, start=1):
+        # Classify by comparing mean(before) vs mean(after) within a small window.
+        win = max(1, int(classify_window))
+        before = arr[max(0, idx - win):idx]
+        after = arr[idx:min(len(arr), idx + win)]
+        if before.size == 0 or after.size == 0:
+            continue
+        mean_before = float(before.mean())
+        mean_after = float(after.mean())
+        magnitude = abs(mean_after - mean_before)
+        event_type = "motion_start" if mean_after > mean_before else "motion_end"
+        out.append(
+            {
+                "boundaryId": f"boundary_{order:03d}",
+                "tMs": int(times[idx]),
+                "eventType": event_type,
+                "magnitude": magnitude,
+                "anchorSource": "regime_boundary",
+            }
+        )
+    return out
+
+
+def merge_peak_and_regime_candidates(
+    peaks: list[dict[str, Any]],
+    regimes: list[dict[str, Any]],
+    *,
+    dedup_window_ms: int = 200,
+) -> list[dict[str, Any]]:
+    """Unify visual peaks and ruptures regime boundaries into one candidate list.
+
+    Peaks become {tMs, prominence, eventType: 'peak', anchorSource: 'visual_peak', ...}.
+    Regimes become {tMs, prominence: magnitude, eventType, anchorSource: 'regime_boundary', ...}.
+
+    Deduplication: any regime falling within ±dedup_window_ms of an existing peak
+    is dropped (peaks carry richer per-channel info, so they win).
+
+    Output is sorted by tMs ascending.
+    """
+    out: list[dict[str, Any]] = []
+
+    peak_times: list[int] = []
+    for peak in peaks:
+        unified = {
+            "tMs": int(peak["tMs"]),
+            "prominence": float(peak.get("prominence", 0.0)),
+            "motionScore": float(peak.get("motionScore", 0.0)),
+            "eventType": "peak",
+            "anchorSource": "visual_peak",
+            "sourceId": peak.get("peakId"),
+        }
+        out.append(unified)
+        peak_times.append(int(peak["tMs"]))
+
+    for regime in regimes:
+        r_t = int(regime["tMs"])
+        # Drop if too close to any existing peak.
+        if any(abs(r_t - pt) <= int(dedup_window_ms) for pt in peak_times):
+            continue
+        unified = {
+            "tMs": r_t,
+            "prominence": float(regime.get("magnitude", 0.0)),
+            "motionScore": float(regime.get("magnitude", 0.0)),
+            "eventType": str(regime.get("eventType", "motion_change")),
+            "anchorSource": "regime_boundary",
+            "sourceId": regime.get("boundaryId"),
+        }
+        out.append(unified)
+
+    out.sort(key=lambda c: c["tMs"])
+    return out
+
+
 def select_peaks_for_block(
     peaks: list[dict[str, Any]],
     *,
     block_duration_ms: int,
-    peaks_per_second: float = 0.8,
+    peaks_per_second: float = 1.0,
     max_peaks: int = 12,
     min_block_seconds: float = 1.5,
     boundary_guard_ms: int = 250,
@@ -190,10 +302,14 @@ def compute_visual_score_series_from_clip(
         next_sample_time = 0.0
 
         dis = cv2.DISOpticalFlow_create(cv2.DISOPTICAL_FLOW_PRESET_FAST)
+        # MOG2 for foreground-area derivative channel (entry/exit detection).
+        # history=20 builds the model fast on short clips; varThreshold=16 is OpenCV default.
+        mog2 = cv2.createBackgroundSubtractorMOG2(history=20, varThreshold=16, detectShadows=False)
 
         samples: list[dict[str, Any]] = []
         prev_gray = None
         prev_hist = None
+        prev_fg_ratio = None
 
         for frame in container.decode(stream):
             if frame.time is None:
@@ -209,12 +325,17 @@ def compute_visual_score_series_from_clip(
             hist = cv2.calcHist([hue], [0], None, [32], [0, 180])
             cv2.normalize(hist, hist)
 
+            # MOG2 foreground mask, then fraction of foreground pixels.
+            fg_mask = mog2.apply(small_bgr)
+            fg_ratio = float((fg_mask > 0).sum()) / float(fg_mask.size)
+
             t_ms = int(round(frame.time * 1000))
 
             if prev_gray is None:
                 hd = 0.0
                 fd = 0.0
                 fm = 0.0
+                area_delta = 0.0
             else:
                 # DIS optical flow needs identical input dimensions; assert before calc.
                 assert gray.shape == prev_gray.shape, (
@@ -224,6 +345,7 @@ def compute_visual_score_series_from_clip(
                 fd = float(cv2.absdiff(gray, prev_gray).mean())
                 flow = dis.calc(prev_gray, gray, None)
                 fm = float(cv2.magnitude(flow[..., 0], flow[..., 1]).mean())
+                area_delta = abs(fg_ratio - prev_fg_ratio) if prev_fg_ratio is not None else 0.0
 
             samples.append(
                 {
@@ -232,21 +354,28 @@ def compute_visual_score_series_from_clip(
                         "hist_delta": float(hd),
                         "frame_diff": float(fd),
                         "flow_mag": float(fm),
+                        "area_delta": float(area_delta),
                     },
                 }
             )
             prev_gray = gray
             prev_hist = hist
+            prev_fg_ratio = fg_ratio
     finally:
         container.close()
 
     if not samples:
         return []
 
-    # Robust z-norm per channel, then max-pool.
+    # Robust z-norm per channel, then max-pool. 4 channels: hist/diff/flow/area.
     raw = np.array(
         [
-            [s["channels"]["hist_delta"], s["channels"]["frame_diff"], s["channels"]["flow_mag"]]
+            [
+                s["channels"]["hist_delta"],
+                s["channels"]["frame_diff"],
+                s["channels"]["flow_mag"],
+                s["channels"]["area_delta"],
+            ]
             for s in samples
         ],
         dtype=np.float64,

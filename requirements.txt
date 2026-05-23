@@ -6,3 +6,4 @@
 scipy>=1.11
 opencv-python>=4.8
 av>=11.0
+ruptures>=1.1
