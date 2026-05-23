@@ -18,6 +18,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from path_layout import DEFAULT_VIDEO_ID, analysis_paths  # noqa: E402
+
+_DEFAULT_PATHS = analysis_paths(DEFAULT_VIDEO_ID)
+
 SCHEMA_VERSION = "media_technical_v1"
 
 # Known aspect ratios used by short-video platforms. Matched by reduced
@@ -173,17 +178,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--video",
-        default="seed_assets/raw_videos/macbook_neo.mp4",
+        default=str(_DEFAULT_PATHS.raw_video),
         help="Source video path.",
     )
     parser.add_argument(
         "--video-id",
-        default="macbook_neo",
+        default=DEFAULT_VIDEO_ID,
         help="Video id stamped into the output.",
     )
     parser.add_argument(
         "--out",
-        default="seed_assets/analysis/macbook_neo/stage1_media/media_technical.json",
+        default=str(_DEFAULT_PATHS.media_technical),
         help="Output JSON path.",
     )
     return parser

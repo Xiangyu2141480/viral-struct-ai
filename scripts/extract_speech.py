@@ -85,6 +85,9 @@ def detect_language(text: str) -> str:
 # Reuse the simple dotenv loader from the rough-scan script (no new deps).
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from doubao_rough_scan import load_dotenv, env_value  # noqa: E402
+from path_layout import DEFAULT_VIDEO_ID, analysis_paths  # noqa: E402
+
+_DEFAULT_PATHS = analysis_paths(DEFAULT_VIDEO_ID)
 
 
 def ffprobe_audio_metadata(audio_path: Path) -> dict[str, Any]:
@@ -332,17 +335,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--audio",
-        default="seed_assets/analysis/macbook_neo/stage1_media/audio_beat_map.wav",
+        default=str(_DEFAULT_PATHS.audio_beat_wav),
         help="Input audio file (wav/mp3/ogg).",
     )
     parser.add_argument(
         "--video-id",
-        default="macbook_neo",
+        default=DEFAULT_VIDEO_ID,
         help="Video id stamped into the transcript.",
     )
     parser.add_argument(
         "--out",
-        default="seed_assets/analysis/macbook_neo/stage1_media/speech_transcript.json",
+        default=str(_DEFAULT_PATHS.speech_transcript),
         help="Output transcript JSON path.",
     )
     parser.add_argument(

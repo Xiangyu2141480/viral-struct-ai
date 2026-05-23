@@ -6,12 +6,18 @@ NormalizeResponseTests).
 """
 
 import importlib.util
+import sys
 import unittest
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULE_PATH = ROOT / "scripts" / "extract_speech.py"
+
+sys.path.insert(0, str(ROOT / "scripts"))
+from path_layout import DEFAULT_VIDEO_ID, analysis_paths  # noqa: E402
+
+_PATHS = analysis_paths(DEFAULT_VIDEO_ID)
 
 
 def load_module():
@@ -516,15 +522,9 @@ class ParserDefaultsTests(unittest.TestCase):
 
     def test_defaults_point_to_macbook_neo_stage1_media(self):
         args = self.module.build_parser().parse_args([])
-        self.assertEqual(
-            args.audio,
-            "seed_assets/analysis/macbook_neo/stage1_media/audio_beat_map.wav",
-        )
-        self.assertEqual(
-            args.out,
-            "seed_assets/analysis/macbook_neo/stage1_media/speech_transcript.json",
-        )
-        self.assertEqual(args.video_id, "macbook_neo")
+        self.assertEqual(args.audio, str(_PATHS.audio_beat_wav))
+        self.assertEqual(args.out, str(_PATHS.speech_transcript))
+        self.assertEqual(args.video_id, DEFAULT_VIDEO_ID)
         self.assertEqual(args.resource_id, "volc.bigasr.auc_turbo")
         self.assertEqual(args.model, "bigmodel")
 

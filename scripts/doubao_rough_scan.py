@@ -14,12 +14,23 @@ import mimetypes
 import os
 import random
 import re
+import sys
 import threading
 import time
 import uuid
 from pathlib import Path
 from typing import Any, Callable, TypeVar
 from urllib import error, request
+
+# scripts/ is on sys.path[0] when this file is run as __main__; sibling
+# imports also work when loaded via importlib.spec_from_file_location
+# because both doubao_fine_scan / extract_speech register scripts/ before
+# importing us. Keep this explicit import close to where DEFAULT_VIDEO_ID
+# is consumed so the dependency is obvious.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from path_layout import DEFAULT_VIDEO_ID, analysis_paths  # noqa: E402
+
+_DEFAULT_PATHS = analysis_paths(DEFAULT_VIDEO_ID)
 
 
 DONE_FILE_STATUSES = {"processed", "completed", "success", "ready", "available"}
@@ -661,7 +672,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--video",
-        default="seed_assets/processed_videos/macbook_neo_preview_5fps_720w.mp4",
+        default=str(_DEFAULT_PATHS.preview_video),
         help="Prepared 5 FPS preview video.",
     )
     parser.add_argument(
@@ -669,7 +680,7 @@ def build_parser() -> argparse.ArgumentParser:
         default="prompts/video_understanding/rough_structure_scan_v0.md",
         help="Prompt markdown file.",
     )
-    parser.add_argument("--video-id", default="macbook_neo")
+    parser.add_argument("--video-id", default=DEFAULT_VIDEO_ID)
     parser.add_argument("--duration", type=float, default=229.53)
     parser.add_argument("--preview-fps", type=float, default=5)
     parser.add_argument("--preview-width", type=int, default=720)
@@ -685,10 +696,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--response-timeout", type=int, default=600)
     # v0.2 directory layout: stage1_rough/ for primary contract, _debug/ for dumps.
     # See docs/DECISIONS/2026-05-23-rough-scan-v2-audit.md §5.1.
-    parser.add_argument("--out", default="seed_assets/analysis/macbook_neo/stage1_rough/rough_structure_scan.json")
-    parser.add_argument("--raw-out", default="seed_assets/analysis/macbook_neo/_debug/rough_structure_scan_raw_response.json")
-    parser.add_argument("--text-out", default="seed_assets/analysis/macbook_neo/_debug/rough_structure_scan_response_text.txt")
-    parser.add_argument("--file-info-out", default="seed_assets/analysis/macbook_neo/_debug/uploaded_file_info.json")
+    parser.add_argument("--out", default=str(_DEFAULT_PATHS.rough_scan))
+    parser.add_argument("--raw-out", default=str(_DEFAULT_PATHS.rough_raw_response))
+    parser.add_argument("--text-out", default=str(_DEFAULT_PATHS.rough_response_text))
+    parser.add_argument("--file-info-out", default=str(_DEFAULT_PATHS.uploaded_file_info))
     parser.add_argument("--dry-run", action="store_true")
     return parser
 

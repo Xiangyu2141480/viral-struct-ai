@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -7,6 +8,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULE_PATH = ROOT / "scripts" / "doubao_fine_scan.py"
+
+# Import path_layout directly so test assertions reference the same source
+# of truth that the script reads. If the layout ever changes, only
+# path_layout.py needs touching — the tests follow automatically.
+sys.path.insert(0, str(ROOT / "scripts"))
+from path_layout import DEFAULT_VIDEO_ID, analysis_paths  # noqa: E402
+
+_PATHS = analysis_paths(DEFAULT_VIDEO_ID)
 
 
 def load_module():
@@ -24,11 +33,11 @@ class DoubaoFineScanTests(unittest.TestCase):
     def test_parser_defaults_point_to_seed_analysis_flow_and_env_config(self):
         args = self.module.build_parser().parse_args([])
 
-        self.assertEqual(args.rough_scan, "seed_assets/analysis/macbook_neo/stage1_rough/rough_structure_scan.json")
-        self.assertEqual(args.video, "seed_assets/raw_videos/macbook_neo.mp4")
-        self.assertEqual(args.beat_map, "seed_assets/analysis/macbook_neo/stage1_media/audio_beat_map.json")
-        self.assertEqual(args.out_dir, "seed_assets/analysis/macbook_neo/fine_scan")
-        self.assertEqual(args.work_dir, "seed_assets/analysis/macbook_neo/fine_scan/clips")
+        self.assertEqual(args.rough_scan, str(_PATHS.rough_scan))
+        self.assertEqual(args.video, str(_PATHS.raw_video))
+        self.assertEqual(args.beat_map, str(_PATHS.audio_beat_map))
+        self.assertEqual(args.out_dir, str(_PATHS.fine_scan_dir))
+        self.assertEqual(args.work_dir, str(_PATHS.fine_scan_clips_dir))
         self.assertEqual(args.base_url, "")
         self.assertEqual(args.model, "")
 
