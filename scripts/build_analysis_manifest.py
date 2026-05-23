@@ -55,6 +55,11 @@ ARTIFACTS: tuple[ArtifactSpec, ...] = (
         description="beat_this audio beat map + BPM.",
     ),
     ArtifactSpec(
+        key="speech",
+        relative_path="stage1_media/speech_transcript.json",
+        description="Volcengine Doubao ASR transcript (hasSpeech=false for BGM-only videos).",
+    ),
+    ArtifactSpec(
         key="timeline",
         relative_path="stage1_5_assembly/content_transition_timeline.json",
         description="Stage 1.5 assembled timeline (content blocks + transitions).",
