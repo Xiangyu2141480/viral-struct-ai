@@ -11,7 +11,7 @@ export function planGapRepairs(
         slotId: gap.slotId,
         strategy: 'ask_user_for_human_demo',
         explanation:
-          '样例结构依赖真人出镜、近脸口播或亲和表达来建立信任。优先让用户补充授权的真人演示素材；若无法补拍，则降级为产品特写 + 强字幕说明，不默认生成虚拟真人替代。'
+          '样例结构需要授权演示或讲解镜头来建立信任。优先让用户补充授权的演示素材；若无法补拍，则降级为产品特写 + 强字幕说明，不默认生成虚拟人物替代。'
       };
     }
 
@@ -20,7 +20,7 @@ export function planGapRepairs(
         slotId: gap.slotId,
         strategy: 'hand_demo',
         explanation:
-          '缺少上脸试用或动作演示素材，优先建议补拍手部试色/使用过程；无法补拍时使用试色卡、步骤字幕和产品局部特写降级表达。'
+          '缺少真实操作或动作演示素材，优先建议补拍手部操作/使用过程；无法补拍时使用步骤卡、字幕和产品局部特写降级表达。'
       };
     }
 
@@ -29,7 +29,7 @@ export function planGapRepairs(
         slotId: gap.slotId,
         strategy: 'before_after_card',
         explanation:
-          '缺少妆前妆后或使用前后对比素材，使用对比卡或前后状态文字卡表达变化，并提示用户后续补充真实对比素材。'
+          '缺少使用前后对比素材，使用对比卡或前后状态文字卡表达变化，并提示用户后续补充真实对比素材。'
       };
     }
 

@@ -8,21 +8,21 @@ const gaps = [
 
 const ingredientGaps = [
   {
-    ingredient: '真人博主近脸上脸试用',
+    ingredient: '授权演示或手部操作素材',
     affected: '使用过程 / 证明',
-    current: '当前只有产品图、手持图和商品文案，没有人物出镜、脸部近景或上脸动作。',
-    repair: '优先让用户补充授权上脸试用视频；无法补拍时降级为手部试色 + 产品特写 + 步骤字幕。'
+    current: '当前只有产品图、手持图和商品文案，没有完整操作过程或讲解镜头。',
+    repair: '优先让用户补充授权演示视频；无法补拍时降级为手部操作 + 产品特写 + 步骤字幕。'
   },
   {
-    ingredient: '妆前妆后对比',
+    ingredient: '使用前后对比',
     affected: '证明段落',
     current: '没有 before / after 图，也没有对比镜头。',
     repair: '使用 before_after_card 或 comparison_card 表达变化，并提示后续补充真实对比素材。'
   },
   {
-    ingredient: '柔光高质感画面',
+    ingredient: '统一视觉包装',
     affected: '商品特写 / 结果展示',
-    current: '素材背景普通，缺少样例中的柔光、干净背景和高审美包装。',
+    current: '素材背景普通，缺少样例中的柔光、干净背景和统一信息卡包装。',
     repair: '使用 style_filter_suggestion、浅色背景版式和卖点卡统一视觉风格。'
   }
 ];
