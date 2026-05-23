@@ -103,14 +103,12 @@ def prepare_block_clip(
     video_path: str | Path,
     block: dict[str, Any],
     work_dir: Path,
-    *,
-    dry_run: bool = False,
 ) -> Path:
     block_id = block["id"]
     start, end = block_time_range(block)
     suffix = "source"
     output_path = work_dir / f"{block_id}_{suffix}.mp4"
-    if output_path.exists() and not dry_run:
+    if output_path.exists():
         return output_path
     work_dir.mkdir(parents=True, exist_ok=True)
 
@@ -121,7 +119,7 @@ def prepare_block_clip(
         end=end,
         mode="copy",
     )
-    run_ffmpeg(command, dry_run=dry_run)
+    run_ffmpeg(command)
     return output_path
 
 
