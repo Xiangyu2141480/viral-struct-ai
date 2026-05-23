@@ -23,6 +23,10 @@ covers
 *.mkv
 *.avi
 *.webm
+# Test fixtures (synthetic small videos for CI smoke tests) are intentional inputs.
+!tests/fixtures/*.mp4
+!tests/fixtures/*.mov
+!tests/fixtures/*.webm
 
 # Seed case assets are intentional project inputs.
 !seed_assets/
