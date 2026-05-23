@@ -47,23 +47,63 @@ _RETRYABLE_ERROR_PATTERNS = (
 )
 
 _HTTP_SEMAPHORE: threading.BoundedSemaphore | None = None
+_HTTP_CAP: int | None = None  # tracks the cap set at first init so mismatches can be detected
 _HTTP_SEMAPHORE_LOCK = threading.Lock()
 
 T = TypeVar("T")
 
 
-def get_http_semaphore(max_concurrent: int = 5) -> threading.BoundedSemaphore:
-    """Return the process-global HTTP semaphore (lazy-created).
+def configure_http_semaphore(max_concurrent: int) -> threading.BoundedSemaphore:
+    """Explicit one-shot initialiser for the process-global HTTP semaphore.
 
-    First call sets the cap; subsequent calls return the existing semaphore
-    and ignore the requested cap. Reset by setting module-level
-    `_HTTP_SEMAPHORE = None` (intended for tests only).
+    Call this once at CLI entry (after parsing `--max-concurrent-http`) and
+    before spawning any worker. Re-calling with the same cap is a no-op
+    (idempotent). Re-calling with a *different* cap raises RuntimeError —
+    the previous silent-ignore behaviour was a real bug (PR #24 review H1).
     """
-    global _HTTP_SEMAPHORE
+    global _HTTP_SEMAPHORE, _HTTP_CAP
+    cap = int(max_concurrent)
     with _HTTP_SEMAPHORE_LOCK:
         if _HTTP_SEMAPHORE is None:
-            _HTTP_SEMAPHORE = threading.BoundedSemaphore(value=int(max_concurrent))
+            _HTTP_CAP = cap
+            _HTTP_SEMAPHORE = threading.BoundedSemaphore(value=cap)
+        elif cap != _HTTP_CAP:
+            raise RuntimeError(
+                f"HTTP semaphore already initialised with cap={_HTTP_CAP}; "
+                f"refusing to reconfigure to cap={cap}. "
+                "Call configure_http_semaphore exactly once at CLI entry."
+            )
         return _HTTP_SEMAPHORE
+
+
+def get_http_semaphore(max_concurrent: int = 5) -> threading.BoundedSemaphore:
+    """Return the process-global HTTP semaphore, lazy-creating on first use.
+
+    Lenient accessor: if the semaphore is already initialised (by an explicit
+    ``configure_http_semaphore`` call), this returns it as-is regardless of
+    ``max_concurrent`` — so internal fallback paths (e.g. ``gated_call``'s
+    default semaphore) never trigger a spurious cap-mismatch raise.
+
+    Strict cap-mismatch enforcement is the job of ``configure_http_semaphore``
+    (PR #24 review H1). Prefer that explicit form at CLI entry.
+    """
+    with _HTTP_SEMAPHORE_LOCK:
+        if _HTTP_SEMAPHORE is not None:
+            return _HTTP_SEMAPHORE
+    # Not yet initialised — defer to configure (which retakes the lock and
+    # initialises with the requested cap).
+    return configure_http_semaphore(max_concurrent)
+
+
+def _reset_http_semaphore_for_testing() -> None:
+    """Clear the global semaphore so the next configure_* call starts fresh.
+
+    Intended only for test isolation. Not part of the public API.
+    """
+    global _HTTP_SEMAPHORE, _HTTP_CAP
+    with _HTTP_SEMAPHORE_LOCK:
+        _HTTP_SEMAPHORE = None
+        _HTTP_CAP = None
 
 
 def _is_retryable_error(message: str) -> bool:
@@ -76,17 +116,21 @@ def gated_call(
     max_attempts: int = 5,
     base_delay: float = 0.5,
     max_delay: float = 8.0,
+    semaphore: threading.BoundedSemaphore | None = None,
     **kwargs: Any,
 ) -> T:
-    """Run an HTTP-bound `fn` through the global semaphore with retry+backoff.
+    """Run an HTTP-bound `fn` through a semaphore with retry+backoff.
 
     - Acquires the semaphore once per attempt (released across backoff sleeps,
       so a retrying caller does not hold a slot during exponential wait).
     - Retries only on 429 / 5xx / RequestBurstTooFast / ServerOverloaded.
     - Client errors (4xx other than 429) raise immediately.
     - Backoff schedule: base_delay * 2**attempt + jitter, capped at max_delay.
+    - ``semaphore``: optional override. If None, falls back to the
+      process-global semaphore (lazy-init at default cap=5). Tests inject
+      their own semaphore for isolation.
     """
-    sem = get_http_semaphore()
+    sem = semaphore if semaphore is not None else get_http_semaphore()
     last_exc: BaseException | None = None
     for attempt in range(int(max_attempts)):
         with sem:

@@ -1,4 +1,5 @@
 import importlib.util
+import threading
 import unittest
 from pathlib import Path
 
@@ -434,8 +435,44 @@ class HttpConcurrencyControlsTests(unittest.TestCase):
 
     def setUp(self):
         self.module = load_module()
-        # Reset the module-level semaphore between tests (testing internals).
-        self.module._HTTP_SEMAPHORE = None
+        # Per-test fresh global. _reset_http_semaphore_for_testing is the
+        # blessed test helper (replaces direct _HTTP_SEMAPHORE = None hack).
+        self.module._reset_http_semaphore_for_testing()
+
+    def test_configure_http_semaphore_initialises_with_requested_cap(self):
+        sem = self.module.configure_http_semaphore(7)
+        # BoundedSemaphore enforces cap by trying to exceed it.
+        for _ in range(7):
+            self.assertTrue(sem.acquire(blocking=False))
+        self.assertFalse(sem.acquire(blocking=False))
+        for _ in range(7):
+            sem.release()
+
+    def test_configure_http_semaphore_idempotent_with_same_cap(self):
+        sem1 = self.module.configure_http_semaphore(5)
+        sem2 = self.module.configure_http_semaphore(5)
+        self.assertIs(sem1, sem2)
+
+    def test_configure_http_semaphore_raises_on_cap_mismatch(self):
+        """PR #24 review H1: the previous behaviour silently ignored the
+        new cap. Now mismatch must fail fast at the call site."""
+        self.module.configure_http_semaphore(5)
+        with self.assertRaisesRegex(RuntimeError, "already initialised"):
+            self.module.configure_http_semaphore(25)
+
+    def test_gated_call_uses_injected_semaphore_when_supplied(self):
+        """DI seam (PR #24 review H1): tests inject their own semaphore
+        rather than mutating module globals. Verifies the injected sem
+        actually gates execution."""
+        injected = threading.BoundedSemaphore(value=2)
+        results: list[int] = []
+        def fn(x: int) -> int:
+            results.append(x)
+            return x
+        # 3 calls × cap=2 still serializes when the injected sem is used.
+        for i in range(3):
+            self.module.gated_call(fn, i, semaphore=injected)
+        self.assertEqual(results, [0, 1, 2])
 
     def test_get_http_semaphore_creates_with_max_concurrent(self):
         sem = self.module.get_http_semaphore(max_concurrent=5)
@@ -449,8 +486,11 @@ class HttpConcurrencyControlsTests(unittest.TestCase):
             sem.release()
 
     def test_get_http_semaphore_is_singleton(self):
+        """Singleton behaviour: same cap call returns the same instance.
+        Different-cap reconfiguration now raises (PR #24 review H1) — see
+        test_configure_http_semaphore_raises_on_cap_mismatch."""
         sem_a = self.module.get_http_semaphore(max_concurrent=3)
-        sem_b = self.module.get_http_semaphore(max_concurrent=10)  # ignored after first
+        sem_b = self.module.get_http_semaphore(max_concurrent=3)
         self.assertIs(sem_a, sem_b)
 
     def test_gated_call_returns_value_on_success(self):

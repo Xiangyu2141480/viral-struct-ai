@@ -23,9 +23,9 @@ from doubao_rough_scan import (  # noqa: E402
     create_response,
     env_value,
     extract_json_object,
+    configure_http_semaphore,
     extract_response_text,
     gated_call,
-    get_http_semaphore,
     load_dotenv,
     load_prompt_sections,
     upload_file,
@@ -334,7 +334,9 @@ def run_fine_scan(args: argparse.Namespace) -> int:
         raise SystemExit(f"Missing required config: {', '.join(missing)}")
 
     # Initialize global HTTP semaphore from CLI before any worker is spawned.
-    get_http_semaphore(max_concurrent=int(args.max_concurrent_http))
+    # Explicit configure_* (not lazy get_*) — cap mismatch now raises rather
+    # than being silently ignored (PR #24 review H1).
+    configure_http_semaphore(int(args.max_concurrent_http))
 
     rough_scan_path = Path(args.rough_scan)
     if not rough_scan_path.exists():
