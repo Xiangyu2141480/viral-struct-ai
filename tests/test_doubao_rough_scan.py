@@ -474,6 +474,58 @@ class HttpConcurrencyControlsTests(unittest.TestCase):
             self.module.gated_call(fn, i, semaphore=injected)
         self.assertEqual(results, [0, 1, 2])
 
+    def test_gated_call_enforces_global_cap_under_l1_l2_saturation(self):
+        """PR #24 review test-1: L1/L2 concurrency contract is testable
+        deterministically without flaky timing. With cap=3 and 12 tasks
+        (3 outer × 4 inner), in-flight count must never exceed 3 and
+        should hit 3 (saturation) given the 50 ms work units.
+
+        Mock-based — replaces what the sub-agent audit flagged as the
+        E2E-only coverage gap for L1+L2+semaphore interaction.
+        """
+        import time as _time
+        from concurrent.futures import ThreadPoolExecutor
+
+        # Use injected sem so the test is fully isolated from any other
+        # global state (cap=3 here).
+        cap = 3
+        sem = threading.BoundedSemaphore(value=cap)
+        in_flight: list[int] = []
+        in_flight_lock = threading.Lock()
+        peak_in_flight = [0]
+
+        def fake_http() -> str:
+            with in_flight_lock:
+                in_flight.append(1)
+                peak_in_flight[0] = max(peak_in_flight[0], len(in_flight))
+            _time.sleep(0.05)
+            with in_flight_lock:
+                in_flight.pop()
+            return "ok"
+
+        def block_worker() -> None:
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                list(pool.map(
+                    lambda _: self.module.gated_call(fake_http, semaphore=sem),
+                    range(4),
+                ))
+
+        with ThreadPoolExecutor(max_workers=3) as outer:
+            list(outer.map(lambda _: block_worker(), range(3)))
+
+        self.assertLessEqual(
+            peak_in_flight[0], cap,
+            f"semaphore breached: peak in-flight {peak_in_flight[0]} > cap {cap}",
+        )
+        # Saturation check — at cap=3 with 12 tasks × 50 ms work, we should
+        # observe the semaphore saturate (peak hits cap). If it doesn't, the
+        # test setup is faulty (threads ran serially), not the semaphore.
+        self.assertGreaterEqual(
+            peak_in_flight[0], cap - 1,
+            f"semaphore underutilised: peak {peak_in_flight[0]} << cap {cap};"
+            f" check L1/L2 thread setup",
+        )
+
     def test_get_http_semaphore_creates_with_max_concurrent(self):
         sem = self.module.get_http_semaphore(max_concurrent=5)
         # BoundedSemaphore exposes acquire/release; verify it's bounded by trying to

@@ -353,6 +353,21 @@ def run_fine_scan(args: argparse.Namespace) -> int:
     # than being silently ignored (PR #24 review H1).
     configure_http_semaphore(int(args.max_concurrent_http))
 
+    # PR #24 review H2: --max-concurrent-http is the *binding* concurrency
+    # cap; --block-workers and --candidate-workers only set the upper bound
+    # on threads. When the upper bound far exceeds the cap, extra threads
+    # just block on the semaphore — HTTP correctness is fine but memory is
+    # wasted. Print a runtime WARN so ops sees the relationship at startup.
+    outer_upper = int(args.block_workers) * (int(args.candidate_workers) + 1)
+    if outer_upper > 2 * int(args.max_concurrent_http):
+        print(
+            f"[WARN] outer-thread upper bound = {outer_upper}"
+            f" (block_workers={args.block_workers} × (candidate_workers={args.candidate_workers} + 1))"
+            f" is > 2× http cap ({args.max_concurrent_http})."
+            f" Extra threads will block on the semaphore — consider lowering"
+            f" --block-workers or --candidate-workers to save memory."
+        )
+
     rough_scan_path = Path(args.rough_scan)
     if not rough_scan_path.exists():
         raise SystemExit(f"Rough scan file not found: {rough_scan_path}")
