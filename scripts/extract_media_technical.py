@@ -29,6 +29,13 @@ KNOWN_ASPECT_RATIOS: dict[tuple[int, int], str] = {
     (4, 5): "4:5",     # Xiaohongshu portrait
     (2, 3): "2:3",     # Xiaohongshu / Pinterest portrait
     (3, 4): "3:4",     # 4:3 inverted (rare but legal)
+    # iPhone full-screen capture (Notch / Dynamic Island devices) — the reduced
+    # integer ratios cluster near 9:19.5. Listed individually because
+    # reduce_ratio returns an exact gcd tuple; future option: tolerance-based
+    # classification (~0.5%) to collapse near-equivalent ratios into one tag.
+    (195, 422): "9:19.5",   # iPhone 12/13/14 (1170×2532)
+    (131, 284): "9:19.5",   # iPhone 14 Pro / 15 / 16 (1179×2556)
+    (215, 466): "9:19.5",   # iPhone 14/15/16 Pro Max (1290×2796)
 }
 
 

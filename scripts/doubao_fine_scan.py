@@ -51,6 +51,21 @@ SOURCE_CLIP_RESOLUTION = "source"
 # so concurrent blocks produce contiguous stdout chunks instead of interleaved
 # lines.
 class BlockLogger:
+    """Per-block buffered logger.
+
+    Threading contract (as of this commit):
+      - One BlockLogger instance is owned by exactly one block-worker thread.
+      - log() / flush() are called only from that owner thread.
+      - The class-level _flush_lock serializes stdout writes across different
+        blocks so chunks don't interleave.
+      - self._buf reassignment in flush() is safe without per-instance lock
+        only as long as _buf is never shared across threads.
+
+    NOTE: this single-owner invariant is challenged when L1 candidate workers
+    in process_block_with_peak_micro share the same block-level logger. A
+    per-logger lock + auto-flush is added in the follow-up M3 fix.
+    """
+
     _flush_lock = threading.Lock()
 
     def __init__(self, block_id: str) -> None:
@@ -715,7 +730,12 @@ def process_block_with_peak_micro(
     if block_failure is not None:
         logger.flush()
         return None, block_failure
-    assert block_metadata is not None
+    # Not `assert` — strip under -O would let downstream `**block_metadata`
+    # raise TypeError instead of failing here with context.
+    if block_metadata is None:
+        raise RuntimeError(
+            f"block {block_id}: block_metadata missing after non-failure scan"
+        )
 
     # Step 6: aggregate code-owned timing with model semantics
     action_beats = aggregate_peak_semantics(

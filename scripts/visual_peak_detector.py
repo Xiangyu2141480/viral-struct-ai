@@ -340,7 +340,11 @@ def compute_visual_score_series_from_clip(
                 fm = 0.0
                 area_delta = 0.0
             else:
-                # DIS optical flow needs identical input dimensions; assert before calc.
+                # DIS optical flow needs identical input dimensions.
+                # Invariant — same PyAV decode loop with fixed small_size
+                # produces identical gray shape; this `assert` is a true
+                # invariant check, not control flow. Safe to strip under -O:
+                # downstream cv2 call would still raise on shape mismatch.
                 assert gray.shape == prev_gray.shape, (
                     f"shape mismatch: {gray.shape} vs {prev_gray.shape}"
                 )

@@ -155,6 +155,9 @@ class DoubaoFineScanTests(unittest.TestCase):
         self.assertFalse(result["isBeatAligned"])
 
     def test_align_anchor_to_audio_beat_returns_none_when_no_beats(self):
+        """Contract lock: empty audio_beats_ms must yield
+        (None, None, False, tolerance_echoed). Don't change the return shape
+        without updating every downstream consumer of actionBeats[*].nearest*."""
         result = self.module.align_anchor_to_audio_beat(
             anchor_ms=5000,
             audio_beats_ms=[],
@@ -291,6 +294,11 @@ class DoubaoFineScanTests(unittest.TestCase):
         self.assertEqual(beats[0]["visualPeak"]["peakId"], "peak_002")
 
     def test_aggregate_peak_semantics_ignores_unknown_peak_ids(self):
+        """Contract lock: hallucinated peakId from LLM (not in visual_peaks)
+        is silently dropped. Important for resilience against LLM JSON parse
+        errors that emit references to non-existent peak ids. (We have not
+        observed this in practice — macbook_neo 0/139 — but the contract is
+        intentional defensive behaviour.)"""
         visual_peaks = [
             {"peakId": "peak_001", "tMs": 1000, "windowMs": {"start": 400, "end": 1800}, "prominence": 2.0, "motionScore": 2.0},
         ]

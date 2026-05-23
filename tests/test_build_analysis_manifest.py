@@ -134,7 +134,7 @@ class BuildManifestTests(unittest.TestCase):
         )
         self.assertEqual(
             set(manifest["artifacts"].keys()),
-            {"rough", "media", "audio", "timeline"},
+            {"rough", "media", "audio", "speech", "timeline"},
         )
 
     def test_default_video_category_is_unknown(self):

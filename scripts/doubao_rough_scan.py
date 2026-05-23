@@ -106,7 +106,11 @@ def gated_call(
             delay = min(float(max_delay), float(base_delay) * (2 ** attempt))
             delay += random.uniform(0, min(1.0, delay))  # jitter
             time.sleep(delay)
-    assert last_exc is not None
+    # Not `assert` — strip under -O would break the `raise last_exc` below.
+    if last_exc is None:
+        raise RuntimeError(
+            "gated_call exhausted attempts without capturing an exception"
+        )
     raise last_exc
 
 
@@ -167,7 +171,7 @@ def build_responses_payload(
     prompt_text: str,
     instructions: str | None = None,
     store: bool = True,
-    temperature: float = 0,
+    temperature: float = 0.0,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "model": model,
