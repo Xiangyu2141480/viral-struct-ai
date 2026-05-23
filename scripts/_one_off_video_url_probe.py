@@ -25,12 +25,10 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from doubao_rough_scan import (  # noqa: E402
-    api_url,
     create_response,
     env_value,
     extract_response_text,
     load_dotenv,
-    request_json,
     upload_file,
     wait_for_file,
 )

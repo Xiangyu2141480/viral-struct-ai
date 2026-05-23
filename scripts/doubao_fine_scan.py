@@ -31,7 +31,6 @@ from doubao_rough_scan import (  # noqa: E402
     upload_file,
     wait_for_file,
     write_json,
-    write_text,
 )
 from video_tools import build_clip_command, build_peak_window_command  # noqa: E402
 from visual_peak_detector import (  # noqa: E402

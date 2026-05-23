@@ -17,7 +17,7 @@ The detector wraps scipy.signal.find_peaks (do not reimplement local-maxima).
 from __future__ import annotations
 
 import math
-from typing import Any, Iterable
+from typing import Any
 
 
 def _to_float(value: Any) -> float:
