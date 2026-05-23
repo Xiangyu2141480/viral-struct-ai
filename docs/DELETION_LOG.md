@@ -6,6 +6,16 @@ refactors, no compat shims — only `delete` and `merge duplicates`.
 Audit phase produced 8 candidate IDs (D1-D8) plus 1 user-decision item (Q1
 probe scripts — user chose to keep). User approved D1-D8.
 
+## Commit summary
+
+| Batch | Commit | Files changed | LOC delta |
+|---|---|---|---|
+| 1 (D1–D6) | `38781a7` | 7 (incl. log) | +60 / −7 |
+| 2 (D7) | `1b9c765` | 2 | 0 / −81 |
+| 3 (D8) | `4298990` | 1 | +2 / −4 |
+
+Net production deletions: **~92 lines of dead code removed**, **0 functionality lost**, **all 103 unit tests pass at every batch boundary**.
+
 ## Batch 1 — Unused imports (D1-D6)
 
 Tools: `vulture --min-confidence 60`, `pyflakes`. All 6 confirmed via cross-reference grep that the imported names are not referenced anywhere in the importing module.
@@ -20,7 +30,7 @@ Tools: `vulture --min-confidence 60`, `pyflakes`. All 6 confirmed via cross-refe
 | D6 | `scripts/_one_off_video_url_probe.py` | `api_url`, `request_json` from import list | pyflakes |
 
 **Verification:** all unit tests pass.
-**Commit:** _(filled after commit)_
+**Commit:** see below
 
 ## Batch 2 — Dead OLD-pipeline audio helper family (D7)
 
@@ -38,7 +48,7 @@ from production; only one test still references it.
 | D7d | `tests/test_doubao_fine_scan.py` | test `test_build_block_audio_analysis_uses_beat_this_relative_times` |
 
 **Verification:** all unit tests pass.
-**Commit:** _(filled after commit)_
+**Commit:** see below
 
 ## Batch 3 — Unreachable `dry_run` parameter on prepare_block_clip (D8)
 
@@ -56,4 +66,4 @@ its own `dry_run` kwarg because it is a general utility used elsewhere
 | D8 | `scripts/doubao_fine_scan.py` | `dry_run` parameter on `prepare_block_clip`, the `and not dry_run` clause, and the `dry_run=dry_run` argument forwarded to `run_ffmpeg` inside that function |
 
 **Verification:** all unit tests pass.
-**Commit:** _(filled after commit)_
+**Commit:** see below
