@@ -30,9 +30,13 @@ from path_layout import DEFAULT_VIDEO_ID, analysis_paths
 # --------------------------------------------------------------------------- #
 
 _FINE_ROLE_MAP = {
+    "hook": "hook",
+    "brand_opening": "hook",
     "product_reveal": "selling_point",
     "selling_point": "selling_point",
     "usage_scene": "usage",
+    "proof": "proof",
+    "comparison": "comparison",
     "cta": "cta",
     "feature_or_claim": "selling_point",
     "demo_or_usage": "usage",
@@ -144,9 +148,15 @@ def _index_fine_blocks(fine_doc: dict) -> dict[str, dict]:
     }
 
 
+def _fine_role(fine_block: dict) -> str:
+    role_info = fine_block.get("roleConfirmation", {}) or {}
+    # v0.3 uses `role`; early experiments used `confirmedRole`.
+    return str(role_info.get("role") or role_info.get("confirmedRole") or "")
+
+
 def _resolve_segment_role(rough_block: dict, fine_block: dict | None, index: int) -> str:
     if fine_block:
-        confirmed = fine_block.get("roleConfirmation", {}).get("confirmedRole", "")
+        confirmed = _fine_role(fine_block)
         if confirmed == "product_reveal" and index == 0:
             return "hook"
         if confirmed in _FINE_ROLE_MAP:
@@ -166,25 +176,82 @@ def _aspect_ratio(value: str | None) -> str:
     return value if value in ("9:16", "16:9", "1:1") else "unknown"
 
 
+def _block_time_range_seconds(rough_block: dict, fine_block: dict | None) -> tuple[float, float]:
+    if fine_block:
+        ms_range = fine_block.get("sourceTimeRangeMs")
+        if isinstance(ms_range, dict):
+            start = float(ms_range.get("start", 0) or 0) / 1000.0
+            end = float(ms_range.get("end", 0) or 0) / 1000.0
+            return start, end
+
+        seconds_range = fine_block.get("sourceTimeRange")
+        if isinstance(seconds_range, dict):
+            return (
+                float(seconds_range.get("start", 0) or 0),
+                float(seconds_range.get("end", 0) or 0),
+            )
+
+    rough_range = rough_block.get("timeRange", {}) or {}
+    return (
+        float(rough_range.get("start", 0) or 0),
+        float(rough_range.get("end", 0) or 0),
+    )
+
+
+def _text_elements(fine_block: dict | None) -> list[dict]:
+    if not fine_block:
+        return []
+    elements = fine_block.get("textOverlayBehavior", {}).get("textElements", [])
+    return elements if isinstance(elements, list) else []
+
+
+def _caption_from_fine_or_rough(fine_block: dict | None, rough_block: dict) -> str:
+    text = " / ".join(
+        str(element.get("content", "")).strip()
+        for element in _text_elements(fine_block)
+        if str(element.get("content", "")).strip()
+    )
+    if text:
+        return text
+
+    if fine_block:
+        feature_seq = fine_block.get("productPresentation", {}).get("featureSequence") or []
+        if feature_seq:
+            return "、".join(str(item) for item in feature_seq)
+
+    return str(rough_block.get("observableSummary", "") or "")
+
+
+def _fine_reasoning(fine_block: dict) -> str:
+    role_info = fine_block.get("roleConfirmation", {}) or {}
+    if role_info.get("reasoning"):
+        return str(role_info["reasoning"])
+    answers = fine_block.get("inspectionAnswers", []) or []
+    for answer in answers:
+        if isinstance(answer, dict) and answer.get("answer"):
+            return str(answer["answer"])
+    motifs = fine_block.get("transferableMotifs", []) or []
+    for motif in motifs:
+        if isinstance(motif, dict) and motif.get("description"):
+            return str(motif["description"])
+    return ""
+
+
 # --------------------------------------------------------------------------- #
 # Builders
 # --------------------------------------------------------------------------- #
 
 def _build_segment(rough_block: dict, fine_block: dict | None, role: str, seg_id: str) -> dict:
+    start, end = _block_time_range_seconds(rough_block, fine_block)
     if fine_block:
-        time_range = fine_block.get("sourceTimeRange", {})
-        reasoning = fine_block.get("roleConfirmation", {}).get("reasoning", "")
-        feature_seq = fine_block.get("productPresentation", {}).get("featureSequence") or []
-        caption_text = "、".join(feature_seq) if feature_seq else rough_block.get("observableSummary", "")
+        reasoning = _fine_reasoning(fine_block)
+        caption_text = _caption_from_fine_or_rough(fine_block, rough_block)
         purpose_base = _ROLE_PURPOSE[role]
         purpose = f"{purpose_base}（精扫定位：{_truncate(reasoning, 120)}）" if reasoning else purpose_base
     else:
-        time_range = rough_block.get("timeRange", {})
-        caption_text = rough_block.get("observableSummary", "")
+        caption_text = _caption_from_fine_or_rough(None, rough_block)
         purpose = _ROLE_PURPOSE[role]
 
-    start = float(time_range.get("start", 0))
-    end = float(time_range.get("end", 0))
     caption = _truncate(caption_text, 200) if caption_text else None
 
     return {
@@ -235,6 +302,181 @@ def _human_requirement(shot: dict) -> dict | None:
     if focus == "product_only":
         return {"required": False}
     return None
+
+
+def _asset_type_to_required_asset_type(asset_type: str) -> str:
+    if asset_type in {"product_still", "comparison_chart"}:
+        return "image"
+    if asset_type in {"text_card", "voiceover_line"}:
+        return "text"
+    return "video"
+
+
+def _slot_role_from_required_asset(asset_type: str, purpose: str, segment_role: str) -> str:
+    if purpose in {"hook_visual", "product_reveal"} and segment_role == "hook":
+        return "opening_attention"
+    if asset_type in {"product_still", "product_video"}:
+        return "usage_demo" if segment_role == "usage" or purpose == "feature_demo" else "product_closeup"
+    if asset_type == "hand_demo":
+        return "usage_demo" if segment_role == "usage" else _SEGMENT_ROLE_TO_SLOT_ROLE[segment_role]
+    if asset_type == "comparison_chart" or purpose == "comparison":
+        return "comparison"
+    if asset_type == "ugc_clip":
+        return "testimonial"
+    if purpose == "cta" or segment_role == "cta":
+        return "cta_visual"
+    return _SEGMENT_ROLE_TO_SLOT_ROLE[segment_role]
+
+
+def _ingredients_from_required_asset(
+    asset_type: str,
+    fine_block: dict | None,
+    rough_block: dict,
+) -> list[str]:
+    text = " ".join([
+        str(asset_type),
+        str(rough_block.get("observableSummary", "") or ""),
+        " ".join(str(v) for v in rough_block.get("visualSignals", []) or []),
+        " ".join(
+            str(motif.get("description", ""))
+            for motif in (fine_block or {}).get("transferableMotifs", []) or []
+            if isinstance(motif, dict)
+        ),
+    ])
+    ingredients: list[str] = []
+    if asset_type == "hand_demo" or "手" in text:
+        ingredients.extend(["human_presence", "hand_demo"])
+    if asset_type in {"product_still", "product_video"} or "产品" in text or "近景" in text:
+        ingredients.append("product_closeup_trait")
+    if asset_type == "comparison_chart" or "对比" in text:
+        ingredients.append("before_after_comparison")
+    if asset_type == "ugc_clip":
+        ingredients.extend(["human_presence", "social_proof"])
+    if "纯白" in text or "纯色" in text or "干净" in text or "极简" in text:
+        ingredients.append("clean_background")
+    if "光" in text or "亮" in text:
+        ingredients.append("soft_light")
+    if "特效" in text or "变色" in text or "形变" in text or "动画" in text or "高级" in text:
+        ingredients.append("premium_visual")
+
+    deduped: list[str] = []
+    for ingredient in ingredients:
+        if ingredient not in deduped:
+            deduped.append(ingredient)
+    if deduped:
+        return deduped
+    if asset_type in {"text_card", "voiceover_line"}:
+        return []
+    return ["product_closeup_trait"]
+
+
+def _human_requirement_from_required_asset(asset_type: str) -> dict:
+    if asset_type == "hand_demo":
+        return {
+            "required": True,
+            "role": "hand_only",
+            "framing": "hands",
+            "action": "holding_product",
+        }
+    if asset_type == "ugc_clip":
+        return {"required": True, "role": "user"}
+    return {"required": False}
+
+
+def _camera_from_required_asset(asset_type: str) -> str:
+    if asset_type in {"product_still", "product_video", "hand_demo"}:
+        return "closeup"
+    if asset_type == "lifestyle_shot":
+        return "medium"
+    return "unknown"
+
+
+def _motion_from_required_asset(asset_type: str) -> str:
+    if asset_type == "hand_demo":
+        return "hand_operation"
+    if asset_type in {"product_video", "lifestyle_shot", "ugc_clip"}:
+        return "static"
+    return "static"
+
+
+def _subject_from_required_asset(asset_req: dict, rough_block: dict, fine_block: dict | None) -> str:
+    purpose = str(asset_req.get("purpose", "") or "")
+    asset_type = str(asset_req.get("assetType", "") or "")
+    caption = _caption_from_fine_or_rough(fine_block, rough_block)
+    if caption:
+        return caption
+    summary = str(rough_block.get("observableSummary", "") or "")
+    if summary:
+        return summary
+    return f"{asset_type or 'asset'} for {purpose or 'slot'}"
+
+
+def _fallback_asset_requirements(role: str) -> list[dict[str, str]]:
+    if role == "hook":
+        return [{"assetType": "product_video", "purpose": "hook_visual", "criticality": "must"}]
+    if role == "usage":
+        return [{"assetType": "product_video", "purpose": "feature_demo", "criticality": "must"}]
+    if role == "comparison":
+        return [{"assetType": "comparison_chart", "purpose": "comparison", "criticality": "must"}]
+    if role == "cta":
+        return [{"assetType": "text_card", "purpose": "cta", "criticality": "must"}]
+    return [{"assetType": "product_still", "purpose": "product_reveal", "criticality": "must"}]
+
+
+def _required_asset_types(fine_block: dict | None, role: str) -> list[dict]:
+    if fine_block:
+        assets = fine_block.get("requiredAssetType", []) or []
+        normalized = [asset for asset in assets if isinstance(asset, dict) and asset.get("assetType")]
+        if normalized:
+            return normalized
+    return _fallback_asset_requirements(role)
+
+
+def _first_action_duration_seconds(fine_block: dict | None, segment_duration: float) -> float:
+    if not fine_block:
+        return segment_duration
+    for beat in fine_block.get("actionBeats", []) or []:
+        time_range = beat.get("timeRangeMs")
+        if isinstance(time_range, dict):
+            start = float(time_range.get("start", 0) or 0)
+            end = float(time_range.get("end", 0) or 0)
+            if end > start:
+                return round((end - start) / 1000.0, 2)
+    return segment_duration
+
+
+def _build_slot_from_required_asset(
+    *,
+    seg_id: str,
+    segment_role: str,
+    rough_block: dict,
+    fine_block: dict | None,
+    asset_req: dict,
+    block_id: str,
+    index_in_block: int,
+    segment_duration: float,
+    importance: int,
+) -> dict:
+    asset_type = str(asset_req.get("assetType", "") or "product_video")
+    purpose = str(asset_req.get("purpose", "") or "")
+    role = _slot_role_from_required_asset(asset_type, purpose, segment_role)
+    min_duration = _first_action_duration_seconds(fine_block, segment_duration)
+    return {
+        "id": f"slot_{block_id}_asset_{index_in_block + 1:03d}",
+        "segmentId": seg_id,
+        "role": role,
+        "requiredAsset": {
+            "type": _asset_type_to_required_asset_type(asset_type),
+            "subject": _truncate(_subject_from_required_asset(asset_req, rough_block, fine_block), 200),
+            "camera": _camera_from_required_asset(asset_type),
+            "motion": _motion_from_required_asset(asset_type),
+            "minDuration": max(round(min_duration, 2), 0.5),
+        },
+        "visualIngredientRequirements": _ingredients_from_required_asset(asset_type, fine_block, rough_block),
+        "humanRequirement": _human_requirement_from_required_asset(asset_type),
+        "fallbackStrategies": _ROLE_FALLBACK_STRATEGIES[segment_role],
+        "importance": importance,
+    }
 
 
 def _build_shot_slot(
@@ -295,6 +537,35 @@ def _build_creative_ingredients(
         signals = list(rough.get("visualSignals", []) or [])
         if fine:
             signals.extend(fine.get("additionalFindings", []) or [])
+            for asset_req in fine.get("requiredAssetType", []) or []:
+                if not isinstance(asset_req, dict):
+                    continue
+                asset_type = asset_req.get("assetType")
+                purpose = asset_req.get("purpose", "")
+                evidence = f"{block_id}: requiredAssetType={asset_type}, purpose={purpose}"
+                if asset_type == "hand_demo":
+                    _add("human_presence", evidence, seg_id, slots_in_seg)
+                    _add("hand_demo", evidence, seg_id, slots_in_seg)
+                elif asset_type in {"product_still", "product_video"}:
+                    _add("product_closeup_trait", evidence, seg_id, slots_in_seg)
+                elif asset_type == "comparison_chart":
+                    _add("before_after_comparison", evidence, seg_id, slots_in_seg)
+                elif asset_type == "ugc_clip":
+                    _add("human_presence", evidence, seg_id, slots_in_seg)
+                    _add("social_proof", evidence, seg_id, slots_in_seg)
+                elif asset_type == "lifestyle_shot":
+                    _add("lifestyle_context", evidence, seg_id, slots_in_seg)
+
+            for motif in fine.get("transferableMotifs", []) or []:
+                if not isinstance(motif, dict):
+                    continue
+                motif_type = motif.get("motifType", "")
+                description = _truncate(str(motif.get("description", "")), 100)
+                if motif_type == "product_handling":
+                    _add("hand_demo", f"{block_id}: {description}", seg_id, slots_in_seg)
+                elif motif_type in {"visual_metaphor", "transition_signature", "text_choreography"}:
+                    _add("premium_visual", f"{block_id}: {description}", seg_id, slots_in_seg)
+
             for shot in fine.get("shotStructure", {}).get("shots", []) or []:
                 if shot.get("subjectFocus") == "human_with_product":
                     _add(
@@ -351,11 +622,35 @@ def _build_creative_ingredients(
             "需要新视频提供手部展示/操作素材",
             ["hand_demo", "ask_user_for_human_demo"],
         ),
+        "human_presence": (
+            "requires_user_asset",
+            "人物出镜要求",
+            "需要新素材提供人物或手部参与画面",
+            ["hand_demo", "ask_user_for_human_demo"],
+        ),
         "product_closeup_trait": (
             "requires_user_asset",
             "产品本体近景特写",
             "需要新视频提供产品清晰特写素材",
             ["product_closeup_replacement", "crop_zoom"],
+        ),
+        "before_after_comparison": (
+            "can_be_recreated_by_packaging",
+            "前后对比或对照表达",
+            "可用对比卡片或新素材中的对照镜头复现",
+            ["before_after_card", "comparison_card"],
+        ),
+        "social_proof": (
+            "can_be_recreated_by_packaging",
+            "社会证明元素",
+            "可用评价、销量、背书或 UGC 片段补足",
+            ["trust_card", "selling_point_card"],
+        ),
+        "lifestyle_context": (
+            "requires_user_asset",
+            "生活方式场景",
+            "需要新素材提供匹配的场景环境或氛围镜头",
+            ["aigc_background", "style_filter_suggestion"],
         ),
     }
 
@@ -385,6 +680,8 @@ def _build_creative_ingredients(
 
 def _build_rhythm(rough_blocks: list[dict], fine_blocks: dict[str, dict]) -> dict:
     durations: list[float] = []
+    peak_at: float | None = None
+    best_confidence = -1.0
     for rough in rough_blocks:
         fine = fine_blocks.get(rough.get("id", ""))
         if not fine:
@@ -393,6 +690,19 @@ def _build_rhythm(rough_blocks: list[dict], fine_blocks: dict[str, dict]) -> dic
             d = float(shot.get("duration", 0) or 0)
             if d > 0:
                 durations.append(d)
+        for beat in fine.get("actionBeats", []) or []:
+            time_range = beat.get("timeRangeMs")
+            if isinstance(time_range, dict):
+                start = float(time_range.get("start", 0) or 0)
+                end = float(time_range.get("end", 0) or 0)
+                if end > start:
+                    durations.append((end - start) / 1000.0)
+            anchor_ms = beat.get("anchorMs")
+            if anchor_ms is not None:
+                confidence = float(beat.get("anchorConfidence", 0.0) or 0.0)
+                if confidence > best_confidence:
+                    best_confidence = confidence
+                    peak_at = round(float(anchor_ms) / 1000.0, 3)
 
     avg = round(sum(durations) / len(durations), 2) if durations else 0.0
     if avg <= 0:
@@ -404,15 +714,15 @@ def _build_rhythm(rough_blocks: list[dict], fine_blocks: dict[str, dict]) -> dic
     else:
         cut_freq = "low"
 
-    intensity_rank = {"strong": 3, "medium": 2, "weak": 1}
-    peak_at: float | None = None
-    best_rank = -1
-    for fine in fine_blocks.values():
-        for change in fine.get("beatSyncAnalysis", {}).get("prominentVisualChanges", []) or []:
-            rank = intensity_rank.get(change.get("intensity", ""), 0)
-            if rank > best_rank:
-                best_rank = rank
-                peak_at = float(change.get("absTime", 0) or 0)
+    if peak_at is None:
+        intensity_rank = {"strong": 3, "medium": 2, "weak": 1}
+        best_rank = -1
+        for fine in fine_blocks.values():
+            for change in fine.get("beatSyncAnalysis", {}).get("prominentVisualChanges", []) or []:
+                rank = intensity_rank.get(change.get("intensity", ""), 0)
+                if rank > best_rank:
+                    best_rank = rank
+                    peak_at = float(change.get("absTime", 0) or 0)
 
     result: dict[str, Any] = {
         "avgShotDuration": avg,
@@ -428,9 +738,11 @@ def _build_packaging(fine_blocks: dict[str, dict]) -> dict:
     has_text = False
     transitions: set[str] = set()
     for fine in fine_blocks.values():
-        if fine.get("textOverlayBehavior", {}).get("hasText"):
+        text_behavior = fine.get("textOverlayBehavior", {}) or {}
+        if text_behavior.get("hasText") or _text_elements(fine):
             has_text = True
-        ttype = fine.get("transitionOut", {}).get("transitionType")
+        transition = fine.get("transitionOut", {}) or {}
+        ttype = transition.get("type") or transition.get("transitionType")
         if ttype:
             transitions.add(ttype)
 
@@ -510,33 +822,34 @@ def build_structure_graph(
         segment = _build_segment(rough, fine, role, seg_id)
         segments.append(segment)
 
-        if fine:
-            shots = fine.get("shotStructure", {}).get("shots", []) or []
+        legacy_shots = fine.get("shotStructure", {}).get("shots", []) if fine else []
+        if legacy_shots:
             additional = fine.get("additionalFindings", []) or []
+            for s_idx, shot in enumerate(legacy_shots):
+                shot_slots.append(_build_shot_slot(
+                    seg_id=seg_id,
+                    segment_role=role,
+                    shot=shot,
+                    block_id=block_id,
+                    index_in_block=s_idx,
+                    total_in_block=len(legacy_shots),
+                    additional_findings=additional,
+                    importance=segment["importance"],
+                ))
         else:
-            shots, additional = [], []
-
-        if not shots:
-            shots = [{
-                "id": "shot_001",
-                "duration": segment["duration"],
-                "cameraMovement": "static",
-                "shotScale": "medium",
-                "subjectFocus": "human_with_product",
-                "visualKeyAction": rough.get("observableSummary", ""),
-            }]
-
-        for s_idx, shot in enumerate(shots):
-            shot_slots.append(_build_shot_slot(
-                seg_id=seg_id,
-                segment_role=role,
-                shot=shot,
-                block_id=block_id,
-                index_in_block=s_idx,
-                total_in_block=len(shots),
-                additional_findings=additional,
-                importance=segment["importance"],
-            ))
+            asset_requirements = _required_asset_types(fine, role)
+            for a_idx, asset_req in enumerate(asset_requirements):
+                shot_slots.append(_build_slot_from_required_asset(
+                    seg_id=seg_id,
+                    segment_role=role,
+                    rough_block=rough,
+                    fine_block=fine,
+                    asset_req=asset_req,
+                    block_id=block_id,
+                    index_in_block=a_idx,
+                    segment_duration=segment["duration"],
+                    importance=segment["importance"],
+                ))
 
     rhythm = _build_rhythm(rough_blocks, fine_blocks)
     packaging = _build_packaging(fine_blocks)
