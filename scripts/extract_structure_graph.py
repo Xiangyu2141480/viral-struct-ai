@@ -123,7 +123,7 @@ _ROLE_IMPORTANCE = {
 # --------------------------------------------------------------------------- #
 
 def _load_json(path: Path) -> Any:
-    with path.open(encoding="utf-8") as f:
+    with path.open(encoding="utf-8-sig") as f:
         return json.load(f)
 
 

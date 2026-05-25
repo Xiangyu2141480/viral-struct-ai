@@ -1,5 +1,6 @@
 import importlib.util
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -21,6 +22,16 @@ def load_module():
 class BuildStructureGraphTests(unittest.TestCase):
     def setUp(self):
         self.module = load_module()
+
+    def test_load_json_accepts_utf8_bom(self):
+        with self.subTest("Windows PowerShell UTF8 files may include a BOM"):
+            with tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp) / "bom_fixture.json"
+                path.write_text('{"ok": true}', encoding="utf-8-sig")
+
+                loaded = self.module._load_json(path)
+
+        self.assertEqual(loaded, {"ok": True})
 
     def test_builds_graph_from_current_fine_scan_v03_contract(self):
         rough_doc = {

@@ -189,7 +189,7 @@ def main() -> int:
     if not path.exists():
         print(f"ERROR: not found: {path}", file=sys.stderr)
         return 2
-    with path.open(encoding="utf-8") as f:
+    with path.open(encoding="utf-8-sig") as f:
         graph = json.load(f)
     validate(graph)
     if errors:
