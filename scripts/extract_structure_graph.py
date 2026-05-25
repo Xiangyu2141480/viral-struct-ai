@@ -333,6 +333,9 @@ def _ingredients_from_required_asset(
     fine_block: dict | None,
     rough_block: dict,
 ) -> list[str]:
+    if asset_type in {"text_card", "voiceover_line"}:
+        return []
+
     text = " ".join([
         str(asset_type),
         str(rough_block.get("observableSummary", "") or ""),
@@ -363,11 +366,7 @@ def _ingredients_from_required_asset(
     for ingredient in ingredients:
         if ingredient not in deduped:
             deduped.append(ingredient)
-    if deduped:
-        return deduped
-    if asset_type in {"text_card", "voiceover_line"}:
-        return []
-    return ["product_closeup_trait"]
+    return deduped or ["product_closeup_trait"]
 
 
 def _human_requirement_from_required_asset(asset_type: str) -> dict:

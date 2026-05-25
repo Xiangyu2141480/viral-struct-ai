@@ -228,8 +228,8 @@ class BuildStructureGraphTests(unittest.TestCase):
                     "id": "block_001",
                     "timeRange": {"start": 10, "end": 13},
                     "coarseRoleGuess": "closing_or_cta",
-                    "observableSummary": "画面出现行动号召文字卡",
-                    "visualSignals": [],
+                    "observableSummary": "画面出现产品价格和行动号召文字卡",
+                    "visualSignals": ["产品价格"],
                 }
             ],
         }
