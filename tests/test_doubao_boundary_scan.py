@@ -1,5 +1,4 @@
 import importlib.util
-import json
 import unittest
 from pathlib import Path
 
@@ -177,9 +176,9 @@ class DoubaoBoundaryScanTests(unittest.TestCase):
     def test_parser_defaults_point_to_stage_one_boundary_flow(self):
         args = self.module.build_parser().parse_args([])
 
-        self.assertEqual(args.rough_scan, "seed_assets/analysis/macbook_neo/rough_structure_scan.json")
+        self.assertEqual(args.rough_scan, "seed_assets/analysis/macbook_neo/stage1_rough/rough_structure_scan.json")
         self.assertEqual(args.video, "seed_assets/raw_videos/macbook_neo.mp4")
-        self.assertEqual(args.beat_map, "seed_assets/analysis/macbook_neo/audio_beat_map.json")
+        self.assertEqual(args.beat_map, "seed_assets/analysis/macbook_neo/stage1_media/audio_beat_map.json")
         self.assertEqual(args.out_dir, "seed_assets/analysis/macbook_neo/boundary_micro_scan")
         self.assertIsNone(args.slowdown_factor)
         self.assertEqual(args.upload_fps, 5.0)

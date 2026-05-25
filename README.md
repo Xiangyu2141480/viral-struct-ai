@@ -122,6 +122,28 @@ QualityReport
 4. AI 能力必须支持 mock / real 双模式，答辩现场不能因为 key 或网络失败而断链。
 5. 火山方舟 Doubao 作为 real mode 优先 provider；真实 key 只放本地 `.env`，不进入仓库。
 
+## Visual Peak Detector — Hard Requirements
+
+Fine Scan v0.3 visual peak detector (`scripts/visual_peak_detector.py`) is
+the core code-owned timing engine. Its dependencies are **non-optional**:
+
+| Package         | Min version | Used by                                          |
+|-----------------|-------------|--------------------------------------------------|
+| `av`            | >= 11.0     | `compute_visual_score_series_from_clip` (PyAV decode) |
+| `opencv-python` | >= 4.8      | DIS optical flow, MOG2, HSV histogram, resize    |
+| `scipy`         | >= 1.11     | `detect_visual_peaks_from_scores` (`find_peaks`) |
+| `ruptures`      | >= 1.1      | `detect_regime_boundaries_from_scores` (PELT)    |
+| `numpy`         | bundled     | All numeric paths                                |
+| `ffmpeg`        | on PATH     | Fixture generation + `video_tools.py` clipping   |
+
+Install with `pip install -r requirements.txt`. Without these packages,
+the heart of the v0.3 pipeline will not run; unit tests marked
+`@requires_video_stack` are skipped (visible in test output as
+`(skipped: needs av + ruptures + cv2 ...)`).
+
+CI runs all Python tests on Ubuntu (the `python-tests` job in
+`.github/workflows/ci.yml`) so the heart is exercised on every push.
+
 ## 安全边界
 
 - 不复刻样例内容，只迁移结构方法。

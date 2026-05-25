@@ -46,21 +46,19 @@
   },
   "roughSummary": {
     "oneSentenceStructure": "只描述视频大体推进，不做精细结构结论",
-    "likelyVideoType": "ecommerce_ad | brand_promo | product_demo | mixed | unknown",
-    "globalConversionLogic": "可粗略判断；不确定则写 unknown"
+    "likelyVideoType": "ecommerce_ad | brand_promo | product_demo | tutorial | course_preview | local_service | lifestyle_vlog | mixed | unknown",
+    "detectedCategory": "3c | beauty | food | apparel | home | course | local_service | lifestyle | other",
+    "categoryConfidence": number
   },
   "contentBlocks": [
     {
       "id": "block_001",
       "timeRange": { "start": number, "end": number },
-      "coarseRoleGuess": "attention_grab | product_or_brand_intro | feature_or_claim | demo_or_usage | evidence_or_comparison | closing_or_cta | unknown",
+      "coarseRoleGuess": "attention_grab | product_or_brand_intro | feature_or_claim | demo_or_usage | tutorial_step | testimonial | atmosphere_or_context | evidence_or_comparison | closing_or_cta | unknown",
       "boundaryReason": "为什么这里适合作为一个内容块边界，而不是普通镜头切换",
       "observableSummary": "只描述粗略可见内容，不要做深度结构解释",
       "visualSignals": ["画面线索"],
       "textSignals": ["字幕/标题/包装线索"],
-      "audioOrRhythmSignals": ["节奏/音频线索"],
-      "hasInternalTransition": true,
-      "confidence": number,
       "fineScanFocusQuestions": [
         "第二阶段精看这一内容块时应该重点回答的问题"
       ]
@@ -73,19 +71,12 @@
       "toBlockId": "block_002",
       "roughBoundaryTime": number,
       "inspectionWindow": { "start": number, "end": number },
-      "visibleBoundaryCue": "第一遍粗看能看到的边界线索，例如画面闪白/暗场/标题变化/场景突变；不确定则写 unknown",
-      "whyNeedsMicroscope": "为什么这个边界需要 Stage 1.5 用高帧细看确认是否存在转场",
-      "confidence": number
+      "visibleBoundaryCue": "第一遍粗看能看到的边界线索，例如画面闪白/暗场/标题变化/场景突变；不确定则写 unknown"
     }
   ],
   "globalNotes": {
-    "likelyHookWindow": { "start": number, "end": number },
-    "likelyProductFirstSeenAt": number,
-    "likelyCtaRegion": { "start": number, "end": number },
-    "dominantPackaging": ["例如：大标题", "底部字幕", "卖点卡", "价格条"],
-    "importantOpenQuestions": [
-      "第一遍看完后仍然不确定、需要第二遍确认的问题"
-    ]
+    "likelySubjectFirstSeenAt": number,
+    "dominantPackaging": ["例如：大标题", "底部字幕", "卖点卡", "价格条"]
   }
 }
 
@@ -98,9 +89,21 @@
 - 不要在 contentBlocks 中插入 transition block。
 - boundaryCandidates 应该对应相邻 contentBlocks 的边界；如果有 N 个 contentBlocks，通常应有 N-1 个 boundaryCandidates。
 - inspectionWindow 默认覆盖 roughBoundaryTime 前后约 2.5 秒；如果边界不确定，可以适当放宽，但不要超过 8 秒。
-- 不要在第一阶段判断转场类型；只描述 visibleBoundaryCue 和 whyNeedsMicroscope。
-- confidence 用 0 到 1。
+- 不要在第一阶段判断转场类型；只描述 visibleBoundaryCue。
 - 如果某个字段无法判断，写 "unknown" 或空数组，不要编造。
+- detectedCategory 基于全片整体内容判断（产品类型、视频体裁、目标观众）。不确定就写 "other"，并把 categoryConfidence 设低。
+- categoryConfidence > 0.6 时，下游会用对应品类的问题模板；低于 0.6 会 fallback 到通用模板。这是协议中唯一保留的 confidence 字段，请认真判断。
+- likelySubjectFirstSeenAt 指视频中核心主体（产品/课程/服务/人物）第一次清晰出现的时间。
+- fineScanFocusQuestions 应根据 detectedCategory 调整聚焦点。可参考以下品类常见关注点：
+  * 3c：芯片性能 / 接口配置 / 续航 / 做工细节 / 配色
+  * beauty：质地 / 上色效果 / 持久度 / 肤感 / 对比效果
+  * food：口感 / 份量 / 价格 / 食材新鲜度 / 食用场景
+  * apparel：面料 / 版型 / 上身效果 / 穿搭场景 / 价格
+  * home：收纳 / 尺寸 / 材质 / 使用场景 / 搭配
+  * course：章节结构 / 师资展示 / 教学形式 / 实际案例 / 适用人群
+  * local_service：位置 / 价格 / 环境 / 服务流程 / 适合谁
+  * lifestyle：场景氛围 / 适用人群 / 搭配建议 / 价格区间
+  * other：保持通用提问
 - 只输出合法 JSON。
 ```
 

@@ -1,0 +1,9 @@
+# Python dependencies for viral-struct-ai scripts.
+#
+# Existing scripts use only stdlib + numpy (implicit, bundled with .venv).
+# These are required for Fine Scan v0.3 (peak-micro refactor):
+
+scipy>=1.11
+opencv-python>=4.8
+av>=11.0
+ruptures>=1.1

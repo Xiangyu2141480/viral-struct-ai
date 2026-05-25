@@ -167,6 +167,32 @@ def build_clip_command(
     ]
 
 
+def build_peak_window_command(
+    input_path: str | Path,
+    output_path: str | Path,
+    *,
+    block_start: float,
+    block_end: float,
+    peak_time: float,
+    pre_context: float = 0.6,
+    post_context: float = 0.8,
+) -> list[str]:
+    block_start_f = float(block_start)
+    block_end_f = float(block_end)
+    peak_time_f = float(peak_time)
+    ensure_end_after_start(block_start_f, block_end_f)
+    if peak_time_f < block_start_f or peak_time_f > block_end_f:
+        raise ValueError(
+            f"peak_time {peak_time_f} must lie within block [{block_start_f}, {block_end_f}]"
+        )
+    if pre_context < 0 or post_context < 0:
+        raise ValueError("pre_context and post_context must be non-negative")
+
+    start = max(block_start_f, peak_time_f - float(pre_context))
+    end = min(block_end_f, peak_time_f + float(post_context))
+    return build_clip_command(input_path, output_path, start=start, end=end, mode="copy")
+
+
 def build_microscope_command(
     input_path: str | Path,
     output_path: str | Path,

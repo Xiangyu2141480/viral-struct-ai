@@ -12,17 +12,150 @@ import argparse
 import json
 import mimetypes
 import os
+import random
 import re
+import threading
 import time
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, TypeVar
 from urllib import error, request
 
 
 DONE_FILE_STATUSES = {"processed", "completed", "success", "ready", "available"}
 WAIT_FILE_STATUSES = {"processing", "pending", "queued", "running"}
 FAILED_FILE_STATUSES = {"failed", "error", "expired", "cancelled"}
+
+
+# ---------------------------------------------------------------------------
+# HTTP concurrency controls (W1.1): global semaphore + retry/backoff.
+# These are foundational for the L1/L2 ThreadPoolExecutor refactor.
+# ---------------------------------------------------------------------------
+
+_RETRYABLE_ERROR_PATTERNS = (
+    "HTTP 429",
+    "HTTP 500",
+    "HTTP 502",
+    "HTTP 503",
+    "HTTP 504",
+    "RequestBurstTooFast",
+    "ServerOverloaded",
+    "timed out",         # urllib.error.URLError("...timed out") on socket timeout
+    "timeout",           # alternate phrasing
+    "Connection reset",  # transient TCP teardown under load
+    "Connection aborted",
+)
+
+_HTTP_SEMAPHORE: threading.BoundedSemaphore | None = None
+_HTTP_CAP: int | None = None  # tracks the cap set at first init so mismatches can be detected
+_HTTP_SEMAPHORE_LOCK = threading.Lock()
+
+T = TypeVar("T")
+
+
+def configure_http_semaphore(max_concurrent: int) -> threading.BoundedSemaphore:
+    """Explicit one-shot initialiser for the process-global HTTP semaphore.
+
+    Call this once at CLI entry (after parsing `--max-concurrent-http`) and
+    before spawning any worker. Re-calling with the same cap is a no-op
+    (idempotent). Re-calling with a *different* cap raises RuntimeError —
+    the previous silent-ignore behaviour was a real bug (PR #24 review H1).
+    """
+    global _HTTP_SEMAPHORE, _HTTP_CAP
+    cap = int(max_concurrent)
+    with _HTTP_SEMAPHORE_LOCK:
+        if _HTTP_SEMAPHORE is None:
+            _HTTP_CAP = cap
+            _HTTP_SEMAPHORE = threading.BoundedSemaphore(value=cap)
+        elif cap != _HTTP_CAP:
+            raise RuntimeError(
+                f"HTTP semaphore already initialised with cap={_HTTP_CAP}; "
+                f"refusing to reconfigure to cap={cap}. "
+                "Call configure_http_semaphore exactly once at CLI entry."
+            )
+        return _HTTP_SEMAPHORE
+
+
+def get_http_semaphore(max_concurrent: int = 5) -> threading.BoundedSemaphore:
+    """Return the process-global HTTP semaphore, lazy-creating on first use.
+
+    Lenient accessor: if the semaphore is already initialised (by an explicit
+    ``configure_http_semaphore`` call), this returns it as-is regardless of
+    ``max_concurrent`` — so internal fallback paths (e.g. ``gated_call``'s
+    default semaphore) never trigger a spurious cap-mismatch raise.
+
+    Strict cap-mismatch enforcement is the job of ``configure_http_semaphore``
+    (PR #24 review H1). Prefer that explicit form at CLI entry.
+    """
+    with _HTTP_SEMAPHORE_LOCK:
+        if _HTTP_SEMAPHORE is not None:
+            return _HTTP_SEMAPHORE
+    # Not yet initialised — defer to configure (which retakes the lock and
+    # initialises with the requested cap).
+    return configure_http_semaphore(max_concurrent)
+
+
+def _reset_http_semaphore_for_testing() -> None:
+    """Clear the global semaphore so the next configure_* call starts fresh.
+
+    Intended only for test isolation. Not part of the public API.
+    """
+    global _HTTP_SEMAPHORE, _HTTP_CAP
+    with _HTTP_SEMAPHORE_LOCK:
+        _HTTP_SEMAPHORE = None
+        _HTTP_CAP = None
+
+
+def _is_retryable_error(message: str) -> bool:
+    return any(pattern in message for pattern in _RETRYABLE_ERROR_PATTERNS)
+
+
+def gated_call(
+    fn: Callable[..., T],
+    *args: Any,
+    max_attempts: int = 5,
+    base_delay: float = 0.5,
+    max_delay: float = 8.0,
+    semaphore: threading.BoundedSemaphore | None = None,
+    **kwargs: Any,
+) -> T:
+    """Run an HTTP-bound `fn` through a semaphore with retry+backoff.
+
+    - Acquires the semaphore once per attempt (released across backoff sleeps,
+      so a retrying caller does not hold a slot during exponential wait).
+    - Retries only on 429 / 5xx / RequestBurstTooFast / ServerOverloaded.
+    - Client errors (4xx other than 429) raise immediately.
+    - Backoff schedule: base_delay * 2**attempt + jitter, capped at max_delay.
+    - ``semaphore``: optional override. If None, falls back to the
+      process-global semaphore (lazy-init at default cap=5). Tests inject
+      their own semaphore for isolation.
+    """
+    sem = semaphore if semaphore is not None else get_http_semaphore()
+    last_exc: BaseException | None = None
+    for attempt in range(int(max_attempts)):
+        with sem:
+            try:
+                return fn(*args, **kwargs)
+            except (RuntimeError, OSError) as exc:
+                # RuntimeError: our wrapped HTTPError messages from request_json.
+                # OSError: covers urllib.error.URLError (subclass of OSError),
+                #          socket.timeout / TimeoutError, ConnectionError, etc.
+                # Filter by message pattern — only retry transient classes.
+                msg = str(exc)
+                if not _is_retryable_error(msg):
+                    raise
+                last_exc = exc
+        # Released semaphore; sleep with backoff if more attempts remain.
+        if attempt < int(max_attempts) - 1:
+            delay = min(float(max_delay), float(base_delay) * (2 ** attempt))
+            delay += random.uniform(0, min(1.0, delay))  # jitter
+            time.sleep(delay)
+    # Not `assert` — strip under -O would break the `raise last_exc` below.
+    if last_exc is None:
+        raise RuntimeError(
+            "gated_call exhausted attempts without capturing an exception"
+        )
+    raise last_exc
 
 
 def load_dotenv(path: str | Path) -> dict[str, str]:
@@ -82,6 +215,7 @@ def build_responses_payload(
     prompt_text: str,
     instructions: str | None = None,
     store: bool = True,
+    temperature: float = 0.0,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "model": model,
@@ -101,6 +235,7 @@ def build_responses_payload(
             }
         ],
         "store": store,
+        "temperature": temperature,
     }
     if instructions:
         payload["instructions"] = instructions
@@ -288,6 +423,16 @@ def _time_range_start(value: dict[str, Any]) -> float:
     return 0.0
 
 
+# Fields removed in v0.2 (see docs/DECISIONS/2026-05-23-rough-scan-v2-audit.md).
+# We strip them defensively in case the LLM still produces them from old prompts
+# cached in any conversational state.
+_KILL_CONTENT_BLOCK_FIELDS = (
+    "audioOrRhythmSignals",  # 5fps preview has no audio track; LLM hallucinates
+    "hasInternalTransition",  # empirically 100% true, zero information entropy
+    "confidence",  # empirically 0.85-0.98, never calibrated, zero downstream reads
+)
+
+
 def normalize_content_blocks(content_blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     normalized: list[dict[str, Any]] = []
     for index, block in enumerate(sorted(content_blocks, key=_time_range_start), start=1):
@@ -299,16 +444,22 @@ def normalize_content_blocks(content_blocks: list[dict[str, Any]]) -> list[dict[
         item.setdefault("observableSummary", "")
         item.setdefault("visualSignals", [])
         item.setdefault("textSignals", [])
-        item.setdefault("audioOrRhythmSignals", [])
-        item.setdefault("hasInternalTransition", False)
-        item.setdefault("confidence", None)
         item.setdefault("fineScanFocusQuestions", [])
+        for legacy_field in _KILL_CONTENT_BLOCK_FIELDS:
+            item.pop(legacy_field, None)
         normalized.append(item)
     return normalized
 
 
 def _boundary_anchor_time(boundary: dict[str, Any]) -> float:
     return float(boundary["roughBoundaryTime"])
+
+
+# Fields removed in v0.2 (see docs/DECISIONS/2026-05-23-rough-scan-v2-audit.md).
+_KILL_BOUNDARY_FIELDS = (
+    "whyNeedsMicroscope",  # boilerplate generator, redundant with visibleBoundaryCue
+    "confidence",  # zero downstream reads, no consumption contract
+)
 
 
 def normalize_boundary_candidates(
@@ -323,17 +474,60 @@ def normalize_boundary_candidates(
         normalized_boundary.setdefault("id", f"boundary_{index:03d}")
         boundary_time = _boundary_anchor_time(normalized_boundary)
         normalized_boundary.setdefault("roughBoundaryTime", boundary_time)
+        # v2.5: canonicalBoundaryTime is the single source of truth for boundary
+        # time across all stages. At rough stage it equals roughBoundaryTime;
+        # Stage 1.5 may override it with the more accurate semanticPivotTime.
+        # See docs/DECISIONS/2026-05-23-rough-scan-v2-audit.md §4.1 (D1).
+        normalized_boundary["canonicalBoundaryTime"] = boundary_time
         normalized_boundary.setdefault(
             "inspectionWindow",
             {"start": round(max(0.0, boundary_time - 2.5), 3), "end": round(boundary_time + 2.5, 3)},
         )
+        for legacy_field in _KILL_BOUNDARY_FIELDS:
+            normalized_boundary.pop(legacy_field, None)
         normalized_boundaries.append(normalized_boundary)
     return normalized_boundaries
 
 
+def _migrate_global_notes_subject_rename(global_notes: dict[str, Any]) -> None:
+    """v3 (Phase 3): rename ``likelyProductFirstSeenAt`` → ``likelySubjectFirstSeenAt``.
+
+    "Subject" generalizes across categories where the focal entity isn't always
+    a product (course, local service, person, lifestyle moment). The old key
+    is migrated forward and removed; the new key is canonical.
+    """
+    old_key = "likelyProductFirstSeenAt"
+    new_key = "likelySubjectFirstSeenAt"
+    if old_key in global_notes:
+        legacy_value = global_notes.pop(old_key)
+        # Only seed new key if LLM didn't already provide it (prefer new value).
+        global_notes.setdefault(new_key, legacy_value)
+
+
 def normalize_rough_scan(parsed: dict[str, Any]) -> dict[str, Any]:
-    """Normalize the Stage 1 content-block contract."""
+    """Normalize the Stage 1 content-block contract.
+
+    v0.2 (2026-05-23): strip KILL fields from roughSummary and globalNotes
+    if the LLM still produces them. See docs/DECISIONS/2026-05-23-rough-scan-v2-audit.md.
+
+    v3 (Phase 3): migrate likelyProductFirstSeenAt → likelySubjectFirstSeenAt
+    for cross-category support (course, local_service, lifestyle, etc.).
+    """
     normalized = json.loads(json.dumps(parsed, ensure_ascii=False))
+
+    rough_summary = normalized.get("roughSummary")
+    if isinstance(rough_summary, dict):
+        # globalConversionLogic: LLM invents business logic from 5fps preview
+        rough_summary.pop("globalConversionLogic", None)
+
+    global_notes = normalized.get("globalNotes")
+    if isinstance(global_notes, dict):
+        # likelyHookWindow == contentBlocks[0].timeRange (100% redundant)
+        # likelyCtaRegion == contentBlocks[-1].timeRange (100% redundant)
+        # importantOpenQuestions ⊂ Σ contentBlocks[*].fineScanFocusQuestions
+        for legacy_field in ("likelyHookWindow", "likelyCtaRegion", "importantOpenQuestions"):
+            global_notes.pop(legacy_field, None)
+        _migrate_global_notes_subject_rename(global_notes)
 
     content_blocks = normalized.get("contentBlocks")
     if not isinstance(content_blocks, list):
@@ -489,10 +683,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--poll-interval", type=float, default=5)
     parser.add_argument("--max-wait-seconds", type=float, default=300)
     parser.add_argument("--response-timeout", type=int, default=600)
-    parser.add_argument("--out", default="seed_assets/analysis/macbook_neo/rough_structure_scan.json")
-    parser.add_argument("--raw-out", default="seed_assets/analysis/macbook_neo/rough_structure_scan_raw_response.json")
-    parser.add_argument("--text-out", default="seed_assets/analysis/macbook_neo/rough_structure_scan_response_text.txt")
-    parser.add_argument("--file-info-out", default="seed_assets/analysis/macbook_neo/uploaded_file_info.json")
+    # v0.2 directory layout: stage1_rough/ for primary contract, _debug/ for dumps.
+    # See docs/DECISIONS/2026-05-23-rough-scan-v2-audit.md §5.1.
+    parser.add_argument("--out", default="seed_assets/analysis/macbook_neo/stage1_rough/rough_structure_scan.json")
+    parser.add_argument("--raw-out", default="seed_assets/analysis/macbook_neo/_debug/rough_structure_scan_raw_response.json")
+    parser.add_argument("--text-out", default="seed_assets/analysis/macbook_neo/_debug/rough_structure_scan_response_text.txt")
+    parser.add_argument("--file-info-out", default="seed_assets/analysis/macbook_neo/_debug/uploaded_file_info.json")
     parser.add_argument("--dry-run", action="store_true")
     return parser
 
