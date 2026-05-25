@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 
 const pythonCommand = findPythonCommand();
 run(pythonCommand, ['-m', 'unittest', 'discover', '-s', 'tests', '-v']);
-run(pnpmCommand(), ['--filter', '@viral-struct/api', 'test']);
+runPnpm(['--filter', '@viral-struct/api', 'test']);
 
 function findPythonCommand() {
   for (const command of ['python', 'python3']) {
@@ -21,8 +21,21 @@ function pnpmCommand() {
   return process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 }
 
-function run(command, args) {
-  const result = spawnSync(command, args, { stdio: 'inherit' });
+function runPnpm(args) {
+  if (process.platform === 'win32') {
+    run('cmd.exe', ['/d', '/s', '/c', commandLineForCmd([pnpmCommand(), ...args])]);
+    return;
+  }
+
+  run(pnpmCommand(), args);
+}
+
+function commandLineForCmd(parts) {
+  return parts.map(String).join(' ');
+}
+
+function run(command, args, options = {}) {
+  const result = spawnSync(command, args, { stdio: 'inherit', ...options });
 
   if (result.error) {
     console.error(result.error.message);
