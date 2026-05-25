@@ -25,6 +25,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, NamedTuple
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from path_layout import DEFAULT_VIDEO_ID, analysis_paths  # noqa: E402
+
+_DEFAULT_PATHS = analysis_paths(DEFAULT_VIDEO_ID)
+
 SCHEMA_VERSION = "analysis_manifest_v1"
 
 
@@ -145,12 +150,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--analysis-root",
-        default="seed_assets/analysis/macbook_neo",
+        default=str(_DEFAULT_PATHS.analysis_root),
         help="Directory containing stage1_rough/, stage1_media/, stage1_5_assembly/.",
     )
     parser.add_argument(
         "--video-id",
-        default="macbook_neo",
+        default=DEFAULT_VIDEO_ID,
         help="Video id stamped into the manifest.",
     )
     parser.add_argument(

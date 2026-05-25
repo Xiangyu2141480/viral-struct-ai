@@ -23,6 +23,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from path_layout import DEFAULT_VIDEO_ID, analysis_paths  # noqa: E402
+
+_DEFAULT_PATHS = analysis_paths(DEFAULT_VIDEO_ID)
+
 SCHEMA_VERSION = "audio_beat_map_v2"
 
 
@@ -119,7 +124,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--in",
         dest="input_path",
-        default="seed_assets/analysis/macbook_neo/stage1_media/audio_beat_map.json",
+        default=str(_DEFAULT_PATHS.audio_beat_map),
         help="Input v1 audio_beat_map.json path.",
     )
     parser.add_argument(

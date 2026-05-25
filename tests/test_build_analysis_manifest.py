@@ -2,6 +2,7 @@
 
 import importlib.util
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -9,6 +10,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULE_PATH = ROOT / "scripts" / "build_analysis_manifest.py"
+
+sys.path.insert(0, str(ROOT / "scripts"))
+from path_layout import DEFAULT_VIDEO_ID, analysis_paths  # noqa: E402
+
+_PATHS = analysis_paths(DEFAULT_VIDEO_ID)
 
 
 def load_module():
@@ -150,8 +156,8 @@ class CliDefaultsTests(unittest.TestCase):
 
     def test_parser_defaults_point_to_macbook_neo_root(self):
         args = self.module.build_parser().parse_args([])
-        self.assertEqual(args.analysis_root, "seed_assets/analysis/macbook_neo")
-        self.assertEqual(args.video_id, "macbook_neo")
+        self.assertEqual(args.analysis_root, str(_PATHS.analysis_root))
+        self.assertEqual(args.video_id, DEFAULT_VIDEO_ID)
         self.assertEqual(args.video_category, "unknown")
         self.assertIsNone(args.out)
 

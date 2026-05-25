@@ -33,6 +33,7 @@ from doubao_rough_scan import (  # noqa: E402
     wait_for_file,
     write_json,
 )
+from path_layout import DEFAULT_VIDEO_ID, analysis_paths  # noqa: E402
 from video_tools import build_clip_command, build_peak_window_command  # noqa: E402
 from visual_peak_detector import (  # noqa: E402
     compute_visual_score_series_from_clip,
@@ -825,9 +826,10 @@ def process_block_with_peak_micro(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Stage 2 fine content-block analysis using Doubao/ModelArk.")
-    parser.add_argument("--rough-scan", default="seed_assets/analysis/macbook_neo/stage1_rough/rough_structure_scan.json")
-    parser.add_argument("--video", default="seed_assets/raw_videos/macbook_neo.mp4")
-    parser.add_argument("--beat-map", default="seed_assets/analysis/macbook_neo/stage1_media/audio_beat_map.json")
+    _paths = analysis_paths(DEFAULT_VIDEO_ID)
+    parser.add_argument("--rough-scan", default=str(_paths.rough_scan))
+    parser.add_argument("--video", default=str(_paths.raw_video))
+    parser.add_argument("--beat-map", default=str(_paths.audio_beat_map))
     parser.add_argument("--video-id", default="")
     parser.add_argument("--prompt", default="prompts/video_understanding/fine_structure_scan_v0.md")
     parser.add_argument(
@@ -835,8 +837,8 @@ def build_parser() -> argparse.ArgumentParser:
         default="prompts/video_understanding/peak_micro_scan_v0.md",
         help="Per-peak semantic-only prompt (v0.3 pipeline).",
     )
-    parser.add_argument("--out-dir", default="seed_assets/analysis/macbook_neo/fine_scan")
-    parser.add_argument("--work-dir", default="seed_assets/analysis/macbook_neo/fine_scan/clips")
+    parser.add_argument("--out-dir", default=str(_paths.fine_scan_dir))
+    parser.add_argument("--work-dir", default=str(_paths.fine_scan_clips_dir))
     parser.add_argument("--block-ids", default="", help="Comma-separated content block IDs to process.")
     parser.add_argument("--skip-audio", action="store_true")
     # Peak detection / selection (S3'-minimal)

@@ -5,8 +5,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from path_layout import DEFAULT_VIDEO_ID, analysis_paths  # noqa: E402
+
+_DEFAULT_PATHS = analysis_paths(DEFAULT_VIDEO_ID)
 
 
 def round_time(value: float) -> float:
@@ -211,12 +217,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Assemble Stage 1 content blocks and Stage 1.5 boundary patches into one timeline."
     )
-    parser.add_argument("--rough-scan", default="seed_assets/analysis/macbook_neo/stage1_rough/rough_structure_scan.json")
+    parser.add_argument("--rough-scan", default=str(_DEFAULT_PATHS.rough_scan))
     parser.add_argument(
         "--boundary-scan",
-        default="seed_assets/analysis/macbook_neo/boundary_micro_scan/boundary_micro_scan.json",
+        default=str(_DEFAULT_PATHS.boundary_scan_merged),
     )
-    parser.add_argument("--out", default="seed_assets/analysis/macbook_neo/stage1_5_assembly/content_transition_timeline.json")
+    parser.add_argument("--out", default=str(_DEFAULT_PATHS.timeline))
     return parser
 
 
