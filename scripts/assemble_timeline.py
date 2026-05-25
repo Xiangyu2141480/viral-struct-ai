@@ -5,8 +5,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from path_layout import DEFAULT_VIDEO_ID, analysis_paths  # noqa: E402
+
+_DEFAULT_PATHS = analysis_paths(DEFAULT_VIDEO_ID)
 
 
 def round_time(value: float) -> float:
@@ -44,14 +50,14 @@ def build_content_unit(block: dict[str, Any]) -> dict[str, Any]:
         "timeRange": require_time_range(block),
         "sourceBlockId": str(block["id"]),
     }
+    # v0.2: dropped audioOrRhythmSignals and confidence — both removed from
+    # Rough Scan schema per docs/DECISIONS/2026-05-23-rough-scan-v2-audit.md.
     for key in (
         "coarseRoleGuess",
         "boundaryReason",
         "observableSummary",
         "visualSignals",
         "textSignals",
-        "audioOrRhythmSignals",
-        "confidence",
         "fineScanFocusQuestions",
     ):
         if key in block:
@@ -102,12 +108,27 @@ def normalize_transition_unit(
     to_block_id: str,
 ) -> dict[str, Any]:
     transition_unit = dict(transition)
-    transition_unit["id"] = str(transition_unit["id"])
+    # v2.5: unify id to the boundary's canonical id. A transition unit IS the
+    # Stage 1.5 manifestation of a Stage 1 boundary — they share identity.
+    # This eliminates the historical 3-way ID drift
+    # (boundary_001 / rough_trans_001 / transition_boundary_001).
+    # See docs/DECISIONS/2026-05-23-rough-scan-v2-audit.md §4.3.
+    transition_unit["id"] = boundary_id
     transition_unit["unitType"] = "transition"
     transition_unit["boundaryId"] = boundary_id
     transition_unit["fromBlockId"] = from_block_id
     transition_unit["toBlockId"] = to_block_id
     transition_unit["timeRange"] = require_time_range(transition_unit)
+    # v2.5: canonicalBoundaryTime is the single source of truth for boundary
+    # time. Stage 1.5 has the more accurate semanticPivotTime, so prefer it
+    # when present; fall back to the midpoint of timeRange otherwise.
+    pivot = transition_unit.get("semanticPivotTime")
+    if pivot is not None:
+        transition_unit["canonicalBoundaryTime"] = round(float(pivot), 3)
+    else:
+        time_range = transition_unit["timeRange"]
+        midpoint = (float(time_range["start"]) + float(time_range["end"])) / 2.0
+        transition_unit["canonicalBoundaryTime"] = round(midpoint, 3)
     return transition_unit
 
 
@@ -196,12 +217,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Assemble Stage 1 content blocks and Stage 1.5 boundary patches into one timeline."
     )
-    parser.add_argument("--rough-scan", default="seed_assets/analysis/macbook_neo/rough_structure_scan.json")
+    parser.add_argument("--rough-scan", default=str(_DEFAULT_PATHS.rough_scan))
     parser.add_argument(
         "--boundary-scan",
-        default="seed_assets/analysis/macbook_neo/boundary_micro_scan/boundary_micro_scan.json",
+        default=str(_DEFAULT_PATHS.boundary_scan_merged),
     )
-    parser.add_argument("--out", default="seed_assets/analysis/macbook_neo/content_transition_timeline.json")
+    parser.add_argument("--out", default=str(_DEFAULT_PATHS.timeline))
     return parser
 
 

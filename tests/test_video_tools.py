@@ -55,6 +55,59 @@ class VideoToolsCommandBuilderTests(unittest.TestCase):
         self.assertIn("libx264", command)
         self.assertEqual(command[-1], "clip.mp4")
 
+    def test_build_peak_window_command_uses_default_pre_post_around_peak(self):
+        command = self.tools.build_peak_window_command(
+            "input.mp4",
+            "peak.mp4",
+            block_start=0.0,
+            block_end=9.5,
+            peak_time=5.7,
+        )
+
+        self.assertEqual(command[command.index("-ss") + 1], "5.100")
+        self.assertEqual(command[command.index("-t") + 1], "1.400")
+        self.assertIn("-c", command)
+        self.assertEqual(command[command.index("-c") + 1], "copy")
+        self.assertEqual(command[-1], "peak.mp4")
+
+    def test_build_peak_window_command_clamps_to_block_start(self):
+        command = self.tools.build_peak_window_command(
+            "input.mp4",
+            "peak.mp4",
+            block_start=10.0,
+            block_end=20.0,
+            peak_time=10.2,
+            pre_context=0.6,
+            post_context=0.8,
+        )
+
+        self.assertEqual(command[command.index("-ss") + 1], "10.000")
+        self.assertEqual(command[command.index("-t") + 1], "1.000")
+
+    def test_build_peak_window_command_clamps_to_block_end(self):
+        command = self.tools.build_peak_window_command(
+            "input.mp4",
+            "peak.mp4",
+            block_start=0.0,
+            block_end=9.5,
+            peak_time=9.3,
+            pre_context=0.6,
+            post_context=0.8,
+        )
+
+        self.assertEqual(command[command.index("-ss") + 1], "8.700")
+        self.assertEqual(command[command.index("-t") + 1], "0.800")
+
+    def test_build_peak_window_command_rejects_peak_outside_block(self):
+        with self.assertRaises(ValueError):
+            self.tools.build_peak_window_command(
+                "input.mp4",
+                "peak.mp4",
+                block_start=10.0,
+                block_end=20.0,
+                peak_time=25.0,
+            )
+
     def test_build_microscope_command_preserves_frames_at_playback_fps(self):
         command = self.tools.build_microscope_command(
             "input.mp4",

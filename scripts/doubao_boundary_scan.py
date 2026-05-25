@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -34,6 +33,7 @@ from doubao_rough_scan import (  # noqa: E402
     wait_for_file,
     write_json,
 )
+from path_layout import DEFAULT_VIDEO_ID, analysis_paths  # noqa: E402
 from video_tools import build_microscope_command, build_probe_command  # noqa: E402
 
 
@@ -528,11 +528,12 @@ def run_boundary_scan(args: argparse.Namespace) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--rough-scan", default="seed_assets/analysis/macbook_neo/rough_structure_scan.json")
-    parser.add_argument("--video", default="seed_assets/raw_videos/macbook_neo.mp4")
-    parser.add_argument("--beat-map", default="seed_assets/analysis/macbook_neo/audio_beat_map.json")
+    _paths = analysis_paths(DEFAULT_VIDEO_ID)
+    parser.add_argument("--rough-scan", default=str(_paths.rough_scan))
+    parser.add_argument("--video", default=str(_paths.raw_video))
+    parser.add_argument("--beat-map", default=str(_paths.audio_beat_map))
     parser.add_argument("--prompt", default="prompts/video_understanding/boundary_micro_scan_v0.md")
-    parser.add_argument("--out-dir", default="seed_assets/analysis/macbook_neo/boundary_micro_scan")
+    parser.add_argument("--out-dir", default=str(_paths.boundary_scan_dir))
     parser.add_argument("--boundary-id", action="append", help="Scan only this boundary id. Repeatable.")
     parser.add_argument("--slowdown-factor", type=float, default=None)
     parser.add_argument("--upload-fps", type=float, default=5.0)

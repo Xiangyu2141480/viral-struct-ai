@@ -1,11 +1,16 @@
 import importlib.util
-import json
+import sys
 import unittest
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULE_PATH = ROOT / "scripts" / "doubao_boundary_scan.py"
+
+sys.path.insert(0, str(ROOT / "scripts"))
+from path_layout import DEFAULT_VIDEO_ID, analysis_paths  # noqa: E402
+
+_PATHS = analysis_paths(DEFAULT_VIDEO_ID)
 
 
 def load_module():
@@ -177,10 +182,10 @@ class DoubaoBoundaryScanTests(unittest.TestCase):
     def test_parser_defaults_point_to_stage_one_boundary_flow(self):
         args = self.module.build_parser().parse_args([])
 
-        self.assertEqual(args.rough_scan, "seed_assets/analysis/macbook_neo/rough_structure_scan.json")
-        self.assertEqual(args.video, "seed_assets/raw_videos/macbook_neo.mp4")
-        self.assertEqual(args.beat_map, "seed_assets/analysis/macbook_neo/audio_beat_map.json")
-        self.assertEqual(args.out_dir, "seed_assets/analysis/macbook_neo/boundary_micro_scan")
+        self.assertEqual(args.rough_scan, str(_PATHS.rough_scan))
+        self.assertEqual(args.video, str(_PATHS.raw_video))
+        self.assertEqual(args.beat_map, str(_PATHS.audio_beat_map))
+        self.assertEqual(args.out_dir, str(_PATHS.boundary_scan_dir))
         self.assertIsNone(args.slowdown_factor)
         self.assertEqual(args.upload_fps, 5.0)
 

@@ -82,18 +82,65 @@ class AssembleTimelineTests(unittest.TestCase):
 
         self.assertEqual(assembled["schemaVersion"], "content_transition_timeline_v1")
         self.assertEqual(assembled["videoId"], "demo")
+        # v2.5: transition unit id unified to boundary's canonical id
+        # (was "transition_boundary_001" before unification).
         self.assertEqual([unit["id"] for unit in assembled["timelineUnits"]], [
             "block_001",
-            "transition_boundary_001",
+            "boundary_001",
             "block_002",
         ])
         self.assertEqual(assembled["timelineUnits"][0]["timeRange"], {"start": 0.0, "end": 8.8})
         self.assertEqual(assembled["timelineUnits"][1]["unitType"], "transition")
         self.assertEqual(assembled["timelineUnits"][1]["timeRange"], {"start": 8.8, "end": 11.2})
+        # v2.5: transition unit must carry boundaryId pointing to its parent boundary
+        self.assertEqual(assembled["timelineUnits"][1]["boundaryId"], "boundary_001")
+        # v2.5: transition unit must expose canonicalBoundaryTime (preferring semanticPivotTime)
+        self.assertEqual(assembled["timelineUnits"][1]["canonicalBoundaryTime"], 10.0)
         self.assertEqual(assembled["timelineUnits"][2]["timeRange"], {"start": 11.2, "end": 20.0})
         self.assertEqual(assembled["assemblyStats"]["transitionUnitCount"], 1)
         self.assertEqual(assembled["assemblyStats"]["patchedBoundaryCount"], 1)
         self.assertEqual(assembled["assemblyStats"]["unscannedBoundaryCount"], 0)
+
+    def test_transition_canonical_boundary_time_falls_back_to_midpoint_when_pivot_missing(self):
+        """v2.5: if boundary_micro_scan didn't emit semanticPivotTime, derive
+        canonicalBoundaryTime from the midpoint of timeRange."""
+        rough_scan = {
+            "videoId": "demo",
+            "contentBlocks": [
+                {"id": "block_001", "timeRange": {"start": 0, "end": 10}},
+                {"id": "block_002", "timeRange": {"start": 10, "end": 20}},
+            ],
+            "boundaryCandidates": [
+                {"id": "boundary_001", "fromBlockId": "block_001", "toBlockId": "block_002",
+                 "roughBoundaryTime": 10},
+            ],
+        }
+        boundary_scan = {
+            "boundaries": [
+                {
+                    "boundaryId": "boundary_001",
+                    "timelinePatch": {
+                        "patchType": "insert_transition_unit",
+                        "fromBlockId": "block_001",
+                        "toBlockId": "block_002",
+                        # Patch blocks to make room for the transition window
+                        "fromBlockPatch": {"id": "block_001", "timeRangePatch": {"end": 9.0}},
+                        "toBlockPatch": {"id": "block_002", "timeRangePatch": {"start": 11.0}},
+                        "transitionUnit": {
+                            "id": "ignored",
+                            "unitType": "transition",
+                            "timeRange": {"start": 9.0, "end": 11.0},
+                            # No semanticPivotTime — should fall back to midpoint 10.0
+                        },
+                    },
+                }
+            ],
+        }
+
+        assembled = self.module.assemble_timeline(rough_scan, boundary_scan)
+        transition = assembled["timelineUnits"][1]
+        self.assertEqual(transition["id"], "boundary_001")
+        self.assertEqual(transition["canonicalBoundaryTime"], 10.0)
 
     def test_assemble_keeps_unscanned_stage_one_boundaries_as_content_boundaries(self):
         rough_scan = {
