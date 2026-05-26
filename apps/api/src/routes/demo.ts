@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { ContentBrief } from '@viral-struct/shared';
-import { analyzeAssetsMock } from '../services/assetAnalyzer';
+import { loadAssetLibrary } from '../services/assetLibraryLoader';
 import { getChampionDemoShowcase } from '../services/demoShowcase';
 import { planGapRepairs } from '../services/gapRepairPlanner';
 import { evaluateQuality } from '../services/qualityEvaluator';
@@ -40,11 +40,7 @@ demoRouter.post('/run', async (_req, res) => {
       manualTranscript: showcase.case.manualTranscript
     });
     const structure = await extractStructureFromVideoAnalysis(videoAnalysis);
-    const demoFiles = showcase.case.assetFiles.map((asset) => ({
-      originalname: asset.filename,
-      path: asset.publicUrl
-    })) as Express.Multer.File[];
-    const assetCards = await analyzeAssetsMock(demoFiles, showcase.case.assetBrief);
+    const assetCards = await loadAssetLibrary(showcase.case.assetLibraryId);
     const slotResult = matchSlots(structure.structureGraph, assetCards);
     const repairs = planGapRepairs(slotResult.gaps, assetCards, contentBrief);
     const generation = await generateTimelineMock({

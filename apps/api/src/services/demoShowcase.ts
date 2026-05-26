@@ -10,6 +10,7 @@ export interface DemoShowcaseCase {
   cta: string;
   stylePreference: string;
   assetBrief: string;
+  assetLibraryId: string;
   assetFiles: DemoShowcaseAsset[];
 }
 
@@ -58,6 +59,7 @@ export function getChampionDemoShowcase(): DemoShowcase {
       stylePreference: '清爽夏日、高点击、快节奏、红色卖点卡',
       assetBrief:
         '已有瓶身主图、动感冰爽图、组合包装图；缺少真人口播、缺少完整开盖畅饮过程、缺少对比镜头、缺少 CTA 结尾镜头。系统需要用标题卡、冰爽卖点卡、结构重排和素材复用完成补全。',
+      assetLibraryId: 'kangshifu_demo',
       assetFiles: [
         {
           filename: 'kangshifu-iced-tea-product-shot.png',
