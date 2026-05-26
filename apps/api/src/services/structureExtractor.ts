@@ -14,6 +14,7 @@ import type {
   ViralStructureGraph
 } from '@viral-struct/shared';
 import { ViralStructureGraphSchema } from '@viral-struct/shared';
+import { loadStructureGraphArtifact } from './scanStructureGraphLoader';
 import { extractCreativeIngredientsMock } from './visualIngredientExtractor';
 
 type IndexedTranscriptSegment = TranscriptSegment & { index: number };
@@ -31,6 +32,7 @@ type StructureSource = {
 
 export type StructureExtractionDebug = {
   fallbackUsed: boolean;
+  extractionSource?: 'rough_fine_scan_artifact' | 'video_analysis_rules' | 'mock_fallback';
   segmentCount: number;
   evidenceCount: number;
   warnings: string[];
@@ -61,18 +63,29 @@ export async function extractStructureGraphWithDebug(
 
   if (!normalized.analysis) {
     const fallbackGraph = ViralStructureGraphSchema.parse(buildMockFallbackGraph());
-    return buildExtractionResult(fallbackGraph, true, normalized.warnings);
+    return buildExtractionResult(fallbackGraph, true, normalized.warnings, 'mock_fallback');
+  }
+
+  const artifact = await loadStructureGraphArtifact(normalized.analysis.metadata.videoId);
+  if (artifact) {
+    return buildExtractionResult(
+      artifact.graph,
+      false,
+      normalized.warnings.concat(`Loaded rough/fine scan graph artifact: ${artifact.videoId}`),
+      'rough_fine_scan_artifact'
+    );
   }
 
   try {
     const graph = ViralStructureGraphSchema.parse(buildRuleBasedGraph(normalized.analysis));
-    return buildExtractionResult(graph, false, normalized.warnings);
+    return buildExtractionResult(graph, false, normalized.warnings, 'video_analysis_rules');
   } catch (error) {
     const fallbackGraph = ViralStructureGraphSchema.parse(buildMockFallbackGraph());
     return buildExtractionResult(
       fallbackGraph,
       true,
-      normalized.warnings.concat(`规则抽取失败，已使用 mock fallback：${errorMessage(error)}`)
+      normalized.warnings.concat(`规则抽取失败，已使用 mock fallback：${errorMessage(error)}`),
+      'mock_fallback'
     );
   }
 }
@@ -273,12 +286,14 @@ function buildMockFallbackGraph(): ViralStructureGraph {
 function buildExtractionResult(
   structureGraph: ViralStructureGraph,
   fallbackUsed: boolean,
-  warnings: string[]
+  warnings: string[],
+  extractionSource: StructureExtractionDebug['extractionSource']
 ): StructureExtractionResult {
   return {
     structureGraph,
     debug: {
       fallbackUsed,
+      extractionSource,
       segmentCount: structureGraph.segments.length,
       evidenceCount: countEvidenceItems(structureGraph),
       warnings
@@ -331,7 +346,7 @@ function normalizeVideoAnalysisInput(value: unknown): { analysis: VideoAnalysis 
     warnings.push('keyframes 缺失或无有效关键帧，证据链将只使用 transcript/shots。');
   }
 
-  const hasSignal = transcript.length > 0 || shots.length > 0 || keyframes.length > 0 || readString(value.videoId) || readString(value.filename);
+  const hasSignal = transcript.length > 0 || shots.length > 0 || keyframes.length > 0 || videoId !== 'unknown-video';
 
   if (!hasSignal) {
     return { analysis: null, warnings: warnings.concat('videoAnalysis 没有可用信号，返回 mock fallback。') };

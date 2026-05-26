@@ -21,6 +21,7 @@ export type GenerationVariant = 'high_click' | 'high_conversion' | 'premium';
 
 export interface StructureDebug {
   fallbackUsed: boolean;
+  extractionSource?: 'rough_fine_scan_artifact' | 'video_analysis_rules' | 'mock_fallback';
   segmentCount: number;
   evidenceCount: number;
   warnings: string[];

@@ -2,6 +2,18 @@
 
 ## 1. 推荐主 case
 
+样例结构来源：
+
+```txt
+macbook_neo.mp4
+```
+
+该样例使用预计算 rough/fine scan adapter 图谱：
+
+```txt
+seed_assets/analysis/macbook_neo/structure_graph.json
+```
+
 商品：
 
 ```txt
@@ -29,7 +41,8 @@
 1. 瓶身主图 1 张
 2. 动感冰爽图 1 张
 3. 组合包装图 1 张
-4. 商品介绍文案 1 段
+4. 预生成 AssetCard library 1 份
+   seed_assets/asset_libraries/kangshifu_demo/asset_cards.json
 ```
 
 故意缺少：

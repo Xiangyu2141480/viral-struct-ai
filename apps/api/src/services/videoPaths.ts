@@ -29,10 +29,14 @@ export function getDemoAssetDir(): string {
   return resolveRepoPath(process.env.DEMO_ASSET_DIR, './seed_assets/demo_assets');
 }
 
-export function getSeedVideoDir(): string {
-  return resolveRepoPath(process.env.SEED_VIDEO_DIR, './seed_assets/raw_videos');
-}
-
 export function getAssetLibraryDir(): string {
   return resolveRepoPath(process.env.ASSET_LIBRARY_DIR, './seed_assets/asset_libraries');
+}
+
+export function getAnalysisDir(): string {
+  return resolveRepoPath(process.env.ANALYSIS_DIR, './seed_assets/analysis');
+}
+
+export function getSeedVideoDir(): string {
+  return resolveRepoPath(process.env.SEED_VIDEO_DIR, './seed_assets/raw_videos');
 }

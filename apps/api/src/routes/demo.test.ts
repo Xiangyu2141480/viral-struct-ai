@@ -53,9 +53,15 @@ test('POST /api/demo/run returns a complete judge-facing workflow result', async
   assert.equal(response.status, 200);
   const body = await response.json();
   assert.equal(body.showcase.case.productName, '康师傅冰红茶');
+  assert.equal(body.showcase.case.seedFilename, 'macbook_neo.mp4');
   assert.equal(body.videoAnalysis.analysisSource, 'real_ffmpeg');
+  assert.equal(body.videoAnalysis.metadata.videoId, 'macbook_neo.mp4');
+  assert.equal(body.structureDebug.extractionSource, 'rough_fine_scan_artifact');
   assert.ok(body.structureGraph.segments.length >= 4);
-  assert.ok(body.assetCards.length >= 3); // real library has 3 images; mock had 3 + 1 text brief
+  assert.deepEqual(
+    body.assetCards.map((card: { id: string }) => card.id),
+    ['asset_001', 'asset_002', 'asset_003']
+  );
   assert.ok(body.assetCards.some((card: { url?: string }) => card.url?.includes('kangshifu_iced_tea')));
   assert.ok(body.materialGaps.length >= 1);
   assert.ok(body.repairs.length >= 1);

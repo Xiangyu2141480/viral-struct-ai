@@ -10,7 +10,8 @@ test('champion demo showcase anchors a real seed and the P0 judging evidence', a
   const showcase = getChampionDemoShowcase();
 
   assert.equal(showcase.case.productName, '康师傅冰红茶');
-  assert.equal(showcase.case.seedFilename, 'huaxizi.mp4');
+  assert.equal(showcase.case.seedFilename, 'macbook_neo.mp4');
+  assert.equal(showcase.case.assetLibraryId, 'kangshifu_demo');
   assert.ok(await getSeedVideoPath(showcase.case.seedFilename));
 
   assert.ok(showcase.case.assetBrief.includes('缺少真人口播'));

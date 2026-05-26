@@ -1,0 +1,228 @@
+{
+  "meta": {
+    "duration": 229.53,
+    "aspectRatio": "16:9",
+    "videoType": "brand",
+    "style": "premium"
+  },
+  "structureSummary": "Rough/Fine Scan 预计算图谱：MacBook 样例采用「未来感开场揭示 → 轻薄痛点 → 性能卖点 → 场景证明 → CTA 收束」结构。迁移到康师傅冰红茶时保留高级产品揭示、慢节奏质感、卖点前置、场景证明和明确收束，而不是复制原样例内容。",
+  "segments": [
+    {
+      "id": "seg_hook_1",
+      "role": "hook",
+      "start": 0,
+      "end": 45.91,
+      "duration": 45.91,
+      "purpose": "用产品揭示和强视觉第一眼建立注意力。来源：rough block_001 + fine_scan block_001 product reveal。",
+      "caption": "未来感产品揭示",
+      "transferRule": "迁移为康师傅冰红茶的冰块飞溅、瓶身英雄图或高质感开场。原样例证据：fine_scan/block_001_fine_scan.json actionBeats[product_reveal]。",
+      "importance": 5
+    },
+    {
+      "id": "seg_pain_2",
+      "role": "pain_point",
+      "start": 45.91,
+      "end": 91.81,
+      "duration": 45.9,
+      "purpose": "放大用户当前选择的不足，承接后续卖点。来源：rough block_002 + fine_scan block_002 problem setup。",
+      "caption": "普通选择不够清爽",
+      "transferRule": "替换为夏季通勤、校园和运动后口渴疲惫的高频痛点。原样例证据：fine_scan/block_002_fine_scan.json inspectionAnswers[pain_point]。",
+      "importance": 4
+    },
+    {
+      "id": "seg_selling_3",
+      "role": "selling_point",
+      "start": 91.81,
+      "end": 137.72,
+      "duration": 45.91,
+      "purpose": "把核心卖点用产品特写和信息卡前置表达。来源：rough block_003 + fine_scan block_003 feature sequence。",
+      "caption": "冰爽解腻，柠檬茶香",
+      "transferRule": "映射为瓶身特写、茶汤飞溅和红黄高对比卖点卡。原样例证据：fine_scan/block_003_fine_scan.json productPresentation.featureSequence。",
+      "importance": 5
+    },
+    {
+      "id": "seg_proof_4",
+      "role": "proof",
+      "start": 137.72,
+      "end": 183.62,
+      "duration": 45.9,
+      "purpose": "通过使用场景、对比或可信解释证明卖点。来源：rough block_004 + fine_scan block_004 usage/proof pattern。",
+      "caption": "冰镇、开盖、畅饮场景证明",
+      "transferRule": "用饮用场景、对比卡或信任卡替代 MacBook 场景证明。原样例证据：fine_scan/block_004_fine_scan.json claimVisualizationPattern。",
+      "importance": 4
+    },
+    {
+      "id": "seg_cta_5",
+      "role": "cta",
+      "start": 183.62,
+      "end": 229.53,
+      "duration": 45.91,
+      "purpose": "用清晰行动召唤和产品收束完成转化。来源：rough block_005 + fine_scan block_005 closing CTA。",
+      "caption": "想要冰爽解腻，就来一瓶康师傅冰红茶",
+      "transferRule": "替换为康师傅冰红茶的购买/尝试 CTA 和组合包装主视觉。原样例证据：fine_scan/block_005_fine_scan.json transitionOut.closing_or_cta。",
+      "importance": 4
+    }
+  ],
+  "shotSlots": [
+    {
+      "id": "slot_opening_attention_1",
+      "segmentId": "seg_hook_1",
+      "role": "opening_attention",
+      "requiredAsset": {
+        "type": "image",
+        "subject": "高级感产品揭示或冰爽冲击开场",
+        "camera": "closeup",
+        "motion": "push_in",
+        "minDuration": 1.5
+      },
+      "visualIngredientRequirements": ["product_closeup_trait", "premium_visual"],
+      "humanRequirement": { "required": false },
+      "fallbackStrategies": ["product_closeup_replacement", "caption_rewrite", "text_card"],
+      "importance": 5
+    },
+    {
+      "id": "slot_benefit_visual_2",
+      "segmentId": "seg_pain_2",
+      "role": "benefit_visual",
+      "requiredAsset": {
+        "type": "image",
+        "subject": "夏季通勤或校园口渴痛点视觉",
+        "camera": "medium",
+        "motion": "static"
+      },
+      "visualIngredientRequirements": ["scene_style", "lifestyle_context"],
+      "humanRequirement": { "required": false },
+      "fallbackStrategies": ["selling_point_card", "text_card", "reuse_asset"],
+      "importance": 4
+    },
+    {
+      "id": "slot_product_closeup_3",
+      "segmentId": "seg_selling_3",
+      "role": "product_closeup",
+      "requiredAsset": {
+        "type": "image",
+        "subject": "瓶身、冰块和柠檬茶香卖点特写",
+        "camera": "closeup",
+        "motion": "push_in"
+      },
+      "visualIngredientRequirements": ["product_closeup_trait", "clean_background"],
+      "humanRequirement": { "required": false },
+      "fallbackStrategies": ["crop_zoom", "selling_point_card", "style_filter_suggestion"],
+      "importance": 5
+    },
+    {
+      "id": "slot_comparison_4",
+      "segmentId": "seg_proof_4",
+      "role": "comparison",
+      "requiredAsset": {
+        "type": "video",
+        "subject": "冰镇畅饮过程、前后状态或普通饮料对比",
+        "camera": "medium",
+        "motion": "hand_operation",
+        "minDuration": 2
+      },
+      "visualIngredientRequirements": ["hand_demo", "before_after_comparison", "trust_building"],
+      "humanRequirement": {
+        "required": true,
+        "role": "hand_only",
+        "framing": "hands",
+        "action": "holding_product"
+      },
+      "fallbackStrategies": ["before_after_card", "comparison_card", "trust_card"],
+      "importance": 4
+    },
+    {
+      "id": "slot_cta_visual_5",
+      "segmentId": "seg_cta_5",
+      "role": "cta_visual",
+      "requiredAsset": {
+        "type": "generated",
+        "subject": "结尾行动卡和组合包装主视觉",
+        "camera": "closeup",
+        "motion": "static"
+      },
+      "visualIngredientRequirements": ["trust_building", "social_proof"],
+      "humanRequirement": { "required": false },
+      "fallbackStrategies": ["cta_card", "selling_point_card", "trust_card"],
+      "importance": 4
+    }
+  ],
+  "rhythm": {
+    "avgShotDuration": 45.91,
+    "cutFrequency": "low",
+    "peakAt": 91.81,
+    "pattern": "rough_fine_low_premium_reveal_pain_feature_proof_cta"
+  },
+  "packaging": {
+    "captionDensity": "low",
+    "captionPosition": "bottom_center",
+    "titleStyle": "premium_product_reveal_large_clean_caption",
+    "cardTypes": ["title_card", "selling_point_card", "comparison_card", "cta_card"],
+    "transitions": ["clean_cut", "push_in", "caption_card"],
+    "coverStyle": "product_hero_center_with_high_contrast_headline"
+  },
+  "creativeIngredients": [
+    {
+      "id": "ing_premium_product_reveal",
+      "type": "premium_visual",
+      "name": "高级产品揭示",
+      "description": "MacBook 样例通过干净背景、产品轮廓和缓慢揭示建立质感；迁移时用冰红茶瓶身英雄图和冰爽动效承接。",
+      "segmentIds": ["seg_hook_1", "seg_selling_3"],
+      "requiredForSlotIds": ["slot_opening_attention_1", "slot_product_closeup_3"],
+      "transferability": "requires_user_asset",
+      "requiredAssets": ["product_hero_image", "premium_product_closeup"],
+      "fallbackStrategies": ["product_closeup_replacement", "style_filter_suggestion", "selling_point_card"],
+      "evidence": [
+        { "type": "model_observation", "value": "rough_scan/stage1_rough/rough_structure_scan.json block_001: product reveal opening" },
+        { "type": "model_observation", "value": "fine_scan/fine_structure_scan.json block_001: transferableMotifs includes premium product reveal" }
+      ],
+      "confidence": 0.88
+    },
+    {
+      "id": "ing_feature_card_sequence",
+      "type": "product_closeup_trait",
+      "name": "卖点前置与产品特写",
+      "description": "样例把功能卖点和产品画面绑定，迁移时需要将冰爽解腻、柠檬茶香和大瓶畅饮转成可见的产品特写或卖点卡。",
+      "segmentIds": ["seg_selling_3"],
+      "requiredForSlotIds": ["slot_product_closeup_3", "slot_benefit_visual_2"],
+      "transferability": "requires_user_asset",
+      "requiredAssets": ["product_closeup", "benefit_visual"],
+      "fallbackStrategies": ["crop_zoom", "selling_point_card", "caption_rewrite"],
+      "evidence": [
+        { "type": "model_observation", "value": "fine_scan/fine_structure_scan.json block_003: productPresentation.featureSequence" }
+      ],
+      "confidence": 0.84
+    },
+    {
+      "id": "ing_usage_proof_gap",
+      "type": "hand_demo",
+      "name": "场景证明和操作演示",
+      "description": "样例后段用真实场景证明价值，迁移到饮料需要开瓶、手持、畅饮或前后对比素材；缺失时用对比卡和信任卡补足。",
+      "segmentIds": ["seg_proof_4", "seg_cta_5"],
+      "requiredForSlotIds": ["slot_comparison_4", "slot_cta_visual_5"],
+      "transferability": "requires_user_asset",
+      "requiredAssets": ["hand_operation_video", "before_after_comparison"],
+      "fallbackStrategies": ["hand_demo", "comparison_card", "trust_card", "cta_card"],
+      "evidence": [
+        { "type": "model_observation", "value": "fine_scan/fine_structure_scan.json block_004: claimVisualizationPattern requires usage proof" }
+      ],
+      "confidence": 0.8
+    }
+  ],
+  "edges": [
+    { "from": "seg_hook_1", "to": "seg_pain_2", "type": "sequence", "explanation": "按 rough/fine 内容块顺序推进。" },
+    { "from": "seg_pain_2", "to": "seg_selling_3", "type": "sequence", "explanation": "痛点之后承接卖点。" },
+    { "from": "seg_selling_3", "to": "seg_proof_4", "type": "sequence", "explanation": "卖点之后需要证明。" },
+    { "from": "seg_proof_4", "to": "seg_cta_5", "type": "sequence", "explanation": "证明之后收束 CTA。" },
+    { "from": "seg_hook_1", "to": "slot_opening_attention_1", "type": "requires", "explanation": "开场段需要产品揭示槽位。" },
+    { "from": "seg_pain_2", "to": "slot_benefit_visual_2", "type": "requires", "explanation": "痛点段需要场景/利益点视觉槽位。" },
+    { "from": "seg_selling_3", "to": "slot_product_closeup_3", "type": "requires", "explanation": "卖点段需要商品特写槽位。" },
+    { "from": "seg_proof_4", "to": "slot_comparison_4", "type": "requires", "explanation": "证明段需要使用或对比槽位。" },
+    { "from": "seg_cta_5", "to": "slot_cta_visual_5", "type": "requires", "explanation": "CTA 段需要结尾行动视觉槽位。" },
+    { "from": "ing_premium_product_reveal", "to": "slot_opening_attention_1", "type": "maps_to", "explanation": "高级产品揭示影响开头视觉选择。" },
+    { "from": "ing_feature_card_sequence", "to": "slot_product_closeup_3", "type": "maps_to", "explanation": "卖点前置影响商品特写和卖点卡。" },
+    { "from": "ing_usage_proof_gap", "to": "slot_comparison_4", "type": "maps_to", "explanation": "场景证明影响对比/操作素材需求。" },
+    { "from": "slot_comparison_4", "to": "comparison_card", "type": "fallback", "explanation": "缺少真实畅饮或前后对比视频时降级为对比卡。" },
+    { "from": "slot_cta_visual_5", "to": "cta_card", "type": "fallback", "explanation": "缺少结尾 CTA 镜头时生成行动卡。" }
+  ]
+}

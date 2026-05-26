@@ -131,7 +131,7 @@ function GraphSummary({
       <h2>结构摘要</h2>
       <p>{graph.structureSummary}</p>
       <ul>
-        <li>结构来源：{debug?.fallbackUsed ? 'Mock fallback' : videoAnalysis ? 'M1 VideoAnalysis 规则抽取' : '默认展示'}</li>
+        <li>结构来源：{structureSourceLabel(debug, videoAnalysis)}</li>
         <li>视频类型：{graph.meta.videoType}</li>
         <li>风格：{graph.meta.style}</li>
         <li>节奏：{graph.rhythm.cutFrequency} · 平均镜头 {formatSeconds(graph.rhythm.avgShotDuration)} · {graph.rhythm.pattern}</li>
@@ -169,6 +169,19 @@ function SegmentStrip({ graph }: { graph: ViralStructureGraph }) {
       ))}
     </div>
   );
+}
+
+function structureSourceLabel(debug: StructureDebug | null, videoAnalysis: VideoAnalysis | null): string {
+  if (debug?.extractionSource === 'rough_fine_scan_artifact') {
+    return 'Rough/Fine Scan 预计算图谱';
+  }
+  if (debug?.extractionSource === 'video_analysis_rules') {
+    return 'M1 VideoAnalysis 规则抽取';
+  }
+  if (debug?.fallbackUsed || debug?.extractionSource === 'mock_fallback') {
+    return 'Mock fallback';
+  }
+  return videoAnalysis ? 'M1 VideoAnalysis 规则抽取' : '默认展示';
 }
 
 function SlotTable({ graph }: { graph: ViralStructureGraph }) {

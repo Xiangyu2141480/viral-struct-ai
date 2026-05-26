@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import type { ContentBrief } from '@viral-struct/shared';
+import { analyzeAssetsMock } from '../services/assetAnalyzer';
 import { loadAssetLibrary } from '../services/assetLibraryLoader';
 import { getChampionDemoShowcase } from '../services/demoShowcase';
 import { planGapRepairs } from '../services/gapRepairPlanner';
@@ -40,7 +41,7 @@ demoRouter.post('/run', async (_req, res) => {
       manualTranscript: showcase.case.manualTranscript
     });
     const structure = await extractStructureFromVideoAnalysis(videoAnalysis);
-    const assetCards = await loadAssetLibrary(showcase.case.assetLibraryId);
+    const assetCards = await loadDemoAssetCards(showcase);
     const slotResult = matchSlots(structure.structureGraph, assetCards);
     const repairs = planGapRepairs(slotResult.gaps, assetCards, contentBrief);
     const generation = await generateTimelineMock({
@@ -75,4 +76,16 @@ demoRouter.post('/run', async (_req, res) => {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+async function loadDemoAssetCards(showcase: ReturnType<typeof getChampionDemoShowcase>) {
+  try {
+    return await loadAssetLibrary(showcase.case.assetLibraryId);
+  } catch {
+    const demoFiles = showcase.case.assetFiles.map((asset) => ({
+      originalname: asset.filename,
+      path: asset.publicUrl
+    })) as Express.Multer.File[];
+    return analyzeAssetsMock(demoFiles, showcase.case.assetBrief);
+  }
 }

@@ -47,10 +47,10 @@ export function getChampionDemoShowcase(): DemoShowcase {
   return {
     case: {
       id: 'kangshifu_iced_black_tea_gap_repair',
-      title: '康师傅冰红茶：少素材结构迁移主案例',
-      seedFilename: 'huaxizi.mp4',
+      title: '康师傅冰红茶：MacBook 爆款结构迁移主案例',
+      seedFilename: 'macbook_neo.mp4',
       manualTranscript:
-        '开头先用高温场景抓住注意。普通饮料不够解腻也不够清爽。核心卖点要快速前置。真实画面展示冰镇、开盖和畅饮瞬间。最后用明确 CTA 完成转化。',
+        '开头先用高质感产品揭示抓住注意。普通选择不够清爽也不够有记忆点。核心卖点要快速前置。真实画面展示冰镇、开盖和畅饮瞬间。最后用明确 CTA 完成转化。',
       productName: '康师傅冰红茶',
       targetAudience: '夏季通勤和校园人群',
       scenario: '午后高温、运动后或饭后解腻',

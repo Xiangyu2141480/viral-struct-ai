@@ -31,6 +31,7 @@ interface DemoShowcaseCase {
   cta: string;
   stylePreference: string;
   assetBrief: string;
+  assetLibraryId?: string;
   assetFiles: DemoShowcaseAsset[];
 }
 
@@ -74,6 +75,7 @@ interface DemoRunResponse {
   structureGraph: ViralStructureGraph;
   structureDebug?: {
     fallbackUsed: boolean;
+    extractionSource?: 'rough_fine_scan_artifact' | 'video_analysis_rules' | 'mock_fallback';
     segmentCount: number;
     evidenceCount: number;
     warnings: string[];
@@ -91,10 +93,10 @@ interface DemoRunResponse {
 const fallbackShowcase: DemoShowcase = {
   case: {
     id: 'kangshifu_iced_black_tea_gap_repair',
-    title: '康师傅冰红茶：少素材结构迁移主案例',
-    seedFilename: 'huaxizi.mp4',
+    title: '康师傅冰红茶：MacBook 爆款结构迁移主案例',
+    seedFilename: 'macbook_neo.mp4',
     manualTranscript:
-      '开头先用高温场景抓住注意。普通饮料不够解腻也不够清爽。核心卖点要快速前置。真实画面展示冰镇、开盖和畅饮瞬间。最后用明确 CTA 完成转化。',
+      '开头先用高质感产品揭示抓住注意。普通选择不够清爽也不够有记忆点。核心卖点要快速前置。真实画面展示冰镇、开盖和畅饮瞬间。最后用明确 CTA 完成转化。',
     productName: '康师傅冰红茶',
     targetAudience: '夏季通勤和校园人群',
     scenario: '午后高温、运动后或饭后解腻',
@@ -103,6 +105,7 @@ const fallbackShowcase: DemoShowcase = {
     stylePreference: '清爽夏日、高点击、快节奏、红色卖点卡',
     assetBrief:
       '已有瓶身主图、动感冰爽图、组合包装图；缺少真人口播、缺少完整开盖畅饮过程、缺少对比镜头、缺少 CTA 结尾镜头。系统需要用标题卡、冰爽卖点卡、结构重排和素材复用完成补全。',
+    assetLibraryId: 'kangshifu_demo',
     assetFiles: [
       {
         filename: 'kangshifu-iced-tea-product-shot.png',

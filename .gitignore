@@ -36,7 +36,9 @@ seed_assets/**/*.ytdl
 seed_assets/**/*.temp
 seed_assets/cookies/
 seed_assets/processed_videos/
-seed_assets/analysis/
+seed_assets/analysis/**
+!seed_assets/analysis/macbook_neo/
+!seed_assets/analysis/macbook_neo/structure_graph.json
 
 # Build and cache artifacts
 .turbo/

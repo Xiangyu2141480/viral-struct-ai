@@ -23,6 +23,8 @@ SEED_VIDEO_DIR=./seed_assets/raw_videos
 UPLOAD_DIR=./uploads
 FRAME_DIR=./frames
 COVER_DIR=./covers
+ANALYSIS_DIR=./seed_assets/analysis
+ASSET_LIBRARY_DIR=./seed_assets/asset_libraries
 ENABLE_MOCK_AI=true
 ```
 
@@ -31,9 +33,9 @@ ENABLE_MOCK_AI=true
 ## 2. 主 Demo 流程
 
 0. `/demo`：打开冠军演示工作台，点击“一键运行冠军 demo”，让评委先看到完整闭环和评分证据链。
-1. `/analyze`：选择 `huaxizi.mp4` 或 `YVES SAINT LAURENT .mp4`，粘贴手动字幕，展示真实时长、FPS、分辨率、关键帧、镜头草案。
-2. `/graph`：自动抽取 ViralStructureGraph，展示脚本结构、节奏结构、包装结构、creativeIngredients 和证据。
-3. `/adapt`：输入康师傅冰红茶 brief，使用瓶身主图、动感冰爽图和组合包装图等少量素材，生成 AssetCard。
+1. `/analyze`：主 demo 使用 `macbook_neo.mp4`，粘贴手动字幕，展示真实时长、FPS、分辨率、关键帧、镜头草案。
+2. `/graph`：优先加载 `seed_assets/analysis/macbook_neo/structure_graph.json` 这个 rough/fine scan adapter 图谱，展示脚本结构、节奏结构、包装结构、creativeIngredients 和证据。
+3. `/adapt`：输入康师傅冰红茶 brief，使用 `seed_assets/asset_libraries/kangshifu_demo/asset_cards.json` 中的真实 AssetCard，展示瓶身主图、动感冰爽图和组合包装图等少量素材。
 4. `/gaps`：展示每个结构槽位的 matched/partial/missing、缺口原因、影响段落和补全策略。
 5. `/result`：生成脚本、分镜、时间线、Web 预览、样例结构到新结果映射、质量自检。
 6. 在 `/result` 切换高点击版、高转化版、高质感版，演示版本策略差异。
@@ -56,8 +58,8 @@ curl -X POST http://localhost:4000/api/demo/run
 ## 4. Fallback 策略
 
 - ffmpeg/ffprobe 异常：`VideoAnalysis.analysisSource = mock_fallback`，页面展示 warning。
-- 无 ASR：manual transcript fallback；为空时结构抽取可用 shots/keyframes 兜底。
-- 无真实素材：AssetCard 可由 text brief 生成，缺口识别仍可演示。
+- 无 ASR：manual transcript fallback；为空时结构抽取优先使用 rough/fine scan artifact，再回退 shots/keyframes 规则兜底。
+- 无真实素材库：demo 会回退到 `analyzeAssetsMock`，缺口识别仍可演示。
 - AI provider 不可用：核心 demo 使用规则/mock provider，不阻断展示。
 
 ## 5. 安全边界
