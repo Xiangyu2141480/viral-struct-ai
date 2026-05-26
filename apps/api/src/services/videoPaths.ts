@@ -32,3 +32,7 @@ export function getDemoAssetDir(): string {
 export function getSeedVideoDir(): string {
   return resolveRepoPath(process.env.SEED_VIDEO_DIR, './seed_assets/raw_videos');
 }
+
+export function getAssetLibraryDir(): string {
+  return resolveRepoPath(process.env.ASSET_LIBRARY_DIR, './seed_assets/asset_libraries');
+}

@@ -1,0 +1,38 @@
+[
+  {
+    "id": "asset_001",
+    "type": "image",
+    "url": "/media/demo-assets/kangshifu_iced_tea/kangshifu-iced-tea-product-shot.png",
+    "spatialDescription": "冰红茶瓶身居中，纯白背景，正面近景构图，瓶标文字清晰可辨，无人物。",
+    "detectedObjects": ["beverage bottle", "label", "product"],
+    "suitableSlots": ["product_closeup", "cta_visual"],
+    "qualityScore": 0.84,
+    "detectedIngredients": ["product_closeup_trait", "clean_background", "premium_visual"],
+    "humanPresence": { "hasHuman": false },
+    "visualStyleTags": ["clean_background", "premium_visual"]
+  },
+  {
+    "id": "asset_002",
+    "type": "image",
+    "url": "/media/demo-assets/kangshifu_iced_tea/kangshifu-iced-tea-splash.png",
+    "spatialDescription": "饮料液体高速飞溅，冰块散落画面四周，产品瓶身居中偏下，深色渐变背景，强动感构图。",
+    "detectedObjects": ["beverage bottle", "ice cubes", "liquid splash", "product"],
+    "suitableSlots": ["opening_attention", "benefit_visual"],
+    "qualityScore": 0.88,
+    "detectedIngredients": ["product_closeup_trait", "premium_visual", "lifestyle_context"],
+    "humanPresence": { "hasHuman": false },
+    "visualStyleTags": ["premium_visual", "lifestyle_context"]
+  },
+  {
+    "id": "asset_003",
+    "type": "image",
+    "url": "/media/demo-assets/kangshifu_iced_tea/kangshifu-iced-tea-lineup.png",
+    "spatialDescription": "多瓶冰红茶并排陈列，宽景构图，展示系列包装一致性，浅色背景，无人物。",
+    "detectedObjects": ["beverage bottle", "product lineup", "label", "product"],
+    "suitableSlots": ["product_closeup", "benefit_visual", "comparison"],
+    "qualityScore": 0.78,
+    "detectedIngredients": ["product_closeup_trait", "clean_background"],
+    "humanPresence": { "hasHuman": false },
+    "visualStyleTags": ["clean_background"]
+  }
+]

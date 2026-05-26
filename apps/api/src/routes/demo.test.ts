@@ -55,7 +55,7 @@ test('POST /api/demo/run returns a complete judge-facing workflow result', async
   assert.equal(body.showcase.case.productName, '康师傅冰红茶');
   assert.equal(body.videoAnalysis.analysisSource, 'real_ffmpeg');
   assert.ok(body.structureGraph.segments.length >= 4);
-  assert.ok(body.assetCards.length >= 4);
+  assert.ok(body.assetCards.length >= 3); // real library has 3 images; mock had 3 + 1 text brief
   assert.ok(body.assetCards.some((card: { url?: string }) => card.url?.includes('kangshifu_iced_tea')));
   assert.ok(body.materialGaps.length >= 1);
   assert.ok(body.repairs.length >= 1);
