@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import type { AssetCard, ContentBrief } from '@viral-struct/shared';
-import { apiPostForm } from '../lib/api';
+import { apiPostForm, mediaUrl } from '../lib/api';
 import { useWorkflowStore } from '../lib/workflowStore';
 
 interface AssetsResponse {
@@ -21,7 +21,9 @@ export function AssetAdaptPanel() {
   const [sellingPointsText, setSellingPointsText] = useState(contentBrief.sellingPoints.join('\n'));
   const [cta, setCta] = useState(contentBrief.cta);
   const [stylePreference, setStylePreference] = useState(contentBrief.stylePreference ?? '');
-  const [textBrief, setTextBrief] = useState('只有产品图和手持图，没有授权真人讲解、完整使用过程、对比镜头和 CTA 镜头。');
+  const [textBrief, setTextBrief] = useState(
+    '已有瓶身主图、动感冰爽图和组合包装图；缺少真人口播、完整开盖畅饮过程、对比镜头和 CTA 结尾镜头。'
+  );
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -128,7 +130,7 @@ export function AssetAdaptPanel() {
             {loading ? '分析中...' : '分析素材并保存'}
           </button>
           {error ? <p style={{ color: '#fca5a5' }}>{error}</p> : null}
-          <p>Demo 推荐故意只提供产品图 + 手持图，以展示素材缺口能力。</p>
+          <p>Demo 推荐故意只提供少量冰红茶素材，以展示素材缺口能力。</p>
         </div>
       </div>
 
@@ -151,6 +153,13 @@ function AssetCards({ cards }: { cards: AssetCard[] }) {
             <strong>
               {card.id} · {card.type}
             </strong>
+            {card.url ? (
+              <img
+                src={mediaUrl(card.url)}
+                alt={card.id}
+                style={{ width: '100%', aspectRatio: '4 / 3', objectFit: 'cover', borderRadius: 6, marginTop: 8 }}
+              />
+            ) : null}
             <p>{card.spatialDescription ?? card.text ?? '文本素材'}</p>
             <p>适配槽位：{card.suitableSlots.join(' / ') || '无'}</p>
             <p>检测要素：{card.detectedIngredients?.join(' / ') || '无'}</p>

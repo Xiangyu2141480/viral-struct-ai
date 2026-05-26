@@ -41,9 +41,10 @@ test('GET /api/demo/showcase exposes the judge-facing demo config', async () => 
 
   assert.equal(response.status, 200);
   const body = await response.json();
-  assert.equal(body.showcase.case.productName, '便携咖啡杯');
+  assert.equal(body.showcase.case.productName, '康师傅冰红茶');
   assert.ok(body.showcase.steps.length >= 5);
   assert.ok(body.showcase.scoreEvidence.length >= 7);
+  assert.equal(body.showcase.case.assetFiles.length, 3);
 });
 
 test('POST /api/demo/run returns a complete judge-facing workflow result', async () => {
@@ -51,10 +52,11 @@ test('POST /api/demo/run returns a complete judge-facing workflow result', async
 
   assert.equal(response.status, 200);
   const body = await response.json();
-  assert.equal(body.showcase.case.productName, '便携咖啡杯');
+  assert.equal(body.showcase.case.productName, '康师傅冰红茶');
   assert.equal(body.videoAnalysis.analysisSource, 'real_ffmpeg');
   assert.ok(body.structureGraph.segments.length >= 4);
-  assert.ok(body.assetCards.length >= 1);
+  assert.ok(body.assetCards.length >= 4);
+  assert.ok(body.assetCards.some((card: { url?: string }) => card.url?.includes('kangshifu_iced_tea')));
   assert.ok(body.materialGaps.length >= 1);
   assert.ok(body.repairs.length >= 1);
   assert.ok(body.timeline.length >= 4);

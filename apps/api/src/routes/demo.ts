@@ -40,7 +40,11 @@ demoRouter.post('/run', async (_req, res) => {
       manualTranscript: showcase.case.manualTranscript
     });
     const structure = await extractStructureFromVideoAnalysis(videoAnalysis);
-    const assetCards = await analyzeAssetsMock([], showcase.case.assetBrief);
+    const demoFiles = showcase.case.assetFiles.map((asset) => ({
+      originalname: asset.filename,
+      path: asset.publicUrl
+    })) as Express.Multer.File[];
+    const assetCards = await analyzeAssetsMock(demoFiles, showcase.case.assetBrief);
     const slotResult = matchSlots(structure.structureGraph, assetCards);
     const repairs = planGapRepairs(slotResult.gaps, assetCards, contentBrief);
     const generation = await generateTimelineMock({

@@ -33,12 +33,12 @@ interface GenerationResult {
 }
 
 const defaultContentBrief: ContentBrief = {
-  productName: '便携咖啡杯',
-  targetAudience: '通勤上班族',
-  scenario: '早高峰通勤路上',
-  sellingPoints: ['保温 8 小时', '倒置不漏', '单手开盖', '可放入车载杯架'],
-  cta: '通勤党想喝热咖啡，就选它。',
-  stylePreference: '高点击、快节奏、清晰卖点卡'
+  productName: '康师傅冰红茶',
+  targetAudience: '夏季通勤和校园人群',
+  scenario: '午后高温、运动后或饭后解腻',
+  sellingPoints: ['冰爽解腻', '柠檬茶香', '大瓶畅饮', '冷藏口感更好'],
+  cta: '想要冰爽解腻，就来一瓶康师傅冰红茶。',
+  stylePreference: '清爽夏日、高点击、快节奏、红色卖点卡'
 };
 
 interface WorkflowState {

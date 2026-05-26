@@ -10,6 +10,14 @@ export interface DemoShowcaseCase {
   cta: string;
   stylePreference: string;
   assetBrief: string;
+  assetFiles: DemoShowcaseAsset[];
+}
+
+export interface DemoShowcaseAsset {
+  filename: string;
+  displayName: string;
+  repoPath: string;
+  publicUrl: string;
 }
 
 export interface DemoShowcaseStep {
@@ -37,19 +45,39 @@ export interface DemoShowcase {
 export function getChampionDemoShowcase(): DemoShowcase {
   return {
     case: {
-      id: 'portable_coffee_cup_gap_repair',
-      title: '便携咖啡杯：少素材结构迁移主案例',
+      id: 'kangshifu_iced_black_tea_gap_repair',
+      title: '康师傅冰红茶：少素材结构迁移主案例',
       seedFilename: 'huaxizi.mp4',
       manualTranscript:
-        '开头先用强问题抓住注意。普通选择很难兼顾质感和效率。核心卖点要快速前置。真实画面展示使用过程和细节。最后用明确 CTA 完成转化。',
-      productName: '便携咖啡杯',
-      targetAudience: '通勤上班族',
-      scenario: '早高峰通勤路上',
-      sellingPoints: ['保温 8 小时', '倒置不漏', '单手开盖', '可放入车载杯架'],
-      cta: '通勤党想喝热咖啡，就选它。',
-      stylePreference: '高点击、快节奏、清晰卖点卡',
+        '开头先用高温场景抓住注意。普通饮料不够解腻也不够清爽。核心卖点要快速前置。真实画面展示冰镇、开盖和畅饮瞬间。最后用明确 CTA 完成转化。',
+      productName: '康师傅冰红茶',
+      targetAudience: '夏季通勤和校园人群',
+      scenario: '午后高温、运动后或饭后解腻',
+      sellingPoints: ['冰爽解腻', '柠檬茶香', '大瓶畅饮', '冷藏口感更好'],
+      cta: '想要冰爽解腻，就来一瓶康师傅冰红茶。',
+      stylePreference: '清爽夏日、高点击、快节奏、红色卖点卡',
       assetBrief:
-        '只有产品图和手持图；缺少真人讲解、缺少使用过程、缺少对比镜头、缺少 CTA 镜头。系统需要用标题卡、卖点卡、结构重排和素材复用完成补全。'
+        '已有瓶身主图、动感冰爽图、组合包装图；缺少真人口播、缺少完整开盖畅饮过程、缺少对比镜头、缺少 CTA 结尾镜头。系统需要用标题卡、冰爽卖点卡、结构重排和素材复用完成补全。',
+      assetFiles: [
+        {
+          filename: 'kangshifu-iced-tea-product-shot.png',
+          displayName: '瓶身主图',
+          repoPath: 'seed_assets/demo_assets/kangshifu_iced_tea/kangshifu-iced-tea-product-shot.png',
+          publicUrl: '/media/demo-assets/kangshifu_iced_tea/kangshifu-iced-tea-product-shot.png'
+        },
+        {
+          filename: 'kangshifu-iced-tea-splash.png',
+          displayName: '动感冰爽图',
+          repoPath: 'seed_assets/demo_assets/kangshifu_iced_tea/kangshifu-iced-tea-splash.png',
+          publicUrl: '/media/demo-assets/kangshifu_iced_tea/kangshifu-iced-tea-splash.png'
+        },
+        {
+          filename: 'kangshifu-iced-tea-lineup.png',
+          displayName: '组合包装图',
+          repoPath: 'seed_assets/demo_assets/kangshifu_iced_tea/kangshifu-iced-tea-lineup.png',
+          publicUrl: '/media/demo-assets/kangshifu_iced_tea/kangshifu-iced-tea-lineup.png'
+        }
+      ]
     },
     steps: [
       {

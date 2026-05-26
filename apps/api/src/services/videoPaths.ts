@@ -25,6 +25,10 @@ export function getCoverDir(): string {
   return resolveRepoPath(process.env.COVER_DIR, './covers');
 }
 
+export function getDemoAssetDir(): string {
+  return resolveRepoPath(process.env.DEMO_ASSET_DIR, './seed_assets/demo_assets');
+}
+
 export function getSeedVideoDir(): string {
   return resolveRepoPath(process.env.SEED_VIDEO_DIR, './seed_assets/raw_videos');
 }

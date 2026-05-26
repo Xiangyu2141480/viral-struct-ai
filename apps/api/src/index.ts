@@ -10,13 +10,14 @@ import { gapsRouter } from './routes/gaps';
 import { timelineRouter } from './routes/timeline';
 import { qualityRouter } from './routes/quality';
 import { demoRouter } from './routes/demo';
-import { getCoverDir, getFrameDir, getUploadDir } from './services/videoPaths';
+import { getCoverDir, getDemoAssetDir, getFrameDir, getUploadDir } from './services/videoPaths';
 
 const app = express();
 const port = Number(process.env.API_PORT ?? 4000);
 const uploadDir = getUploadDir();
 const frameDir = getFrameDir();
 const coverDir = getCoverDir();
+const demoAssetDir = getDemoAssetDir();
 const allowedOrigins = (process.env.WEB_ORIGIN ?? 'http://localhost:3000,http://localhost:3001')
   .split(',')
   .map((origin) => origin.trim())
@@ -25,6 +26,7 @@ const allowedOrigins = (process.env.WEB_ORIGIN ?? 'http://localhost:3000,http://
 mkdirSync(uploadDir, { recursive: true });
 mkdirSync(frameDir, { recursive: true });
 mkdirSync(coverDir, { recursive: true });
+mkdirSync(demoAssetDir, { recursive: true });
 
 app.use(cors({
   origin(origin, callback) {
@@ -39,6 +41,7 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use('/media/frames', express.static(frameDir));
 app.use('/media/covers', express.static(coverDir));
+app.use('/media/demo-assets', express.static(demoAssetDir));
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'viral-struct-api' });

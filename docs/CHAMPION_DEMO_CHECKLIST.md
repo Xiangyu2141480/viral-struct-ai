@@ -33,7 +33,7 @@ ENABLE_MOCK_AI=true
 0. `/demo`：打开冠军演示工作台，点击“一键运行冠军 demo”，让评委先看到完整闭环和评分证据链。
 1. `/analyze`：选择 `huaxizi.mp4` 或 `YVES SAINT LAURENT .mp4`，粘贴手动字幕，展示真实时长、FPS、分辨率、关键帧、镜头草案。
 2. `/graph`：自动抽取 ViralStructureGraph，展示脚本结构、节奏结构、包装结构、creativeIngredients 和证据。
-3. `/adapt`：输入便携咖啡杯 brief，只上传少量产品/手持素材或仅输入文字素材，生成 AssetCard。
+3. `/adapt`：输入康师傅冰红茶 brief，使用瓶身主图、动感冰爽图和组合包装图等少量素材，生成 AssetCard。
 4. `/gaps`：展示每个结构槽位的 matched/partial/missing、缺口原因、影响段落和补全策略。
 5. `/result`：生成脚本、分镜、时间线、Web 预览、样例结构到新结果映射、质量自检。
 6. 在 `/result` 切换高点击版、高转化版、高质感版，演示版本策略差异。
