@@ -2,9 +2,22 @@
 
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import type { VideoAnalysis, ViralStructureGraph } from '@viral-struct/shared';
+import type {
+  AssetCard,
+  ContentBrief,
+  GapRepair,
+  MaterialGap,
+  QualityReport,
+  ScriptSegment,
+  SlotMatch,
+  StoryboardShot,
+  TimelineItem,
+  VideoAnalysis,
+  ViralStructureGraph
+} from '@viral-struct/shared';
 
 export type StructureStatus = 'idle' | 'extracting' | 'ready' | 'fallback' | 'error';
+export type GenerationVariant = 'high_click' | 'high_conversion' | 'premium';
 
 export interface StructureDebug {
   fallbackUsed: boolean;
@@ -13,16 +26,50 @@ export interface StructureDebug {
   warnings: string[];
 }
 
+interface GenerationResult {
+  script: ScriptSegment[];
+  storyboard: StoryboardShot[];
+  timeline: TimelineItem[];
+}
+
+const defaultContentBrief: ContentBrief = {
+  productName: '便携咖啡杯',
+  targetAudience: '通勤上班族',
+  scenario: '早高峰通勤路上',
+  sellingPoints: ['保温 8 小时', '倒置不漏', '单手开盖', '可放入车载杯架'],
+  cta: '通勤党想喝热咖啡，就选它。',
+  stylePreference: '高点击、快节奏、清晰卖点卡'
+};
+
 interface WorkflowState {
   videoAnalysis: VideoAnalysis | null;
   structureGraph: ViralStructureGraph | null;
   structureStatus: StructureStatus;
   structureError: string | null;
   structureDebug: StructureDebug | null;
+  contentBrief: ContentBrief;
+  assetCards: AssetCard[];
+  slotMatches: SlotMatch[];
+  materialGaps: MaterialGap[];
+  repairs: GapRepair[];
+  script: ScriptSegment[];
+  storyboard: StoryboardShot[];
+  timeline: TimelineItem[];
+  qualityReport: QualityReport | null;
+  generationVariant: GenerationVariant;
+  editNotes: string[];
   setVideoAnalysis: (videoAnalysis: VideoAnalysis) => void;
   setStructureGraph: (structureGraph: ViralStructureGraph, debug?: StructureDebug) => void;
   setStructureExtracting: () => void;
   setStructureError: (message: string) => void;
+  setContentBrief: (contentBrief: ContentBrief) => void;
+  setAssetCards: (assetCards: AssetCard[]) => void;
+  setSlotResult: (slotMatches: SlotMatch[], materialGaps: MaterialGap[]) => void;
+  setRepairs: (repairs: GapRepair[]) => void;
+  setGenerationResult: (result: GenerationResult) => void;
+  setQualityReport: (qualityReport: QualityReport) => void;
+  setGenerationVariant: (variant: GenerationVariant) => void;
+  applyLocalEdit: (instruction: string) => void;
   resetWorkflow: () => void;
 }
 
@@ -34,30 +81,164 @@ export const useWorkflowStore = create<WorkflowState>()(
       structureStatus: 'idle',
       structureError: null,
       structureDebug: null,
-      // Fine Scan handoff point: once Fine Scan produces a VideoAnalysis,
-      // call setVideoAnalysis(output); /graph will extract and cache M2.
-      setVideoAnalysis: (videoAnalysis) => set({
-        videoAnalysis,
-        structureGraph: null,
-        structureStatus: 'idle',
-        structureError: null,
-        structureDebug: null
-      }),
-      setStructureGraph: (structureGraph, debug) => set({
-        structureGraph,
-        structureStatus: debug?.fallbackUsed ? 'fallback' : 'ready',
-        structureError: null,
-        structureDebug: debug ?? null
-      }),
+      contentBrief: defaultContentBrief,
+      assetCards: [],
+      slotMatches: [],
+      materialGaps: [],
+      repairs: [],
+      script: [],
+      storyboard: [],
+      timeline: [],
+      qualityReport: null,
+      generationVariant: 'high_click',
+      editNotes: [],
+      setVideoAnalysis: (videoAnalysis) =>
+        set({
+          videoAnalysis,
+          structureGraph: null,
+          structureStatus: 'idle',
+          structureError: null,
+          structureDebug: null,
+          assetCards: [],
+          slotMatches: [],
+          materialGaps: [],
+          repairs: [],
+          script: [],
+          storyboard: [],
+          timeline: [],
+          qualityReport: null,
+          editNotes: []
+        }),
+      setStructureGraph: (structureGraph, debug) =>
+        set({
+          structureGraph,
+          structureStatus: debug?.fallbackUsed ? 'fallback' : 'ready',
+          structureError: null,
+          structureDebug: debug ?? null,
+          slotMatches: [],
+          materialGaps: [],
+          repairs: [],
+          script: [],
+          storyboard: [],
+          timeline: [],
+          qualityReport: null,
+          editNotes: []
+        }),
       setStructureExtracting: () => set({ structureStatus: 'extracting', structureError: null }),
       setStructureError: (message) => set({ structureStatus: 'error', structureError: message }),
-      resetWorkflow: () => set({
-        videoAnalysis: null,
-        structureGraph: null,
-        structureStatus: 'idle',
-        structureError: null,
-        structureDebug: null
-      })
+      setContentBrief: (contentBrief) =>
+        set({
+          contentBrief,
+          slotMatches: [],
+          materialGaps: [],
+          repairs: [],
+          script: [],
+          storyboard: [],
+          timeline: [],
+          qualityReport: null,
+          editNotes: []
+        }),
+      setAssetCards: (assetCards) =>
+        set({
+          assetCards,
+          slotMatches: [],
+          materialGaps: [],
+          repairs: [],
+          script: [],
+          storyboard: [],
+          timeline: [],
+          qualityReport: null,
+          editNotes: []
+        }),
+      setSlotResult: (slotMatches, materialGaps) =>
+        set({
+          slotMatches,
+          materialGaps,
+          repairs: [],
+          script: [],
+          storyboard: [],
+          timeline: [],
+          qualityReport: null,
+          editNotes: []
+        }),
+      setRepairs: (repairs) =>
+        set({
+          repairs,
+          script: [],
+          storyboard: [],
+          timeline: [],
+          qualityReport: null,
+          editNotes: []
+        }),
+      setGenerationResult: ({ script, storyboard, timeline }) =>
+        set({
+          script,
+          storyboard,
+          timeline,
+          qualityReport: null,
+          editNotes: []
+        }),
+      setQualityReport: (qualityReport) => set({ qualityReport }),
+      setGenerationVariant: (generationVariant) =>
+        set({
+          generationVariant,
+          script: [],
+          storyboard: [],
+          timeline: [],
+          qualityReport: null,
+          editNotes: []
+        }),
+      applyLocalEdit: (instruction) =>
+        set((state) => {
+          const normalized = instruction.trim();
+          if (!normalized) {
+            return state;
+          }
+
+          const timeline = state.timeline.map((item, index) => {
+            if (normalized.includes('开头') && index === 0) {
+              return {
+                ...item,
+                script: `${item.script} 先用更强标题抓住注意。`,
+                packaging: { ...item.packaging, transition: 'zoom_in' as const, motion: 'push_in' as const }
+              };
+            }
+
+            if (normalized.includes('商品') && item.segmentRole === 'selling_point') {
+              return { ...item, script: `${state.contentBrief.productName}：${state.contentBrief.sellingPoints[0] ?? item.script}` };
+            }
+
+            if (normalized.includes('节奏')) {
+              return { ...item, packaging: { ...item.packaging, transition: 'quick_cut' as const } };
+            }
+
+            return item;
+          });
+
+          return {
+            timeline,
+            editNotes: [`自然语言调整：${normalized}`, ...state.editNotes]
+          };
+        }),
+      resetWorkflow: () =>
+        set({
+          videoAnalysis: null,
+          structureGraph: null,
+          structureStatus: 'idle',
+          structureError: null,
+          structureDebug: null,
+          contentBrief: defaultContentBrief,
+          assetCards: [],
+          slotMatches: [],
+          materialGaps: [],
+          repairs: [],
+          script: [],
+          storyboard: [],
+          timeline: [],
+          qualityReport: null,
+          generationVariant: 'high_click',
+          editNotes: []
+        })
     }),
     {
       name: 'viral-struct-ai-workflow',

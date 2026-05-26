@@ -8,25 +8,23 @@ import type {
   SlotMatch
 } from '@viral-struct/shared';
 
+type GenerationVariant = 'high_click' | 'high_conversion' | 'premium';
+
 export async function generateTimelineMock(input: {
   structureGraph: ViralStructureGraph;
   newContent: ContentBrief;
   matches: SlotMatch[];
   repairs: GapRepair[];
+  variant?: GenerationVariant;
 }): Promise<{
   script: ScriptSegment[];
   storyboard: StoryboardShot[];
   timeline: TimelineItem[];
 }> {
   const { structureGraph, newContent, matches, repairs } = input;
+  const variant = input.variant ?? 'high_click';
 
-  const lineByRole: Record<string, string> = {
-    hook: `${newContent.scenario}，你是不是也遇到过这个问题？`,
-    pain_point: `普通选择不方便，还影响体验。`,
-    selling_point: `${newContent.productName}，${newContent.sellingPoints.slice(0, 2).join('，')}。`,
-    comparison: `对比普通方案，它更适合${newContent.targetAudience}。`,
-    cta: newContent.cta
-  };
+  const lineByRole = buildLinesByRole(newContent, variant);
 
   const script: ScriptSegment[] = structureGraph.segments.map((seg) => ({
     segmentId: seg.id,
@@ -73,16 +71,46 @@ export async function generateTimelineMock(input: {
         ? 'use_matched_asset'
         : `repair_with_${repair?.strategy ?? 'caption_rewrite'}`,
       packaging: {
-        captionStyle: 'large_bottom_bold',
+        captionStyle: captionStyleForVariant(variant),
         cardType: cardTypeByRole(seg.role),
-        transition: index === 0 ? 'zoom_in' : 'quick_cut',
-        motion: repair?.strategy === 'crop_zoom' ? 'crop_zoom' : 'static'
+        transition: transitionForVariant(variant, index),
+        motion: motionForVariant(variant, repair)
       },
       repair
     };
   });
 
   return { script, storyboard, timeline };
+}
+
+function buildLinesByRole(newContent: ContentBrief, variant: GenerationVariant): Record<string, string> {
+  if (variant === 'premium') {
+    return {
+      hook: `${newContent.productName}，把${newContent.scenario}里的质感细节先立住。`,
+      pain_point: `普通选择容易打断体验，也很难显得精致。`,
+      selling_point: `${newContent.sellingPoints.slice(0, 2).join('，')}，用更克制的画面表达。`,
+      comparison: `对比普通方案，它更适合追求稳定体验的${newContent.targetAudience}。`,
+      cta: `${newContent.cta} 保持简洁、有质感的收束。`
+    };
+  }
+
+  if (variant === 'high_conversion') {
+    return {
+      hook: `${newContent.productName}先给结论：${newContent.sellingPoints[0] ?? '核心卖点明确'}。`,
+      pain_point: `普通选择不方便，还会影响${newContent.targetAudience}的真实使用体验。`,
+      selling_point: `${newContent.productName}，${newContent.sellingPoints.join('，')}。`,
+      comparison: `把普通方案和新方案直接对比，降低决策成本。`,
+      cta: `立即行动：${newContent.cta}`
+    };
+  }
+
+  return {
+    hook: `3 秒看懂：${newContent.scenario}，你是不是也遇到过这个问题？`,
+    pain_point: `普通选择不方便，还影响体验。`,
+    selling_point: `${newContent.productName}，${newContent.sellingPoints.slice(0, 2).join('，')}。`,
+    comparison: `对比普通方案，它更适合${newContent.targetAudience}。`,
+    cta: newContent.cta
+  };
 }
 
 function splitSubtitle(text: string): string[] {
@@ -99,4 +127,29 @@ function cardTypeByRole(role: string): TimelineItem['packaging']['cardType'] {
   if (role === 'comparison') return 'comparison_card';
   if (role === 'cta') return 'cta_card';
   return 'selling_point_card';
+}
+
+function captionStyleForVariant(variant: GenerationVariant): string {
+  if (variant === 'premium') return 'premium_center_light';
+  if (variant === 'high_conversion') return 'conversion_large_bottom_bold';
+  return 'click_large_bottom_bold';
+}
+
+function transitionForVariant(
+  variant: GenerationVariant,
+  index: number
+): NonNullable<TimelineItem['packaging']['transition']> {
+  if (variant === 'premium') return 'fade';
+  if (variant === 'high_conversion') return index === 0 ? 'push' : 'quick_cut';
+  return 'quick_cut';
+}
+
+function motionForVariant(
+  variant: GenerationVariant,
+  repair: GapRepair | undefined
+): NonNullable<TimelineItem['packaging']['motion']> {
+  if (repair?.strategy === 'crop_zoom') return 'crop_zoom';
+  if (variant === 'premium') return 'push_in';
+  if (variant === 'high_click') return 'push_in';
+  return 'static';
 }

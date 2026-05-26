@@ -106,6 +106,7 @@ QualityReport
 - `docs/AI_CONTEXT.md`
 - `docs/SCORING_EXECUTION_PLAN.md`
 - `docs/DEMO_TARGET.md`
+- `docs/CHAMPION_DEMO_CHECKLIST.md`
 - `docs/ISSUE_INDEX.md`
 
 ## 当前分支策略
