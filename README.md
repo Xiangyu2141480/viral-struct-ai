@@ -42,6 +42,8 @@ pnpm build
 pnpm dev
 ```
 
+本地启动后，评委演示入口是 `http://localhost:3000/demo`。
+
 ## 核心数据流
 
 ```txt

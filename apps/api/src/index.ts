@@ -9,6 +9,7 @@ import { slotsRouter } from './routes/slots';
 import { gapsRouter } from './routes/gaps';
 import { timelineRouter } from './routes/timeline';
 import { qualityRouter } from './routes/quality';
+import { demoRouter } from './routes/demo';
 import { getCoverDir, getFrameDir, getUploadDir } from './services/videoPaths';
 
 const app = express();
@@ -50,6 +51,7 @@ app.use('/api/slots', slotsRouter);
 app.use('/api/gaps', gapsRouter);
 app.use('/api/timeline', timelineRouter);
 app.use('/api/quality', qualityRouter);
+app.use('/api/demo', demoRouter);
 
 app.listen(port, () => {
   console.log(`ViralStruct API listening on http://localhost:${port}`);

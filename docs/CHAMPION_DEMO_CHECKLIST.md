@@ -30,6 +30,7 @@ ENABLE_MOCK_AI=true
 
 ## 2. 主 Demo 流程
 
+0. `/demo`：打开冠军演示工作台，点击“一键运行冠军 demo”，让评委先看到完整闭环和评分证据链。
 1. `/analyze`：选择 `huaxizi.mp4` 或 `YVES SAINT LAURENT .mp4`，粘贴手动字幕，展示真实时长、FPS、分辨率、关键帧、镜头草案。
 2. `/graph`：自动抽取 ViralStructureGraph，展示脚本结构、节奏结构、包装结构、creativeIngredients 和证据。
 3. `/adapt`：输入便携咖啡杯 brief，只上传少量产品/手持素材或仅输入文字素材，生成 AssetCard。
@@ -37,6 +38,12 @@ ENABLE_MOCK_AI=true
 5. `/result`：生成脚本、分镜、时间线、Web 预览、样例结构到新结果映射、质量自检。
 6. 在 `/result` 切换高点击版、高转化版、高质感版，演示版本策略差异。
 7. 输入“开头更抓人一些，把商品信息提前，节奏更快”，演示人工可调/自然语言改片。
+
+API smoke 可直接调用：
+
+```bash
+curl -X POST http://localhost:4000/api/demo/run
+```
 
 ## 3. 评分证据
 
