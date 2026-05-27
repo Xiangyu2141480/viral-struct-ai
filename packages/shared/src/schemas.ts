@@ -171,12 +171,12 @@ export const AssetCardSchema = z.object({
 export const BoundaryMicroShotSchema = z.object({
   id: z.string(),
   role: z.enum(['pre_transition', 'transition_peak', 'post_transition', 'unknown']),
-  durationMs: z.number().optional(),
+  durationMs: z.number().optional(),  // milliseconds
   description: z.string().optional()
 });
 
 export const BoundarySchema = z.object({
-  boundaryId: z.string(),
+  id: z.string(),
   from: z.string(),
   to: z.string(),
   transitionType: z.enum(['cut', 'fade', 'morph', 'wipe', 'dissolve', 'unknown']),
@@ -248,5 +248,5 @@ export const ViralStructureGraphSchema = z.object({
     type: z.enum(['sequence', 'requires', 'maps_to', 'fallback']),
     explanation: z.string().optional()
   })),
-  boundaries: z.array(BoundarySchema).optional()  // ★ new
+  boundaries: z.array(BoundarySchema).optional()
 });
