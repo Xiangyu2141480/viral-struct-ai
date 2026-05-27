@@ -60,9 +60,6 @@ demoRouter.post('/run', async (_req, res) => {
     const assetLoad = await loadDemoAssetCards(showcase);
     const slotResult = matchSlots(structure.structureGraph, assetLoad.assetCards, boundaries);
     const repairs = planGapRepairs(slotResult.gaps, assetLoad.assetCards, contentBrief, boundaries);
-    const assetLoad = await loadDemoAssetCards(showcase);
-    const slotResult = matchSlots(structure.structureGraph, assetLoad.assetCards);
-    const repairs = planGapRepairs(slotResult.gaps, assetLoad.assetCards, contentBrief);
     const generation = await generateTimelineMock({
       structureGraph: structure.structureGraph,
       newContent: contentBrief,
