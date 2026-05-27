@@ -68,3 +68,18 @@ test('POST /api/demo/run returns a complete judge-facing workflow result', async
   assert.ok(body.timeline.length >= 4);
   assert.ok(body.qualityReport.structureMatch > 0);
 });
+
+test('POST /api/demo/run propagates boundaries into qualityReport.transitionFidelity', async () => {
+  const response = await fetch(`${baseUrl}/api/demo/run`, { method: 'POST' });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+
+  // Macbook_neo structure_graph.json now has 9 boundaries committed (Task 7).
+  assert.equal(body.structureDebug.extractionSource, 'rough_fine_scan_artifact');
+  assert.ok(Array.isArray(body.structureGraph.boundaries), 'structureGraph.boundaries should be an array');
+  assert.ok(body.structureGraph.boundaries.length >= 1, 'at least one boundary expected');
+
+  // Quality report should include transitionFidelity since boundaries flowed in.
+  assert.equal(typeof body.qualityReport.transitionFidelity, 'number');
+  assert.ok(body.qualityReport.transitionFidelity >= 0 && body.qualityReport.transitionFidelity <= 1);
+});

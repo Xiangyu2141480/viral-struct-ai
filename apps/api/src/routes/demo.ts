@@ -41,19 +41,22 @@ demoRouter.post('/run', async (_req, res) => {
       manualTranscript: showcase.case.manualTranscript
     });
     const structure = await extractStructureFromVideoAnalysis(videoAnalysis);
+    const boundaries = structure.structureGraph.boundaries;
     const assetCards = await loadDemoAssetCards(showcase);
-    const slotResult = matchSlots(structure.structureGraph, assetCards);
-    const repairs = planGapRepairs(slotResult.gaps, assetCards, contentBrief);
+    const slotResult = matchSlots(structure.structureGraph, assetCards, boundaries);
+    const repairs = planGapRepairs(slotResult.gaps, assetCards, contentBrief, boundaries);
     const generation = await generateTimelineMock({
       structureGraph: structure.structureGraph,
       newContent: contentBrief,
       matches: slotResult.matches,
       repairs,
-      variant: 'high_click'
+      variant: 'high_click',
+      boundaries
     });
     const qualityReport = evaluateQuality({
       matches: slotResult.matches,
-      timeline: generation.timeline
+      timeline: generation.timeline,
+      boundaries
     });
 
     res.json({
