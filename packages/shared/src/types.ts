@@ -344,4 +344,23 @@ export interface QualityReport {
   coherence: number;
   subtitleReadability: number;
   warnings: string[];
+  transitionFidelity?: number;  // 0..1; only populated when source boundaries exist
+}
+
+export interface BoundaryMicroShot {
+  id: string;
+  role: 'pre_transition' | 'transition_peak' | 'post_transition' | 'unknown';
+  durationMs?: number;
+  description?: string;
+}
+
+export interface Boundary {
+  boundaryId: string;
+  from: string;
+  to: string;
+  transitionType: 'cut' | 'fade' | 'morph' | 'wipe' | 'dissolve' | 'unknown';
+  intensity?: 'weak' | 'medium' | 'strong';
+  alignedToBeat?: boolean;
+  microShots?: BoundaryMicroShot[];
+  evidence?: string;
 }
