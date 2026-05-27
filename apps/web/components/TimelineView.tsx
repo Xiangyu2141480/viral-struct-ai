@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import type { QualityReport, ScriptSegment, StoryboardShot, TimelineItem } from '@viral-struct/shared';
+import type { AssetCard, QualityReport, ScriptSegment, StoryboardShot, TimelineItem } from '@viral-struct/shared';
 import { apiPost } from '../lib/api';
 import { type GenerationVariant, useWorkflowStore } from '../lib/workflowStore';
+import { VisualTimelinePreview } from './VisualTimelinePreview';
 
 interface TimelineResponse {
   script: ScriptSegment[];
@@ -29,6 +30,7 @@ export function TimelineView() {
   const script = useWorkflowStore((state) => state.script);
   const storyboard = useWorkflowStore((state) => state.storyboard);
   const timeline = useWorkflowStore((state) => state.timeline);
+  const assetCards = useWorkflowStore((state) => state.assetCards);
   const generationVariant = useWorkflowStore((state) => state.generationVariant);
   const editNotes = useWorkflowStore((state) => state.editNotes);
   const setGenerationVariant = useWorkflowStore((state) => state.setGenerationVariant);
@@ -95,7 +97,7 @@ export function TimelineView() {
         {error ? <p style={{ color: '#fca5a5' }}>{error}</p> : null}
       </div>
 
-      {timeline.length ? <Preview timeline={timeline} /> : null}
+      {timeline.length ? <Preview timeline={timeline} assetCards={assetCards} /> : null}
       {timeline.length ? (
         <section className="card" style={{ marginBottom: 16 }}>
           <h2>人工可调 / 自然语言改片</h2>
@@ -125,43 +127,11 @@ export function TimelineView() {
   );
 }
 
-function Preview({ timeline }: { timeline: TimelineItem[] }) {
+function Preview({ timeline, assetCards }: { timeline: TimelineItem[]; assetCards: AssetCard[] }) {
   return (
     <section className="card" style={{ marginBottom: 16 }}>
-      <h2>Web 预览 Demo</h2>
-      <div
-        style={{
-          aspectRatio: '9 / 16',
-          maxWidth: 360,
-          margin: '0 auto',
-          border: '1px solid rgba(255,255,255,0.16)',
-          borderRadius: 8,
-          overflow: 'hidden',
-          background: '#f8fafc',
-          color: '#0f172a'
-        }}
-      >
-        {timeline.slice(0, 6).map((item, index) => (
-          <div
-            key={item.id}
-            style={{
-              minHeight: `${100 / Math.min(timeline.length, 6)}%`,
-              padding: 12,
-              display: 'grid',
-              alignContent: 'center',
-              gap: 6,
-              background: index % 2 === 0 ? '#fff7ed' : '#ecfeff',
-              borderBottom: '1px solid rgba(15,23,42,0.12)'
-            }}
-          >
-            <strong>{item.packaging.cardType ?? item.segmentRole}</strong>
-            <span>{item.script}</span>
-            <small>
-              {formatSeconds(item.start)} - {formatSeconds(item.end)} · {item.visualAction}
-            </small>
-          </div>
-        ))}
-      </div>
+      <h2>Web 视觉预览</h2>
+      <VisualTimelinePreview timeline={timeline} assetCards={assetCards} />
     </section>
   );
 }
