@@ -1610,214 +1610,289 @@
       "id": "boundary_001",
       "from": "seg_block_001",
       "to": "seg_block_002",
-      "transitionType": "unknown",
-      "alignedToBeat": false,
+      "transitionType": "morph",
+      "intensity": "strong",
       "microShots": [
         {
           "id": "micro_001",
-          "role": "unknown"
+          "role": "pre_transition",
+          "durationMs": 6200.0,
+          "description": "黄色笔记本在纯白背景上缓慢平移，屏幕显示固定的黄绿渐变椭圆图案，无其他物体入镜"
         },
         {
           "id": "micro_002",
-          "role": "unknown"
+          "role": "transition_peak",
+          "durationMs": 4700.0,
+          "description": "双手从画面两侧进入，握住黄色笔记本两侧将其抬起，笔记本逐渐移出画面右上角，画面同步出现运动模糊效果"
         },
         {
           "id": "micro_003",
-          "role": "unknown"
+          "role": "transition_peak",
+          "durationMs": 6100.0,
+          "description": "画面完全变为纯白空白，仅有微弱的光影缓慢流动，无任何实体物体出现，承担前后内容块的桥接过渡作用"
         },
         {
           "id": "micro_004",
-          "role": "unknown"
+          "role": "post_transition",
+          "durationMs": 7000.0,
+          "description": "一只手从画面左侧托着灰色哑光质感的笔记本进入，将其平稳放置在白色桌面上，另一只手从画面右侧进入准备操作笔记本"
         }
-      ]
+      ],
+      "evidence": "前序黄色笔记本完全移出画面后进入纯白空白过渡状态，自然衔接后续灰色哑光笔记本的出场，完成两个不同产品展示段落的平滑切换"
     },
     {
       "id": "boundary_002",
       "from": "seg_block_002",
       "to": "seg_block_003",
-      "transitionType": "unknown",
-      "alignedToBeat": false,
+      "transitionType": "fade",
+      "intensity": "strong",
       "microShots": [
         {
           "id": "micro_001",
-          "role": "unknown"
+          "role": "pre_transition",
+          "durationMs": 8600.0,
+          "description": "双手托住哑光灰色悬空笔记本，缓慢向下移动，将笔记本平稳放置在桌面上，随后双手从画面两侧移出"
         },
         {
           "id": "micro_002",
-          "role": "unknown"
+          "role": "transition_peak",
+          "durationMs": 2400.0,
+          "description": "笔记本静止放置在亮白背景的桌面上，无手部动作，画面保持静态展示产品外观"
         },
         {
           "id": "micro_003",
-          "role": "unknown"
+          "role": "transition_peak",
+          "durationMs": 8000.0,
+          "description": "双手从画面两侧入镜，手掌逐渐亮起粉紫色荧光，同时整体环境同步缓慢变暗，亮白背景逐步过渡为纯黑暗调，完成从产品静态展示到特效互动场景的切换"
         },
         {
           "id": "micro_004",
-          "role": "unknown"
+          "role": "post_transition",
+          "durationMs": 4976.0,
+          "description": "全暗环境下，双手之间的粉紫色发光软质物件被逐步揉搓挤压，光线形态随手部动作不断变化，进入后续创意特效环节"
         }
-      ]
+      ],
+      "evidence": "通过双手发光特效搭配环境同步渐暗，把前序的产品静态展示段落平滑过渡到后续的创意特效互动段落，实现两个内容块的自然衔接"
     },
     {
       "id": "boundary_003",
       "from": "seg_block_003",
       "to": "seg_block_004",
-      "transitionType": "unknown",
-      "alignedToBeat": false,
+      "transitionType": "morph",
+      "intensity": "strong",
       "microShots": [
         {
           "id": "micro_001",
-          "role": "unknown"
+          "role": "pre_transition",
+          "durationMs": 10800.0,
+          "description": "单手握持白色小型物件，逐渐张开手掌，随后另一手入画，双手合掌揉搓，将手中物体向上抛出，背景中出现显示紫蓝渐变图案的笔记本电脑"
         },
         {
           "id": "micro_002",
-          "role": "unknown"
+          "role": "post_transition",
+          "durationMs": 13176.0,
+          "description": "被抛出的物体在空中碎裂，逐步分解为大量键盘按键碎片，所有碎片向四周缓慢漂浮展开"
         }
-      ]
+      ],
+      "evidence": "前序动作中抛出的小物件在空中完成碎裂变形，转化为笔记本键盘的全部按键碎片，自然衔接后续键盘自动组装的演示内容"
     },
     {
       "id": "boundary_004",
       "from": "seg_block_004",
       "to": "seg_block_005",
-      "transitionType": "unknown",
-      "alignedToBeat": false,
+      "transitionType": "morph",
+      "intensity": "strong",
       "microShots": [
         {
           "id": "micro_001",
-          "role": "unknown"
+          "role": "pre_transition",
+          "durationMs": 3400.0,
+          "description": "画面静止展示笔记本键盘右上角的圆形指纹按键特写，旁边散落彩色碎纸屑，无额外动作"
         },
         {
           "id": "micro_002",
-          "role": "unknown"
+          "role": "transition_peak",
+          "durationMs": 6800.0,
+          "description": "手指从画面下方进入，按压圆形指纹按键，保持按压状态数秒后松开，随后手指移出画面"
         },
         {
           "id": "micro_003",
-          "role": "unknown"
+          "role": "transition_peak",
+          "durationMs": 3000.0,
+          "description": "镜头从键盘区域向上缓慢平移，逐步移出键盘画面，向笔记本屏幕区域移动，完成从硬件特写向屏幕界面的过渡"
         },
         {
           "id": "micro_004",
-          "role": "unknown"
+          "role": "post_transition",
+          "durationMs": 10776.0,
+          "description": "镜头继续移动展示笔记本屏幕上的App Store购买弹窗，弹窗加载完成后自动收起，露出完整的系统渐变界面"
         }
-      ]
+      ],
+      "evidence": "通过镜头向上平移的连续运动，将前序的键盘硬件操作演示画面平滑过渡到后续的屏幕系统界面展示画面，完成两个内容块的自然衔接"
     },
     {
       "id": "boundary_005",
       "from": "seg_block_005",
       "to": "seg_block_006",
-      "transitionType": "unknown",
-      "alignedToBeat": false,
+      "transitionType": "morph",
+      "intensity": "strong",
       "microShots": [
         {
           "id": "micro_001",
-          "role": "unknown"
+          "role": "pre_transition",
+          "durationMs": 11200.0,
+          "description": "手指从屏幕上方移开，镜头持续向前推近聚焦屏幕顶部的前置摄像头，给到镜头完整特写后，摄像头逐步缩小向上移动，最终几乎完全移出画面消失在全黑背景中"
         },
         {
           "id": "micro_002",
-          "role": "unknown"
+          "role": "transition_peak",
+          "durationMs": 2800.0,
+          "description": "全黑画面向下滑动露出笔记本屏幕内播放的敞篷跑车行驶画面，随后镜头同步向外拉远，逐步展示出完整的笔记本机身轮廓"
         },
         {
           "id": "micro_003",
-          "role": "unknown"
+          "role": "post_transition",
+          "durationMs": 9900.0,
+          "description": "镜头完全拉远展示完整的银色笔记本整机，随后两只手从画面两侧入画，指尖相碰后拉伸展开金属网罩部件，展示其表面的镂空网格纹理"
         }
-      ]
+      ],
+      "evidence": "从全黑状态向下滑出画面，先露出笔记本屏幕内的跑车行驶视频，再通过拉镜逐步展示完整笔记本，将前序的摄像头特写内容和后续的笔记本功能演示内容自然衔接"
     },
     {
       "id": "boundary_006",
       "from": "seg_block_006",
       "to": "seg_block_007",
-      "transitionType": "unknown",
-      "alignedToBeat": false,
+      "transitionType": "morph",
+      "intensity": "strong",
       "microShots": [
         {
           "id": "micro_001",
-          "role": "unknown"
+          "role": "pre_transition",
+          "durationMs": 9600.0,
+          "description": "打开状态的笔记本屏幕播放敞篷车行驶的视频，手从画面右侧伸入，向下滑动将笔记本完全闭合，最终笔记本平放在桌面上"
         },
         {
           "id": "micro_002",
-          "role": "unknown"
+          "role": "transition_peak",
+          "durationMs": 5600.0,
+          "description": "手调整姿势抠住闭合笔记本的边缘，将平放在桌面的笔记本向上抬起，另一只手从画面左侧伸出托住笔记本另一侧，完成产品从桌面放置到悬空持握的状态切换"
         },
         {
           "id": "micro_003",
-          "role": "unknown"
+          "role": "post_transition",
+          "durationMs": 8776.0,
+          "description": "双手共同持握悬空的笔记本，翻转机身展示笔记本背面的品牌标识与机身侧面细节，进入产品外观展示环节"
         }
-      ]
+      ],
+      "evidence": "通过连贯的手部操作动作，将刚完成闭合的笔记本从桌面抬起，自然衔接前序的视频播放演示环节与后续的产品外观多配色展示环节，实现内容块的平滑过渡"
     },
     {
       "id": "boundary_007",
       "from": "seg_block_007",
       "to": "seg_block_008",
       "transitionType": "unknown",
-      "alignedToBeat": false,
+      "intensity": "strong",
       "microShots": [
         {
           "id": "micro_001",
-          "role": "unknown"
+          "role": "pre_transition",
+          "durationMs": 8000.0,
+          "description": "印有A18 PRO标识的芯片在空中旋转下落，黄色笔记本从画面下方升起，芯片最终悬浮在合上的笔记本上方"
         },
         {
           "id": "micro_002",
-          "role": "unknown"
+          "role": "transition_peak",
+          "durationMs": 5600.0,
+          "description": "一只手抓住空中的芯片，另一只手掀开合上的笔记本上盖，将芯片装入笔记本机身内部"
         },
         {
           "id": "micro_003",
-          "role": "unknown"
+          "role": "transition_peak",
+          "durationMs": 5200.0,
+          "description": "笔记本完全打开，屏幕从暗态逐步点亮，显示出带有招财猫图案的彩色应用界面，原本握拳的双手松开落到键盘和触控板区域"
         },
         {
           "id": "micro_004",
-          "role": "unknown"
+          "role": "post_transition",
+          "durationMs": 5176.0,
+          "description": "双手保持放在笔记本触控板和键盘上的操作姿态，屏幕稳定展示多个并列的应用窗口界面，进入软件使用演示的稳定状态"
         }
-      ]
+      ],
+      "evidence": "通过掀开笔记本上盖、装入芯片的连贯动作，让笔记本屏幕从暗态逐步点亮，将前序的硬件安装展示内容块平滑衔接至后续的软件多场景使用演示内容块"
     },
     {
       "id": "boundary_008",
       "from": "seg_block_008",
       "to": "seg_block_009",
-      "transitionType": "unknown",
-      "alignedToBeat": false,
+      "transitionType": "morph",
+      "intensity": "strong",
       "microShots": [
         {
           "id": "micro_001",
-          "role": "unknown"
+          "role": "pre_transition",
+          "durationMs": 3200.0,
+          "description": "黄绿色笔记本处于画面中心，使用者左手放在触控板上，右手握着触控笔，屏幕同时显示日程表格和视频通话窗口，画面状态稳定"
         },
         {
           "id": "micro_002",
-          "role": "unknown"
+          "role": "transition_peak",
+          "durationMs": 3200.0,
+          "description": "硬切到笔记本屏幕显示被百叶窗遮挡的人物画面，双手位置保持不变，画面状态稳定"
         },
         {
           "id": "micro_003",
-          "role": "unknown"
+          "role": "transition_peak",
+          "durationMs": 5400.0,
+          "description": "镜头开始向右平移，笔记本和桌面逐渐移出画面，背景从浅灰过渡到纯白，完成从笔记本演示场景到空白展示场景的切换"
         },
         {
           "id": "micro_004",
-          "role": "unknown"
+          "role": "transition_peak",
+          "durationMs": 4400.0,
+          "description": "纯白背景下，手从画面右侧进入，手指保持捏合悬空的状态，没有露出任何物体，画面状态稳定"
         },
         {
           "id": "micro_005",
-          "role": "unknown"
+          "role": "post_transition",
+          "durationMs": 7776.0,
+          "description": "手展开捏出蓝色的Finder笑脸图标，将图标展示在画面中心，画面状态稳定"
         }
-      ]
+      ],
+      "evidence": "通过镜头向右平移的运动，将前序的笔记本演示场景完全移出画面，过渡到纯白空白背景，自然衔接后续手持系统小图标的展示内容"
     },
     {
       "id": "boundary_009",
       "from": "seg_block_009",
       "to": "seg_block_010",
-      "transitionType": "unknown",
-      "alignedToBeat": false,
+      "transitionType": "morph",
+      "intensity": "strong",
       "microShots": [
         {
           "id": "micro_001",
-          "role": "unknown"
+          "role": "pre_transition",
+          "durationMs": 9600.0,
+          "description": "双手置于黄色MacBook触控板两侧，屏幕显示跨设备同步的地图界面，双手保持初始姿态，画面整体状态稳定无大幅动作变化"
         },
         {
           "id": "micro_002",
-          "role": "unknown"
+          "role": "transition_peak",
+          "durationMs": 4600.0,
+          "description": "左手抬起从屏幕上方向前划过，带动笔记本屏幕逐步向下闭合，最终完全合上露出黄色笔记本顶盖"
         },
         {
           "id": "micro_003",
-          "role": "unknown"
+          "role": "transition_peak",
+          "durationMs": 5600.0,
+          "description": "双手放在闭合的黄色笔记本两侧，缓慢调整笔记本在桌面的居中位置，准备开启包装盒封边"
         },
         {
           "id": "micro_004",
-          "role": "unknown"
+          "role": "post_transition",
+          "durationMs": 4176.0,
+          "description": "双手拉开包装盒左右两侧的白色封边，松开手后包装盒四周的白色结构向上收拢，完全包裹住笔记本，进入产品包装展示阶段"
         }
-      ]
+      ],
+      "evidence": "通过合上正在演示功能的笔记本，顺势引出隐藏在笔记本下方的白色包装盒，完成从功能演示环节到产品包装展示环节的平滑衔接"
     }
   ]
 }

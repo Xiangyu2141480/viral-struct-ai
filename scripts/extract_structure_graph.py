@@ -132,39 +132,88 @@ def _truncate(s: str, n: int = 200) -> str:
     return s if len(s) <= n else s[: n - 1] + "…"
 
 
-_BOUNDARY_TRANSITION_MAP = {
-    "cut": "cut",
-    "hard_cut": "cut",
-    "fade": "fade",
-    "fade_in": "fade",
-    "fade_out": "fade",
-    "morph": "morph",
-    "wipe": "wipe",
-    "dissolve": "dissolve",
-}
+# techniqueTag → transitionType inference (first matching tag wins).
+_TAG_TO_TRANSITION = [
+    # (predicate substring or exact, transitionType)
+    ("fade",     "fade"),
+    ("dissolve", "dissolve"),
+    ("wipe",     "wipe"),
+    ("cut",      "cut"),       # 'hard_cut', etc.
+    ("morph",    "morph"),     # 'object_morph'
+    ("motion_blur", "morph"),
+    ("camera_move", "morph"),
+    ("zoom",     "morph"),     # 'zoom_in', 'zoom_out'
+    ("pan",      "morph"),     # 'pan', 'pan_down'
+    ("object_fragmentation", "morph"),
+    ("object_reassembly",    "morph"),
+    ("object_manipulation",  "morph"),
+]
 
 
-def _map_transition(value: str) -> str:
-    return _BOUNDARY_TRANSITION_MAP.get(str(value).strip().lower(), "unknown")
+def _classify_technique_tags(tags: list) -> str:
+    """Pick a transitionType from a list of techniqueTags. Returns 'unknown' if nothing matches.
+
+    Lookup is by substring match against the predicate, since real tags
+    are compound tokens like 'object_morph', 'pan_down', etc.
+    """
+    if not tags:
+        return "unknown"
+    normalized = [str(t).strip().lower() for t in tags if t]
+    for predicate, ttype in _TAG_TO_TRANSITION:
+        for tag in normalized:
+            if predicate in tag:
+                return ttype
+    return "unknown"
+
+
+def _confidence_to_intensity(confidence: float | None) -> str | None:
+    if confidence is None:
+        return None
+    try:
+        c = float(confidence)
+    except (TypeError, ValueError):
+        return None
+    if c >= 0.85:
+        return "strong"
+    if c >= 0.6:
+        return "medium"
+    return "weak"
 
 
 def _map_micro_shots(micro_shots: list) -> list[dict] | None:
     if not micro_shots:
         return None
+    valid = [ms for ms in micro_shots if isinstance(ms, dict)]
+    if not valid:
+        return None
     out: list[dict] = []
-    for ms in micro_shots:
-        if not isinstance(ms, dict):
-            continue
-        role = ms.get("role", "unknown")
-        if role not in {"pre_transition", "transition_peak", "post_transition"}:
-            role = "unknown"
+    n = len(valid)
+    for idx, ms in enumerate(valid):
+        # Derive role from position: first=pre, last=post, single or middle=peak.
+        if n == 1:
+            role = "transition_peak"
+        elif idx == 0:
+            role = "pre_transition"
+        elif idx == n - 1:
+            role = "post_transition"
+        else:
+            role = "transition_peak"
+
         item = {"id": str(ms.get("id", "")), "role": role}
-        duration_ms = ms.get("durationMs")
-        if isinstance(duration_ms, (int, float)):
-            item["durationMs"] = float(duration_ms)
-        description = ms.get("description")
+
+        time_range = ms.get("microscopeTimeRange") or {}
+        try:
+            start = float(time_range.get("start", 0) or 0)
+            end = float(time_range.get("end", 0) or 0)
+            if end > start:
+                item["durationMs"] = round((end - start) * 1000.0, 1)
+        except (TypeError, ValueError):
+            pass
+
+        description = ms.get("visualChange")
         if description:
             item["description"] = _truncate(str(description), 200)
+
         out.append(item)
     return out or None
 
@@ -186,14 +235,19 @@ def _build_boundaries(rough_blocks: list, boundary_doc: dict | None) -> list[dic
         if not b:
             continue
         tc = b.get("transitionCandidate") or {}
-        evidence = _truncate(str(tc.get("description", "")), 200) if tc.get("description") else None
+        technique_tags = tc.get("techniqueTags") or []
+        transition_type = _classify_technique_tags(technique_tags)
+        confidence = tc.get("confidence")
+        intensity = _confidence_to_intensity(confidence)
+        visual_change = tc.get("visualChange")
+        evidence = _truncate(str(visual_change), 200) if visual_change else None
+
         entry = {
             "id": bid,
             "from": f"seg_{rough_blocks[i].get('id', f'block_{i+1:03d}')}",
             "to": f"seg_{rough_blocks[i+1].get('id', f'block_{i+2:03d}')}",
-            "transitionType": _map_transition(tc.get("type", "unknown")),
-            "intensity": tc.get("intensity") if tc.get("intensity") in ("weak", "medium", "strong") else None,
-            "alignedToBeat": bool(tc.get("alignedToBeat", False)),
+            "transitionType": transition_type,
+            "intensity": intensity,
             "microShots": _map_micro_shots(b.get("microShots") or []),
             "evidence": evidence,
         }

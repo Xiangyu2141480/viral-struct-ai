@@ -278,14 +278,14 @@ class BuildBoundariesTests(unittest.TestCase):
             boundaries.append({
                 "boundaryId": f"boundary_{i+1:03d}",
                 "transitionCandidate": {
-                    "type": "morph",
-                    "intensity": "strong",
-                    "alignedToBeat": True,
-                    "description": f"transition {i+1} description"
+                    "exists": True,
+                    "techniqueTags": ["object_morph"],
+                    "confidence": 0.95,
+                    "visualChange": f"transition {i+1} description"
                 },
                 "microShots": [
-                    {"id": f"ms_{i+1}_1", "role": "pre_transition", "durationMs": 200},
-                    {"id": f"ms_{i+1}_2", "role": "transition_peak", "durationMs": 100}
+                    {"id": f"ms_{i+1}_1", "microscopeTimeRange": {"start": 0.0, "end": 0.2}, "visualChange": "before"},
+                    {"id": f"ms_{i+1}_2", "microscopeTimeRange": {"start": 0.2, "end": 0.3}, "visualChange": "peak"}
                 ]
             })
         return {"videoId": "test", "boundaries": boundaries}
@@ -305,8 +305,12 @@ class BuildBoundariesTests(unittest.TestCase):
         self.assertEqual(result[0]["to"], "seg_block_002")
         self.assertEqual(result[0]["transitionType"], "morph")
         self.assertEqual(result[0]["intensity"], "strong")
-        self.assertTrue(result[0]["alignedToBeat"])
+        self.assertNotIn("alignedToBeat", result[0])
         self.assertEqual(len(result[0]["microShots"]), 2)
+        self.assertEqual(result[0]["microShots"][0]["role"], "pre_transition")
+        self.assertEqual(result[0]["microShots"][1]["role"], "post_transition")
+        self.assertEqual(result[0]["microShots"][0]["durationMs"], 200.0)
+        self.assertEqual(result[0]["microShots"][1]["durationMs"], 100.0)
 
     def test_build_boundaries_returns_none_when_doc_absent(self):
         rough_blocks = self._make_rough_blocks(4)
