@@ -58,6 +58,15 @@ interface DemoScoreEvidence {
   evidence: string;
 }
 
+interface DemoEvidenceTraceItem {
+  id: string;
+  label: string;
+  source: string;
+  artifactPath?: string;
+  detail: string;
+  judgeBenefit: string;
+}
+
 interface DemoShowcase {
   case: DemoShowcaseCase;
   steps: DemoShowcaseStep[];
@@ -81,6 +90,10 @@ interface DemoRunResponse {
     warnings: string[];
   };
   assetCards: AssetCard[];
+  assetSource?: {
+    source: 'asset_library' | 'demo_fallback';
+    libraryId?: string;
+  };
   slotMatches: SlotMatch[];
   materialGaps: MaterialGap[];
   repairs: GapRepair[];
@@ -88,6 +101,7 @@ interface DemoRunResponse {
   storyboard: StoryboardShot[];
   timeline: TimelineItem[];
   qualityReport: QualityReport;
+  evidenceTrace?: DemoEvidenceTraceItem[];
 }
 
 const fallbackShowcase: DemoShowcase = {
@@ -247,6 +261,7 @@ export function DemoShowcasePanel() {
   const [statuses, setStatuses] = useState<Record<string, DemoStatus>>(initialStatuses(fallbackShowcase.steps));
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [evidenceTrace, setEvidenceTrace] = useState<DemoEvidenceTraceItem[]>([]);
 
   useEffect(() => {
     let mounted = true;
@@ -297,6 +312,7 @@ export function DemoShowcasePanel() {
 
     setRunning(true);
     setError(null);
+    setEvidenceTrace([]);
     resetWorkflow();
     setStatuses(allStatuses(showcase.steps, 'running'));
 
@@ -306,7 +322,14 @@ export function DemoShowcasePanel() {
       setVideoAnalysis(result.videoAnalysis);
       setStructureGraph(result.structureGraph, result.structureDebug);
       setContentBrief(result.contentBrief);
-      setAssetCards(result.assetCards);
+      setAssetCards(result.assetCards, {
+        source: result.assetSource?.source ?? 'demo_fallback',
+        libraryId: result.assetSource?.libraryId,
+        label:
+          result.assetSource?.source === 'asset_library'
+            ? `队友 AssetCard 库：${result.assetSource.libraryId}`
+            : 'Demo fallback 素材分析'
+      });
       setSlotResult(result.slotMatches, result.materialGaps);
       setRepairs(result.repairs);
       setGenerationVariant('high_click');
@@ -316,6 +339,7 @@ export function DemoShowcasePanel() {
         timeline: result.timeline
       });
       setQualityReport(result.qualityReport);
+      setEvidenceTrace(result.evidenceTrace ?? []);
       setStatuses(allStatuses(result.showcase.steps, 'done'));
     } catch (err) {
       const message = errorMessage(err);
@@ -371,6 +395,8 @@ export function DemoShowcasePanel() {
         <Metric label="素材缺口" value={String(materialGaps.length)} detail={repairs.length ? `${repairs.length} repairs` : '等待缺口识别'} />
         <Metric label="结果时间线" value={String(timeline.length)} detail={qualityReport ? `quality ${qualityReport.structureMatch.toFixed(2)}` : '等待生成'} />
       </section>
+
+      <EvidenceTracePanel evidenceTrace={evidenceTrace} />
 
       <section className="card">
         <h2>迁移链路</h2>
@@ -479,6 +505,36 @@ function Metric({ label, value, detail }: { label: string; value: string; detail
   );
 }
 
+function EvidenceTracePanel({ evidenceTrace }: { evidenceTrace: DemoEvidenceTraceItem[] }) {
+  const trace = evidenceTrace.length ? evidenceTrace : fallbackEvidenceTrace;
+
+  return (
+    <section className="card">
+      <h2>队友模块接入证据</h2>
+      <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+        {trace.map((item) => (
+          <article
+            key={item.id}
+            style={{
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: 8,
+              padding: 12,
+              background: 'rgba(15,23,42,0.36)',
+              overflowWrap: 'anywhere'
+            }}
+          >
+            <strong>{item.label}</strong>
+            <p style={{ margin: '8px 0' }}>{item.detail}</p>
+            <p style={{ margin: '8px 0' }}>来源：{item.source}</p>
+            {item.artifactPath ? <p style={{ margin: '8px 0' }}>产物：{item.artifactPath}</p> : null}
+            <small>{item.judgeBenefit}</small>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function StatusBadge({ status }: { status: DemoStatus }) {
   const labels: Record<DemoStatus, string> = {
     pending: '等待',
@@ -495,6 +551,25 @@ function StatusBadge({ status }: { status: DemoStatus }) {
 
   return <span style={{ color: colors[status], fontWeight: 700 }}>{labels[status]}</span>;
 }
+
+const fallbackEvidenceTrace: DemoEvidenceTraceItem[] = [
+  {
+    id: 'rough_fine_scan',
+    label: 'Rough/Fine Scan 结构图谱',
+    source: '等待运行',
+    artifactPath: 'seed_assets/analysis/macbook_neo/structure_graph.json',
+    detail: '一键运行后展示段落、槽位、创作要素数量。',
+    judgeBenefit: '证明样例结构来自 rough/fine scan adapter 产物。'
+  },
+  {
+    id: 'asset_library',
+    label: 'AssetCard 素材库',
+    source: '等待运行',
+    artifactPath: 'seed_assets/asset_libraries/kangshifu_demo/asset_cards.json',
+    detail: '一键运行后展示素材卡数量和来源。',
+    judgeBenefit: '证明新素材适配使用队友 AssetCard 协议结果。'
+  }
+];
 
 function ResultSnapshot({
   timeline,
