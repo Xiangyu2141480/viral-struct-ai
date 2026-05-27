@@ -18,6 +18,7 @@ import type {
 
 export type StructureStatus = 'idle' | 'extracting' | 'ready' | 'fallback' | 'error';
 export type GenerationVariant = 'high_click' | 'high_conversion' | 'premium';
+export type AssetSourceKind = 'asset_library' | 'upload_analysis' | 'demo_fallback';
 
 export interface StructureDebug {
   fallbackUsed: boolean;
@@ -25,6 +26,12 @@ export interface StructureDebug {
   segmentCount: number;
   evidenceCount: number;
   warnings: string[];
+}
+
+export interface AssetSourceDebug {
+  source: AssetSourceKind;
+  libraryId?: string;
+  label: string;
 }
 
 interface GenerationResult {
@@ -50,6 +57,7 @@ interface WorkflowState {
   structureDebug: StructureDebug | null;
   contentBrief: ContentBrief;
   assetCards: AssetCard[];
+  assetSourceDebug: AssetSourceDebug | null;
   slotMatches: SlotMatch[];
   materialGaps: MaterialGap[];
   repairs: GapRepair[];
@@ -64,7 +72,7 @@ interface WorkflowState {
   setStructureExtracting: () => void;
   setStructureError: (message: string) => void;
   setContentBrief: (contentBrief: ContentBrief) => void;
-  setAssetCards: (assetCards: AssetCard[]) => void;
+  setAssetCards: (assetCards: AssetCard[], assetSourceDebug?: AssetSourceDebug) => void;
   setSlotResult: (slotMatches: SlotMatch[], materialGaps: MaterialGap[]) => void;
   setRepairs: (repairs: GapRepair[]) => void;
   setGenerationResult: (result: GenerationResult) => void;
@@ -84,6 +92,7 @@ export const useWorkflowStore = create<WorkflowState>()(
       structureDebug: null,
       contentBrief: defaultContentBrief,
       assetCards: [],
+      assetSourceDebug: null,
       slotMatches: [],
       materialGaps: [],
       repairs: [],
@@ -101,6 +110,7 @@ export const useWorkflowStore = create<WorkflowState>()(
           structureError: null,
           structureDebug: null,
           assetCards: [],
+          assetSourceDebug: null,
           slotMatches: [],
           materialGaps: [],
           repairs: [],
@@ -139,9 +149,10 @@ export const useWorkflowStore = create<WorkflowState>()(
           qualityReport: null,
           editNotes: []
         }),
-      setAssetCards: (assetCards) =>
+      setAssetCards: (assetCards, assetSourceDebug) =>
         set({
           assetCards,
+          assetSourceDebug: assetSourceDebug ?? null,
           slotMatches: [],
           materialGaps: [],
           repairs: [],
@@ -230,6 +241,7 @@ export const useWorkflowStore = create<WorkflowState>()(
           structureDebug: null,
           contentBrief: defaultContentBrief,
           assetCards: [],
+          assetSourceDebug: null,
           slotMatches: [],
           materialGaps: [],
           repairs: [],
