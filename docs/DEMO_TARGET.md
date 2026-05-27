@@ -2,40 +2,54 @@
 
 ## 1. 推荐主 case
 
+样例结构来源：
+
+```txt
+macbook_neo.mp4
+```
+
+该样例使用预计算 rough/fine scan adapter 图谱：
+
+```txt
+seed_assets/analysis/macbook_neo/structure_graph.json
+```
+
 商品：
 
 ```txt
-便携咖啡杯
+康师傅冰红茶
 ```
 
 目标用户：
 
 ```txt
-通勤上班族
+夏季通勤和校园人群
 ```
 
 卖点：
 
 ```txt
-1. 保温 8 小时
-2. 不漏水
-3. 单手开盖
-4. 可放入车载杯架
+1. 冰爽解腻
+2. 柠檬茶香
+3. 大瓶畅饮
+4. 冷藏口感更好
 ```
 
 用户素材故意不完整：
 
 ```txt
-1. 产品正面图 1 张
-2. 手持图 1 张
-3. 商品介绍文案 1 段
+1. 瓶身主图 1 张
+2. 动感冰爽图 1 张
+3. 组合包装图 1 张
+4. 预生成 AssetCard library 1 份
+   seed_assets/asset_libraries/kangshifu_demo/asset_cards.json
 ```
 
 故意缺少：
 
 ```txt
 1. 开头强视觉镜头
-2. 使用过程视频
+2. 完整开盖畅饮过程
 3. 对比镜头
 4. 结尾 CTA 镜头
 ```
@@ -127,18 +141,20 @@ Hook -> 痛点 -> 卖点 -> 证明 -> CTA
 展示 AssetCard：
 
 ```txt
-产品图：适合 product_closeup / CTA，不适合 usage_demo
-手持图：适合 usage_demo 的弱补全，不是真实动作视频
+瓶身主图：适合 product_closeup / CTA，不适合 usage_demo
+动感冰爽图：适合 benefit_visual 和氛围强化，不是真实开盖畅饮视频
+组合包装图：适合 product_closeup / CTA / packaging reference
 文案：适合脚本和字幕生成
 ```
 
 同时展示要素检测：
 
 ```txt
-产品图：detectedIngredients = product_closeup_trait / clean_background
-手持图：detectedIngredients = hand_demo / product_closeup_trait
+瓶身主图：detectedIngredients = product_closeup_trait / clean_background
+动感冰爽图：detectedIngredients = product_closeup_trait / clean_background
+组合包装图：detectedIngredients = product_closeup_trait / clean_background
 文案：detectedIngredients = trust_building
-缺少：human_presence / face_closeup / beauty_demo / before_after_comparison
+缺少：human_presence / opening_attention / usage_process / before_after_comparison
 ```
 
 ### Step 6：缺口识别
@@ -148,8 +164,8 @@ Hook -> 痛点 -> 卖点 -> 证明 -> CTA
 | 结构槽位 | 需要素材 | 当前素材 | 状态 |
 |---|---|---|---|
 | Hook | 强视觉开头 | 无 | missing |
-| 商品特写 | 产品近景 | 产品图 | matched |
-| 使用过程 | 操作视频 | 手持图 | partial |
+| 商品特写 | 产品近景 | 瓶身主图 | matched |
+| 使用过程 | 开盖畅饮视频 | 动感冰爽图 | partial |
 | 对比证明 | 对比镜头 | 无 | missing |
 | CTA | 结尾镜头 | 无 | missing |
 
@@ -169,7 +185,7 @@ Hook -> 痛点 -> 卖点 -> 证明 -> CTA
 | 缺口 | 补全方式 |
 |---|---|
 | 缺开头镜头 | 标题卡 + 产品图快速推近 |
-| 缺使用过程 | 手持图裁切 + 步骤字幕 |
+| 缺使用过程 | 动感冰爽图裁切 + 步骤字幕 |
 | 缺对比镜头 | 左右对比卡 |
 | 缺 CTA | 结尾行动卡 |
 
@@ -189,7 +205,7 @@ Hook -> 痛点 -> 卖点 -> 证明 -> CTA
 
 ```txt
 把 Hook 改成更抓人
-把保温卖点提前
+把冰爽解腻卖点提前
 节奏改快
 包装风格改成高转化
 ```

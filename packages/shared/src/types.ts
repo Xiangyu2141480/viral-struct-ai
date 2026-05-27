@@ -148,6 +148,8 @@ export interface VideoAnalysis {
   shots: Shot[];
   keyframes: Keyframe[];
   transcript: TranscriptSegment[];
+  analysisSource?: 'real_ffmpeg' | 'mock_fallback';
+  warnings?: string[];
 }
 
 export interface SegmentNode {

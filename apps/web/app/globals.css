@@ -14,3 +14,24 @@ body {
   border-radius: 16px;
   padding: 16px;
 }
+
+input,
+textarea,
+select {
+  box-sizing: border-box;
+  border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 6px;
+  background: rgba(15,23,42,0.84);
+  color: #eef2ff;
+  padding: 8px 10px;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #94a3b8;
+}
+
+button,
+a {
+  color: inherit;
+}

@@ -42,6 +42,8 @@ pnpm build
 pnpm dev
 ```
 
+本地启动后，评委演示入口是 `http://localhost:3000/demo`。
+
 ## 核心数据流
 
 ```txt
@@ -106,6 +108,7 @@ QualityReport
 - `docs/AI_CONTEXT.md`
 - `docs/SCORING_EXECUTION_PLAN.md`
 - `docs/DEMO_TARGET.md`
+- `docs/CHAMPION_DEMO_CHECKLIST.md`
 - `docs/ISSUE_INDEX.md`
 
 ## 当前分支策略

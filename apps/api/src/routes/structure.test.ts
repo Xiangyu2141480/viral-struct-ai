@@ -118,6 +118,35 @@ test('POST /api/structure/extract consumes a Fine Scan fixture VideoAnalysis han
   ));
 });
 
+test('POST /api/structure/extract prefers precomputed rough/fine scan graph artifacts', async () => {
+  const response = await postExtract({
+    videoAnalysis: {
+      metadata: {
+        videoId: 'macbook_neo.mp4',
+        duration: 229.53,
+        fps: 23.98,
+        width: 1920,
+        height: 1080,
+        aspectRatio: '16:9'
+      },
+      shots: [],
+      keyframes: [],
+      transcript: [],
+      analysisSource: 'real_ffmpeg'
+    }
+  });
+
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  const parsed = ViralStructureGraphSchema.parse(body.structureGraph);
+  assert.equal(body.debug.fallbackUsed, false);
+  assert.equal(body.debug.extractionSource, 'rough_fine_scan_artifact');
+  assert.match(parsed.structureSummary, /Rough\/Fine Scan/);
+  assert.ok(parsed.creativeIngredients.some((ingredient) =>
+    ingredient.evidence.some((evidence) => evidence.value.includes('fine_scan'))
+  ));
+});
+
 function postExtract(body: unknown): Promise<Response> {
   return fetch(`${baseUrl}/api/structure/extract`, {
     method: 'POST',
