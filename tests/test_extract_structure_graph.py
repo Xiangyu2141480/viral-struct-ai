@@ -266,3 +266,63 @@ class BuildStructureGraphTests(unittest.TestCase):
         self.assertEqual(slot["requiredAsset"]["type"], "text")
         self.assertEqual(slot["role"], "cta_visual")
         self.assertEqual(slot["visualIngredientRequirements"], [])
+
+
+class BuildBoundariesTests(unittest.TestCase):
+    def setUp(self):
+        self.module = load_module()
+
+    def _make_boundary_doc(self, count: int) -> dict:
+        boundaries = []
+        for i in range(count):
+            boundaries.append({
+                "boundaryId": f"boundary_{i+1:03d}",
+                "transitionCandidate": {
+                    "exists": True,
+                    "techniqueTags": ["object_morph"],
+                    "confidence": 0.95,
+                    "visualChange": f"transition {i+1} description"
+                },
+                "microShots": [
+                    {"id": f"ms_{i+1}_1", "microscopeTimeRange": {"start": 0.0, "end": 0.2}, "visualChange": "before"},
+                    {"id": f"ms_{i+1}_2", "microscopeTimeRange": {"start": 0.2, "end": 0.3}, "visualChange": "peak"}
+                ]
+            })
+        return {"videoId": "test", "boundaries": boundaries}
+
+    def _make_rough_blocks(self, count: int) -> list:
+        return [{"id": f"block_{i+1:03d}", "timeRange": {"start": i*10, "end": (i+1)*10}}
+                for i in range(count)]
+
+    def test_build_boundaries_with_full_doc(self):
+        rough_blocks = self._make_rough_blocks(4)         # 4 blocks → 3 boundaries
+        boundary_doc = self._make_boundary_doc(3)
+        result = self.module._build_boundaries(rough_blocks, boundary_doc)
+        self.assertIsNotNone(result)
+        self.assertEqual(len(result), 3)
+        self.assertEqual(result[0]["id"], "boundary_001")
+        self.assertEqual(result[0]["from"], "seg_block_001")
+        self.assertEqual(result[0]["to"], "seg_block_002")
+        self.assertEqual(result[0]["transitionType"], "morph")
+        self.assertEqual(result[0]["intensity"], "strong")
+        self.assertNotIn("alignedToBeat", result[0])
+        self.assertEqual(len(result[0]["microShots"]), 2)
+        self.assertEqual(result[0]["microShots"][0]["role"], "pre_transition")
+        self.assertEqual(result[0]["microShots"][1]["role"], "post_transition")
+        self.assertEqual(result[0]["microShots"][0]["durationMs"], 200.0)
+        self.assertEqual(result[0]["microShots"][1]["durationMs"], 100.0)
+
+    def test_build_boundaries_returns_none_when_doc_absent(self):
+        rough_blocks = self._make_rough_blocks(4)
+        result = self.module._build_boundaries(rough_blocks, None)
+        self.assertIsNone(result)
+
+    def test_build_boundaries_skips_missing_boundary_ids(self):
+        rough_blocks = self._make_rough_blocks(4)                    # 4 blocks → expect 3 boundaries
+        boundary_doc = self._make_boundary_doc(3)
+        boundary_doc["boundaries"].pop(1)                            # delete boundary_002 input
+        result = self.module._build_boundaries(rough_blocks, boundary_doc)
+        self.assertIsNotNone(result)
+        self.assertEqual(len(result), 2)                             # 001 and 003 only
+        ids = [b["id"] for b in result]
+        self.assertEqual(ids, ["boundary_001", "boundary_003"])

@@ -1,5 +1,6 @@
 import type {
   AssetCard,
+  Boundary,
   CreativeIngredientType,
   MaterialGap,
   MaterialGapType,
@@ -9,7 +10,8 @@ import type {
 
 export function matchSlots(
   graph: ViralStructureGraph,
-  assets: AssetCard[]
+  assets: AssetCard[],
+  boundaries?: Boundary[]
 ): { matches: SlotMatch[]; gaps: MaterialGap[] } {
   const matches: SlotMatch[] = graph.shotSlots.map((slot) => {
     const ranked = assets
@@ -27,7 +29,9 @@ export function matchSlots(
         );
         const motionMatch = getMotionMatch(slot.requiredAsset.motion, asset);
         const quality = asset.qualityScore * 0.1;
-        const score = semanticMatch + typeMatch + ingredientMatchScore * 0.2 + motionMatch + quality;
+        const score =
+          semanticMatch + typeMatch + ingredientMatchScore * 0.2 + motionMatch + quality
+          + boundaryBonus(slot.segmentId, boundaries);
         return {
           asset,
           score,
@@ -199,4 +203,16 @@ function sanitizeMissingIngredients(missingIngredients: CreativeIngredientType[]
       return ingredient;
     })
     .filter((ingredient, index, items) => items.indexOf(ingredient) === index);
+}
+
+function boundaryBonus(segmentId: string, boundaries?: Boundary[]): number {
+  if (!boundaries?.length) return 0;
+  const strongTransitions = new Set(['morph', 'wipe']);
+  const touches = boundaries.some(
+    (b) =>
+      (b.from === segmentId || b.to === segmentId)
+      && b.intensity === 'strong'
+      && strongTransitions.has(b.transitionType)
+  );
+  return touches ? 0.05 : 0;
 }

@@ -141,10 +141,10 @@ test('POST /api/structure/extract prefers precomputed rough/fine scan graph arti
   const parsed = ViralStructureGraphSchema.parse(body.structureGraph);
   assert.equal(body.debug.fallbackUsed, false);
   assert.equal(body.debug.extractionSource, 'rough_fine_scan_artifact');
-  assert.match(parsed.structureSummary, /Rough\/Fine Scan/);
-  assert.ok(parsed.creativeIngredients.some((ingredient) =>
-    ingredient.evidence.some((evidence) => evidence.value.includes('fine_scan'))
-  ));
+  // When using precomputed artifacts, structure should be fully populated (not a generated mock)
+  assert.ok(parsed.structureSummary && parsed.structureSummary.length > 0);
+  assert.ok(parsed.segments.length >= 5, 'artifacts should provide detailed segmentation');
+  assert.ok(parsed.creativeIngredients.length >= 3, 'artifacts should derive multiple ingredients');
 });
 
 function postExtract(body: unknown): Promise<Response> {

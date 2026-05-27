@@ -132,6 +132,129 @@ def _truncate(s: str, n: int = 200) -> str:
     return s if len(s) <= n else s[: n - 1] + "…"
 
 
+# techniqueTag → transitionType inference (first matching tag wins).
+_TAG_TO_TRANSITION = [
+    # (predicate substring or exact, transitionType)
+    ("fade",     "fade"),
+    ("dissolve", "dissolve"),
+    ("wipe",     "wipe"),
+    ("cut",      "cut"),       # 'hard_cut', etc.
+    ("morph",    "morph"),     # 'object_morph'
+    ("motion_blur", "morph"),
+    ("camera_move", "morph"),
+    ("zoom",     "morph"),     # 'zoom_in', 'zoom_out'
+    ("pan",      "morph"),     # 'pan', 'pan_down'
+    ("object_fragmentation", "morph"),
+    ("object_reassembly",    "morph"),
+    ("object_manipulation",  "morph"),
+]
+
+
+def _classify_technique_tags(tags: list) -> str:
+    """Pick a transitionType from a list of techniqueTags. Returns 'unknown' if nothing matches.
+
+    Lookup is by substring match against the predicate, since real tags
+    are compound tokens like 'object_morph', 'pan_down', etc.
+    """
+    if not tags:
+        return "unknown"
+    normalized = [str(t).strip().lower() for t in tags if t]
+    for predicate, ttype in _TAG_TO_TRANSITION:
+        for tag in normalized:
+            if predicate in tag:
+                return ttype
+    return "unknown"
+
+
+def _confidence_to_intensity(confidence: float | None) -> str | None:
+    if confidence is None:
+        return None
+    try:
+        c = float(confidence)
+    except (TypeError, ValueError):
+        return None
+    if c >= 0.85:
+        return "strong"
+    if c >= 0.6:
+        return "medium"
+    return "weak"
+
+
+def _map_micro_shots(micro_shots: list) -> list[dict] | None:
+    if not micro_shots:
+        return None
+    valid = [ms for ms in micro_shots if isinstance(ms, dict)]
+    if not valid:
+        return None
+    out: list[dict] = []
+    n = len(valid)
+    for idx, ms in enumerate(valid):
+        # Derive role from position: first=pre, last=post, single or middle=peak.
+        if n == 1:
+            role = "transition_peak"
+        elif idx == 0:
+            role = "pre_transition"
+        elif idx == n - 1:
+            role = "post_transition"
+        else:
+            role = "transition_peak"
+
+        item = {"id": str(ms.get("id", "")), "role": role}
+
+        time_range = ms.get("microscopeTimeRange") or {}
+        try:
+            start = float(time_range.get("start", 0) or 0)
+            end = float(time_range.get("end", 0) or 0)
+            if end > start:
+                item["durationMs"] = round((end - start) * 1000.0, 1)
+        except (TypeError, ValueError):
+            pass
+
+        description = ms.get("visualChange")
+        if description:
+            item["description"] = _truncate(str(description), 200)
+
+        out.append(item)
+    return out or None
+
+
+def _build_boundaries(rough_blocks: list, boundary_doc: dict | None) -> list[dict] | None:
+    """Convert boundary_micro_scan.json into the structure_graph boundaries[] field.
+
+    Returns None when no boundary doc is provided so _strip_none omits the key
+    entirely (distinguishes "no boundary scan ran" from "scan ran but produced
+    zero matches").
+    """
+    if not boundary_doc:
+        return None
+    by_id = {b["boundaryId"]: b for b in boundary_doc.get("boundaries", []) if isinstance(b, dict)}
+    out: list[dict] = []
+    for i in range(len(rough_blocks) - 1):
+        bid = f"boundary_{i+1:03d}"
+        b = by_id.get(bid)
+        if not b:
+            continue
+        tc = b.get("transitionCandidate") or {}
+        technique_tags = tc.get("techniqueTags") or []
+        transition_type = _classify_technique_tags(technique_tags)
+        confidence = tc.get("confidence")
+        intensity = _confidence_to_intensity(confidence)
+        visual_change = tc.get("visualChange")
+        evidence = _truncate(str(visual_change), 200) if visual_change else None
+
+        entry = {
+            "id": bid,
+            "from": f"seg_{rough_blocks[i].get('id', f'block_{i+1:03d}')}",
+            "to": f"seg_{rough_blocks[i+1].get('id', f'block_{i+2:03d}')}",
+            "transitionType": transition_type,
+            "intensity": intensity,
+            "microShots": _map_micro_shots(b.get("microShots") or []),
+            "evidence": evidence,
+        }
+        out.append(entry)
+    return out  # may be [] if doc present but no matching boundary IDs
+
+
 def _strip_none(obj: Any) -> Any:
     """Recursively drop None-valued keys so Zod .optional() doesn't get null."""
     if isinstance(obj, dict):
@@ -805,6 +928,7 @@ def build_structure_graph(
     fine_doc: dict | None,
     *,
     aspect_ratio: str = "unknown",
+    boundary_doc: dict | None = None,           # ★ new
 ) -> dict:
     rough_blocks = rough_doc.get("contentBlocks", []) or []
     fine_blocks = _index_fine_blocks(fine_doc) if fine_doc else {}
@@ -856,6 +980,7 @@ def build_structure_graph(
         rough_blocks, fine_blocks, segments, shot_slots
     )
     edges = _build_edges(segments, shot_slots, creative_ingredients)
+    boundaries = _build_boundaries(rough_blocks, boundary_doc)
 
     duration = 0.0
     if rough_blocks:
@@ -878,6 +1003,7 @@ def build_structure_graph(
         "packaging": packaging,
         "creativeIngredients": creative_ingredients,
         "edges": edges,
+        "boundaries": boundaries,    # _strip_none drops the key when None
     }
     return _strip_none(graph)
 
@@ -903,6 +1029,13 @@ def _resolve_fine_scan(video_id: str, override: Path | None) -> Path | None:
     return merged if merged.exists() else None
 
 
+def _resolve_boundary_scan(video_id: str, override: Path | None) -> Path | None:
+    if override:
+        return override
+    boundary_path = analysis_paths(video_id).boundary_scan_merged
+    return boundary_path if boundary_path.exists() else None
+
+
 def _resolve_output(video_id: str, override: Path | None) -> Path:
     if override:
         return override
@@ -914,6 +1047,7 @@ def main() -> int:
     parser.add_argument("--video-id", default=DEFAULT_VIDEO_ID)
     parser.add_argument("--rough-scan", type=Path, default=None)
     parser.add_argument("--fine-scan", type=Path, default=None)
+    parser.add_argument("--boundary-scan", type=Path, default=None)
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument(
         "--aspect-ratio",
@@ -925,6 +1059,7 @@ def main() -> int:
 
     rough_path = _resolve_rough_scan(args.video_id, args.rough_scan)
     fine_path = _resolve_fine_scan(args.video_id, args.fine_scan)
+    boundary_path = _resolve_boundary_scan(args.video_id, args.boundary_scan)
     out_path = _resolve_output(args.video_id, args.output)
 
     if not rough_path.exists():
@@ -933,12 +1068,14 @@ def main() -> int:
 
     rough_doc = _load_json(rough_path)
     fine_doc = _load_json(fine_path) if fine_path else None
+    boundary_doc = _load_json(boundary_path) if boundary_path else None
 
-    print(f"rough_scan -> {rough_path}")
-    print(f"fine_scan  -> {fine_path if fine_path else '(none, rough-only)'}")
-    print(f"output     -> {out_path}")
+    print(f"rough_scan    -> {rough_path}")
+    print(f"fine_scan     -> {fine_path if fine_path else '(none, rough-only)'}")
+    print(f"boundary_scan -> {boundary_path if boundary_path else '(absent)'}")
+    print(f"output        -> {out_path}")
 
-    graph = build_structure_graph(rough_doc, fine_doc, aspect_ratio=args.aspect_ratio)
+    graph = build_structure_graph(rough_doc, fine_doc, aspect_ratio=args.aspect_ratio, boundary_doc=boundary_doc)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("w", encoding="utf-8") as f:

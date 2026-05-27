@@ -168,6 +168,24 @@ export const AssetCardSchema = z.object({
   visualStyleTags: z.array(VisualStyleTagSchema).optional()
 });
 
+export const BoundaryMicroShotSchema = z.object({
+  id: z.string(),
+  role: z.enum(['pre_transition', 'transition_peak', 'post_transition', 'unknown']),
+  durationMs: z.number().optional(),  // milliseconds
+  description: z.string().optional()
+});
+
+export const BoundarySchema = z.object({
+  id: z.string(),
+  from: z.string(),
+  to: z.string(),
+  transitionType: z.enum(['cut', 'fade', 'morph', 'wipe', 'dissolve', 'unknown']),
+  intensity: z.enum(['weak', 'medium', 'strong']).optional(),
+  alignedToBeat: z.boolean().optional(),
+  microShots: z.array(BoundaryMicroShotSchema).optional(),
+  evidence: z.string().optional()
+});
+
 export const ViralStructureGraphSchema = z.object({
   meta: z.object({
     duration: z.number(),
@@ -229,5 +247,6 @@ export const ViralStructureGraphSchema = z.object({
     to: z.string(),
     type: z.enum(['sequence', 'requires', 'maps_to', 'fallback']),
     explanation: z.string().optional()
-  }))
+  })),
+  boundaries: z.array(BoundarySchema).optional()
 });

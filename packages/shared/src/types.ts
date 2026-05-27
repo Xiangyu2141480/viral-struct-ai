@@ -210,6 +210,24 @@ export interface GraphEdge {
   explanation?: string;
 }
 
+export interface BoundaryMicroShot {
+  id: string;
+  role: 'pre_transition' | 'transition_peak' | 'post_transition' | 'unknown';
+  durationMs?: number;  // milliseconds
+  description?: string;
+}
+
+export interface Boundary {
+  id: string;
+  from: string;
+  to: string;
+  transitionType: 'cut' | 'fade' | 'morph' | 'wipe' | 'dissolve' | 'unknown';
+  intensity?: 'weak' | 'medium' | 'strong';
+  alignedToBeat?: boolean;
+  microShots?: BoundaryMicroShot[];
+  evidence?: string;
+}
+
 export interface ViralStructureGraph {
   meta: {
     duration: number;
@@ -224,6 +242,7 @@ export interface ViralStructureGraph {
   packaging: PackagingStructure;
   creativeIngredients: CreativeIngredient[];
   edges: GraphEdge[];
+  boundaries?: Boundary[];
 }
 
 export interface ContentBrief {
@@ -344,4 +363,5 @@ export interface QualityReport {
   coherence: number;
   subtitleReadability: number;
   warnings: string[];
+  transitionFidelity?: number;  // 0..1; only populated when source boundaries exist
 }
