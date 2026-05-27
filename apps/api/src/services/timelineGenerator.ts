@@ -1,4 +1,5 @@
 import type {
+  Boundary,
   ContentBrief,
   GapRepair,
   ScriptSegment,
@@ -16,12 +17,13 @@ export async function generateTimelineMock(input: {
   matches: SlotMatch[];
   repairs: GapRepair[];
   variant?: GenerationVariant;
+  boundaries?: Boundary[];
 }): Promise<{
   script: ScriptSegment[];
   storyboard: StoryboardShot[];
   timeline: TimelineItem[];
 }> {
-  const { structureGraph, newContent, matches, repairs } = input;
+  const { structureGraph, newContent, matches, repairs, boundaries } = input;
   const variant = input.variant ?? 'high_click';
 
   const lineByRole = buildLinesByRole(newContent, variant);
@@ -73,7 +75,8 @@ export async function generateTimelineMock(input: {
       packaging: {
         captionStyle: captionStyleForVariant(variant),
         cardType: cardTypeByRole(seg.role),
-        transition: transitionForVariant(variant, index),
+        transition: transitionFromBoundary(seg.id, boundaries)
+          ?? transitionForVariant(variant, index),
         motion: motionForVariant(variant, repair)
       },
       repair
@@ -142,6 +145,33 @@ function transitionForVariant(
   if (variant === 'premium') return 'fade';
   if (variant === 'high_conversion') return index === 0 ? 'push' : 'quick_cut';
   return 'quick_cut';
+}
+
+function transitionFromBoundary(
+  segmentId: string,
+  boundaries: Boundary[] | undefined
+): NonNullable<TimelineItem['packaging']['transition']> | null {
+  if (!boundaries?.length) return null;
+  // Find the boundary whose 'from' is this segment (i.e., this segment ENDS at the boundary).
+  const b = boundaries.find((x) => x.from === segmentId);
+  if (!b) return null;
+  return mapBoundaryTypeToPackagingTransition(b.transitionType);
+}
+
+function mapBoundaryTypeToPackagingTransition(
+  type: Boundary['transitionType']
+): NonNullable<TimelineItem['packaging']['transition']> {
+  switch (type) {
+    case 'fade':
+    case 'dissolve':
+      return 'fade';
+    case 'morph':
+    case 'wipe':
+      return 'push';
+    case 'cut':
+    default:
+      return 'quick_cut';
+  }
 }
 
 function motionForVariant(

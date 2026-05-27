@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { ContentBrief, ViralStructureGraph } from '@viral-struct/shared';
+import type { Boundary, ContentBrief, GapRepair, SlotMatch, ViralStructureGraph } from '@viral-struct/shared';
 import { generateTimelineMock } from './timelineGenerator';
+
+const matches: SlotMatch[] = [];
+const repairs: GapRepair[] = [];
 
 const graph: ViralStructureGraph = {
   meta: { duration: 10, aspectRatio: '9:16', videoType: 'ecommerce', style: 'high_click' },
@@ -119,4 +122,50 @@ test('generateTimelineMock puts proof and CTA emphasis into high-conversion vari
 
   assert.match(result.script.at(-1)?.text ?? '', /立即/);
   assert.ok(result.timeline.every((item) => item.packaging.captionStyle.includes('conversion')));
+});
+
+test('generateTimelineMock uses default per-variant transitions when boundaries absent', async () => {
+  const result = await generateTimelineMock({
+    structureGraph: graph,
+    newContent: brief,
+    matches,
+    repairs,
+    variant: 'high_click'
+  });
+  // Without boundaries, high_click variant default is 'quick_cut'
+  assert.equal(result.timeline[0].packaging.transition, 'quick_cut');
+});
+
+test('generateTimelineMock overrides transition from source boundary mapping', async () => {
+  const boundaries: Boundary[] = [
+    { id: 'b1', from: 'seg_hook', to: 'seg_sp', transitionType: 'fade', intensity: 'medium' }
+  ];
+  const result = await generateTimelineMock({
+    structureGraph: graph,
+    newContent: brief,
+    matches,
+    repairs,
+    variant: 'high_click',
+    boundaries
+  });
+  // The timeline item whose sourceSegmentId is 'seg_hook' (the boundary's from)
+  // should get its packaging.transition overridden to 'fade'.
+  const endingHook = result.timeline.find(t => t.sourceSegmentId === 'seg_hook')!;
+  assert.equal(endingHook.packaging.transition, 'fade');
+});
+
+test('generateTimelineMock maps morph boundary to push transition', async () => {
+  const boundaries: Boundary[] = [
+    { id: 'b1', from: 'seg_hook', to: 'seg_sp', transitionType: 'morph', intensity: 'strong' }
+  ];
+  const result = await generateTimelineMock({
+    structureGraph: graph,
+    newContent: brief,
+    matches,
+    repairs,
+    variant: 'high_click',
+    boundaries
+  });
+  const endingHook = result.timeline.find(t => t.sourceSegmentId === 'seg_hook')!;
+  assert.equal(endingHook.packaging.transition, 'push');
 });
