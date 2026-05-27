@@ -62,6 +62,16 @@ test('POST /api/demo/run returns a complete judge-facing workflow result', async
     body.assetCards.map((card: { id: string }) => card.id),
     ['asset_001', 'asset_002', 'asset_003']
   );
+  assert.equal(body.assetSource.source, 'asset_library');
+  assert.equal(body.assetSource.libraryId, 'kangshifu_demo');
+  assert.equal(
+    body.evidenceTrace.find((item: { id: string }) => item.id === 'rough_fine_scan')?.source,
+    'rough_fine_scan_artifact'
+  );
+  assert.equal(
+    body.evidenceTrace.find((item: { id: string }) => item.id === 'asset_library')?.artifactPath,
+    'seed_assets/asset_libraries/kangshifu_demo/asset_cards.json'
+  );
   assert.ok(body.assetCards.some((card: { url?: string }) => card.url?.includes('kangshifu_iced_tea')));
   assert.ok(body.materialGaps.length >= 1);
   assert.ok(body.repairs.length >= 1);

@@ -2,17 +2,27 @@
 
 import { useMemo, useState } from 'react';
 import type { AssetCard, ContentBrief } from '@viral-struct/shared';
-import { apiPostForm, mediaUrl } from '../lib/api';
+import { apiGet, apiPostForm, mediaUrl } from '../lib/api';
 import { useWorkflowStore } from '../lib/workflowStore';
 
 interface AssetsResponse {
   assetCards: AssetCard[];
+  source?: 'upload_analysis';
 }
+
+interface AssetLibraryResponse {
+  assetCards: AssetCard[];
+  source: 'asset_library';
+  libraryId: string;
+}
+
+const DEMO_LIBRARY_ID = 'kangshifu_demo';
 
 export function AssetAdaptPanel() {
   const structureGraph = useWorkflowStore((state) => state.structureGraph);
   const contentBrief = useWorkflowStore((state) => state.contentBrief);
   const assetCards = useWorkflowStore((state) => state.assetCards);
+  const assetSourceDebug = useWorkflowStore((state) => state.assetSourceDebug);
   const setContentBrief = useWorkflowStore((state) => state.setContentBrief);
   const setAssetCards = useWorkflowStore((state) => state.setAssetCards);
   const [productName, setProductName] = useState(contentBrief.productName);
@@ -59,7 +69,29 @@ export function AssetAdaptPanel() {
       });
       form.append('textBrief', textBrief);
       const result = await apiPostForm<AssetsResponse>('/api/assets/analyze', form);
-      setAssetCards(result.assetCards);
+      setAssetCards(result.assetCards, {
+        source: result.source ?? 'upload_analysis',
+        label: '上传素材启发式分析'
+      });
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleLoadDemoLibrary() {
+    setLoading(true);
+    setError(null);
+
+    try {
+      setContentBrief(nextBrief);
+      const result = await apiGet<AssetLibraryResponse>(`/api/assets/libraries/${encodeURIComponent(DEMO_LIBRARY_ID)}`);
+      setAssetCards(result.assetCards, {
+        source: result.source,
+        libraryId: result.libraryId,
+        label: `队友 AssetCard 库：${result.libraryId}`
+      });
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -109,6 +141,12 @@ export function AssetAdaptPanel() {
 
         <div className="card">
           <h3>上传素材</h3>
+          <button type="button" onClick={handleLoadDemoLibrary} disabled={loading} style={{ marginBottom: 12 }}>
+            使用康师傅 AssetCard 库
+          </button>
+          <p style={{ marginTop: 0 }}>
+            推荐演示路径会直接读取 `seed_assets/asset_libraries/kangshifu_demo/asset_cards.json`，使用队友的素材卡协议结果。
+          </p>
           <label style={{ display: 'grid', gap: 6 }}>
             <span>图片或视频素材</span>
             <input
@@ -135,7 +173,7 @@ export function AssetAdaptPanel() {
       </div>
 
       {assetCards.length ? (
-        <AssetCards cards={assetCards} />
+        <AssetCards cards={assetCards} sourceLabel={assetSourceDebug?.label ?? '当前素材卡'} />
       ) : (
         <p style={{ marginTop: 16 }}>尚未生成 AssetCard。提交素材后会调用 `/api/assets/analyze`。</p>
       )}
@@ -143,10 +181,11 @@ export function AssetAdaptPanel() {
   );
 }
 
-function AssetCards({ cards }: { cards: AssetCard[] }) {
+function AssetCards({ cards, sourceLabel }: { cards: AssetCard[]; sourceLabel: string }) {
   return (
     <section className="card" style={{ marginTop: 16 }}>
       <h2>素材理解结果</h2>
+      <p>{sourceLabel}</p>
       <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
         {cards.map((card) => (
           <article className="card" key={card.id}>
