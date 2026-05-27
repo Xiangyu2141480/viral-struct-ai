@@ -9,7 +9,7 @@ export default function HomePage() {
           从样例视频中抽取可迁移结构，映射到新商品和用户素材，并在素材不足时自动识别缺口和补全，最终生成脚本、分镜、时间线和视频 demo。
         </p>
         <p>
-          <a href="/demo">打开冠军演示 →</a>
+          <a href="/demo">打开评审演示 →</a>
           {' · '}
           <a href="/analyze">开始样例分析 →</a>
         </p>
