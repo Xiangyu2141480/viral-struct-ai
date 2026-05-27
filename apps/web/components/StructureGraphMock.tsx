@@ -241,7 +241,7 @@ function CreativeIngredients({ graph }: { graph: ViralStructureGraph }) {
             key={ingredient.id}
             style={{
               border: '1px solid rgba(255,255,255,0.12)',
-              borderRadius: 12,
+              borderRadius: 8,
               padding: 14,
               background: 'rgba(255,255,255,0.04)',
               overflowWrap: 'anywhere'

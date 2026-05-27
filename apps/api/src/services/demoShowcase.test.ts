@@ -4,10 +4,10 @@ import { resolve } from 'node:path';
 import { test } from 'node:test';
 import { getRepoRoot } from './videoPaths';
 import { getSeedVideoPath } from './videoAnalyzer';
-import { getChampionDemoShowcase } from './demoShowcase';
+import { getDemoShowcase } from './demoShowcase';
 
-test('champion demo showcase anchors a real seed and the P0 judging evidence', async () => {
-  const showcase = getChampionDemoShowcase();
+test('demo showcase anchors a real seed and the P0 judging evidence', async () => {
+  const showcase = getDemoShowcase();
 
   assert.equal(showcase.case.productName, '康师傅冰红茶');
   assert.equal(showcase.case.seedFilename, 'macbook_neo.mp4');
@@ -36,4 +36,14 @@ test('champion demo showcase anchors a real seed and the P0 judging evidence', a
   for (const taskId of ['task_1', 'task_2', 'task_3', 'task_5', 'task_6', 'task_7', 'task_8']) {
     assert.ok(taskIds.has(taskId), `missing score evidence for ${taskId}`);
   }
+
+  assertNoRestrictedWinnerCopy(showcase);
 });
+
+function assertNoRestrictedWinnerCopy(value: unknown) {
+  const serialized = JSON.stringify(value);
+  const restrictedCn = String.fromCharCode(0x51a0, 0x519b);
+  const restrictedEn = String.fromCharCode(99, 104, 97, 109, 112, 105, 111, 110);
+  assert.equal(serialized.includes(restrictedCn), false);
+  assert.equal(serialized.toLowerCase().includes(restrictedEn), false);
+}

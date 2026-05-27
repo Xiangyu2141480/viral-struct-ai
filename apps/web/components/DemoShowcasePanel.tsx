@@ -16,6 +16,7 @@ import type {
 } from '@viral-struct/shared';
 import { apiGet, apiPost, mediaUrl } from '../lib/api';
 import { useWorkflowStore } from '../lib/workflowStore';
+import { VisualTimelinePreview } from './VisualTimelinePreview';
 
 type DemoStatus = 'pending' | 'running' | 'done' | 'error';
 
@@ -353,7 +354,7 @@ export function DemoShowcasePanel() {
   if (!showcase) {
     return (
       <main className="card">
-        <h1>冠军演示工作台</h1>
+        <h1>评审演示工作台</h1>
         <p>{error ? `加载失败：${error}` : '正在读取 demo case...'}</p>
       </main>
     );
@@ -371,14 +372,14 @@ export function DemoShowcasePanel() {
       >
         <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'minmax(0, 1.25fr) minmax(260px, 0.75fr)' }}>
           <div>
-            <p style={{ margin: '0 0 6px', color: '#a7f3d0' }}>Champion Demo Case</p>
+            <p style={{ margin: '0 0 6px', color: '#a7f3d0' }}>Review Demo Case</p>
             <h1 style={{ margin: 0 }}>{showcase.case.title}</h1>
             <p style={{ maxWidth: 760 }}>
               用真实样例视频抽取结构，再迁移到少素材的新商品 brief；页面把 P0 闭环和评分证据集中在一个演示路径里。
             </p>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               <button type="button" onClick={handleRunDemo} disabled={running}>
-                {running ? '演示链路运行中...' : timeline.length ? '重新运行冠军 demo' : '一键运行冠军 demo'}
+                {running ? '演示链路运行中...' : timeline.length ? '重新运行评审 demo' : '一键运行评审 demo'}
               </button>
               <a href="/result">查看结果页 →</a>
             </div>
@@ -452,7 +453,15 @@ export function DemoShowcasePanel() {
         </div>
       </section>
 
-      {timeline.length ? <ResultSnapshot timeline={timeline} qualityReport={qualityReport} gaps={materialGaps} repairs={repairs} /> : null}
+      {timeline.length ? (
+        <ResultSnapshot
+          timeline={timeline}
+          assetCards={assetCards}
+          qualityReport={qualityReport}
+          gaps={materialGaps}
+          repairs={repairs}
+        />
+      ) : null}
     </main>
   );
 }
@@ -573,11 +582,13 @@ const fallbackEvidenceTrace: DemoEvidenceTraceItem[] = [
 
 function ResultSnapshot({
   timeline,
+  assetCards,
   qualityReport,
   gaps,
   repairs
 }: {
   timeline: TimelineItem[];
+  assetCards: AssetCard[];
   qualityReport: QualityReport | null;
   gaps: MaterialGap[];
   repairs: GapRepair[];
@@ -585,36 +596,8 @@ function ResultSnapshot({
   return (
     <section className="card">
       <h2>最终结果快照</h2>
-      <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'minmax(260px, 360px) minmax(0, 1fr)' }}>
-        <div
-          style={{
-            aspectRatio: '9 / 16',
-            borderRadius: 8,
-            overflow: 'hidden',
-            background: '#f8fafc',
-            color: '#0f172a',
-            border: '1px solid rgba(255,255,255,0.16)'
-          }}
-        >
-          {timeline.slice(0, 6).map((item, index) => (
-            <div
-              key={item.id}
-              style={{
-                minHeight: `${100 / Math.min(timeline.length, 6)}%`,
-                padding: 12,
-                display: 'grid',
-                alignContent: 'center',
-                gap: 6,
-                background: index % 2 === 0 ? '#ecfeff' : '#fff7ed',
-                borderBottom: '1px solid rgba(15,23,42,0.12)'
-              }}
-            >
-              <strong>{item.packaging.cardType ?? item.segmentRole}</strong>
-              <span>{item.script}</span>
-              <small>{item.visualAction}</small>
-            </div>
-          ))}
-        </div>
+      <div style={{ display: 'grid', gap: 16 }}>
+        <VisualTimelinePreview timeline={timeline} assetCards={assetCards} compact />
 
         <div style={{ display: 'grid', gap: 12, alignContent: 'start' }}>
           <div>
