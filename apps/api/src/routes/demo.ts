@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { AssetCard, ContentBrief, GapRepair, QualityReport, SlotMatch, TimelineItem } from '@viral-struct/shared';
 import { analyzeAssetsMock } from '../services/assetAnalyzer';
 import { loadAssetLibrary } from '../services/assetLibraryLoader';
-import { type DemoShowcase, getChampionDemoShowcase } from '../services/demoShowcase';
+import { type DemoShowcase, getDemoShowcase } from '../services/demoShowcase';
 import { planGapRepairs } from '../services/gapRepairPlanner';
 import { evaluateQuality } from '../services/qualityEvaluator';
 import { matchSlots } from '../services/slotMatcher';
@@ -28,12 +28,12 @@ interface DemoAssetLoadResult {
 }
 
 demoRouter.get('/showcase', (_req, res) => {
-  res.json({ showcase: getChampionDemoShowcase() });
+  res.json({ showcase: getDemoShowcase() });
 });
 
 demoRouter.post('/run', async (_req, res) => {
   try {
-    const showcase = getChampionDemoShowcase();
+    const showcase = getDemoShowcase();
     const filePath = await getSeedVideoPath(showcase.case.seedFilename);
 
     if (!filePath) {
@@ -109,7 +109,7 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-async function loadDemoAssetCards(showcase: ReturnType<typeof getChampionDemoShowcase>): Promise<DemoAssetLoadResult> {
+async function loadDemoAssetCards(showcase: ReturnType<typeof getDemoShowcase>): Promise<DemoAssetLoadResult> {
   try {
     const assetCards = await loadAssetLibrary(showcase.case.assetLibraryId);
     return {

@@ -43,7 +43,7 @@ export interface DemoShowcase {
   scoreEvidence: DemoScoreEvidence[];
 }
 
-export function getChampionDemoShowcase(): DemoShowcase {
+export function getDemoShowcase(): DemoShowcase {
   return {
     case: {
       id: 'kangshifu_iced_black_tea_gap_repair',
