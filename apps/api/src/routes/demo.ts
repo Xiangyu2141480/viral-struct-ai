@@ -71,7 +71,9 @@ demoRouter.post('/run', async (_req, res) => {
     const qualityReport = evaluateQuality({
       matches: slotResult.matches,
       timeline: generation.timeline,
-      boundaries
+      boundaries,
+      contentBrief,
+      assets: assetLoad.assetCards
     });
 
     res.json({
