@@ -326,3 +326,86 @@ class BuildBoundariesTests(unittest.TestCase):
         self.assertEqual(len(result), 2)                             # 001 and 003 only
         ids = [b["id"] for b in result]
         self.assertEqual(ids, ["boundary_001", "boundary_003"])
+
+
+class ExtractMigrationContractTests(unittest.TestCase):
+    def setUp(self):
+        self.module = load_module()
+
+    def _valid_contract(self) -> dict:
+        return {
+            "intent": {
+                "purpose": "1.5s 内制造高强度视觉冲击",
+                "energyLevel": "high",
+                "motionPattern": "centripetal_impact_or_dynamic_entry",
+                "compositionPrincipal": "single_subject_center_with_dynamic_negative_space",
+                "durationMs": [800, 2000],
+                "soundDesignHint": "transient_attack_aligned_with_visual_peak"
+            },
+            "sourceInstance": {
+                "productInSource": "MacBook 银色机身",
+                "specificAction": "双手左右托举旋转",
+                "colorSignature": "silver_yellow_gradient"
+            },
+            "acceptanceCriteria": {
+                "anyOf": [
+                    {"motionType": "fluid_dynamics", "examples": ["液体飞溅", "颗粒爆炸"]},
+                    {"motionType": "object_kinetic", "compositionType": "left_right_symmetry", "examples": ["物体快速入画"]}
+                ],
+                "rejectIf": ["低动感纯静物图"]
+            }
+        }
+
+    def test_returns_three_keys_when_contract_well_formed(self):
+        fine_block = {"migrationContract": self._valid_contract()}
+        result = self.module._extract_migration_contract(fine_block)
+        self.assertEqual(set(result.keys()), {"intent", "sourceInstance", "acceptanceCriteria"})
+        self.assertEqual(result["intent"]["energyLevel"], "high")
+        self.assertEqual(result["intent"]["durationMs"], [800.0, 2000.0])
+        self.assertEqual(result["sourceInstance"]["productInSource"], "MacBook 银色机身")
+        self.assertEqual(len(result["acceptanceCriteria"]["anyOf"]), 2)
+        self.assertEqual(result["acceptanceCriteria"]["rejectIf"], ["低动感纯静物图"])
+
+    def test_returns_empty_when_fine_block_missing_contract(self):
+        self.assertEqual(self.module._extract_migration_contract({}), {})
+        self.assertEqual(self.module._extract_migration_contract(None), {})
+        self.assertEqual(self.module._extract_migration_contract({"migrationContract": "not a dict"}), {})
+
+    def test_drops_malformed_intent_but_keeps_other_valid_sections(self):
+        contract = self._valid_contract()
+        contract["intent"]["energyLevel"] = "extreme"   # not in enum
+        fine_block = {"migrationContract": contract}
+        result = self.module._extract_migration_contract(fine_block)
+        self.assertNotIn("intent", result)
+        self.assertIn("sourceInstance", result)
+        self.assertIn("acceptanceCriteria", result)
+
+
+class BuildStructureGraphSchemaVersionTests(unittest.TestCase):
+    def setUp(self):
+        self.module = load_module()
+
+    def test_schema_version_v1_when_any_block_has_contract(self):
+        rough_doc = {"contentBlocks": [
+            {"id": "block_001", "timeRange": {"start": 0, "end": 5}},
+            {"id": "block_002", "timeRange": {"start": 5, "end": 10}},
+        ], "roughSummary": {"oneSentenceStructure": "test"}}
+        fine_doc = {"contentBlocks": [
+            {"blockId": "block_001", "migrationContract": {
+                "intent": {
+                    "purpose": "x", "energyLevel": "high",
+                    "motionPattern": "p", "compositionPrincipal": "c",
+                    "durationMs": [100, 200]
+                }
+            }}
+        ]}
+        graph = self.module.build_structure_graph(rough_doc, fine_doc)
+        self.assertEqual(graph.get("schemaVersion"), "v1")
+
+    def test_schema_version_omitted_for_v0_input(self):
+        rough_doc = {"contentBlocks": [
+            {"id": "block_001", "timeRange": {"start": 0, "end": 5}},
+        ], "roughSummary": {"oneSentenceStructure": "test"}}
+        fine_doc = {"contentBlocks": [{"blockId": "block_001"}]}  # no migrationContract
+        graph = self.module.build_structure_graph(rough_doc, fine_doc)
+        self.assertNotIn("schemaVersion", graph)

@@ -567,6 +567,81 @@ def _first_action_duration_seconds(fine_block: dict | None, segment_duration: fl
     return segment_duration
 
 
+def _extract_migration_contract(fine_block: dict | None) -> dict:
+    """Read optional migrationContract.{intent, sourceInstance, acceptanceCriteria} from a v1 fine block.
+
+    Returns a dict with three keys (each may be None). Returns {} when fine_block lacks the contract.
+    Only fields that pass shape validation are kept; malformed sections are dropped silently.
+    """
+    if not fine_block or not isinstance(fine_block, dict):
+        return {}
+    contract = fine_block.get("migrationContract")
+    if not isinstance(contract, dict):
+        return {}
+
+    result: dict = {}
+
+    intent = contract.get("intent")
+    if isinstance(intent, dict):
+        duration_ms = intent.get("durationMs")
+        if (
+            isinstance(intent.get("purpose"), str)
+            and intent.get("energyLevel") in ("low", "medium", "high")
+            and isinstance(intent.get("motionPattern"), str)
+            and isinstance(intent.get("compositionPrincipal"), str)
+            and isinstance(duration_ms, list)
+            and len(duration_ms) == 2
+            and all(isinstance(x, (int, float)) for x in duration_ms)
+        ):
+            kept = {
+                "purpose": intent["purpose"],
+                "energyLevel": intent["energyLevel"],
+                "motionPattern": intent["motionPattern"],
+                "compositionPrincipal": intent["compositionPrincipal"],
+                "durationMs": [float(duration_ms[0]), float(duration_ms[1])],
+            }
+            sound_hint = intent.get("soundDesignHint")
+            if isinstance(sound_hint, str) and sound_hint:
+                kept["soundDesignHint"] = sound_hint
+            result["intent"] = kept
+
+    source_instance = contract.get("sourceInstance")
+    if isinstance(source_instance, dict) and isinstance(source_instance.get("productInSource"), str):
+        kept = {"productInSource": source_instance["productInSource"]}
+        for opt_key in ("specificAction", "colorSignature"):
+            val = source_instance.get(opt_key)
+            if isinstance(val, str) and val:
+                kept[opt_key] = val
+        result["sourceInstance"] = kept
+
+    acceptance = contract.get("acceptanceCriteria")
+    if isinstance(acceptance, dict):
+        any_of = acceptance.get("anyOf")
+        if isinstance(any_of, list) and any_of:
+            kept_criteria: list[dict] = []
+            for entry in any_of:
+                if not isinstance(entry, dict):
+                    continue
+                examples = entry.get("examples")
+                if not isinstance(examples, list) or not all(isinstance(e, str) for e in examples):
+                    continue
+                criterion: dict = {"examples": examples}
+                for opt_key in ("motionType", "compositionType"):
+                    val = entry.get(opt_key)
+                    if isinstance(val, str) and val:
+                        criterion[opt_key] = val
+                kept_criteria.append(criterion)
+            if kept_criteria:
+                kept_acceptance: dict = {"anyOf": kept_criteria}
+                reject_if = acceptance.get("rejectIf")
+                if isinstance(reject_if, list) and all(isinstance(r, str) for r in reject_if):
+                    if reject_if:
+                        kept_acceptance["rejectIf"] = reject_if
+                result["acceptanceCriteria"] = kept_acceptance
+
+    return result
+
+
 def _build_slot_from_required_asset(
     *,
     seg_id: str,
@@ -583,7 +658,7 @@ def _build_slot_from_required_asset(
     purpose = str(asset_req.get("purpose", "") or "")
     role = _slot_role_from_required_asset(asset_type, purpose, segment_role)
     min_duration = _first_action_duration_seconds(fine_block, segment_duration)
-    return {
+    slot = {
         "id": f"slot_{block_id}_asset_{index_in_block + 1:03d}",
         "segmentId": seg_id,
         "role": role,
@@ -599,6 +674,8 @@ def _build_slot_from_required_asset(
         "fallbackStrategies": _ROLE_FALLBACK_STRATEGIES[segment_role],
         "importance": importance,
     }
+    slot.update(_extract_migration_contract(fine_block))
+    return slot
 
 
 def _build_shot_slot(
@@ -611,10 +688,11 @@ def _build_shot_slot(
     total_in_block: int,
     additional_findings: list[str],
     importance: int,
+    fine_block: dict | None = None,
 ) -> dict:
     duration = float(shot.get("duration", 0))
     shot_id = shot.get("id", f"shot_{index_in_block + 1:03d}")
-    return {
+    slot = {
         "id": f"slot_{block_id}_{shot_id}",
         "segmentId": seg_id,
         "role": _slot_role(segment_role, index_in_block, total_in_block),
@@ -630,6 +708,8 @@ def _build_shot_slot(
         "fallbackStrategies": _ROLE_FALLBACK_STRATEGIES[segment_role],
         "importance": importance,
     }
+    slot.update(_extract_migration_contract(fine_block))
+    return slot
 
 
 def _build_creative_ingredients(
@@ -958,6 +1038,7 @@ def build_structure_graph(
                     total_in_block=len(legacy_shots),
                     additional_findings=additional,
                     importance=segment["importance"],
+                    fine_block=fine,
                 ))
         else:
             asset_requirements = _required_asset_types(fine, role)
@@ -986,7 +1067,13 @@ def build_structure_graph(
     if rough_blocks:
         duration = float(rough_blocks[-1].get("timeRange", {}).get("end", 0) or 0)
 
+    has_migration_contract = any(
+        isinstance(fb, dict) and isinstance(fb.get("migrationContract"), dict)
+        for fb in fine_blocks.values()
+    )
+
     graph = {
+        "schemaVersion": "v1" if has_migration_contract else None,
         "meta": {
             "duration": duration,
             "aspectRatio": _aspect_ratio(aspect_ratio),
