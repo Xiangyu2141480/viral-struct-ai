@@ -148,6 +148,28 @@ export const ContentBriefSchema = z.object({
   stylePreference: z.string().optional()
 });
 
+export const AssetVisualContentSchema = z.object({
+  primarySubject: z.string(),
+  subjectPosition: z.string(),
+  negativeSpace: z.string().optional(),
+  kinematicElements: z.array(z.string()),
+  lighting: z.string().optional(),
+  colorPalette: z.array(z.string()).optional()
+});
+
+export const AssetMotionPotentialSchema = z.object({
+  isStill: z.boolean(),
+  implicitMotion: z.enum(['low', 'medium', 'high']),
+  canSimulateMotion: z.array(z.string()).optional(),
+  canSimulateDurationMs: z.tuple([z.number(), z.number()]).optional()
+});
+
+export const AssetCandidateSlotRoleSchema = z.object({
+  role: ShotSlotRoleSchema,
+  confidence: z.number().min(0).max(1),
+  caveat: z.string().optional()
+});
+
 export const AssetCardSchema = z.object({
   id: z.string(),
   type: z.enum(['image', 'video', 'text']),
@@ -165,7 +187,11 @@ export const AssetCardSchema = z.object({
     framing: z.array(HumanFramingSchema).optional(),
     actions: z.array(AssetHumanActionSchema).optional()
   }).optional(),
-  visualStyleTags: z.array(VisualStyleTagSchema).optional()
+  visualStyleTags: z.array(VisualStyleTagSchema).optional(),
+  visualContent: AssetVisualContentSchema.optional(),
+  motionPotential: AssetMotionPotentialSchema.optional(),
+  candidateSlotRoles: z.array(AssetCandidateSlotRoleSchema).optional(),
+  analysisSource: z.enum(['static_library', 'mock_filename_rules', 'llm_multimodal', 'manual_text_brief']).optional()
 });
 
 export const BoundaryMicroShotSchema = z.object({

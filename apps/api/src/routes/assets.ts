@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
-import { analyzeAssetsMock } from '../services/assetAnalyzer';
+import type { AssetCard } from '@viral-struct/shared';
+import { analyzeAssetsWithFallback } from '../services/assetAnalyzer';
 import { loadAssetLibrary } from '../services/assetLibraryLoader';
 import { getUploadDir } from '../services/videoPaths';
 
@@ -24,10 +25,20 @@ assetsRouter.get('/libraries/:libraryId', async (req, res) => {
 
 assetsRouter.post('/analyze', upload.array('assets'), async (req, res) => {
   const files = (req.files ?? []) as Express.Multer.File[];
-  const cards = await analyzeAssetsMock(files, req.body?.textBrief);
-  res.json({ assetCards: cards, source: 'upload_analysis' });
+  const cards = await analyzeAssetsWithFallback({ files, textBrief: req.body?.textBrief });
+  res.json({ assetCards: cards, source: uploadAnalysisSource(cards) });
 });
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function uploadAnalysisSource(cards: AssetCard[]): 'upload_analysis_llm' | 'upload_analysis_fallback' | 'upload_analysis_manual' {
+  if (cards.some((card) => card.analysisSource === 'mock_filename_rules')) {
+    return 'upload_analysis_fallback';
+  }
+  if (cards.some((card) => card.analysisSource === 'llm_multimodal')) {
+    return 'upload_analysis_llm';
+  }
+  return 'upload_analysis_manual';
 }

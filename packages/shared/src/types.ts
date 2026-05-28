@@ -284,6 +284,30 @@ export interface ContentBrief {
   stylePreference?: string;
 }
 
+export interface AssetVisualContent {
+  primarySubject: string;
+  subjectPosition: string;
+  negativeSpace?: string;
+  kinematicElements: string[];
+  lighting?: string;
+  colorPalette?: string[];
+}
+
+export interface AssetMotionPotential {
+  isStill: boolean;
+  implicitMotion: 'low' | 'medium' | 'high';
+  canSimulateMotion?: string[];
+  canSimulateDurationMs?: [number, number];
+}
+
+export interface AssetCandidateSlotRole {
+  role: ShotSlotRole;
+  confidence: number;
+  caveat?: string;
+}
+
+export type AssetAnalysisSource = 'static_library' | 'mock_filename_rules' | 'llm_multimodal' | 'manual_text_brief';
+
 export interface AssetCard {
   id: string;
   type: 'image' | 'video' | 'text';
@@ -302,6 +326,10 @@ export interface AssetCard {
     actions?: AssetHumanAction[];
   };
   visualStyleTags?: VisualStyleTag[];
+  visualContent?: AssetVisualContent;
+  motionPotential?: AssetMotionPotential;
+  candidateSlotRoles?: AssetCandidateSlotRole[];
+  analysisSource?: AssetAnalysisSource;
 }
 
 export interface SlotMatch {
