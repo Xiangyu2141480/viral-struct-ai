@@ -221,7 +221,7 @@ export async function analyzeAssetsLLM(opts: AnalyzeOpts): Promise<AssetCard[]> 
       detectedIngredients: ['trust_building'],
       humanPresence: { hasHuman: false },
       visualStyleTags: [],
-      analysisSource: 'llm_multimodal'
+      analysisSource: 'manual_text_brief'
     });
   }
 
@@ -294,7 +294,7 @@ export async function analyzeAssetsMock(
         actions: []
       },
       visualStyleTags: [],
-      analysisSource: 'mock_filename_rules'
+      analysisSource: 'manual_text_brief'
     });
   }
 

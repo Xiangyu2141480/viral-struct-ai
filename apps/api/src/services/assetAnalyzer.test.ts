@@ -168,8 +168,9 @@ test('analyzeAssetsMock output still validates against AssetCardSchema', async (
   assert.equal(cards.length, 2); // file + text_brief
   for (const c of cards) {
     AssetCardSchema.parse(c);
-    assert.equal(c.analysisSource, 'mock_filename_rules');
   }
+  assert.equal(cards[0].analysisSource, 'mock_filename_rules');
+  assert.equal(cards[1].analysisSource, 'manual_text_brief');
 });
 
 // ---------------------------------------------------------------------------

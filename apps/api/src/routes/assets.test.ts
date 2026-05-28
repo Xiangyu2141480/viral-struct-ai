@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import { createServer, type Server } from 'node:http';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { after, before, test } from 'node:test';
 import express from 'express';
 import { assetsRouter } from './assets';
@@ -55,4 +58,56 @@ test('GET /api/assets/libraries/:libraryId rejects traversal-like library ids', 
   assert.equal(response.status, 400);
   const body = await response.json();
   assert.match(body.error, /could not be loaded/i);
+});
+
+test('POST /api/assets/analyze uses LLM fallback path and marks manual text separately', async () => {
+  const previousModel = process.env.LLM_MODEL;
+  const previousKey = process.env.LLM_API_KEY;
+  const previousBaseUrl = process.env.LLM_BASE_URL;
+  delete process.env.LLM_MODEL;
+  delete process.env.LLM_API_KEY;
+  delete process.env.LLM_BASE_URL;
+
+  const dir = await mkdtemp(path.join(tmpdir(), 'asset-route-test-'));
+  const imgPath = path.join(dir, 'kangshifu-hand-demo.png');
+  await writeFile(imgPath, Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+    'base64'
+  ));
+
+  try {
+    const form = new FormData();
+    const image = new Blob([await readFile(imgPath)], { type: 'image/png' });
+    form.append('assets', image, 'kangshifu-hand-demo.png');
+    form.append('textBrief', '冰爽解腻，适合夏日聚餐。');
+
+    const response = await fetch(`${baseUrl}/api/assets/analyze`, {
+      method: 'POST',
+      body: form
+    });
+
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.source, 'upload_analysis_fallback');
+    assert.equal(body.assetCards[0].analysisSource, 'mock_filename_rules');
+    assert.equal(body.assetCards[1].id, 'asset_text_brief');
+    assert.equal(body.assetCards[1].analysisSource, 'manual_text_brief');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+    if (previousModel === undefined) {
+      delete process.env.LLM_MODEL;
+    } else {
+      process.env.LLM_MODEL = previousModel;
+    }
+    if (previousKey === undefined) {
+      delete process.env.LLM_API_KEY;
+    } else {
+      process.env.LLM_API_KEY = previousKey;
+    }
+    if (previousBaseUrl === undefined) {
+      delete process.env.LLM_BASE_URL;
+    } else {
+      process.env.LLM_BASE_URL = previousBaseUrl;
+    }
+  }
 });

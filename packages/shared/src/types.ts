@@ -276,7 +276,7 @@ export interface AssetCandidateSlotRole {
   caveat?: string;
 }
 
-export type AssetAnalysisSource = 'static_library' | 'mock_filename_rules' | 'llm_multimodal';
+export type AssetAnalysisSource = 'static_library' | 'mock_filename_rules' | 'llm_multimodal' | 'manual_text_brief';
 
 export interface AssetCard {
   id: string;

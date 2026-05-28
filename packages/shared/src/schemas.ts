@@ -191,7 +191,7 @@ export const AssetCardSchema = z.object({
   visualContent: AssetVisualContentSchema.optional(),
   motionPotential: AssetMotionPotentialSchema.optional(),
   candidateSlotRoles: z.array(AssetCandidateSlotRoleSchema).optional(),
-  analysisSource: z.enum(['static_library', 'mock_filename_rules', 'llm_multimodal']).optional()
+  analysisSource: z.enum(['static_library', 'mock_filename_rules', 'llm_multimodal', 'manual_text_brief']).optional()
 });
 
 export const BoundaryMicroShotSchema = z.object({
