@@ -1,4 +1,6 @@
-import type { AssetCard, Boundary, ContentBrief, GapRepair, MaterialGap } from '@viral-struct/shared';
+import { z } from 'zod';
+import type { AssetCard, Boundary, ContentBrief, GapRepair, GapShootSpec, MaterialGap, ViralStructureGraph } from '@viral-struct/shared';
+import { createOpenAICompatibleClient } from './llmProvider';
 
 export function planGapRepairs(
   gaps: MaterialGap[],
@@ -115,4 +117,178 @@ function annotateBoundary(
     ...repair,
     explanation: `[boundary:${touching.transitionType}/${touching.intensity}] 该缺口位于源片强转场边界，补全策略需保持原片节奏；${repair.explanation}`
   };
+}
+
+// ---------------------------------------------------------------------------
+// LLM gap shoot-spec generator
+// source-of-truth prompt at prompts/migration/gap_spec_v0.md
+// ---------------------------------------------------------------------------
+
+const GAP_SPEC_SYSTEM_PROMPT = `你是一个短视频迁移系统中的「缺口拍摄规格生成器」。
+
+你将看到：
+A. 一个 MaterialGap 列表：每项含 slotId、role、severity、自然语言的 missing 描述、源片该段的 intent。
+B. 新商品的 ContentBrief：产品名、目标人群、场景、卖点、CTA、风格偏好。
+C. 当前手上已有的 AssetCard 清单（仅供"用现有素材降级"参考）。
+
+对每一个 gap，输出三层拍摄规格：ideal / minimalAcceptable / alternativeIfNoShoot。
+
+规则：
+1. ideal 要具体到「时长 + 镜头 + 动作 + 设备建议」，不要写"高质量产品视频"这种废话。
+2. minimalAcceptable 要比 ideal 弱一档但仍可用：更少镜头数、更短时长，或用连拍静图代替视频。
+3. alternativeIfNoShoot 必须明确指出「用哪几张现有素材 + 加什么后期效果 + 字幕怎么写」。
+4. 文案用第二人称，像是给运营/摄影师的工作指南。中文为主，英文蛇形命名只用于动效术语。
+5. 只输出 JSON，不要 Markdown，不要解释。`;
+
+const GapShootSpecResponseSchema = z.object({
+  ideal: z.string().min(1),
+  minimalAcceptable: z.string().min(1),
+  alternativeIfNoShoot: z.string().min(1)
+});
+
+const GapShootSpecResponseMapSchema = z.record(GapShootSpecResponseSchema);
+
+interface GapForPrompt {
+  slotId: string;
+  role: string;
+  severity: string;
+  missing: string;
+  segmentIntent?: ViralStructureGraph['shotSlots'][number]['intent'];
+}
+
+interface AssetBrief {
+  id: string;
+  type: AssetCard['type'];
+  primarySubject?: string;
+  kinematicElements?: string[];
+}
+
+function summarizeAssetForGapPrompt(a: AssetCard): AssetBrief {
+  return {
+    id: a.id,
+    type: a.type,
+    primarySubject: a.visualContent?.primarySubject ?? a.spatialDescription,
+    kinematicElements: a.visualContent?.kinematicElements
+  };
+}
+
+function buildGapSpecUserPrompt(
+  brief: ContentBrief,
+  assets: AssetCard[],
+  gaps: GapForPrompt[]
+): string {
+  return `ContentBrief:
+${JSON.stringify(brief, null, 2)}
+
+候选素材摘要（仅供 alternativeIfNoShoot 参考）：
+${JSON.stringify(assets.map(summarizeAssetForGapPrompt), null, 2)}
+
+待生成规格的缺口列表：
+${JSON.stringify(gaps, null, 2)}
+
+请输出 JSON：
+
+{
+  "<slotId>": {
+    "ideal": "≤120字。完整拍摄方案，含时长/镜头/动作/设备。",
+    "minimalAcceptable": "≤80字。降一档的方案。",
+    "alternativeIfNoShoot": "≤120字。指明用哪张素材 + 后期 + 字幕。"
+  }
+}
+
+约束：
+- 输入 gap 的每个 slotId 都必须出现在输出里。
+- 不要发明素材 id；只引用候选素材清单里的 id。
+- 三个字段都不能为空字符串。
+
+只输出 JSON 本体。`;
+}
+
+function stripJsonFenceGap(raw: string): string {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith('```')) {
+    return trimmed.replace(/^```(?:json)?\s*/i, '').replace(/```$/i, '').trim();
+  }
+  return trimmed;
+}
+
+type Client = ReturnType<typeof createOpenAICompatibleClient>;
+
+export interface PlanGapRepairsLLMOptions {
+  gaps: MaterialGap[];
+  assets: AssetCard[];
+  newContent: ContentBrief;
+  graph?: ViralStructureGraph;
+  boundaries?: Boundary[];
+  clientFactory?: () => Client;
+  model?: string;
+}
+
+export async function planGapRepairsLLM(opts: PlanGapRepairsLLMOptions): Promise<GapRepair[]> {
+  const { gaps, assets, newContent, graph, boundaries, clientFactory, model } = opts;
+  if (gaps.length === 0) return [];
+
+  const client = (clientFactory ?? createOpenAICompatibleClient)();
+  const modelId = model ?? process.env.LLM_MODEL;
+  if (!modelId) {
+    throw new Error('LLM_MODEL is required for planGapRepairsLLM.');
+  }
+
+  const slotIndex = new Map(graph?.shotSlots.map((s) => [s.id, s]) ?? []);
+  const gapsForPrompt: GapForPrompt[] = gaps.map((g) => ({
+    slotId: g.slotId,
+    role: g.role,
+    severity: g.severity,
+    missing: g.reason,
+    segmentIntent: slotIndex.get(g.slotId)?.intent
+  }));
+
+  const response = await client.chat.completions.create({
+    model: modelId,
+    messages: [
+      { role: 'system', content: GAP_SPEC_SYSTEM_PROMPT },
+      { role: 'user', content: buildGapSpecUserPrompt(newContent, assets, gapsForPrompt) }
+    ],
+    temperature: 0.4,
+    response_format: { type: 'json_object' }
+  });
+
+  const raw = response.choices[0]?.message?.content ?? '';
+  const parsed = JSON.parse(stripJsonFenceGap(raw));
+  const validated = GapShootSpecResponseMapSchema.parse(parsed);
+
+  return gaps.map((gap) => {
+    const spec = validated[gap.slotId];
+    if (!spec) {
+      throw new Error(`LLM gap-spec missing slot ${gap.slotId}`);
+    }
+    const gapSpec: GapShootSpec = {
+      ideal: spec.ideal,
+      minimalAcceptable: spec.minimalAcceptable,
+      alternativeIfNoShoot: spec.alternativeIfNoShoot
+    };
+    const baseRepair = buildBaseRepair(gap, newContent);
+    const annotated = annotateBoundary(baseRepair, gap, boundaries);
+    return { ...annotated, gapSpec };
+  });
+}
+
+export type PlanGapRepairsResultWithSource = {
+  repairs: GapRepair[];
+  gapSpecSource: 'llm_generated' | 'rule_based';
+  warning?: string;
+};
+
+export async function planGapRepairsWithFallback(opts: PlanGapRepairsLLMOptions): Promise<PlanGapRepairsResultWithSource> {
+  try {
+    const repairs = await planGapRepairsLLM(opts);
+    return { repairs, gapSpecSource: 'llm_generated' };
+  } catch (err) {
+    const fallback = planGapRepairs(opts.gaps, opts.assets, opts.newContent, opts.boundaries);
+    return {
+      repairs: fallback,
+      gapSpecSource: 'rule_based',
+      warning: `LLM gap-spec failed (${err instanceof Error ? err.message : String(err)}); using rule-based fallback.`
+    };
+  }
 }
