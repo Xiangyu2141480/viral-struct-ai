@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import type {
   AssetCard,
   Boundary,
@@ -7,6 +8,7 @@ import type {
   SlotMatch,
   ViralStructureGraph
 } from '@viral-struct/shared';
+import { createOpenAICompatibleClient } from './llmProvider';
 
 export function matchSlots(
   graph: ViralStructureGraph,
@@ -215,4 +217,252 @@ function boundaryBonus(segmentId: string, boundaries?: Boundary[]): number {
       && strongTransitions.has(b.transitionType)
   );
   return touches ? 0.05 : 0;
+}
+
+// ---------------------------------------------------------------------------
+// LLM judge: source-of-truth prompt at prompts/migration/slot_alignment_v0.md
+// ---------------------------------------------------------------------------
+
+const SLOT_ALIGNMENT_SYSTEM_PROMPT = `你是一个短视频结构迁移系统中的「素材对齐裁判」。
+
+你将看到：
+A. 源片样例的"分镜槽位骨架"：每个槽位含意图 (intent，可迁移)、源片实例 (sourceInstance，仅供识别 SWAP 项)、可接受标准 (acceptanceCriteria.anyOf)。
+B. 新商品的"候选素材清单"：每张 AssetCard 含视觉描述 (visualContent)、动作潜力 (motionPotential)、候选角色 (candidateSlotRoles)。
+
+判断原则：
+1. 只看意图 + 接受标准，不要让 sourceInstance 把你带跑——新素材不需要和源片产品长得像。
+2. 接受标准的 anyOf 是「OR」关系：任一组合达成即合格。在结果里列出 matchedCriteria 命中的项。
+3. 即使没有任何 asset 能达 ≥ 0.85 质量，也仍要给出"最佳匹配 + treatmentSpec"。质量 < 0.45 才允许 assetId = null。
+4. treatmentSpec 是处方：动作类型、时长（毫秒，落在素材的 canSimulateDurationMs 区间内）、节拍同步点、字幕建议。三选二填即可。
+5. missing 必须是自然语言描述，不是 token。
+6. 不要发明 assetId——只用候选清单里出现过的 id。
+7. 只输出 JSON，不要 Markdown，不要解释。`;
+
+const TreatmentSpecResponseSchema = z.object({
+  motion: z.string().nullable().optional(),
+  durationMs: z.number().nullable().optional(),
+  syncPoint: z.string().nullable().optional(),
+  captionOverlay: z.string().nullable().optional()
+});
+
+const SlotAlignmentResultSchema = z.object({
+  assetId: z.string().nullable(),
+  quality: z.number().min(0).max(1),
+  matchedCriteria: z.array(z.string()).default([]),
+  missing: z.string().default(''),
+  treatmentSpec: TreatmentSpecResponseSchema.default({})
+});
+
+const SlotAlignmentResponseSchema = z.record(SlotAlignmentResultSchema);
+
+type AlignmentResult = z.infer<typeof SlotAlignmentResultSchema>;
+
+interface SlotSummary {
+  id: string;
+  segmentId: string;
+  role: string;
+  intent?: ViralStructureGraph['shotSlots'][number]['intent'];
+  acceptanceCriteria?: ViralStructureGraph['shotSlots'][number]['acceptanceCriteria'];
+  sourceInstance?: ViralStructureGraph['shotSlots'][number]['sourceInstance'];
+  fallbackStrategies: ViralStructureGraph['shotSlots'][number]['fallbackStrategies'];
+}
+
+interface AssetSummary {
+  id: string;
+  type: AssetCard['type'];
+  visualContent?: AssetCard['visualContent'];
+  motionPotential?: AssetCard['motionPotential'];
+  candidateSlotRoles?: AssetCard['candidateSlotRoles'];
+  detectedObjects?: AssetCard['detectedObjects'];
+  suitableSlots?: AssetCard['suitableSlots'];
+}
+
+function summarizeSlot(slot: ViralStructureGraph['shotSlots'][number]): SlotSummary {
+  return {
+    id: slot.id,
+    segmentId: slot.segmentId,
+    role: slot.role,
+    intent: slot.intent,
+    acceptanceCriteria: slot.acceptanceCriteria,
+    sourceInstance: slot.sourceInstance,
+    fallbackStrategies: slot.fallbackStrategies
+  };
+}
+
+function summarizeAsset(asset: AssetCard): AssetSummary {
+  return {
+    id: asset.id,
+    type: asset.type,
+    visualContent: asset.visualContent,
+    motionPotential: asset.motionPotential,
+    candidateSlotRoles: asset.candidateSlotRoles,
+    detectedObjects: asset.detectedObjects,
+    suitableSlots: asset.suitableSlots
+  };
+}
+
+function buildAlignmentUserPrompt(slots: SlotSummary[], assets: AssetSummary[]): string {
+  return `下面是源片骨架的槽位清单（精简版）：
+
+${JSON.stringify(slots, null, 2)}
+
+下面是新商品的候选素材（精简版）：
+
+${JSON.stringify(assets, null, 2)}
+
+请输出对齐 JSON，结构为 { "<slotId>": { "assetId": "..." | null, "quality": 0..1, "matchedCriteria": [...], "missing": "≤80字", "treatmentSpec": { "motion"|null, "durationMs"|null, "syncPoint"|null, "captionOverlay"|null } } }。
+
+约束：
+- 每个 slotId 必须出现一次，不可遗漏。
+- assetId 必须存在于候选素材清单中或为 null。
+- quality 严格 0-1。
+- treatmentSpec 至少有两个字段非 null。
+
+只输出 JSON 本体。`;
+}
+
+function stripJsonFence(raw: string): string {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith('```')) {
+    return trimmed.replace(/^```(?:json)?\s*/i, '').replace(/```$/i, '').trim();
+  }
+  return trimmed;
+}
+
+function statusFromQuality(quality: number, assetId: string | null): SlotMatch['status'] {
+  if (assetId && quality >= 0.85) return 'matched';
+  if (assetId && quality >= 0.45) return 'partial';
+  return 'missing';
+}
+
+function cleanTreatmentSpec(spec: AlignmentResult['treatmentSpec']): import('@viral-struct/shared').SlotTreatmentSpec | undefined {
+  const out: import('@viral-struct/shared').SlotTreatmentSpec = {};
+  if (typeof spec.motion === 'string') out.motion = spec.motion;
+  if (typeof spec.durationMs === 'number') out.durationMs = spec.durationMs;
+  if (typeof spec.syncPoint === 'string') out.syncPoint = spec.syncPoint;
+  if (typeof spec.captionOverlay === 'string') out.captionOverlay = spec.captionOverlay;
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function reasonFromAlignment(result: AlignmentResult, status: SlotMatch['status']): string {
+  if (status === 'matched') return result.matchedCriteria.length
+    ? `已对齐：命中接受标准 ${result.matchedCriteria.join(' / ')}。`
+    : '已对齐：质量评分高于阈值。';
+  if (status === 'partial') return result.missing
+    ? `可用但需补全：${result.missing}`
+    : '素材语义部分满足，可用但需要补全处理。';
+  return result.missing || '没有候选素材能达到该槽位的接受标准。';
+}
+
+function buildLLMMatch(slot: ViralStructureGraph['shotSlots'][number], result: AlignmentResult): SlotMatch {
+  const assetId = result.assetId ?? undefined;
+  const status = statusFromQuality(result.quality, result.assetId);
+  const treatmentSpec = cleanTreatmentSpec(result.treatmentSpec);
+  return {
+    slotId: slot.id,
+    assetId,
+    score: result.quality,
+    status,
+    reason: reasonFromAlignment(result, status),
+    quality: result.quality,
+    matchedCriteria: result.matchedCriteria.length ? result.matchedCriteria : undefined,
+    missingDescription: result.missing || undefined,
+    treatmentSpec,
+    alignmentSource: 'llm_judge'
+  };
+}
+
+function buildLLMGap(slot: ViralStructureGraph['shotSlots'][number], match: SlotMatch): MaterialGap {
+  return {
+    slotId: slot.id,
+    role: slot.role,
+    severity: match.status === 'missing' ? 'high' : 'medium',
+    reason: match.missingDescription || match.reason,
+    impact: `该缺口影响 ${slot.segmentId} 段落的画面表达，需要走 ${slot.fallbackStrategies.join(' / ')} 补足。`,
+    affectedSegmentId: slot.segmentId
+  };
+}
+
+type Client = ReturnType<typeof createOpenAICompatibleClient>;
+
+export interface MatchSlotsLLMOptions {
+  graph: ViralStructureGraph;
+  assets: AssetCard[];
+  boundaries?: Boundary[];
+  clientFactory?: () => Client;
+  model?: string;
+}
+
+export async function matchSlotsLLM(opts: MatchSlotsLLMOptions): Promise<{ matches: SlotMatch[]; gaps: MaterialGap[] }> {
+  const { graph, assets, clientFactory, model } = opts;
+  const client = (clientFactory ?? createOpenAICompatibleClient)();
+  const modelId = model ?? process.env.LLM_MODEL;
+  if (!modelId) {
+    throw new Error('LLM_MODEL is required for matchSlotsLLM.');
+  }
+
+  const slotSummaries = graph.shotSlots.map(summarizeSlot);
+  const assetSummaries = assets.map(summarizeAsset);
+
+  const response = await client.chat.completions.create({
+    model: modelId,
+    messages: [
+      { role: 'system', content: SLOT_ALIGNMENT_SYSTEM_PROMPT },
+      { role: 'user', content: buildAlignmentUserPrompt(slotSummaries, assetSummaries) }
+    ],
+    temperature: 0.2,
+    response_format: { type: 'json_object' }
+  });
+
+  const raw = response.choices[0]?.message?.content ?? '';
+  const parsed = JSON.parse(stripJsonFence(raw));
+  const validated = SlotAlignmentResponseSchema.parse(parsed);
+
+  const knownAssetIds = new Set(assets.map((a) => a.id));
+  const matches: SlotMatch[] = graph.shotSlots.map((slot) => {
+    const aligned = validated[slot.id];
+    if (!aligned) {
+      throw new Error(`LLM alignment missing slot ${slot.id}`);
+    }
+    if (aligned.assetId && !knownAssetIds.has(aligned.assetId)) {
+      throw new Error(`LLM returned unknown assetId ${aligned.assetId} for slot ${slot.id}`);
+    }
+    return buildLLMMatch(slot, aligned);
+  });
+
+  const gaps: MaterialGap[] = matches
+    .filter((m) => m.status !== 'matched')
+    .map((m) => {
+      const slot = graph.shotSlots.find((s) => s.id === m.slotId)!;
+      return buildLLMGap(slot, m);
+    });
+
+  return { matches, gaps };
+}
+
+export type MatchSlotsResultWithSource = {
+  matches: SlotMatch[];
+  gaps: MaterialGap[];
+  alignmentSource: 'llm_judge' | 'rule_based';
+  warning?: string;
+};
+
+/**
+ * Tries the LLM alignment judge first; on any error falls back to the
+ * rule-based scorer. The returned `alignmentSource` and per-match
+ * `alignmentSource` tell callers which path was taken.
+ */
+export async function matchSlotsWithFallback(opts: MatchSlotsLLMOptions): Promise<MatchSlotsResultWithSource> {
+  try {
+    const result = await matchSlotsLLM(opts);
+    return { ...result, alignmentSource: 'llm_judge' };
+  } catch (err) {
+    const fallback = matchSlots(opts.graph, opts.assets, opts.boundaries);
+    return {
+      matches: fallback.matches.map((m) => ({ ...m, alignmentSource: 'rule_based' as const })),
+      gaps: fallback.gaps,
+      alignmentSource: 'rule_based',
+      warning: `LLM alignment failed (${err instanceof Error ? err.message : String(err)}); using rule-based fallback.`
+    };
+  }
 }
