@@ -1,4 +1,5 @@
 {
+  "schemaVersion": "v1",
   "meta": {
     "duration": 224.0,
     "aspectRatio": "16:9",
@@ -145,7 +146,55 @@
         "caption_rewrite",
         "text_card"
       ],
-      "importance": 5
+      "importance": 5,
+      "intent": {
+        "purpose": "Use a high-energy opening visual to make viewers feel the product state is transforming.",
+        "energyLevel": "high",
+        "motionPattern": "dynamic_product_entry_or_state_morph",
+        "compositionPrincipal": "single_subject_center_with_clean_negative_space",
+        "durationMs": [
+          800,
+          2200
+        ],
+        "soundDesignHint": "transient_attack_aligned_with_visual_peak"
+      },
+      "sourceInstance": {
+        "productInSource": "MacBook silver body morphing into vivid yellow",
+        "specificAction": "Two hands hold the laptop symmetrically while the body color changes quickly.",
+        "colorSignature": "silver_to_vivid_yellow_morph"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "motionType": "fluid_splash",
+            "compositionType": "centered_product_clean_bg",
+            "examples": [
+              "iced tea splash around the bottle",
+              "ice cubes orbiting the product"
+            ]
+          },
+          {
+            "motionType": "object_kinetic_entry",
+            "compositionType": "single_subject_center",
+            "examples": [
+              "bottle entering frame quickly",
+              "product rotating into a freeze frame"
+            ]
+          },
+          {
+            "motionType": "particle_assembly",
+            "compositionType": "centripetal_focus",
+            "examples": [
+              "ice cubes converging around the bottle",
+              "lemon slices guiding attention to the label"
+            ]
+          }
+        ],
+        "rejectIf": [
+          "static product image without motion",
+          "main subject fully covered by text"
+        ]
+      }
     },
     {
       "id": "slot_block_001_asset_002",
@@ -207,7 +256,47 @@
         "crop_zoom",
         "caption_rewrite"
       ],
-      "importance": 5
+      "importance": 5,
+      "intent": {
+        "purpose": "Use close detail shots to establish real product texture and a memorable packaging cue.",
+        "energyLevel": "medium",
+        "motionPattern": "slow_product_rotation_or_macro_reveal",
+        "compositionPrincipal": "product_detail_dominant_with_clean_background",
+        "durationMs": [
+          1200,
+          2800
+        ],
+        "soundDesignHint": "soft_whoosh_under_detail_reveal"
+      },
+      "sourceInstance": {
+        "productInSource": "MacBook matte gray side edge and hinge detail",
+        "specificAction": "Two hands rotate the product to show side thickness and opening motion.",
+        "colorSignature": "matte_gray_clean_white"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "motionType": "macro_push_in",
+            "compositionType": "label_or_texture_closeup",
+            "examples": [
+              "water droplets on the bottle",
+              "lemon label close-up"
+            ]
+          },
+          {
+            "motionType": "hand_product_turn",
+            "compositionType": "hands_anchor_product",
+            "examples": [
+              "handheld bottle rotation",
+              "cap-opening close-up"
+            ]
+          }
+        ],
+        "rejectIf": [
+          "product detail is not readable",
+          "background dominates the product"
+        ]
+      }
     },
     {
       "id": "slot_block_002_asset_002",
@@ -321,7 +410,47 @@
         "crop_zoom",
         "caption_rewrite"
       ],
-      "importance": 5
+      "importance": 5,
+      "intent": {
+        "purpose": "Use sequential action to turn static assets into a perceptible product experience.",
+        "energyLevel": "high",
+        "motionPattern": "sequential_assembly_or_usage_reveal",
+        "compositionPrincipal": "action_path_guides_eye_to_product",
+        "durationMs": [
+          1600,
+          3600
+        ],
+        "soundDesignHint": "rhythmic_hits_follow_action_steps"
+      },
+      "sourceInstance": {
+        "productInSource": "MacBook keyboard assembly and screen animation",
+        "specificAction": "Keyboard pieces assemble automatically and trigger an animated screen moment.",
+        "colorSignature": "dark_scene_neon_burst"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "motionType": "usage_sequence",
+            "compositionType": "hands_interacting_with_product",
+            "examples": [
+              "opening the cap and drinking sequence",
+              "taking the chilled bottle from ice"
+            ]
+          },
+          {
+            "motionType": "ingredient_assembly",
+            "compositionType": "elements_converge_to_product",
+            "examples": [
+              "ice and lemon converging",
+              "tea liquid flowing toward the bottle"
+            ]
+          }
+        ],
+        "rejectIf": [
+          "no visible action progression",
+          "selling point depends only on long text"
+        ]
+      }
     },
     {
       "id": "slot_block_004_asset_002",

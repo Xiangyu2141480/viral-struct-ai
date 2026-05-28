@@ -1,11 +1,12 @@
 'use client';
 
-import type { AssetCard, TimelineItem } from '@viral-struct/shared';
+import type { AssetCard, TimelineItem, ViralStructureGraph } from '@viral-struct/shared';
 import { mediaUrl } from '../lib/api';
 
 interface VisualTimelinePreviewProps {
   timeline: TimelineItem[];
   assetCards: AssetCard[];
+  structureGraph?: ViralStructureGraph | null;
   compact?: boolean;
 }
 
@@ -15,8 +16,9 @@ interface FrameSource {
   detail: string;
 }
 
-export function VisualTimelinePreview({ timeline, assetCards, compact = false }: VisualTimelinePreviewProps) {
+export function VisualTimelinePreview({ timeline, assetCards, structureGraph, compact = false }: VisualTimelinePreviewProps) {
   const assetById = new Map(assetCards.map((asset) => [asset.id, asset]));
+  const slotById = new Map((structureGraph?.shotSlots ?? []).map((slot) => [slot.id, slot]));
   const frames = timeline.slice(0, compact ? 6 : 8);
 
   return (
@@ -72,11 +74,24 @@ export function VisualTimelinePreview({ timeline, assetCards, compact = false }:
         <ol style={{ margin: 0, paddingLeft: 22, display: 'grid', gap: 8 }}>
           {frames.map((item) => {
             const source = frameSource(item, assetById);
+            const slot = slotById.get(item.slotId);
             return (
               <li key={item.id}>
                 <strong>{item.sourceSegmentId}</strong> → {item.slotId} → {source.label}
                 <br />
                 <small style={{ color: '#cbd5e1' }}>{source.detail}</small>
+                {slot?.intent ? (
+                  <>
+                    <br />
+                    <small style={{ color: '#a7f3d0' }}>迁移意图：{slot.intent.purpose}</small>
+                  </>
+                ) : null}
+                {slot?.sourceInstance ? (
+                  <>
+                    <br />
+                    <small style={{ color: '#fde68a' }}>源片实例：{slot.sourceInstance.productInSource}</small>
+                  </>
+                ) : null}
               </li>
             );
           })}

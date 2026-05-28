@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { AssetCard, QualityReport, ScriptSegment, StoryboardShot, TimelineItem } from '@viral-struct/shared';
+import type { AssetCard, QualityReport, ScriptSegment, StoryboardShot, TimelineItem, ViralStructureGraph } from '@viral-struct/shared';
 import { apiPost } from '../lib/api';
 import { type GenerationVariant, useWorkflowStore } from '../lib/workflowStore';
 import { VisualTimelinePreview } from './VisualTimelinePreview';
@@ -56,13 +56,15 @@ export function TimelineView() {
         newContent: contentBrief,
         matches: slotMatches,
         repairs,
-        variant: generationVariant
+        variant: generationVariant,
+        boundaries: structureGraph.boundaries
       });
       setGenerationResult(result);
 
       const quality = await apiPost<QualityResponse>('/api/quality/evaluate', {
         matches: slotMatches,
-        timeline: result.timeline
+        timeline: result.timeline,
+        boundaries: structureGraph.boundaries
       });
       setQualityReport(quality.qualityReport);
     } catch (err) {
@@ -97,7 +99,7 @@ export function TimelineView() {
         {error ? <p style={{ color: '#fca5a5' }}>{error}</p> : null}
       </div>
 
-      {timeline.length ? <Preview timeline={timeline} assetCards={assetCards} /> : null}
+      {timeline.length ? <Preview timeline={timeline} assetCards={assetCards} structureGraph={structureGraph} /> : null}
       {timeline.length ? (
         <section className="card" style={{ marginBottom: 16 }}>
           <h2>人工可调 / 自然语言改片</h2>
@@ -121,17 +123,25 @@ export function TimelineView() {
 
       {script.length ? <ScriptList script={script} /> : null}
       {storyboard.length ? <StoryboardList storyboard={storyboard} /> : null}
-      {timeline.length ? <MappingView timeline={timeline} /> : null}
-      {timeline.length ? <TimelineList timeline={timeline} /> : <p>尚未生成。点击按钮后会调用 `/api/timeline/generate`。</p>}
+      {timeline.length ? <MappingView timeline={timeline} structureGraph={structureGraph} /> : null}
+      {timeline.length ? <TimelineList timeline={timeline} structureGraph={structureGraph} /> : <p>尚未生成。点击按钮后会调用 `/api/timeline/generate`。</p>}
     </section>
   );
 }
 
-function Preview({ timeline, assetCards }: { timeline: TimelineItem[]; assetCards: AssetCard[] }) {
+function Preview({
+  timeline,
+  assetCards,
+  structureGraph
+}: {
+  timeline: TimelineItem[];
+  assetCards: AssetCard[];
+  structureGraph: ViralStructureGraph | null;
+}) {
   return (
     <section className="card" style={{ marginBottom: 16 }}>
       <h2>Web 视觉预览</h2>
-      <VisualTimelinePreview timeline={timeline} assetCards={assetCards} />
+      <VisualTimelinePreview timeline={timeline} assetCards={assetCards} structureGraph={structureGraph} />
     </section>
   );
 }
@@ -171,7 +181,9 @@ function StoryboardList({ storyboard }: { storyboard: StoryboardShot[] }) {
   );
 }
 
-function MappingView({ timeline }: { timeline: TimelineItem[] }) {
+function MappingView({ timeline, structureGraph }: { timeline: TimelineItem[]; structureGraph: ViralStructureGraph | null }) {
+  const slotById = new Map((structureGraph?.shotSlots ?? []).map((slot) => [slot.id, slot]));
+
   return (
     <section className="card" style={{ marginBottom: 16 }}>
       <h2>样例结构 → 新结果映射</h2>
@@ -180,43 +192,57 @@ function MappingView({ timeline }: { timeline: TimelineItem[] }) {
           <tr>
             <th align="left">样例段落</th>
             <th align="left">槽位</th>
+            <th align="left">迁移意图</th>
             <th align="left">素材/补全</th>
             <th align="left">新结果</th>
           </tr>
         </thead>
         <tbody>
-          {timeline.map((item) => (
-            <tr key={item.id}>
-              <td style={{ padding: 8 }}>{item.sourceSegmentId}</td>
-              <td style={{ padding: 8 }}>{item.slotId}</td>
-              <td style={{ padding: 8 }}>{item.assetId ?? item.repair?.strategy ?? 'packaging'}</td>
-              <td style={{ padding: 8 }}>{item.script}</td>
-            </tr>
-          ))}
+          {timeline.map((item) => {
+            const slot = slotById.get(item.slotId);
+            return (
+              <tr key={item.id}>
+                <td style={{ padding: 8 }}>{item.sourceSegmentId}</td>
+                <td style={{ padding: 8 }}>{item.slotId}</td>
+                <td style={{ padding: 8 }}>{slot?.intent?.purpose ?? '沿用槽位转移规则'}</td>
+                <td style={{ padding: 8 }}>{item.assetId ?? item.repair?.strategy ?? 'packaging'}</td>
+                <td style={{ padding: 8 }}>{item.script}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </section>
   );
 }
 
-function TimelineList({ timeline }: { timeline: TimelineItem[] }) {
+function TimelineList({ timeline, structureGraph }: { timeline: TimelineItem[]; structureGraph: ViralStructureGraph | null }) {
+  const slotById = new Map((structureGraph?.shotSlots ?? []).map((slot) => [slot.id, slot]));
+
   return (
     <section className="card">
       <h2>时间线草案</h2>
-      {timeline.map((item) => (
-        <div className="card" key={item.id} style={{ marginBottom: 8 }}>
-          <strong>
-            {formatSeconds(item.start)} - {formatSeconds(item.end)} · {item.segmentRole}
-          </strong>
-          <p>{item.visualAction}</p>
-          <p>{item.script}</p>
-          <p>字幕：{item.subtitles.join(' / ')}</p>
-          <p>
-            包装：{item.packaging.cardType ?? 'none'} · {item.packaging.transition ?? 'none'} · {item.packaging.motion ?? 'none'}
-          </p>
-          {item.repair ? <p>补全：{item.repair.strategy} · {item.repair.explanation}</p> : null}
-        </div>
-      ))}
+      {timeline.map((item) => {
+        const slot = slotById.get(item.slotId);
+        return (
+          <div className="card" key={item.id} style={{ marginBottom: 8 }}>
+            <strong>
+              {formatSeconds(item.start)} - {formatSeconds(item.end)} · {item.segmentRole}
+            </strong>
+            <p>{item.visualAction}</p>
+            <p>{item.script}</p>
+            <p>字幕：{item.subtitles.join(' / ')}</p>
+            <p>
+              包装：{item.packaging.cardType ?? 'none'} · {item.packaging.transition ?? 'none'} · {item.packaging.motion ?? 'none'}
+            </p>
+            {slot?.intent ? <p>迁移意图：{slot.intent.purpose}</p> : null}
+            {slot?.acceptanceCriteria ? (
+              <p>替代标准：{slot.acceptanceCriteria.anyOf.flatMap((criterion) => criterion.examples).slice(0, 3).join(' / ')}</p>
+            ) : null}
+            {item.repair ? <p>补全：{item.repair.strategy} · {item.repair.explanation}</p> : null}
+          </div>
+        );
+      })}
     </section>
   );
 }

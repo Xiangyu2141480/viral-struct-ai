@@ -8,7 +8,14 @@ import { getAnalysisDir } from './videoPaths';
 test('ViralStructureGraphSchema accepts v0 artifact without intent/sourceInstance/acceptanceCriteria', async () => {
   const artifactPath = path.join(getAnalysisDir(), 'macbook_neo', 'structure_graph.json');
   const raw = await readFile(artifactPath, 'utf-8');
-  const parsed = ViralStructureGraphSchema.parse(JSON.parse(raw));
+  const legacyGraph = JSON.parse(raw);
+  delete legacyGraph.schemaVersion;
+  for (const slot of legacyGraph.shotSlots) {
+    delete slot.intent;
+    delete slot.sourceInstance;
+    delete slot.acceptanceCriteria;
+  }
+  const parsed = ViralStructureGraphSchema.parse(legacyGraph);
   assert.equal(typeof parsed.structureSummary, 'string');
   assert.ok(Array.isArray(parsed.shotSlots) && parsed.shotSlots.length > 0);
   for (const slot of parsed.shotSlots) {
