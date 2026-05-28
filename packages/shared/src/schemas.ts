@@ -175,6 +175,32 @@ export const BoundaryMicroShotSchema = z.object({
   description: z.string().optional()
 });
 
+export const ShotSlotIntentSchema = z.object({
+  purpose: z.string(),
+  energyLevel: z.enum(['low', 'medium', 'high']),
+  motionPattern: z.string(),
+  compositionPrincipal: z.string(),
+  durationMs: z.tuple([z.number(), z.number()]),
+  soundDesignHint: z.string().optional()
+});
+
+export const ShotSlotSourceInstanceSchema = z.object({
+  productInSource: z.string(),
+  specificAction: z.string().optional(),
+  colorSignature: z.string().optional()
+});
+
+export const ShotSlotAcceptanceCriterionSchema = z.object({
+  motionType: z.string().optional(),
+  compositionType: z.string().optional(),
+  examples: z.array(z.string())
+});
+
+export const ShotSlotAcceptanceCriteriaSchema = z.object({
+  anyOf: z.array(ShotSlotAcceptanceCriterionSchema),
+  rejectIf: z.array(z.string()).optional()
+});
+
 export const BoundarySchema = z.object({
   id: z.string(),
   from: z.string(),
@@ -187,6 +213,7 @@ export const BoundarySchema = z.object({
 });
 
 export const ViralStructureGraphSchema = z.object({
+  schemaVersion: z.enum(['v0', 'v1']).optional(),
   meta: z.object({
     duration: z.number(),
     aspectRatio: z.enum(['9:16', '16:9', '1:1', 'unknown']),
@@ -225,7 +252,10 @@ export const ViralStructureGraphSchema = z.object({
       action: HumanActionSchema.optional()
     }).optional(),
     fallbackStrategies: z.array(GapRepairStrategySchema),
-    importance: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]).optional()
+    importance: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]).optional(),
+    intent: ShotSlotIntentSchema.optional(),
+    sourceInstance: ShotSlotSourceInstanceSchema.optional(),
+    acceptanceCriteria: ShotSlotAcceptanceCriteriaSchema.optional()
   })),
   rhythm: z.object({
     avgShotDuration: z.number(),

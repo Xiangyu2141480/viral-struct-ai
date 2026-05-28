@@ -165,6 +165,32 @@ export interface SegmentNode {
   importance: 1 | 2 | 3 | 4 | 5;
 }
 
+export interface ShotSlotIntent {
+  purpose: string;
+  energyLevel: 'low' | 'medium' | 'high';
+  motionPattern: string;
+  compositionPrincipal: string;
+  durationMs: [number, number];
+  soundDesignHint?: string;
+}
+
+export interface ShotSlotSourceInstance {
+  productInSource: string;
+  specificAction?: string;
+  colorSignature?: string;
+}
+
+export interface ShotSlotAcceptanceCriterion {
+  motionType?: string;
+  compositionType?: string;
+  examples: string[];
+}
+
+export interface ShotSlotAcceptanceCriteria {
+  anyOf: ShotSlotAcceptanceCriterion[];
+  rejectIf?: string[];
+}
+
 export interface ShotSlotNode {
   id: string;
   segmentId: string;
@@ -185,6 +211,9 @@ export interface ShotSlotNode {
   };
   fallbackStrategies: GapRepairStrategy[];
   importance?: 1 | 2 | 3 | 4 | 5;
+  intent?: ShotSlotIntent;
+  sourceInstance?: ShotSlotSourceInstance;
+  acceptanceCriteria?: ShotSlotAcceptanceCriteria;
 }
 
 export interface RhythmStructure {
@@ -229,6 +258,7 @@ export interface Boundary {
 }
 
 export interface ViralStructureGraph {
+  schemaVersion?: 'v0' | 'v1';
   meta: {
     duration: number;
     aspectRatio: '9:16' | '16:9' | '1:1' | 'unknown';
