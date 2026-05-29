@@ -25,6 +25,21 @@ test('ViralStructureGraphSchema accepts v0 artifact without intent/sourceInstanc
   }
 });
 
+test('macbook_neo v1 artifact has migration contracts on every shot slot', async () => {
+  const artifactPath = path.join(getAnalysisDir(), 'macbook_neo', 'structure_graph.json');
+  const raw = await readFile(artifactPath, 'utf-8');
+  const parsed = ViralStructureGraphSchema.parse(JSON.parse(raw));
+  const missing = parsed.shotSlots
+    .filter((slot) => !slot.intent || !slot.sourceInstance || !slot.acceptanceCriteria)
+    .map((slot) => slot.id);
+
+  assert.equal(
+    missing.length,
+    0,
+    `Expected every macbook_neo shot slot to carry a migration contract; missing: ${missing.join(', ')}`
+  );
+});
+
 test('ViralStructureGraphSchema accepts v1 slot with intent + sourceInstance + acceptanceCriteria', () => {
   const minimal = {
     schemaVersion: 'v1' as const,

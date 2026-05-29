@@ -1,12 +1,12 @@
 {
   "schemaVersion": "v1",
   "meta": {
-    "duration": 224.0,
+    "duration": 229.0,
     "aspectRatio": "16:9",
     "videoType": "ecommerce",
     "style": "premium"
   },
-  "structureSummary": "视频以创意动画形式逐步展示MacBook Neo的多配色外观、硬件细节、系统功能、跨设备联动特性，最后公布产品名称与售价完成收尾",
+  "structureSummary": "视频通过创意动画依次展示MacBook Neo的多配色外观、硬件细节、系统功能、多场景使用演示、苹果生态联动，最后公布产品名称、售价并展示品牌标识收尾",
   "segments": [
     {
       "id": "seg_block_001",
@@ -14,19 +14,19 @@
       "start": 0.0,
       "end": 9.0,
       "duration": 9.0,
-      "purpose": "建立第一眼注意力，揭示主体或制造好奇（精扫定位：中段双手托住银色笔记本翻转时，机身通过模糊过渡特效平滑切换为亮黄色，无生硬跳变，色彩和后续屏幕壁纸色调统一）",
-      "caption": "纯白背景下双手从空白画面中取出银色苹果笔记本，动态变换机身颜色为黄色，放置桌面打开屏幕展示彩色渐变壁纸后将笔记本拿走",
+      "purpose": "建立第一眼注意力，揭示主体或制造好奇（精扫定位：开头双手托举产品悬浮过程中，产品整体表面色彩平滑渐变过渡，完成从初始色到目标色的切换，无突兀跳变）",
+      "caption": "双手从纯白空白画面中拿出银色苹果笔记本，悬浮过程中色彩渐变变为黄色，放置桌面后打开屏幕，显示黄绿渐变的彩色壁纸",
       "transferRule": "替换为新商品的高强度视觉揭示或反常识开场，保留 3 秒内主体亮相节奏",
       "importance": 5
     },
     {
       "id": "seg_block_002",
       "role": "selling_point",
-      "start": 10.0,
-      "end": 26.0,
-      "duration": 16.0,
-      "purpose": "展示核心卖点，建立产品价值感知（精扫定位：该阶段展示的机身是哑光金属铝合金材质，表面呈现细腻均匀的磨砂灰色质感，没有多余的亮面反光，整体触感看起来顺滑细腻）",
-      "caption": "双手取出灰色哑光质感的笔记本，翻转展示机身侧边厚度、圆角弧度细节，完成开合动作后将笔记本放置在桌面上",
+      "start": 9.0,
+      "end": 27.0,
+      "duration": 18.0,
+      "purpose": "展示核心卖点，建立产品价值感知（精扫定位：中段展示机身厚度极薄，边缘做了圆润倒角处理，外壳是细腻哑光金属质感，整体线条流畅无突兀棱角）",
+      "caption": "双手将灰色薄型平板状产品拿起，翻转展示边缘、圆角和外壳质感，打开后自动展开为完整笔记本形态，放置在桌面上",
       "transferRule": "映射到新商品最能驱动转化的核心卖点",
       "importance": 5
     },
@@ -36,30 +36,30 @@
       "start": 27.0,
       "end": 45.0,
       "duration": 18.0,
-      "purpose": "展示核心卖点，建立产品价值感知（精扫定位：开头双手揉搓出发光软质物件，拉伸后贴合笔记本屏幕点亮，表达屏幕具备高通透、色彩绚丽、显示效果灵动鲜活的特性，可呈现出富有层次感的渐变光影效果。）",
-      "caption": "环境变暗，双手揉搓出发光的紫蓝色软质物件，拉伸后贴到笔记本屏幕上点亮屏幕，随后从屏幕中取出彩色圆形元素，最终变出一枚小型芯片",
+      "purpose": "展示核心卖点，建立产品价值感知（精扫定位：中段通过拉伸发光软条覆盖屏幕的创意动画，传递产品屏幕显示效果流畅、色彩表现力强的特性，点亮过程丝滑无卡顿）",
+      "caption": "暗环境下双手揉搓发出紫光的软质条带，拉伸后覆盖到笔记本屏幕上，屏幕自动点亮显示紫绿渐变壁纸，手指从屏幕中取出圆形图标抛起后变成白色小方块",
       "transferRule": "映射到新商品最能驱动转化的核心卖点",
       "importance": 5
     },
     {
       "id": "seg_block_004",
-      "role": "selling_point",
-      "start": 46.0,
-      "end": 70.0,
-      "duration": 24.0,
-      "purpose": "展示核心卖点，建立产品价值感知（精扫定位：开头展示散落的按键碎片自动归位组装成完整键盘，布局为全尺寸白色巧克力按键，顶部功能键依次排列，右上角集成圆形指纹按键，整体布局紧凑规整。）",
-      "caption": "键盘按键碎片从空中落下自动组装到笔记本上，演示触控板操作触发屏幕内的火箭动画，火箭飞出机身炸开彩屑，最后特写展示键盘右上角的圆形指纹按键",
-      "transferRule": "映射到新商品最能驱动转化的核心卖点",
-      "importance": 5
+      "role": "usage",
+      "start": 45.0,
+      "end": 71.0,
+      "duration": 26.0,
+      "purpose": "演示真实使用场景，降低使用门槛（精扫定位：中段展示的键盘为全尺寸方形按键，布局规整，按键表面平整哑光，悬浮组装后严丝合缝贴合机身）",
+      "caption": "键盘碎片在空中飞舞后落到笔记本上自动组装完成，手指按压安装上触控板，滑动触控板控制屏幕里的火箭飞出笔记本炸开撒出彩屑，随后手指按下键盘右上角圆形按键弹出应用购买窗口",
+      "transferRule": "替换为新商品的真实使用场景，保留手部演示节奏",
+      "importance": 4
     },
     {
       "id": "seg_block_005",
       "role": "selling_point",
       "start": 71.0,
-      "end": 90.0,
-      "duration": 19.0,
-      "purpose": "展示核心卖点，建立产品价值感知（精扫定位：开头部分展示笔记本机身侧边配置了两个USB-C类接口和一个3.5mm音频接口）",
-      "caption": "展示笔记本机身侧边的多个接口，随后取出圆形透明镜片，拆分后贴到屏幕顶部组装成前置摄像头，给到摄像头镜头特写",
+      "end": 91.0,
+      "duration": 20.0,
+      "purpose": "展示核心卖点，建立产品价值感知（精扫定位：中段展示笔记本侧边，可见2个全功能数据接口、1个3.5mm音频接口，共3个侧边接口）",
+      "caption": "镜头移动展示笔记本侧边的多个接口，圆形镜片飞入被双手接住变成彩色球体，拆分后贴到屏幕顶部边框变成摄像头，镜头放大展示摄像头镜片细节",
       "transferRule": "映射到新商品最能驱动转化的核心卖点",
       "importance": 5
     },
@@ -69,19 +69,19 @@
       "start": 91.0,
       "end": 103.0,
       "duration": 12.0,
-      "purpose": "展示核心卖点，建立产品价值感知（精扫定位：中段双手拿出的金属网罩是笔记本的散热格栅部件，对准笔记本机身侧面的开孔完成安装，和机身外观质感完全统一）",
-      "caption": "笔记本屏幕播放敞篷跑车行驶的高清视频，双手拿出金属网罩部件安装到笔记本上，继续播放视频，操作触控板暂停视频后合上笔记本",
+      "purpose": "展示核心卖点，建立产品价值感知（精扫定位：开头双手捏住的长条部件表面是连续的菱形镂空格栅，开孔均匀排列覆盖整个长条区域，安装后该格栅部件嵌入笔记本机身侧边）",
+      "caption": "双手拿出带格栅的长条部件安装到笔记本屏幕下方，笔记本屏幕播放敞篷跑车行驶的高清视频，手指按压侧边按键暂停视频，随后手掌从上往下合上笔记本",
       "transferRule": "映射到新商品最能驱动转化的核心卖点",
       "importance": 5
     },
     {
       "id": "seg_block_007",
       "role": "selling_point",
-      "start": 104.0,
-      "end": 127.0,
-      "duration": 23.0,
-      "purpose": "展示核心卖点，建立产品价值感知（精扫定位：在片段开头依次展示了银色、深蓝色、粉色、黄色共4种官方配色）",
-      "caption": "双手拿起合上的笔记本，依次切换展示银色、深蓝色、粉色、黄色多种配色，翻转展示底部并安装防滑脚垫，随后A18 PRO芯片从机身弹出再装回",
+      "start": 103.0,
+      "end": 128.0,
+      "duration": 25.0,
+      "purpose": "展示核心卖点，建立产品价值感知（精扫定位：开头部分双手握持产品依次切换展示了银色、深灰、粉色、黄色共4种配色）",
+      "caption": "A18 PRO",
       "transferRule": "映射到新商品最能驱动转化的核心卖点",
       "importance": 5
     },
@@ -91,30 +91,41 @@
       "start": 128.0,
       "end": 159.0,
       "duration": 31.0,
-      "purpose": "演示真实使用场景，降低使用门槛（精扫定位：开头依次展示设计创作、音乐剪辑、游戏娱乐、网页浏览、图片修图、AI内容生成、视频播放、日程管理等覆盖创意工作、日常娱乐、办公协作的多元使用场景。）",
-      "caption": "打开黄色笔记本，双手操作触控板和键盘，依次演示多个应用界面：设计软件、音乐剪辑软件、游戏、网页、视频剪辑、AI对话生成内容，覆盖多种使用场景",
+      "purpose": "演示真实使用场景，降低使用门槛（精扫定位：全程通过触控板和键盘操作，中段依次切换不同类型应用，界面跳转无卡顿感，操作反馈即时，流畅度表现优异）",
+      "caption": "双手操作触控板和键盘，依次切换展示多个应用界面，涵盖创意设计、音频剪辑、3D游戏、网页浏览、视频剪辑、AI生成训练计划等不同使用场景",
       "transferRule": "替换为新商品的真实使用场景，保留手部演示节奏",
       "importance": 4
     },
     {
       "id": "seg_block_009",
       "role": "selling_point",
-      "start": 160.0,
-      "end": 204.0,
-      "duration": 44.0,
-      "purpose": "展示核心卖点，建立产品价值感知（精扫定位：中段依次演示了桌面图标实体化拼接成Dock栏吸附到笔记本底部、多窗口并行操作、聊天消息从笔记本同步到iPhone、手机端选中的图片隔空投送到笔记本、最后将iPhone的完整桌面镜像投屏到笔记本屏幕）",
-      "caption": "双手拿出多个系统图标，在桌面上拖动展开成完整的Dock栏吸附到笔记本屏幕底部，随后演示多窗口操作，消息跨设备同步到iPhone，手机上的图片隔空投送到笔记本，最后演示手机镜像投屏到笔记本屏幕",
+      "start": 159.0,
+      "end": 188.0,
+      "duration": 29.0,
+      "purpose": "展示核心卖点，建立产品价值感知（精扫定位：开头部分，零散的应用图标被手动拼接成完整的Dock栏，随后自动吸附到笔记本屏幕底部，支持快速点击切换不同应用，操作流畅自然。）",
+      "caption": "CRAFTED SOAPS / Natural, sustainable essentials for the body and home. / 聊天窗口对话内容",
       "transferRule": "映射到新商品最能驱动转化的核心卖点",
       "importance": 5
     },
     {
       "id": "seg_block_010",
+      "role": "usage",
+      "start": 188.0,
+      "end": 205.0,
+      "duration": 17.0,
+      "purpose": "演示真实使用场景，降低使用门槛（精扫定位：开头演示移动端界面操作浏览图片，中段演示跨设备隔空传输文件，后段演示移动端界面无缝接力到桌面端显示，结尾完成设备联动闭环操作）",
+      "caption": "手持iPhone操作聊天界面、浏览螳螂图片，将手机放到笔记本旁边隔空投送图片，随后笔记本屏幕上接力显示iPhone的桌面和地图导航界面，最后手掌合上笔记本",
+      "transferRule": "替换为新商品的真实使用场景，保留手部演示节奏",
+      "importance": 4
+    },
+    {
+      "id": "seg_block_011",
       "role": "cta",
       "start": 205.0,
-      "end": 224.0,
-      "duration": 19.0,
-      "purpose": "明确行动号召并收束（精扫定位：中段位置在纯白背景上以居中黑色无衬线文字依次淡入展示产品名MacBook Neo，随后切换浅灰背景淡入展示售价From $599，整体排版极简，和整体干净的视觉风格统一。）",
-      "caption": "MacBook Neo / From $599 / 回收材料占比、电池续航免责、Apple订阅服务相关合规说明",
+      "end": 229.0,
+      "duration": 24.0,
+      "purpose": "明确行动号召并收束（精扫定位：中段居中位置弹出起售价文字，展示清晰醒目无遮挡，用户可快速读取价格信息。）",
+      "caption": "MacBook Neo / From $599 / 底部小字环保与服务相关说明",
       "transferRule": "用新商品场景化 CTA 收束（价格、限时、优惠）",
       "importance": 4
     }
@@ -126,9 +137,9 @@
       "role": "opening_attention",
       "requiredAsset": {
         "type": "video",
-        "subject": "纯白背景下双手从空白画面中取出银色苹果笔记本，动态变换机身颜色为黄色，放置桌面打开屏幕展示彩色渐变壁纸后将笔记本拿走",
+        "subject": "双手从纯白空白画面中拿出银色苹果笔记本，悬浮过程中色彩渐变变为黄色，放置桌面后打开屏幕，显示黄绿渐变的彩色壁纸",
         "camera": "closeup",
-        "motion": "static",
+        "motion": "hand_operation",
         "minDuration": 1.3
       },
       "visualIngredientRequirements": [
@@ -136,10 +147,13 @@
         "hand_demo",
         "product_closeup_trait",
         "clean_background",
-        "soft_light"
+        "premium_visual"
       ],
       "humanRequirement": {
-        "required": false
+        "required": true,
+        "role": "hand_only",
+        "framing": "hands",
+        "action": "holding_product"
       },
       "fallbackStrategies": [
         "product_closeup_replacement",
@@ -148,51 +162,51 @@
       ],
       "importance": 5,
       "intent": {
-        "purpose": "Use a high-energy opening visual to make viewers feel the product state is transforming.",
+        "purpose": "开场快速抓住用户注意力，通过产品动态变换完成首次完整亮相，展示产品完整形态",
         "energyLevel": "high",
-        "motionPattern": "dynamic_product_entry_or_state_morph",
-        "compositionPrincipal": "single_subject_center_with_clean_negative_space",
+        "motionPattern": "symmetric_hand_presenting_with_object_transform",
+        "compositionPrincipal": "centered_subject_minimal_white_background",
         "durationMs": [
-          800,
-          2200
+          7000.0,
+          10000.0
         ],
-        "soundDesignHint": "transient_attack_aligned_with_visual_peak"
+        "soundDesignHint": "transient_swish_aligned_with_color_transform"
       },
       "sourceInstance": {
-        "productInSource": "MacBook silver body morphing into vivid yellow",
-        "specificAction": "Two hands hold the laptop symmetrically while the body color changes quickly.",
-        "colorSignature": "silver_to_vivid_yellow_morph"
+        "productInSource": "苹果MacBook笔记本电脑",
+        "specificAction": "双手托举产品悬浮翻转，色彩渐变后放置桌面开盖",
+        "colorSignature": "silver_to_yellow_gradient"
       },
       "acceptanceCriteria": {
         "anyOf": [
           {
-            "motionType": "fluid_splash",
-            "compositionType": "centered_product_clean_bg",
             "examples": [
-              "iced tea splash around the bottle",
-              "ice cubes orbiting the product"
-            ]
+              "产品悬浮色彩渐变",
+              "产品悬浮形态切换"
+            ],
+            "motionType": "object_kinetic_transform",
+            "compositionType": "centered_subject_clean_bg"
           },
           {
-            "motionType": "object_kinetic_entry",
-            "compositionType": "single_subject_center",
             "examples": [
-              "bottle entering frame quickly",
-              "product rotating into a freeze frame"
-            ]
+              "双手对称托举展示",
+              "双手引导产品入画"
+            ],
+            "motionType": "hand_guided_reveal",
+            "compositionType": "symmetric_frame_center"
           },
           {
-            "motionType": "particle_assembly",
-            "compositionType": "centripetal_focus",
             "examples": [
-              "ice cubes converging around the bottle",
-              "lemon slices guiding attention to the label"
-            ]
+              "产品轻放桌面",
+              "产品平稳展开"
+            ],
+            "motionType": "smooth_kinetic_placement",
+            "compositionType": "minimal_negative_space"
           }
         ],
         "rejectIf": [
-          "static product image without motion",
-          "main subject fully covered by text"
+          "背景杂乱有多余干扰元素",
+          "产品展示过程被无关物体遮挡"
         ]
       }
     },
@@ -202,9 +216,9 @@
       "role": "opening_attention",
       "requiredAsset": {
         "type": "video",
-        "subject": "纯白背景下双手从空白画面中取出银色苹果笔记本，动态变换机身颜色为黄色，放置桌面打开屏幕展示彩色渐变壁纸后将笔记本拿走",
+        "subject": "双手从纯白空白画面中拿出银色苹果笔记本，悬浮过程中色彩渐变变为黄色，放置桌面后打开屏幕，显示黄绿渐变的彩色壁纸",
         "camera": "closeup",
-        "motion": "hand_operation",
+        "motion": "static",
         "minDuration": 1.3
       },
       "visualIngredientRequirements": [
@@ -212,20 +226,65 @@
         "hand_demo",
         "product_closeup_trait",
         "clean_background",
-        "soft_light"
+        "premium_visual"
       ],
       "humanRequirement": {
-        "required": true,
-        "role": "hand_only",
-        "framing": "hands",
-        "action": "holding_product"
+        "required": false
       },
       "fallbackStrategies": [
         "product_closeup_replacement",
         "caption_rewrite",
         "text_card"
       ],
-      "importance": 5
+      "importance": 5,
+      "intent": {
+        "purpose": "开场快速抓住用户注意力，通过产品动态变换完成首次完整亮相，展示产品完整形态",
+        "energyLevel": "high",
+        "motionPattern": "symmetric_hand_presenting_with_object_transform",
+        "compositionPrincipal": "centered_subject_minimal_white_background",
+        "durationMs": [
+          7000.0,
+          10000.0
+        ],
+        "soundDesignHint": "transient_swish_aligned_with_color_transform"
+      },
+      "sourceInstance": {
+        "productInSource": "苹果MacBook笔记本电脑",
+        "specificAction": "双手托举产品悬浮翻转，色彩渐变后放置桌面开盖",
+        "colorSignature": "silver_to_yellow_gradient"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "examples": [
+              "产品悬浮色彩渐变",
+              "产品悬浮形态切换"
+            ],
+            "motionType": "object_kinetic_transform",
+            "compositionType": "centered_subject_clean_bg"
+          },
+          {
+            "examples": [
+              "双手对称托举展示",
+              "双手引导产品入画"
+            ],
+            "motionType": "hand_guided_reveal",
+            "compositionType": "symmetric_frame_center"
+          },
+          {
+            "examples": [
+              "产品轻放桌面",
+              "产品平稳展开"
+            ],
+            "motionType": "smooth_kinetic_placement",
+            "compositionType": "minimal_negative_space"
+          }
+        ],
+        "rejectIf": [
+          "背景杂乱有多余干扰元素",
+          "产品展示过程被无关物体遮挡"
+        ]
+      }
     },
     {
       "id": "slot_block_002_asset_001",
@@ -233,16 +292,15 @@
       "role": "product_closeup",
       "requiredAsset": {
         "type": "video",
-        "subject": "双手取出灰色哑光质感的笔记本，翻转展示机身侧边厚度、圆角弧度细节，完成开合动作后将笔记本放置在桌面上",
+        "subject": "双手将灰色薄型平板状产品拿起，翻转展示边缘、圆角和外壳质感，打开后自动展开为完整笔记本形态，放置在桌面上",
         "camera": "closeup",
         "motion": "hand_operation",
-        "minDuration": 1.4
+        "minDuration": 1.18
       },
       "visualIngredientRequirements": [
         "human_presence",
         "hand_demo",
         "product_closeup_trait",
-        "soft_light",
         "premium_visual"
       ],
       "humanRequirement": {
@@ -258,43 +316,51 @@
       ],
       "importance": 5,
       "intent": {
-        "purpose": "Use close detail shots to establish real product texture and a memorable packaging cue.",
+        "purpose": "通过双手操作逐步展示产品超薄质感与特殊开合结构，完成产品形态的完整揭晓",
         "energyLevel": "medium",
-        "motionPattern": "slow_product_rotation_or_macro_reveal",
-        "compositionPrincipal": "product_detail_dominant_with_clean_background",
+        "motionPattern": "fluid_product_handling_and_transform",
+        "compositionPrincipal": "single_subject_center_minimal_background",
         "durationMs": [
-          1200,
-          2800
+          15000.0,
+          20000.0
         ],
-        "soundDesignHint": "soft_whoosh_under_detail_reveal"
+        "soundDesignHint": "soft_tactile_foley_under_handling"
       },
       "sourceInstance": {
-        "productInSource": "MacBook matte gray side edge and hinge detail",
-        "specificAction": "Two hands rotate the product to show side thickness and opening motion.",
-        "colorSignature": "matte_gray_clean_white"
+        "productInSource": "灰色超薄MacBook笔记本",
+        "specificAction": "双手拿起薄平板状产品翻转展示边缘，逐步打开展开为完整笔记本放置桌面",
+        "colorSignature": "matte_silver_gray_smooth_surface"
       },
       "acceptanceCriteria": {
         "anyOf": [
           {
-            "motionType": "macro_push_in",
-            "compositionType": "label_or_texture_closeup",
             "examples": [
-              "water droplets on the bottle",
-              "lemon label close-up"
-            ]
+              "双手翻转展示产品细节",
+              "产品形态逐步展开"
+            ],
+            "motionType": "object_kinetic_handling",
+            "compositionType": "centered_subject_clean_bg"
           },
           {
-            "motionType": "hand_product_turn",
-            "compositionType": "hands_anchor_product",
             "examples": [
-              "handheld bottle rotation",
-              "cap-opening close-up"
-            ]
+              "薄产品边缘特写展示",
+              "开合结构慢动作演示"
+            ],
+            "motionType": "slow_kinetic_transform",
+            "compositionType": "minimal_white_background"
+          },
+          {
+            "examples": [
+              "双手托举产品旋转",
+              "产品放置桌面展示全貌"
+            ],
+            "motionType": "tactile_interaction",
+            "compositionType": "symmetric_center_framing"
           }
         ],
         "rejectIf": [
-          "product detail is not readable",
-          "background dominates the product"
+          "背景杂乱的实拍素材",
+          "产品形态完全固定无开合结构的素材"
         ]
       }
     },
@@ -304,16 +370,15 @@
       "role": "usage_demo",
       "requiredAsset": {
         "type": "video",
-        "subject": "双手取出灰色哑光质感的笔记本，翻转展示机身侧边厚度、圆角弧度细节，完成开合动作后将笔记本放置在桌面上",
+        "subject": "双手将灰色薄型平板状产品拿起，翻转展示边缘、圆角和外壳质感，打开后自动展开为完整笔记本形态，放置在桌面上",
         "camera": "closeup",
         "motion": "static",
-        "minDuration": 1.4
+        "minDuration": 1.18
       },
       "visualIngredientRequirements": [
         "human_presence",
         "hand_demo",
         "product_closeup_trait",
-        "soft_light",
         "premium_visual"
       ],
       "humanRequirement": {
@@ -324,7 +389,55 @@
         "crop_zoom",
         "caption_rewrite"
       ],
-      "importance": 5
+      "importance": 5,
+      "intent": {
+        "purpose": "通过双手操作逐步展示产品超薄质感与特殊开合结构，完成产品形态的完整揭晓",
+        "energyLevel": "medium",
+        "motionPattern": "fluid_product_handling_and_transform",
+        "compositionPrincipal": "single_subject_center_minimal_background",
+        "durationMs": [
+          15000.0,
+          20000.0
+        ],
+        "soundDesignHint": "soft_tactile_foley_under_handling"
+      },
+      "sourceInstance": {
+        "productInSource": "灰色超薄MacBook笔记本",
+        "specificAction": "双手拿起薄平板状产品翻转展示边缘，逐步打开展开为完整笔记本放置桌面",
+        "colorSignature": "matte_silver_gray_smooth_surface"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "examples": [
+              "双手翻转展示产品细节",
+              "产品形态逐步展开"
+            ],
+            "motionType": "object_kinetic_handling",
+            "compositionType": "centered_subject_clean_bg"
+          },
+          {
+            "examples": [
+              "薄产品边缘特写展示",
+              "开合结构慢动作演示"
+            ],
+            "motionType": "slow_kinetic_transform",
+            "compositionType": "minimal_white_background"
+          },
+          {
+            "examples": [
+              "双手托举产品旋转",
+              "产品放置桌面展示全貌"
+            ],
+            "motionType": "tactile_interaction",
+            "compositionType": "symmetric_center_framing"
+          }
+        ],
+        "rejectIf": [
+          "背景杂乱的实拍素材",
+          "产品形态完全固定无开合结构的素材"
+        ]
+      }
     },
     {
       "id": "slot_block_003_asset_001",
@@ -332,7 +445,7 @@
       "role": "product_closeup",
       "requiredAsset": {
         "type": "video",
-        "subject": "环境变暗，双手揉搓出发光的紫蓝色软质物件，拉伸后贴到笔记本屏幕上点亮屏幕，随后从屏幕中取出彩色圆形元素，最终变出一枚小型芯片",
+        "subject": "暗环境下双手揉搓发出紫光的软质条带，拉伸后覆盖到笔记本屏幕上，屏幕自动点亮显示紫绿渐变壁纸，手指从屏幕中取出圆形图标抛起后变成白色小方块",
         "camera": "closeup",
         "motion": "hand_operation",
         "minDuration": 1.05
@@ -355,7 +468,55 @@
         "crop_zoom",
         "caption_rewrite"
       ],
-      "importance": 5
+      "importance": 5,
+      "intent": {
+        "purpose": "通过虚实结合的创意特效，具象化展示产品屏幕显示与系统交互的流畅特性，制造视觉惊喜",
+        "energyLevel": "medium",
+        "motionPattern": "fluid_object_stretch_and_extract",
+        "compositionPrincipal": "center_focus_with_hand_operation_on_both_sides",
+        "durationMs": [
+          15000.0,
+          20000.0
+        ],
+        "soundDesignHint": "sustained_soft_glow_sound_peak_at_extraction"
+      },
+      "sourceInstance": {
+        "productInSource": "MacBook 笔记本电脑",
+        "specificAction": "双手揉搓拉伸发光软条覆盖屏幕，从屏幕取出圆形图标抛起变为白色小方块",
+        "colorSignature": "purple_blue_green_gradient"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "examples": [
+              "发光软质条带拉伸",
+              "流体状发光元素延展"
+            ],
+            "motionType": "fluid_dynamics",
+            "compositionType": "dark_bg_low_light_centered"
+          },
+          {
+            "examples": [
+              "虚拟元素从屏幕取出",
+              "图标实体化抓取"
+            ],
+            "motionType": "object_kinetic_extraction",
+            "compositionType": "clean_white_bg_centered"
+          },
+          {
+            "examples": [
+              "暗环境逐步提亮",
+              "双手对称操作展示"
+            ],
+            "motionType": "light_brightness_ramp_up",
+            "compositionType": "symmetric_hand_operation"
+          }
+        ],
+        "rejectIf": [
+          "无实体手部操作的纯静态画面",
+          "色彩杂乱高饱和刺眼的素材"
+        ]
+      }
     },
     {
       "id": "slot_block_003_asset_002",
@@ -363,7 +524,7 @@
       "role": "product_closeup",
       "requiredAsset": {
         "type": "video",
-        "subject": "环境变暗，双手揉搓出发光的紫蓝色软质物件，拉伸后贴到笔记本屏幕上点亮屏幕，随后从屏幕中取出彩色圆形元素，最终变出一枚小型芯片",
+        "subject": "暗环境下双手揉搓发出紫光的软质条带，拉伸后覆盖到笔记本屏幕上，屏幕自动点亮显示紫绿渐变壁纸，手指从屏幕中取出圆形图标抛起后变成白色小方块",
         "camera": "closeup",
         "motion": "static",
         "minDuration": 1.05
@@ -383,7 +544,55 @@
         "crop_zoom",
         "caption_rewrite"
       ],
-      "importance": 5
+      "importance": 5,
+      "intent": {
+        "purpose": "通过虚实结合的创意特效，具象化展示产品屏幕显示与系统交互的流畅特性，制造视觉惊喜",
+        "energyLevel": "medium",
+        "motionPattern": "fluid_object_stretch_and_extract",
+        "compositionPrincipal": "center_focus_with_hand_operation_on_both_sides",
+        "durationMs": [
+          15000.0,
+          20000.0
+        ],
+        "soundDesignHint": "sustained_soft_glow_sound_peak_at_extraction"
+      },
+      "sourceInstance": {
+        "productInSource": "MacBook 笔记本电脑",
+        "specificAction": "双手揉搓拉伸发光软条覆盖屏幕，从屏幕取出圆形图标抛起变为白色小方块",
+        "colorSignature": "purple_blue_green_gradient"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "examples": [
+              "发光软质条带拉伸",
+              "流体状发光元素延展"
+            ],
+            "motionType": "fluid_dynamics",
+            "compositionType": "dark_bg_low_light_centered"
+          },
+          {
+            "examples": [
+              "虚拟元素从屏幕取出",
+              "图标实体化抓取"
+            ],
+            "motionType": "object_kinetic_extraction",
+            "compositionType": "clean_white_bg_centered"
+          },
+          {
+            "examples": [
+              "暗环境逐步提亮",
+              "双手对称操作展示"
+            ],
+            "motionType": "light_brightness_ramp_up",
+            "compositionType": "symmetric_hand_operation"
+          }
+        ],
+        "rejectIf": [
+          "无实体手部操作的纯静态画面",
+          "色彩杂乱高饱和刺眼的素材"
+        ]
+      }
     },
     {
       "id": "slot_block_004_asset_001",
@@ -391,7 +600,615 @@
       "role": "usage_demo",
       "requiredAsset": {
         "type": "video",
-        "subject": "键盘按键碎片从空中落下自动组装到笔记本上，演示触控板操作触发屏幕内的火箭动画，火箭飞出机身炸开彩屑，最后特写展示键盘右上角的圆形指纹按键",
+        "subject": "键盘碎片在空中飞舞后落到笔记本上自动组装完成，手指按压安装上触控板，滑动触控板控制屏幕里的火箭飞出笔记本炸开撒出彩屑，随后手指按下键盘右上角圆形按键弹出应用购买窗口",
+        "camera": "closeup",
+        "motion": "hand_operation",
+        "minDuration": 1.05
+      },
+      "visualIngredientRequirements": [
+        "human_presence",
+        "hand_demo",
+        "product_closeup_trait",
+        "premium_visual"
+      ],
+      "humanRequirement": {
+        "required": true,
+        "role": "hand_only",
+        "framing": "hands",
+        "action": "holding_product"
+      },
+      "fallbackStrategies": [
+        "hand_demo",
+        "selling_point_card",
+        "caption_rewrite"
+      ],
+      "importance": 4,
+      "intent": {
+        "purpose": "通过趣味动态组装+交互演示，依次展示多个核心硬件功能，强化用户对产品设计精巧的感知",
+        "energyLevel": "high",
+        "motionPattern": "synchronized_object_assembly_with_interactive_feedback",
+        "compositionPrincipal": "centered_product_with_dynamic_negative_space",
+        "durationMs": [
+          22000.0,
+          30000.0
+        ],
+        "soundDesignHint": "layered_click_sound_sync_with_assembly_and_tap"
+      },
+      "sourceInstance": {
+        "productInSource": "银色MacBook笔记本电脑",
+        "specificAction": "散落的白色键盘按键碎片自动组装到机身，手指依次按压触控板、滑动触控板、点击右上角圆形按键",
+        "colorSignature": "silver_purple_gradient"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "examples": [
+              "散落零件自动归位组装",
+              "散落碎片拼接成完整产品"
+            ],
+            "motionType": "particle_floating_and_assembly",
+            "compositionType": "centered_subject_clean_background"
+          },
+          {
+            "examples": [
+              "手指操作产品部件同步触发屏幕动画",
+              "触控操作联动虚拟元素运动"
+            ],
+            "motionType": "hand_interaction_with_screen_feedback",
+            "compositionType": "eye_level_product_shot"
+          },
+          {
+            "examples": [
+              "虚拟物体飞出产品边界带出彩屑",
+              "操作完成触发庆祝粒子特效"
+            ],
+            "motionType": "particle_explosion_celebration",
+            "compositionType": "product_edge_focus"
+          }
+        ],
+        "rejectIf": [
+          "无实体产品部件展示的纯特效素材",
+          "无手部交互动作的纯静态产品图"
+        ]
+      }
+    },
+    {
+      "id": "slot_block_004_asset_002",
+      "segmentId": "seg_block_004",
+      "role": "usage_demo",
+      "requiredAsset": {
+        "type": "video",
+        "subject": "键盘碎片在空中飞舞后落到笔记本上自动组装完成，手指按压安装上触控板，滑动触控板控制屏幕里的火箭飞出笔记本炸开撒出彩屑，随后手指按下键盘右上角圆形按键弹出应用购买窗口",
+        "camera": "closeup",
+        "motion": "static",
+        "minDuration": 1.05
+      },
+      "visualIngredientRequirements": [
+        "human_presence",
+        "hand_demo",
+        "product_closeup_trait",
+        "premium_visual"
+      ],
+      "humanRequirement": {
+        "required": false
+      },
+      "fallbackStrategies": [
+        "hand_demo",
+        "selling_point_card",
+        "caption_rewrite"
+      ],
+      "importance": 4,
+      "intent": {
+        "purpose": "通过趣味动态组装+交互演示，依次展示多个核心硬件功能，强化用户对产品设计精巧的感知",
+        "energyLevel": "high",
+        "motionPattern": "synchronized_object_assembly_with_interactive_feedback",
+        "compositionPrincipal": "centered_product_with_dynamic_negative_space",
+        "durationMs": [
+          22000.0,
+          30000.0
+        ],
+        "soundDesignHint": "layered_click_sound_sync_with_assembly_and_tap"
+      },
+      "sourceInstance": {
+        "productInSource": "银色MacBook笔记本电脑",
+        "specificAction": "散落的白色键盘按键碎片自动组装到机身，手指依次按压触控板、滑动触控板、点击右上角圆形按键",
+        "colorSignature": "silver_purple_gradient"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "examples": [
+              "散落零件自动归位组装",
+              "散落碎片拼接成完整产品"
+            ],
+            "motionType": "particle_floating_and_assembly",
+            "compositionType": "centered_subject_clean_background"
+          },
+          {
+            "examples": [
+              "手指操作产品部件同步触发屏幕动画",
+              "触控操作联动虚拟元素运动"
+            ],
+            "motionType": "hand_interaction_with_screen_feedback",
+            "compositionType": "eye_level_product_shot"
+          },
+          {
+            "examples": [
+              "虚拟物体飞出产品边界带出彩屑",
+              "操作完成触发庆祝粒子特效"
+            ],
+            "motionType": "particle_explosion_celebration",
+            "compositionType": "product_edge_focus"
+          }
+        ],
+        "rejectIf": [
+          "无实体产品部件展示的纯特效素材",
+          "无手部交互动作的纯静态产品图"
+        ]
+      }
+    },
+    {
+      "id": "slot_block_004_asset_003",
+      "segmentId": "seg_block_004",
+      "role": "usage_demo",
+      "requiredAsset": {
+        "type": "video",
+        "subject": "键盘碎片在空中飞舞后落到笔记本上自动组装完成，手指按压安装上触控板，滑动触控板控制屏幕里的火箭飞出笔记本炸开撒出彩屑，随后手指按下键盘右上角圆形按键弹出应用购买窗口",
+        "camera": "closeup",
+        "motion": "static",
+        "minDuration": 1.05
+      },
+      "visualIngredientRequirements": [
+        "human_presence",
+        "hand_demo",
+        "product_closeup_trait",
+        "premium_visual"
+      ],
+      "humanRequirement": {
+        "required": false
+      },
+      "fallbackStrategies": [
+        "hand_demo",
+        "selling_point_card",
+        "caption_rewrite"
+      ],
+      "importance": 4,
+      "intent": {
+        "purpose": "通过趣味动态组装+交互演示，依次展示多个核心硬件功能，强化用户对产品设计精巧的感知",
+        "energyLevel": "high",
+        "motionPattern": "synchronized_object_assembly_with_interactive_feedback",
+        "compositionPrincipal": "centered_product_with_dynamic_negative_space",
+        "durationMs": [
+          22000.0,
+          30000.0
+        ],
+        "soundDesignHint": "layered_click_sound_sync_with_assembly_and_tap"
+      },
+      "sourceInstance": {
+        "productInSource": "银色MacBook笔记本电脑",
+        "specificAction": "散落的白色键盘按键碎片自动组装到机身，手指依次按压触控板、滑动触控板、点击右上角圆形按键",
+        "colorSignature": "silver_purple_gradient"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "examples": [
+              "散落零件自动归位组装",
+              "散落碎片拼接成完整产品"
+            ],
+            "motionType": "particle_floating_and_assembly",
+            "compositionType": "centered_subject_clean_background"
+          },
+          {
+            "examples": [
+              "手指操作产品部件同步触发屏幕动画",
+              "触控操作联动虚拟元素运动"
+            ],
+            "motionType": "hand_interaction_with_screen_feedback",
+            "compositionType": "eye_level_product_shot"
+          },
+          {
+            "examples": [
+              "虚拟物体飞出产品边界带出彩屑",
+              "操作完成触发庆祝粒子特效"
+            ],
+            "motionType": "particle_explosion_celebration",
+            "compositionType": "product_edge_focus"
+          }
+        ],
+        "rejectIf": [
+          "无实体产品部件展示的纯特效素材",
+          "无手部交互动作的纯静态产品图"
+        ]
+      }
+    },
+    {
+      "id": "slot_block_005_asset_001",
+      "segmentId": "seg_block_005",
+      "role": "usage_demo",
+      "requiredAsset": {
+        "type": "video",
+        "subject": "镜头移动展示笔记本侧边的多个接口，圆形镜片飞入被双手接住变成彩色球体，拆分后贴到屏幕顶部边框变成摄像头，镜头放大展示摄像头镜片细节",
+        "camera": "closeup",
+        "motion": "static",
+        "minDuration": 1.4
+      },
+      "visualIngredientRequirements": [
+        "human_presence",
+        "hand_demo",
+        "product_closeup_trait",
+        "soft_light",
+        "premium_visual"
+      ],
+      "humanRequirement": {
+        "required": false
+      },
+      "fallbackStrategies": [
+        "selling_point_card",
+        "crop_zoom",
+        "caption_rewrite"
+      ],
+      "importance": 5,
+      "intent": {
+        "purpose": "依次展示产品侧边接口布局，通过具象化部件动画完成核心功能部件的组装呈现，突出设计精巧感",
+        "energyLevel": "medium",
+        "motionPattern": "sequential_interface_reveal_then_object_assembly",
+        "compositionPrincipal": "product_side_edge_focus_then_center_close_up",
+        "durationMs": [
+          18000.0,
+          22000.0
+        ],
+        "soundDesignHint": "soft_click_sound_on_each_interface_reveal"
+      },
+      "sourceInstance": {
+        "productInSource": "银色MacBook笔记本电脑",
+        "specificAction": "手指依次点按机身侧边露出接口，透明镜片飞入后双手揉搓拆分贴到屏幕顶部形成摄像头",
+        "colorSignature": "silver_purple_green_gradient"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "examples": [
+              "手指依次点按露出接口",
+              "滑动盖板露出隐藏接口"
+            ],
+            "motionType": "sequential_interface_uncover",
+            "compositionType": "side_edge_clean_background"
+          },
+          {
+            "examples": [
+              "悬浮部件拼接成产品组件",
+              "透明物件融合进产品机身"
+            ],
+            "motionType": "floating_object_assembly",
+            "compositionType": "hand_framed_center_subject"
+          },
+          {
+            "examples": [
+              "微距放大展示部件细节",
+              "镜头推近聚焦核心元件"
+            ],
+            "motionType": "macro_lens_zoom_in",
+            "compositionType": "centered_detail_focus"
+          }
+        ],
+        "rejectIf": [
+          "完全没有部件展示的空泛产品全景素材",
+          "接口被完全遮挡无法看清的素材"
+        ]
+      }
+    },
+    {
+      "id": "slot_block_005_asset_002",
+      "segmentId": "seg_block_005",
+      "role": "product_closeup",
+      "requiredAsset": {
+        "type": "video",
+        "subject": "镜头移动展示笔记本侧边的多个接口，圆形镜片飞入被双手接住变成彩色球体，拆分后贴到屏幕顶部边框变成摄像头，镜头放大展示摄像头镜片细节",
+        "camera": "closeup",
+        "motion": "hand_operation",
+        "minDuration": 1.4
+      },
+      "visualIngredientRequirements": [
+        "human_presence",
+        "hand_demo",
+        "product_closeup_trait",
+        "soft_light",
+        "premium_visual"
+      ],
+      "humanRequirement": {
+        "required": true,
+        "role": "hand_only",
+        "framing": "hands",
+        "action": "holding_product"
+      },
+      "fallbackStrategies": [
+        "selling_point_card",
+        "crop_zoom",
+        "caption_rewrite"
+      ],
+      "importance": 5,
+      "intent": {
+        "purpose": "依次展示产品侧边接口布局，通过具象化部件动画完成核心功能部件的组装呈现，突出设计精巧感",
+        "energyLevel": "medium",
+        "motionPattern": "sequential_interface_reveal_then_object_assembly",
+        "compositionPrincipal": "product_side_edge_focus_then_center_close_up",
+        "durationMs": [
+          18000.0,
+          22000.0
+        ],
+        "soundDesignHint": "soft_click_sound_on_each_interface_reveal"
+      },
+      "sourceInstance": {
+        "productInSource": "银色MacBook笔记本电脑",
+        "specificAction": "手指依次点按机身侧边露出接口，透明镜片飞入后双手揉搓拆分贴到屏幕顶部形成摄像头",
+        "colorSignature": "silver_purple_green_gradient"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "examples": [
+              "手指依次点按露出接口",
+              "滑动盖板露出隐藏接口"
+            ],
+            "motionType": "sequential_interface_uncover",
+            "compositionType": "side_edge_clean_background"
+          },
+          {
+            "examples": [
+              "悬浮部件拼接成产品组件",
+              "透明物件融合进产品机身"
+            ],
+            "motionType": "floating_object_assembly",
+            "compositionType": "hand_framed_center_subject"
+          },
+          {
+            "examples": [
+              "微距放大展示部件细节",
+              "镜头推近聚焦核心元件"
+            ],
+            "motionType": "macro_lens_zoom_in",
+            "compositionType": "centered_detail_focus"
+          }
+        ],
+        "rejectIf": [
+          "完全没有部件展示的空泛产品全景素材",
+          "接口被完全遮挡无法看清的素材"
+        ]
+      }
+    },
+    {
+      "id": "slot_block_006_asset_001",
+      "segmentId": "seg_block_006",
+      "role": "product_closeup",
+      "requiredAsset": {
+        "type": "video",
+        "subject": "双手拿出带格栅的长条部件安装到笔记本屏幕下方，笔记本屏幕播放敞篷跑车行驶的高清视频，手指按压侧边按键暂停视频，随后手掌从上往下合上笔记本",
+        "camera": "closeup",
+        "motion": "hand_operation",
+        "minDuration": 1.18
+      },
+      "visualIngredientRequirements": [
+        "human_presence",
+        "hand_demo",
+        "product_closeup_trait"
+      ],
+      "humanRequirement": {
+        "required": true,
+        "role": "hand_only",
+        "framing": "hands",
+        "action": "holding_product"
+      },
+      "fallbackStrategies": [
+        "selling_point_card",
+        "crop_zoom",
+        "caption_rewrite"
+      ],
+      "importance": 5,
+      "intent": {
+        "purpose": "依次演示功能部件组装、高清内容播放、按键操作、产品闭合全流程，传递产品设计与使用体验优势",
+        "energyLevel": "medium",
+        "motionPattern": "synchronized_assembly_then_interactive_demo",
+        "compositionPrincipal": "centered_product_on_clean_white_bg",
+        "durationMs": [
+          10000.0,
+          14000.0
+        ],
+        "soundDesignHint": "subtle_click_sound_on_each_manual_action"
+      },
+      "sourceInstance": {
+        "productInSource": "银色轻薄笔记本电脑",
+        "specificAction": "双手将格栅长条部件嵌入笔记本机身侧边，手指按压侧边按键，手掌从上往下合上笔记本",
+        "colorSignature": "silver_white_minimalist"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "examples": [
+              "配件对准卡槽嵌入机身",
+              "功能部件卡入产品对应位置"
+            ],
+            "motionType": "manual_part_assembly",
+            "compositionType": "centered_subject_clean_bg"
+          },
+          {
+            "examples": [
+              "屏幕播放高清动态视频",
+              "屏幕展示高画质动态内容"
+            ],
+            "motionType": "screen_content_playback",
+            "compositionType": "product_screen_focus"
+          },
+          {
+            "examples": [
+              "手掌平扫合上产品上盖",
+              "单手完成产品闭合动作"
+            ],
+            "motionType": "manual_product_close",
+            "compositionType": "full_product_centered"
+          }
+        ],
+        "rejectIf": [
+          "无任何手动交互的纯静态素材",
+          "背景杂乱无法突出产品主体的素材"
+        ]
+      }
+    },
+    {
+      "id": "slot_block_006_asset_002",
+      "segmentId": "seg_block_006",
+      "role": "usage_demo",
+      "requiredAsset": {
+        "type": "video",
+        "subject": "双手拿出带格栅的长条部件安装到笔记本屏幕下方，笔记本屏幕播放敞篷跑车行驶的高清视频，手指按压侧边按键暂停视频，随后手掌从上往下合上笔记本",
+        "camera": "closeup",
+        "motion": "static",
+        "minDuration": 1.18
+      },
+      "visualIngredientRequirements": [
+        "human_presence",
+        "hand_demo",
+        "product_closeup_trait"
+      ],
+      "humanRequirement": {
+        "required": false
+      },
+      "fallbackStrategies": [
+        "selling_point_card",
+        "crop_zoom",
+        "caption_rewrite"
+      ],
+      "importance": 5,
+      "intent": {
+        "purpose": "依次演示功能部件组装、高清内容播放、按键操作、产品闭合全流程，传递产品设计与使用体验优势",
+        "energyLevel": "medium",
+        "motionPattern": "synchronized_assembly_then_interactive_demo",
+        "compositionPrincipal": "centered_product_on_clean_white_bg",
+        "durationMs": [
+          10000.0,
+          14000.0
+        ],
+        "soundDesignHint": "subtle_click_sound_on_each_manual_action"
+      },
+      "sourceInstance": {
+        "productInSource": "银色轻薄笔记本电脑",
+        "specificAction": "双手将格栅长条部件嵌入笔记本机身侧边，手指按压侧边按键，手掌从上往下合上笔记本",
+        "colorSignature": "silver_white_minimalist"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "examples": [
+              "配件对准卡槽嵌入机身",
+              "功能部件卡入产品对应位置"
+            ],
+            "motionType": "manual_part_assembly",
+            "compositionType": "centered_subject_clean_bg"
+          },
+          {
+            "examples": [
+              "屏幕播放高清动态视频",
+              "屏幕展示高画质动态内容"
+            ],
+            "motionType": "screen_content_playback",
+            "compositionType": "product_screen_focus"
+          },
+          {
+            "examples": [
+              "手掌平扫合上产品上盖",
+              "单手完成产品闭合动作"
+            ],
+            "motionType": "manual_product_close",
+            "compositionType": "full_product_centered"
+          }
+        ],
+        "rejectIf": [
+          "无任何手动交互的纯静态素材",
+          "背景杂乱无法突出产品主体的素材"
+        ]
+      }
+    },
+    {
+      "id": "slot_block_006_asset_003",
+      "segmentId": "seg_block_006",
+      "role": "product_closeup",
+      "requiredAsset": {
+        "type": "video",
+        "subject": "双手拿出带格栅的长条部件安装到笔记本屏幕下方，笔记本屏幕播放敞篷跑车行驶的高清视频，手指按压侧边按键暂停视频，随后手掌从上往下合上笔记本",
+        "camera": "medium",
+        "motion": "static",
+        "minDuration": 1.18
+      },
+      "visualIngredientRequirements": [
+        "human_presence",
+        "hand_demo",
+        "product_closeup_trait"
+      ],
+      "humanRequirement": {
+        "required": false
+      },
+      "fallbackStrategies": [
+        "selling_point_card",
+        "crop_zoom",
+        "caption_rewrite"
+      ],
+      "importance": 5,
+      "intent": {
+        "purpose": "依次演示功能部件组装、高清内容播放、按键操作、产品闭合全流程，传递产品设计与使用体验优势",
+        "energyLevel": "medium",
+        "motionPattern": "synchronized_assembly_then_interactive_demo",
+        "compositionPrincipal": "centered_product_on_clean_white_bg",
+        "durationMs": [
+          10000.0,
+          14000.0
+        ],
+        "soundDesignHint": "subtle_click_sound_on_each_manual_action"
+      },
+      "sourceInstance": {
+        "productInSource": "银色轻薄笔记本电脑",
+        "specificAction": "双手将格栅长条部件嵌入笔记本机身侧边，手指按压侧边按键，手掌从上往下合上笔记本",
+        "colorSignature": "silver_white_minimalist"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "examples": [
+              "配件对准卡槽嵌入机身",
+              "功能部件卡入产品对应位置"
+            ],
+            "motionType": "manual_part_assembly",
+            "compositionType": "centered_subject_clean_bg"
+          },
+          {
+            "examples": [
+              "屏幕播放高清动态视频",
+              "屏幕展示高画质动态内容"
+            ],
+            "motionType": "screen_content_playback",
+            "compositionType": "product_screen_focus"
+          },
+          {
+            "examples": [
+              "手掌平扫合上产品上盖",
+              "单手完成产品闭合动作"
+            ],
+            "motionType": "manual_product_close",
+            "compositionType": "full_product_centered"
+          }
+        ],
+        "rejectIf": [
+          "无任何手动交互的纯静态素材",
+          "背景杂乱无法突出产品主体的素材"
+        ]
+      }
+    },
+    {
+      "id": "slot_block_007_asset_001",
+      "segmentId": "seg_block_007",
+      "role": "usage_demo",
+      "requiredAsset": {
+        "type": "video",
+        "subject": "A18 PRO",
         "camera": "closeup",
         "motion": "static",
         "minDuration": 1.4
@@ -412,272 +1229,53 @@
       ],
       "importance": 5,
       "intent": {
-        "purpose": "Use sequential action to turn static assets into a perceptible product experience.",
-        "energyLevel": "high",
-        "motionPattern": "sequential_assembly_or_usage_reveal",
-        "compositionPrincipal": "action_path_guides_eye_to_product",
+        "purpose": "依次展示产品多配色外观，动态演示部件归位，突出核心硬件卖点，完成产品细节铺垫",
+        "energyLevel": "medium",
+        "motionPattern": "synchronized_color_switch_and_parts_assembly",
+        "compositionPrincipal": "centered_subject_minimal_white_bg",
         "durationMs": [
-          1600,
-          3600
+          20000.0,
+          30000.0
         ],
-        "soundDesignHint": "rhythmic_hits_follow_action_steps"
+        "soundDesignHint": "soft_click_sound_on_each_part_landing"
       },
       "sourceInstance": {
-        "productInSource": "MacBook keyboard assembly and screen animation",
-        "specificAction": "Keyboard pieces assemble automatically and trigger an animated screen moment.",
-        "colorSignature": "dark_scene_neon_burst"
+        "productInSource": "多配色Apple MacBook笔记本电脑",
+        "specificAction": "双手托举翻转笔记本切换配色，弹飞脚垫自动吸附，芯片飞入机身",
+        "colorSignature": "silver_grey_pink_yellow_gradient"
       },
       "acceptanceCriteria": {
         "anyOf": [
           {
-            "motionType": "usage_sequence",
-            "compositionType": "hands_interacting_with_product",
             "examples": [
-              "opening the cap and drinking sequence",
-              "taking the chilled bottle from ice"
-            ]
+              "产品外观颜色渐变切换",
+              "多配色产品依次入画展示"
+            ],
+            "motionType": "color_swap_animation",
+            "compositionType": "centered_clean_background"
           },
           {
-            "motionType": "ingredient_assembly",
-            "compositionType": "elements_converge_to_product",
             "examples": [
-              "ice and lemon converging",
-              "tea liquid flowing toward the bottle"
-            ]
+              "小部件悬浮后吸附到产品表面",
+              "零件自动归位组装动画"
+            ],
+            "motionType": "floating_parts_snap_to_place",
+            "compositionType": "top_down_flat_lay"
+          },
+          {
+            "examples": [
+              "核心部件从画面外飞入产品",
+              "芯片动态植入产品主体"
+            ],
+            "motionType": "flying_core_component_into_product",
+            "compositionType": "subject_center_focus"
           }
         ],
         "rejectIf": [
-          "no visible action progression",
-          "selling point depends only on long text"
+          "背景杂乱无主体聚焦",
+          "部件动作与产品无关联"
         ]
       }
-    },
-    {
-      "id": "slot_block_004_asset_002",
-      "segmentId": "seg_block_004",
-      "role": "product_closeup",
-      "requiredAsset": {
-        "type": "video",
-        "subject": "键盘按键碎片从空中落下自动组装到笔记本上，演示触控板操作触发屏幕内的火箭动画，火箭飞出机身炸开彩屑，最后特写展示键盘右上角的圆形指纹按键",
-        "camera": "closeup",
-        "motion": "hand_operation",
-        "minDuration": 1.4
-      },
-      "visualIngredientRequirements": [
-        "human_presence",
-        "hand_demo",
-        "product_closeup_trait",
-        "premium_visual"
-      ],
-      "humanRequirement": {
-        "required": true,
-        "role": "hand_only",
-        "framing": "hands",
-        "action": "holding_product"
-      },
-      "fallbackStrategies": [
-        "selling_point_card",
-        "crop_zoom",
-        "caption_rewrite"
-      ],
-      "importance": 5
-    },
-    {
-      "id": "slot_block_004_asset_003",
-      "segmentId": "seg_block_004",
-      "role": "product_closeup",
-      "requiredAsset": {
-        "type": "image",
-        "subject": "键盘按键碎片从空中落下自动组装到笔记本上，演示触控板操作触发屏幕内的火箭动画，火箭飞出机身炸开彩屑，最后特写展示键盘右上角的圆形指纹按键",
-        "camera": "closeup",
-        "motion": "static",
-        "minDuration": 1.4
-      },
-      "visualIngredientRequirements": [
-        "human_presence",
-        "hand_demo",
-        "product_closeup_trait",
-        "premium_visual"
-      ],
-      "humanRequirement": {
-        "required": false
-      },
-      "fallbackStrategies": [
-        "selling_point_card",
-        "crop_zoom",
-        "caption_rewrite"
-      ],
-      "importance": 5
-    },
-    {
-      "id": "slot_block_005_asset_001",
-      "segmentId": "seg_block_005",
-      "role": "product_closeup",
-      "requiredAsset": {
-        "type": "video",
-        "subject": "展示笔记本机身侧边的多个接口，随后取出圆形透明镜片，拆分后贴到屏幕顶部组装成前置摄像头，给到摄像头镜头特写",
-        "camera": "closeup",
-        "motion": "hand_operation",
-        "minDuration": 1.4
-      },
-      "visualIngredientRequirements": [
-        "human_presence",
-        "hand_demo",
-        "product_closeup_trait",
-        "soft_light",
-        "premium_visual"
-      ],
-      "humanRequirement": {
-        "required": true,
-        "role": "hand_only",
-        "framing": "hands",
-        "action": "holding_product"
-      },
-      "fallbackStrategies": [
-        "selling_point_card",
-        "crop_zoom",
-        "caption_rewrite"
-      ],
-      "importance": 5
-    },
-    {
-      "id": "slot_block_005_asset_002",
-      "segmentId": "seg_block_005",
-      "role": "product_closeup",
-      "requiredAsset": {
-        "type": "video",
-        "subject": "展示笔记本机身侧边的多个接口，随后取出圆形透明镜片，拆分后贴到屏幕顶部组装成前置摄像头，给到摄像头镜头特写",
-        "camera": "closeup",
-        "motion": "static",
-        "minDuration": 1.4
-      },
-      "visualIngredientRequirements": [
-        "human_presence",
-        "hand_demo",
-        "product_closeup_trait",
-        "soft_light",
-        "premium_visual"
-      ],
-      "humanRequirement": {
-        "required": false
-      },
-      "fallbackStrategies": [
-        "selling_point_card",
-        "crop_zoom",
-        "caption_rewrite"
-      ],
-      "importance": 5
-    },
-    {
-      "id": "slot_block_006_asset_001",
-      "segmentId": "seg_block_006",
-      "role": "usage_demo",
-      "requiredAsset": {
-        "type": "video",
-        "subject": "笔记本屏幕播放敞篷跑车行驶的高清视频，双手拿出金属网罩部件安装到笔记本上，继续播放视频，操作触控板暂停视频后合上笔记本",
-        "camera": "closeup",
-        "motion": "static",
-        "minDuration": 1.18
-      },
-      "visualIngredientRequirements": [
-        "human_presence",
-        "hand_demo",
-        "product_closeup_trait",
-        "premium_visual"
-      ],
-      "humanRequirement": {
-        "required": false
-      },
-      "fallbackStrategies": [
-        "selling_point_card",
-        "crop_zoom",
-        "caption_rewrite"
-      ],
-      "importance": 5
-    },
-    {
-      "id": "slot_block_006_asset_002",
-      "segmentId": "seg_block_006",
-      "role": "product_closeup",
-      "requiredAsset": {
-        "type": "video",
-        "subject": "笔记本屏幕播放敞篷跑车行驶的高清视频，双手拿出金属网罩部件安装到笔记本上，继续播放视频，操作触控板暂停视频后合上笔记本",
-        "camera": "closeup",
-        "motion": "hand_operation",
-        "minDuration": 1.18
-      },
-      "visualIngredientRequirements": [
-        "human_presence",
-        "hand_demo",
-        "product_closeup_trait",
-        "premium_visual"
-      ],
-      "humanRequirement": {
-        "required": true,
-        "role": "hand_only",
-        "framing": "hands",
-        "action": "holding_product"
-      },
-      "fallbackStrategies": [
-        "selling_point_card",
-        "crop_zoom",
-        "caption_rewrite"
-      ],
-      "importance": 5
-    },
-    {
-      "id": "slot_block_006_asset_003",
-      "segmentId": "seg_block_006",
-      "role": "product_closeup",
-      "requiredAsset": {
-        "type": "video",
-        "subject": "笔记本屏幕播放敞篷跑车行驶的高清视频，双手拿出金属网罩部件安装到笔记本上，继续播放视频，操作触控板暂停视频后合上笔记本",
-        "camera": "medium",
-        "motion": "static",
-        "minDuration": 1.18
-      },
-      "visualIngredientRequirements": [
-        "human_presence",
-        "hand_demo",
-        "product_closeup_trait",
-        "premium_visual"
-      ],
-      "humanRequirement": {
-        "required": false
-      },
-      "fallbackStrategies": [
-        "selling_point_card",
-        "crop_zoom",
-        "caption_rewrite"
-      ],
-      "importance": 5
-    },
-    {
-      "id": "slot_block_007_asset_001",
-      "segmentId": "seg_block_007",
-      "role": "product_closeup",
-      "requiredAsset": {
-        "type": "video",
-        "subject": "双手拿起合上的笔记本，依次切换展示银色、深蓝色、粉色、黄色多种配色，翻转展示底部并安装防滑脚垫，随后A18 PRO芯片从机身弹出再装回",
-        "camera": "closeup",
-        "motion": "static",
-        "minDuration": 1.4
-      },
-      "visualIngredientRequirements": [
-        "human_presence",
-        "hand_demo",
-        "product_closeup_trait",
-        "premium_visual"
-      ],
-      "humanRequirement": {
-        "required": false
-      },
-      "fallbackStrategies": [
-        "selling_point_card",
-        "crop_zoom",
-        "caption_rewrite"
-      ],
-      "importance": 5
     },
     {
       "id": "slot_block_007_asset_002",
@@ -685,7 +1283,7 @@
       "role": "product_closeup",
       "requiredAsset": {
         "type": "video",
-        "subject": "双手拿起合上的笔记本，依次切换展示银色、深蓝色、粉色、黄色多种配色，翻转展示底部并安装防滑脚垫，随后A18 PRO芯片从机身弹出再装回",
+        "subject": "A18 PRO",
         "camera": "closeup",
         "motion": "hand_operation",
         "minDuration": 1.4
@@ -707,7 +1305,55 @@
         "crop_zoom",
         "caption_rewrite"
       ],
-      "importance": 5
+      "importance": 5,
+      "intent": {
+        "purpose": "依次展示产品多配色外观，动态演示部件归位，突出核心硬件卖点，完成产品细节铺垫",
+        "energyLevel": "medium",
+        "motionPattern": "synchronized_color_switch_and_parts_assembly",
+        "compositionPrincipal": "centered_subject_minimal_white_bg",
+        "durationMs": [
+          20000.0,
+          30000.0
+        ],
+        "soundDesignHint": "soft_click_sound_on_each_part_landing"
+      },
+      "sourceInstance": {
+        "productInSource": "多配色Apple MacBook笔记本电脑",
+        "specificAction": "双手托举翻转笔记本切换配色，弹飞脚垫自动吸附，芯片飞入机身",
+        "colorSignature": "silver_grey_pink_yellow_gradient"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "examples": [
+              "产品外观颜色渐变切换",
+              "多配色产品依次入画展示"
+            ],
+            "motionType": "color_swap_animation",
+            "compositionType": "centered_clean_background"
+          },
+          {
+            "examples": [
+              "小部件悬浮后吸附到产品表面",
+              "零件自动归位组装动画"
+            ],
+            "motionType": "floating_parts_snap_to_place",
+            "compositionType": "top_down_flat_lay"
+          },
+          {
+            "examples": [
+              "核心部件从画面外飞入产品",
+              "芯片动态植入产品主体"
+            ],
+            "motionType": "flying_core_component_into_product",
+            "compositionType": "subject_center_focus"
+          }
+        ],
+        "rejectIf": [
+          "背景杂乱无主体聚焦",
+          "部件动作与产品无关联"
+        ]
+      }
     },
     {
       "id": "slot_block_008_asset_001",
@@ -715,7 +1361,7 @@
       "role": "usage_demo",
       "requiredAsset": {
         "type": "video",
-        "subject": "打开黄色笔记本，双手操作触控板和键盘，依次演示多个应用界面：设计软件、音乐剪辑软件、游戏、网页、视频剪辑、AI对话生成内容，覆盖多种使用场景",
+        "subject": "双手操作触控板和键盘，依次切换展示多个应用界面，涵盖创意设计、音频剪辑、3D游戏、网页浏览、视频剪辑、AI生成训练计划等不同使用场景",
         "camera": "closeup",
         "motion": "hand_operation",
         "minDuration": 1.4
@@ -736,7 +1382,55 @@
         "selling_point_card",
         "caption_rewrite"
       ],
-      "importance": 4
+      "importance": 4,
+      "intent": {
+        "purpose": "通过连贯的操作演示，快速展示多类不同使用场景，传递产品功能丰富、运行流畅的核心优势",
+        "energyLevel": "medium",
+        "motionPattern": "sequential_ui_switch_with_hand_interaction",
+        "compositionPrincipal": "centered_product_with_full_screen_ui_display",
+        "durationMs": [
+          28000.0,
+          33000.0
+        ],
+        "soundDesignHint": "subtle_click_sound_sync_with_ui_switch"
+      },
+      "sourceInstance": {
+        "productInSource": "淡黄绿色MacBook笔记本电脑",
+        "specificAction": "双手操作触控板和键盘，依次切换打开多个不同类型的应用界面",
+        "colorSignature": "pale_yellow_body_with_green_gradient_wallpaper"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "examples": [
+              "多应用界面平滑轮播",
+              "操作手势连贯自然"
+            ],
+            "motionType": "smooth_ui_transition",
+            "compositionType": "centered_product_clean_background"
+          },
+          {
+            "examples": [
+              "双手操作产品输入部件",
+              "屏幕内容清晰可见"
+            ],
+            "motionType": "hand_focused_interaction",
+            "compositionType": "product_center_framing"
+          },
+          {
+            "examples": [
+              "不同使用场景快速切换",
+              "无多余遮挡元素"
+            ],
+            "motionType": "multi_scene_quick_cut",
+            "compositionType": "no_extra_clutter_on_frame"
+          }
+        ],
+        "rejectIf": [
+          "无手部操作的纯静态截图拼接",
+          "界面切换出现明显卡顿黑屏"
+        ]
+      }
     },
     {
       "id": "slot_block_008_asset_002",
@@ -744,7 +1438,7 @@
       "role": "usage_demo",
       "requiredAsset": {
         "type": "video",
-        "subject": "打开黄色笔记本，双手操作触控板和键盘，依次演示多个应用界面：设计软件、音乐剪辑软件、游戏、网页、视频剪辑、AI对话生成内容，覆盖多种使用场景",
+        "subject": "双手操作触控板和键盘，依次切换展示多个应用界面，涵盖创意设计、音频剪辑、3D游戏、网页浏览、视频剪辑、AI生成训练计划等不同使用场景",
         "camera": "closeup",
         "motion": "static",
         "minDuration": 1.4
@@ -762,7 +1456,55 @@
         "selling_point_card",
         "caption_rewrite"
       ],
-      "importance": 4
+      "importance": 4,
+      "intent": {
+        "purpose": "通过连贯的操作演示，快速展示多类不同使用场景，传递产品功能丰富、运行流畅的核心优势",
+        "energyLevel": "medium",
+        "motionPattern": "sequential_ui_switch_with_hand_interaction",
+        "compositionPrincipal": "centered_product_with_full_screen_ui_display",
+        "durationMs": [
+          28000.0,
+          33000.0
+        ],
+        "soundDesignHint": "subtle_click_sound_sync_with_ui_switch"
+      },
+      "sourceInstance": {
+        "productInSource": "淡黄绿色MacBook笔记本电脑",
+        "specificAction": "双手操作触控板和键盘，依次切换打开多个不同类型的应用界面",
+        "colorSignature": "pale_yellow_body_with_green_gradient_wallpaper"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "examples": [
+              "多应用界面平滑轮播",
+              "操作手势连贯自然"
+            ],
+            "motionType": "smooth_ui_transition",
+            "compositionType": "centered_product_clean_background"
+          },
+          {
+            "examples": [
+              "双手操作产品输入部件",
+              "屏幕内容清晰可见"
+            ],
+            "motionType": "hand_focused_interaction",
+            "compositionType": "product_center_framing"
+          },
+          {
+            "examples": [
+              "不同使用场景快速切换",
+              "无多余遮挡元素"
+            ],
+            "motionType": "multi_scene_quick_cut",
+            "compositionType": "no_extra_clutter_on_frame"
+          }
+        ],
+        "rejectIf": [
+          "无手部操作的纯静态截图拼接",
+          "界面切换出现明显卡顿黑屏"
+        ]
+      }
     },
     {
       "id": "slot_block_008_asset_003",
@@ -770,7 +1512,7 @@
       "role": "usage_demo",
       "requiredAsset": {
         "type": "video",
-        "subject": "打开黄色笔记本，双手操作触控板和键盘，依次演示多个应用界面：设计软件、音乐剪辑软件、游戏、网页、视频剪辑、AI对话生成内容，覆盖多种使用场景",
+        "subject": "双手操作触控板和键盘，依次切换展示多个应用界面，涵盖创意设计、音频剪辑、3D游戏、网页浏览、视频剪辑、AI生成训练计划等不同使用场景",
         "camera": "medium",
         "motion": "static",
         "minDuration": 1.4
@@ -788,7 +1530,55 @@
         "selling_point_card",
         "caption_rewrite"
       ],
-      "importance": 4
+      "importance": 4,
+      "intent": {
+        "purpose": "通过连贯的操作演示，快速展示多类不同使用场景，传递产品功能丰富、运行流畅的核心优势",
+        "energyLevel": "medium",
+        "motionPattern": "sequential_ui_switch_with_hand_interaction",
+        "compositionPrincipal": "centered_product_with_full_screen_ui_display",
+        "durationMs": [
+          28000.0,
+          33000.0
+        ],
+        "soundDesignHint": "subtle_click_sound_sync_with_ui_switch"
+      },
+      "sourceInstance": {
+        "productInSource": "淡黄绿色MacBook笔记本电脑",
+        "specificAction": "双手操作触控板和键盘，依次切换打开多个不同类型的应用界面",
+        "colorSignature": "pale_yellow_body_with_green_gradient_wallpaper"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "examples": [
+              "多应用界面平滑轮播",
+              "操作手势连贯自然"
+            ],
+            "motionType": "smooth_ui_transition",
+            "compositionType": "centered_product_clean_background"
+          },
+          {
+            "examples": [
+              "双手操作产品输入部件",
+              "屏幕内容清晰可见"
+            ],
+            "motionType": "hand_focused_interaction",
+            "compositionType": "product_center_framing"
+          },
+          {
+            "examples": [
+              "不同使用场景快速切换",
+              "无多余遮挡元素"
+            ],
+            "motionType": "multi_scene_quick_cut",
+            "compositionType": "no_extra_clutter_on_frame"
+          }
+        ],
+        "rejectIf": [
+          "无手部操作的纯静态截图拼接",
+          "界面切换出现明显卡顿黑屏"
+        ]
+      }
     },
     {
       "id": "slot_block_009_asset_001",
@@ -796,7 +1586,7 @@
       "role": "product_closeup",
       "requiredAsset": {
         "type": "video",
-        "subject": "双手拿出多个系统图标，在桌面上拖动展开成完整的Dock栏吸附到笔记本屏幕底部，随后演示多窗口操作，消息跨设备同步到iPhone，手机上的图片隔空投送到笔记本，最后演示手机镜像投屏到笔记本屏幕",
+        "subject": "CRAFTED SOAPS / Natural, sustainable essentials for the body and home. / 聊天窗口对话内容",
         "camera": "closeup",
         "motion": "hand_operation",
         "minDuration": 1.4
@@ -804,6 +1594,7 @@
       "visualIngredientRequirements": [
         "human_presence",
         "hand_demo",
+        "product_closeup_trait",
         "premium_visual"
       ],
       "humanRequirement": {
@@ -817,7 +1608,55 @@
         "crop_zoom",
         "caption_rewrite"
       ],
-      "importance": 5
+      "importance": 5,
+      "intent": {
+        "purpose": "通过实体化UI拼接演示产品全新交互特性，展示多窗口并行操作的流畅体验",
+        "energyLevel": "medium",
+        "motionPattern": "synchronized_object_assembly",
+        "compositionPrincipal": "single_subject_center_with_dynamic_negative_space",
+        "durationMs": [
+          25000.0,
+          35000.0
+        ],
+        "soundDesignHint": "soft_click_sound_aligned_with_each_icon_placement"
+      },
+      "sourceInstance": {
+        "productInSource": "黄色MacBook笔记本电脑",
+        "specificAction": "手指依次捏取不同系统图标，在桌面拼接成完整Dock栏后吸附到屏幕底部，操作触控板打开多应用窗口",
+        "colorSignature": "pale_yellow_body_with_green_gradient_wallpaper"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "examples": [
+              "实体小物件拼接成功能条带",
+              "虚拟元素从桌面滑入屏幕"
+            ],
+            "motionType": "object_kinetic",
+            "compositionType": "centered_subject_clean_bg"
+          },
+          {
+            "examples": [
+              "多窗口分层展示多任务",
+              "手势操作演示系统功能"
+            ],
+            "motionType": "parallax_zoom_in",
+            "compositionType": "multi_window_overlap_layout"
+          },
+          {
+            "examples": [
+              "UI元素平滑吸附到屏幕",
+              "手指点按切换不同应用"
+            ],
+            "motionType": "fluid_dynamics",
+            "compositionType": "clean_minimalist_background"
+          }
+        ],
+        "rejectIf": [
+          "无手部操作的纯录屏演示",
+          "背景杂乱遮挡核心交互区域"
+        ]
+      }
     },
     {
       "id": "slot_block_009_asset_002",
@@ -825,7 +1664,7 @@
       "role": "usage_demo",
       "requiredAsset": {
         "type": "video",
-        "subject": "双手拿出多个系统图标，在桌面上拖动展开成完整的Dock栏吸附到笔记本屏幕底部，随后演示多窗口操作，消息跨设备同步到iPhone，手机上的图片隔空投送到笔记本，最后演示手机镜像投屏到笔记本屏幕",
+        "subject": "CRAFTED SOAPS / Natural, sustainable essentials for the body and home. / 聊天窗口对话内容",
         "camera": "closeup",
         "motion": "static",
         "minDuration": 1.4
@@ -844,15 +1683,214 @@
         "crop_zoom",
         "caption_rewrite"
       ],
-      "importance": 5
+      "importance": 5,
+      "intent": {
+        "purpose": "通过实体化UI拼接演示产品全新交互特性，展示多窗口并行操作的流畅体验",
+        "energyLevel": "medium",
+        "motionPattern": "synchronized_object_assembly",
+        "compositionPrincipal": "single_subject_center_with_dynamic_negative_space",
+        "durationMs": [
+          25000.0,
+          35000.0
+        ],
+        "soundDesignHint": "soft_click_sound_aligned_with_each_icon_placement"
+      },
+      "sourceInstance": {
+        "productInSource": "黄色MacBook笔记本电脑",
+        "specificAction": "手指依次捏取不同系统图标，在桌面拼接成完整Dock栏后吸附到屏幕底部，操作触控板打开多应用窗口",
+        "colorSignature": "pale_yellow_body_with_green_gradient_wallpaper"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "examples": [
+              "实体小物件拼接成功能条带",
+              "虚拟元素从桌面滑入屏幕"
+            ],
+            "motionType": "object_kinetic",
+            "compositionType": "centered_subject_clean_bg"
+          },
+          {
+            "examples": [
+              "多窗口分层展示多任务",
+              "手势操作演示系统功能"
+            ],
+            "motionType": "parallax_zoom_in",
+            "compositionType": "multi_window_overlap_layout"
+          },
+          {
+            "examples": [
+              "UI元素平滑吸附到屏幕",
+              "手指点按切换不同应用"
+            ],
+            "motionType": "fluid_dynamics",
+            "compositionType": "clean_minimalist_background"
+          }
+        ],
+        "rejectIf": [
+          "无手部操作的纯录屏演示",
+          "背景杂乱遮挡核心交互区域"
+        ]
+      }
+    },
+    {
+      "id": "slot_block_009_asset_003",
+      "segmentId": "seg_block_009",
+      "role": "product_closeup",
+      "requiredAsset": {
+        "type": "video",
+        "subject": "CRAFTED SOAPS / Natural, sustainable essentials for the body and home. / 聊天窗口对话内容",
+        "camera": "medium",
+        "motion": "static",
+        "minDuration": 1.4
+      },
+      "visualIngredientRequirements": [
+        "human_presence",
+        "hand_demo",
+        "product_closeup_trait",
+        "premium_visual"
+      ],
+      "humanRequirement": {
+        "required": false
+      },
+      "fallbackStrategies": [
+        "selling_point_card",
+        "crop_zoom",
+        "caption_rewrite"
+      ],
+      "importance": 5,
+      "intent": {
+        "purpose": "通过实体化UI拼接演示产品全新交互特性，展示多窗口并行操作的流畅体验",
+        "energyLevel": "medium",
+        "motionPattern": "synchronized_object_assembly",
+        "compositionPrincipal": "single_subject_center_with_dynamic_negative_space",
+        "durationMs": [
+          25000.0,
+          35000.0
+        ],
+        "soundDesignHint": "soft_click_sound_aligned_with_each_icon_placement"
+      },
+      "sourceInstance": {
+        "productInSource": "黄色MacBook笔记本电脑",
+        "specificAction": "手指依次捏取不同系统图标，在桌面拼接成完整Dock栏后吸附到屏幕底部，操作触控板打开多应用窗口",
+        "colorSignature": "pale_yellow_body_with_green_gradient_wallpaper"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "examples": [
+              "实体小物件拼接成功能条带",
+              "虚拟元素从桌面滑入屏幕"
+            ],
+            "motionType": "object_kinetic",
+            "compositionType": "centered_subject_clean_bg"
+          },
+          {
+            "examples": [
+              "多窗口分层展示多任务",
+              "手势操作演示系统功能"
+            ],
+            "motionType": "parallax_zoom_in",
+            "compositionType": "multi_window_overlap_layout"
+          },
+          {
+            "examples": [
+              "UI元素平滑吸附到屏幕",
+              "手指点按切换不同应用"
+            ],
+            "motionType": "fluid_dynamics",
+            "compositionType": "clean_minimalist_background"
+          }
+        ],
+        "rejectIf": [
+          "无手部操作的纯录屏演示",
+          "背景杂乱遮挡核心交互区域"
+        ]
+      }
     },
     {
       "id": "slot_block_010_asset_001",
       "segmentId": "seg_block_010",
-      "role": "product_closeup",
+      "role": "usage_demo",
       "requiredAsset": {
         "type": "video",
-        "subject": "MacBook Neo / From $599 / 回收材料占比、电池续航免责、Apple订阅服务相关合规说明",
+        "subject": "手持iPhone操作聊天界面、浏览螳螂图片，将手机放到笔记本旁边隔空投送图片，随后笔记本屏幕上接力显示iPhone的桌面和地图导航界面，最后手掌合上笔记本",
+        "camera": "closeup",
+        "motion": "hand_operation",
+        "minDuration": 1.18
+      },
+      "visualIngredientRequirements": [
+        "human_presence",
+        "hand_demo",
+        "premium_visual"
+      ],
+      "humanRequirement": {
+        "required": true,
+        "role": "hand_only",
+        "framing": "hands",
+        "action": "holding_product"
+      },
+      "fallbackStrategies": [
+        "hand_demo",
+        "selling_point_card",
+        "caption_rewrite"
+      ],
+      "importance": 4,
+      "intent": {
+        "purpose": "完整演示多设备之间的无缝协同操作流程，直观展示跨设备联动的流畅使用体验",
+        "energyLevel": "medium",
+        "motionPattern": "seamless_cross_device_transition",
+        "compositionPrincipal": "centered_subject_clean_white_bg",
+        "durationMs": [
+          15000.0,
+          20000.0
+        ]
+      },
+      "sourceInstance": {
+        "productInSource": "黄色MacBook笔记本+绿色iPhone手机",
+        "specificAction": "手持手机操作界面，放置手机到笔记本旁隔空投送图片，双手操作笔记本展示接力界面后合上笔记本",
+        "colorSignature": "yellow_green_pastel_gradient"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "examples": [
+              "手持便携设备操作演示",
+              "跨设备文件传输演示"
+            ],
+            "motionType": "hand_operation_flow",
+            "compositionType": "centered_device_clean_bg"
+          },
+          {
+            "examples": [
+              "界面悬浮过渡到另一设备",
+              "多设备联动功能演示"
+            ],
+            "motionType": "ui_smooth_transition",
+            "compositionType": "minimalist_white_background"
+          },
+          {
+            "examples": [
+              "放置设备触发联动效果",
+              "桌面端展示移动端界面"
+            ],
+            "motionType": "object_placement_trigger",
+            "compositionType": "symmetric_device_layout"
+          }
+        ],
+        "rejectIf": [
+          "背景杂乱无主体聚焦",
+          "出现明显卡顿跳帧的操作演示"
+        ]
+      }
+    },
+    {
+      "id": "slot_block_010_asset_002",
+      "segmentId": "seg_block_010",
+      "role": "usage_demo",
+      "requiredAsset": {
+        "type": "video",
+        "subject": "手持iPhone操作聊天界面、浏览螳螂图片，将手机放到笔记本旁边隔空投送图片，随后笔记本屏幕上接力显示iPhone的桌面和地图导航界面，最后手掌合上笔记本",
         "camera": "closeup",
         "motion": "static",
         "minDuration": 1.18
@@ -861,26 +1899,72 @@
         "human_presence",
         "hand_demo",
         "product_closeup_trait",
-        "clean_background",
         "premium_visual"
       ],
       "humanRequirement": {
         "required": false
       },
       "fallbackStrategies": [
-        "cta_card",
+        "hand_demo",
         "selling_point_card",
-        "trust_card"
+        "caption_rewrite"
       ],
-      "importance": 4
+      "importance": 4,
+      "intent": {
+        "purpose": "完整演示多设备之间的无缝协同操作流程，直观展示跨设备联动的流畅使用体验",
+        "energyLevel": "medium",
+        "motionPattern": "seamless_cross_device_transition",
+        "compositionPrincipal": "centered_subject_clean_white_bg",
+        "durationMs": [
+          15000.0,
+          20000.0
+        ]
+      },
+      "sourceInstance": {
+        "productInSource": "黄色MacBook笔记本+绿色iPhone手机",
+        "specificAction": "手持手机操作界面，放置手机到笔记本旁隔空投送图片，双手操作笔记本展示接力界面后合上笔记本",
+        "colorSignature": "yellow_green_pastel_gradient"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "examples": [
+              "手持便携设备操作演示",
+              "跨设备文件传输演示"
+            ],
+            "motionType": "hand_operation_flow",
+            "compositionType": "centered_device_clean_bg"
+          },
+          {
+            "examples": [
+              "界面悬浮过渡到另一设备",
+              "多设备联动功能演示"
+            ],
+            "motionType": "ui_smooth_transition",
+            "compositionType": "minimalist_white_background"
+          },
+          {
+            "examples": [
+              "放置设备触发联动效果",
+              "桌面端展示移动端界面"
+            ],
+            "motionType": "object_placement_trigger",
+            "compositionType": "symmetric_device_layout"
+          }
+        ],
+        "rejectIf": [
+          "背景杂乱无主体聚焦",
+          "出现明显卡顿跳帧的操作演示"
+        ]
+      }
     },
     {
-      "id": "slot_block_010_asset_002",
-      "segmentId": "seg_block_010",
+      "id": "slot_block_011_asset_001",
+      "segmentId": "seg_block_011",
       "role": "cta_visual",
       "requiredAsset": {
         "type": "video",
-        "subject": "MacBook Neo / From $599 / 回收材料占比、电池续航免责、Apple订阅服务相关合规说明",
+        "subject": "MacBook Neo / From $599 / 底部小字环保与服务相关说明",
         "camera": "closeup",
         "motion": "hand_operation",
         "minDuration": 1.18
@@ -889,7 +1973,6 @@
         "human_presence",
         "hand_demo",
         "product_closeup_trait",
-        "clean_background",
         "premium_visual"
       ],
       "humanRequirement": {
@@ -903,15 +1986,63 @@
         "selling_point_card",
         "trust_card"
       ],
-      "importance": 4
+      "importance": 4,
+      "intent": {
+        "purpose": "依次展示产品全配色，弹出产品名与售价信息，最后通过拼接动画呈现品牌标识完成收尾，引导用户完成购买决策。",
+        "energyLevel": "low",
+        "motionPattern": "static_centered_reveal_with_sequential_assembly",
+        "compositionPrincipal": "single_subject_center_with_minimal_negative_space",
+        "durationMs": [
+          20000.0,
+          25000.0
+        ],
+        "soundDesignHint": "sustained_soft_pad_under_sequential_text_reveal"
+      },
+      "sourceInstance": {
+        "productInSource": "黄色外壳MacBook笔记本电脑",
+        "specificAction": "双手将产品放入包装盒，逐次切换配色，手部动作拼接品牌标识",
+        "colorSignature": "pastel_gradient_series_color_swap"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "examples": [
+              "产品多配色依次切换展示",
+              "纯色背景居中展示产品"
+            ],
+            "motionType": "color_swap_sequential_transition",
+            "compositionType": "centered_clean_white_bg"
+          },
+          {
+            "examples": [
+              "产品名+售价依次弹出",
+              "居中文字信息展示"
+            ],
+            "motionType": "text_sequential_pop_animation",
+            "compositionType": "text_center_focus"
+          },
+          {
+            "examples": [
+              "手部动作拼接品牌标识",
+              "极简背景品牌logo动画"
+            ],
+            "motionType": "hand_guided_shape_assembly",
+            "compositionType": "minimalist_negative_space"
+          }
+        ],
+        "rejectIf": [
+          "带有杂乱背景的实拍素材",
+          "信息层级混乱的多元素叠加画面"
+        ]
+      }
     },
     {
-      "id": "slot_block_010_asset_003",
-      "segmentId": "seg_block_010",
+      "id": "slot_block_011_asset_002",
+      "segmentId": "seg_block_011",
       "role": "cta_visual",
       "requiredAsset": {
         "type": "text",
-        "subject": "MacBook Neo / From $599 / 回收材料占比、电池续航免责、Apple订阅服务相关合规说明",
+        "subject": "MacBook Neo / From $599 / 底部小字环保与服务相关说明",
         "camera": "unknown",
         "motion": "static",
         "minDuration": 1.18
@@ -925,14 +2056,137 @@
         "selling_point_card",
         "trust_card"
       ],
-      "importance": 4
+      "importance": 4,
+      "intent": {
+        "purpose": "依次展示产品全配色，弹出产品名与售价信息，最后通过拼接动画呈现品牌标识完成收尾，引导用户完成购买决策。",
+        "energyLevel": "low",
+        "motionPattern": "static_centered_reveal_with_sequential_assembly",
+        "compositionPrincipal": "single_subject_center_with_minimal_negative_space",
+        "durationMs": [
+          20000.0,
+          25000.0
+        ],
+        "soundDesignHint": "sustained_soft_pad_under_sequential_text_reveal"
+      },
+      "sourceInstance": {
+        "productInSource": "黄色外壳MacBook笔记本电脑",
+        "specificAction": "双手将产品放入包装盒，逐次切换配色，手部动作拼接品牌标识",
+        "colorSignature": "pastel_gradient_series_color_swap"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "examples": [
+              "产品多配色依次切换展示",
+              "纯色背景居中展示产品"
+            ],
+            "motionType": "color_swap_sequential_transition",
+            "compositionType": "centered_clean_white_bg"
+          },
+          {
+            "examples": [
+              "产品名+售价依次弹出",
+              "居中文字信息展示"
+            ],
+            "motionType": "text_sequential_pop_animation",
+            "compositionType": "text_center_focus"
+          },
+          {
+            "examples": [
+              "手部动作拼接品牌标识",
+              "极简背景品牌logo动画"
+            ],
+            "motionType": "hand_guided_shape_assembly",
+            "compositionType": "minimalist_negative_space"
+          }
+        ],
+        "rejectIf": [
+          "带有杂乱背景的实拍素材",
+          "信息层级混乱的多元素叠加画面"
+        ]
+      }
+    },
+    {
+      "id": "slot_block_011_asset_003",
+      "segmentId": "seg_block_011",
+      "role": "product_closeup",
+      "requiredAsset": {
+        "type": "video",
+        "subject": "MacBook Neo / From $599 / 底部小字环保与服务相关说明",
+        "camera": "closeup",
+        "motion": "static",
+        "minDuration": 1.18
+      },
+      "visualIngredientRequirements": [
+        "human_presence",
+        "hand_demo",
+        "product_closeup_trait",
+        "premium_visual"
+      ],
+      "humanRequirement": {
+        "required": false
+      },
+      "fallbackStrategies": [
+        "cta_card",
+        "selling_point_card",
+        "trust_card"
+      ],
+      "importance": 4,
+      "intent": {
+        "purpose": "依次展示产品全配色，弹出产品名与售价信息，最后通过拼接动画呈现品牌标识完成收尾，引导用户完成购买决策。",
+        "energyLevel": "low",
+        "motionPattern": "static_centered_reveal_with_sequential_assembly",
+        "compositionPrincipal": "single_subject_center_with_minimal_negative_space",
+        "durationMs": [
+          20000.0,
+          25000.0
+        ],
+        "soundDesignHint": "sustained_soft_pad_under_sequential_text_reveal"
+      },
+      "sourceInstance": {
+        "productInSource": "黄色外壳MacBook笔记本电脑",
+        "specificAction": "双手将产品放入包装盒，逐次切换配色，手部动作拼接品牌标识",
+        "colorSignature": "pastel_gradient_series_color_swap"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "examples": [
+              "产品多配色依次切换展示",
+              "纯色背景居中展示产品"
+            ],
+            "motionType": "color_swap_sequential_transition",
+            "compositionType": "centered_clean_white_bg"
+          },
+          {
+            "examples": [
+              "产品名+售价依次弹出",
+              "居中文字信息展示"
+            ],
+            "motionType": "text_sequential_pop_animation",
+            "compositionType": "text_center_focus"
+          },
+          {
+            "examples": [
+              "手部动作拼接品牌标识",
+              "极简背景品牌logo动画"
+            ],
+            "motionType": "hand_guided_shape_assembly",
+            "compositionType": "minimalist_negative_space"
+          }
+        ],
+        "rejectIf": [
+          "带有杂乱背景的实拍素材",
+          "信息层级混乱的多元素叠加画面"
+        ]
+      }
     }
   ],
   "rhythm": {
     "avgShotDuration": 1.38,
     "cutFrequency": "high",
     "pattern": "avg_1.38s_per_shot_high_cut",
-    "peakAt": 106.753
+    "peakAt": 102.261
   },
   "packaging": {
     "captionDensity": "medium",
@@ -944,84 +2198,12 @@
     "transitions": [
       "fade",
       "hard_cut",
-      "scene_change",
-      "zoom_out"
+      "match_cut",
+      "scene_change"
     ],
     "coverStyle": "product_centered_clean_background"
   },
   "creativeIngredients": [
-    {
-      "id": "ing_product_closeup_trait",
-      "type": "product_closeup_trait",
-      "name": "产品本体近景特写",
-      "description": "需要新视频提供产品清晰特写素材",
-      "segmentIds": [
-        "seg_block_001",
-        "seg_block_002",
-        "seg_block_003",
-        "seg_block_004",
-        "seg_block_005",
-        "seg_block_006",
-        "seg_block_007",
-        "seg_block_008",
-        "seg_block_009",
-        "seg_block_010"
-      ],
-      "requiredForSlotIds": [
-        "slot_block_001_asset_001",
-        "slot_block_001_asset_002",
-        "slot_block_002_asset_001",
-        "slot_block_002_asset_002",
-        "slot_block_003_asset_001",
-        "slot_block_003_asset_002",
-        "slot_block_004_asset_001",
-        "slot_block_004_asset_002",
-        "slot_block_004_asset_003",
-        "slot_block_005_asset_001",
-        "slot_block_005_asset_002",
-        "slot_block_006_asset_001",
-        "slot_block_006_asset_002",
-        "slot_block_006_asset_003",
-        "slot_block_007_asset_001",
-        "slot_block_007_asset_002",
-        "slot_block_008_asset_001",
-        "slot_block_008_asset_002",
-        "slot_block_008_asset_003",
-        "slot_block_009_asset_001",
-        "slot_block_009_asset_002",
-        "slot_block_010_asset_001",
-        "slot_block_010_asset_002",
-        "slot_block_010_asset_003"
-      ],
-      "transferability": "requires_user_asset",
-      "fallbackStrategies": [
-        "product_closeup_replacement",
-        "crop_zoom"
-      ],
-      "evidence": [
-        {
-          "type": "model_observation",
-          "value": "block_001: requiredAssetType=product_video, purpose=hook_visual"
-        },
-        {
-          "type": "model_observation",
-          "value": "block_002: requiredAssetType=product_video, purpose=feature_demo"
-        },
-        {
-          "type": "model_observation",
-          "value": "block_003: requiredAssetType=product_video, purpose=product_reveal"
-        },
-        {
-          "type": "model_observation",
-          "value": "block_004: requiredAssetType=product_video, purpose=feature_demo"
-        },
-        {
-          "type": "model_observation",
-          "value": "block_004: requiredAssetType=product_still, purpose=product_reveal"
-        }
-      ],
-      "confidence": 0.85
-    },
     {
       "id": "ing_human_presence",
       "type": "human_presence",
@@ -1037,7 +2219,8 @@
         "seg_block_007",
         "seg_block_008",
         "seg_block_009",
-        "seg_block_010"
+        "seg_block_010",
+        "seg_block_011"
       ],
       "requiredForSlotIds": [
         "slot_block_001_asset_001",
@@ -1061,9 +2244,12 @@
         "slot_block_008_asset_003",
         "slot_block_009_asset_001",
         "slot_block_009_asset_002",
+        "slot_block_009_asset_003",
         "slot_block_010_asset_001",
         "slot_block_010_asset_002",
-        "slot_block_010_asset_003"
+        "slot_block_011_asset_001",
+        "slot_block_011_asset_002",
+        "slot_block_011_asset_003"
       ],
       "transferability": "requires_user_asset",
       "fallbackStrategies": [
@@ -1073,7 +2259,7 @@
       "evidence": [
         {
           "type": "model_observation",
-          "value": "block_001: requiredAssetType=hand_demo, purpose=product_reveal"
+          "value": "block_001: requiredAssetType=hand_demo, purpose=hook_visual"
         },
         {
           "type": "model_observation",
@@ -1089,7 +2275,7 @@
         },
         {
           "type": "model_observation",
-          "value": "block_005: requiredAssetType=hand_demo, purpose=feature_demo"
+          "value": "block_005: requiredAssetType=hand_demo, purpose=transition_bridge"
         }
       ],
       "confidence": 0.85
@@ -1109,7 +2295,8 @@
         "seg_block_007",
         "seg_block_008",
         "seg_block_009",
-        "seg_block_010"
+        "seg_block_010",
+        "seg_block_011"
       ],
       "requiredForSlotIds": [
         "slot_block_001_asset_001",
@@ -1133,9 +2320,12 @@
         "slot_block_008_asset_003",
         "slot_block_009_asset_001",
         "slot_block_009_asset_002",
+        "slot_block_009_asset_003",
         "slot_block_010_asset_001",
         "slot_block_010_asset_002",
-        "slot_block_010_asset_003"
+        "slot_block_011_asset_001",
+        "slot_block_011_asset_002",
+        "slot_block_011_asset_003"
       ],
       "transferability": "requires_user_asset",
       "fallbackStrategies": [
@@ -1145,11 +2335,11 @@
       "evidence": [
         {
           "type": "model_observation",
-          "value": "block_001: requiredAssetType=hand_demo, purpose=product_reveal"
+          "value": "block_001: requiredAssetType=hand_demo, purpose=hook_visual"
         },
         {
           "type": "model_observation",
-          "value": "block_001: 双手从空白背景中托举产品展示，翻转过程中通过动态模糊实现机身色彩无缝切换，强化产品外观新鲜感"
+          "value": "block_001: 双手对称托举产品，松手让产品短暂悬浮后完成形态/色彩切换，强化视觉记忆点"
         },
         {
           "type": "model_observation",
@@ -1157,11 +2347,87 @@
         },
         {
           "type": "model_observation",
-          "value": "block_002: 双手从托举产品开始，逐步翻转展示侧边厚度、圆角细节，再完成开合动作，全程动作舒缓流畅，突出产品精致做工"
+          "value": "block_002: 双手从不同角度托举翻转产品，依次展示边缘、圆角、外壳质感，动作轻柔流畅"
         },
         {
           "type": "model_observation",
           "value": "block_003: requiredAssetType=hand_demo, purpose=feature_demo"
+        }
+      ],
+      "confidence": 0.85
+    },
+    {
+      "id": "ing_product_closeup_trait",
+      "type": "product_closeup_trait",
+      "name": "产品本体近景特写",
+      "description": "需要新视频提供产品清晰特写素材",
+      "segmentIds": [
+        "seg_block_001",
+        "seg_block_002",
+        "seg_block_003",
+        "seg_block_004",
+        "seg_block_005",
+        "seg_block_006",
+        "seg_block_007",
+        "seg_block_008",
+        "seg_block_009",
+        "seg_block_010",
+        "seg_block_011"
+      ],
+      "requiredForSlotIds": [
+        "slot_block_001_asset_001",
+        "slot_block_001_asset_002",
+        "slot_block_002_asset_001",
+        "slot_block_002_asset_002",
+        "slot_block_003_asset_001",
+        "slot_block_003_asset_002",
+        "slot_block_004_asset_001",
+        "slot_block_004_asset_002",
+        "slot_block_004_asset_003",
+        "slot_block_005_asset_001",
+        "slot_block_005_asset_002",
+        "slot_block_006_asset_001",
+        "slot_block_006_asset_002",
+        "slot_block_006_asset_003",
+        "slot_block_007_asset_001",
+        "slot_block_007_asset_002",
+        "slot_block_008_asset_001",
+        "slot_block_008_asset_002",
+        "slot_block_008_asset_003",
+        "slot_block_009_asset_001",
+        "slot_block_009_asset_002",
+        "slot_block_009_asset_003",
+        "slot_block_010_asset_001",
+        "slot_block_010_asset_002",
+        "slot_block_011_asset_001",
+        "slot_block_011_asset_002",
+        "slot_block_011_asset_003"
+      ],
+      "transferability": "requires_user_asset",
+      "fallbackStrategies": [
+        "product_closeup_replacement",
+        "crop_zoom"
+      ],
+      "evidence": [
+        {
+          "type": "model_observation",
+          "value": "block_001: requiredAssetType=product_video, purpose=product_reveal"
+        },
+        {
+          "type": "model_observation",
+          "value": "block_002: requiredAssetType=product_video, purpose=feature_demo"
+        },
+        {
+          "type": "model_observation",
+          "value": "block_003: requiredAssetType=product_video, purpose=transition_bridge"
+        },
+        {
+          "type": "model_observation",
+          "value": "block_004: requiredAssetType=product_video, purpose=product_reveal"
+        },
+        {
+          "type": "model_observation",
+          "value": "block_004: requiredAssetType=product_video, purpose=transition_bridge"
         }
       ],
       "confidence": 0.85
@@ -1181,7 +2447,8 @@
         "seg_block_007",
         "seg_block_008",
         "seg_block_009",
-        "seg_block_010"
+        "seg_block_010",
+        "seg_block_011"
       ],
       "requiredForSlotIds": [
         "slot_block_001_asset_001",
@@ -1205,9 +2472,12 @@
         "slot_block_008_asset_003",
         "slot_block_009_asset_001",
         "slot_block_009_asset_002",
+        "slot_block_009_asset_003",
         "slot_block_010_asset_001",
         "slot_block_010_asset_002",
-        "slot_block_010_asset_003"
+        "slot_block_011_asset_001",
+        "slot_block_011_asset_002",
+        "slot_block_011_asset_003"
       ],
       "transferability": "can_be_recreated_by_packaging",
       "fallbackStrategies": [
@@ -1217,23 +2487,23 @@
       "evidence": [
         {
           "type": "model_observation",
-          "value": "block_001: 产品放置桌面后自然打开屏幕，展示和机身同色系的系统壁纸，完成视觉风格统一"
+          "value": "block_001: 纯白极简背景下无多余干扰，所有注意力完全集中在产品本身的动态变化上"
         },
         {
           "type": "model_observation",
-          "value": "block_001: 纯白无干扰背景下突出产品本身，所有注意力完全集中在产品外观和色彩变化上"
+          "value": "block_001: 产品色彩渐变过程暗示产品拥有丰富的外观配色选择，传递年轻活力属性"
         },
         {
           "type": "model_observation",
-          "value": "block_002: 从初始的哑光板材逐步变形为完整笔记本的过程，用材质本身的形态变化完成产品揭晓，没有多余特效"
+          "value": "block_001: 纯白背景 双手持笔记本 机身色彩渐变动画 笔记本开盖动作"
         },
         {
           "type": "model_observation",
-          "value": "block_003: 将抽象的屏幕色彩显示能力实体化为可揉搓拉伸的发光软质物件，用物理交互直观传递产品特性"
+          "value": "block_002: 将折叠形态的产品从薄平板逐步展开为完整功能形态，制造形态变化的惊喜感"
         },
         {
           "type": "model_observation",
-          "value": "block_003: 暗环境下紫蓝色发光物体 屏幕点亮动画 从屏幕取出元素的特效"
+          "value": "block_002: 拉丝质感灰色外壳 超薄机身 翻转展示边角细节 开盖展开结构动画"
         }
       ],
       "confidence": 0.85
@@ -1258,7 +2528,7 @@
       "evidence": [
         {
           "type": "model_observation",
-          "value": "block_001: 纯白背景 双手持笔记本 机身颜色动态变换 打开笔记本亮屏"
+          "value": "block_001: 纯白背景 双手持笔记本 机身色彩渐变动画 笔记本开盖动作"
         }
       ],
       "confidence": 0.85
@@ -1269,17 +2539,14 @@
       "name": "柔光高级光感",
       "description": "可通过打光或后期调色复现",
       "segmentIds": [
-        "seg_block_001",
-        "seg_block_002",
-        "seg_block_003"
+        "seg_block_003",
+        "seg_block_005"
       ],
       "requiredForSlotIds": [
-        "slot_block_001_asset_001",
-        "slot_block_001_asset_002",
-        "slot_block_002_asset_001",
-        "slot_block_002_asset_002",
         "slot_block_003_asset_001",
-        "slot_block_003_asset_002"
+        "slot_block_003_asset_002",
+        "slot_block_005_asset_001",
+        "slot_block_005_asset_002"
       ],
       "transferability": "can_be_recreated_by_packaging",
       "fallbackStrategies": [
@@ -1289,15 +2556,11 @@
       "evidence": [
         {
           "type": "model_observation",
-          "value": "block_001: 纯白背景 双手持笔记本 机身颜色动态变换 打开笔记本亮屏"
+          "value": "block_003: 暗场紫光特效 软条拉伸动画 屏幕点亮效果 图标从屏幕取出的创意特效"
         },
         {
           "type": "model_observation",
-          "value": "block_002: 灰色哑光机身 展示机身边角弧度 笔记本开合动作"
-        },
-        {
-          "type": "model_observation",
-          "value": "block_003: 暗环境下紫蓝色发光物体 屏幕点亮动画 从屏幕取出元素的特效"
+          "value": "block_005: 侧边Type-C接口、耳机孔展示 球体拆分特效 屏幕顶部摄像头特写 暗场镜头光晕"
         }
       ],
       "confidence": 0.85
@@ -1309,7 +2572,8 @@
       "description": "需要新素材提供匹配的场景环境或氛围镜头",
       "segmentIds": [
         "seg_block_006",
-        "seg_block_008"
+        "seg_block_008",
+        "seg_block_009"
       ],
       "requiredForSlotIds": [
         "slot_block_006_asset_001",
@@ -1317,7 +2581,10 @@
         "slot_block_006_asset_003",
         "slot_block_008_asset_001",
         "slot_block_008_asset_002",
-        "slot_block_008_asset_003"
+        "slot_block_008_asset_003",
+        "slot_block_009_asset_001",
+        "slot_block_009_asset_002",
+        "slot_block_009_asset_003"
       ],
       "transferability": "requires_user_asset",
       "fallbackStrategies": [
@@ -1327,11 +2594,15 @@
       "evidence": [
         {
           "type": "model_observation",
-          "value": "block_006: requiredAssetType=lifestyle_shot, purpose=proof"
+          "value": "block_006: requiredAssetType=lifestyle_shot, purpose=transition_bridge"
         },
         {
           "type": "model_observation",
           "value": "block_008: requiredAssetType=lifestyle_shot, purpose=feature_demo"
+        },
+        {
+          "type": "model_observation",
+          "value": "block_009: requiredAssetType=lifestyle_shot, purpose=transition_bridge"
         }
       ],
       "confidence": 0.85
@@ -1381,6 +2652,11 @@
     {
       "from": "seg_block_009",
       "to": "seg_block_010",
+      "type": "sequence"
+    },
+    {
+      "from": "seg_block_010",
+      "to": "seg_block_011",
       "type": "sequence"
     },
     {
@@ -1489,6 +2765,11 @@
       "type": "maps_to"
     },
     {
+      "from": "slot_block_009_asset_003",
+      "to": "seg_block_009",
+      "type": "maps_to"
+    },
+    {
       "from": "slot_block_010_asset_001",
       "to": "seg_block_010",
       "type": "maps_to"
@@ -1499,59 +2780,19 @@
       "type": "maps_to"
     },
     {
-      "from": "slot_block_010_asset_003",
-      "to": "seg_block_010",
+      "from": "slot_block_011_asset_001",
+      "to": "seg_block_011",
       "type": "maps_to"
     },
     {
-      "from": "ing_product_closeup_trait",
-      "to": "seg_block_001",
-      "type": "requires"
+      "from": "slot_block_011_asset_002",
+      "to": "seg_block_011",
+      "type": "maps_to"
     },
     {
-      "from": "ing_product_closeup_trait",
-      "to": "seg_block_002",
-      "type": "requires"
-    },
-    {
-      "from": "ing_product_closeup_trait",
-      "to": "seg_block_003",
-      "type": "requires"
-    },
-    {
-      "from": "ing_product_closeup_trait",
-      "to": "seg_block_004",
-      "type": "requires"
-    },
-    {
-      "from": "ing_product_closeup_trait",
-      "to": "seg_block_005",
-      "type": "requires"
-    },
-    {
-      "from": "ing_product_closeup_trait",
-      "to": "seg_block_006",
-      "type": "requires"
-    },
-    {
-      "from": "ing_product_closeup_trait",
-      "to": "seg_block_007",
-      "type": "requires"
-    },
-    {
-      "from": "ing_product_closeup_trait",
-      "to": "seg_block_008",
-      "type": "requires"
-    },
-    {
-      "from": "ing_product_closeup_trait",
-      "to": "seg_block_009",
-      "type": "requires"
-    },
-    {
-      "from": "ing_product_closeup_trait",
-      "to": "seg_block_010",
-      "type": "requires"
+      "from": "slot_block_011_asset_003",
+      "to": "seg_block_011",
+      "type": "maps_to"
     },
     {
       "from": "ing_human_presence",
@@ -1601,6 +2842,11 @@
     {
       "from": "ing_human_presence",
       "to": "seg_block_010",
+      "type": "requires"
+    },
+    {
+      "from": "ing_human_presence",
+      "to": "seg_block_011",
       "type": "requires"
     },
     {
@@ -1654,6 +2900,66 @@
       "type": "requires"
     },
     {
+      "from": "ing_hand_demo",
+      "to": "seg_block_011",
+      "type": "requires"
+    },
+    {
+      "from": "ing_product_closeup_trait",
+      "to": "seg_block_001",
+      "type": "requires"
+    },
+    {
+      "from": "ing_product_closeup_trait",
+      "to": "seg_block_002",
+      "type": "requires"
+    },
+    {
+      "from": "ing_product_closeup_trait",
+      "to": "seg_block_003",
+      "type": "requires"
+    },
+    {
+      "from": "ing_product_closeup_trait",
+      "to": "seg_block_004",
+      "type": "requires"
+    },
+    {
+      "from": "ing_product_closeup_trait",
+      "to": "seg_block_005",
+      "type": "requires"
+    },
+    {
+      "from": "ing_product_closeup_trait",
+      "to": "seg_block_006",
+      "type": "requires"
+    },
+    {
+      "from": "ing_product_closeup_trait",
+      "to": "seg_block_007",
+      "type": "requires"
+    },
+    {
+      "from": "ing_product_closeup_trait",
+      "to": "seg_block_008",
+      "type": "requires"
+    },
+    {
+      "from": "ing_product_closeup_trait",
+      "to": "seg_block_009",
+      "type": "requires"
+    },
+    {
+      "from": "ing_product_closeup_trait",
+      "to": "seg_block_010",
+      "type": "requires"
+    },
+    {
+      "from": "ing_product_closeup_trait",
+      "to": "seg_block_011",
+      "type": "requires"
+    },
+    {
       "from": "ing_premium_visual",
       "to": "seg_block_001",
       "type": "requires"
@@ -1701,6 +3007,11 @@
     {
       "from": "ing_premium_visual",
       "to": "seg_block_010",
+      "type": "requires"
+    },
+    {
+      "from": "ing_premium_visual",
+      "to": "seg_block_011",
       "type": "requires"
     },
     {
@@ -1710,17 +3021,12 @@
     },
     {
       "from": "ing_soft_light",
-      "to": "seg_block_001",
-      "type": "requires"
-    },
-    {
-      "from": "ing_soft_light",
-      "to": "seg_block_002",
-      "type": "requires"
-    },
-    {
-      "from": "ing_soft_light",
       "to": "seg_block_003",
+      "type": "requires"
+    },
+    {
+      "from": "ing_soft_light",
+      "to": "seg_block_005",
       "type": "requires"
     },
     {
@@ -1731,6 +3037,11 @@
     {
       "from": "ing_lifestyle_context",
       "to": "seg_block_008",
+      "type": "requires"
+    },
+    {
+      "from": "ing_lifestyle_context",
+      "to": "seg_block_009",
       "type": "requires"
     }
   ],
@@ -1745,29 +3056,29 @@
         {
           "id": "micro_001",
           "role": "pre_transition",
-          "durationMs": 6200.0,
-          "description": "黄色笔记本在纯白背景上缓慢平移，屏幕显示固定的黄绿渐变椭圆图案，无其他物体入镜"
+          "durationMs": 22000.0,
+          "description": "黄色笔记本静止放置在白色背景桌面上，双手从画面边缘移出，笔记本缓慢旋转展示整机外观，屏幕保持黄绿渐变壁纸无变化"
         },
         {
           "id": "micro_002",
           "role": "transition_peak",
-          "durationMs": 4700.0,
-          "description": "双手从画面两侧进入，握住黄色笔记本两侧将其抬起，笔记本逐渐移出画面右上角，画面同步出现运动模糊效果"
+          "durationMs": 11000.0,
+          "description": "双手从画面两侧重新伸入，握住黄色笔记本两侧将其抬起，笔记本逐渐向上移出画面，画面出现运动模糊效果"
         },
         {
           "id": "micro_003",
           "role": "transition_peak",
-          "durationMs": 6100.0,
-          "description": "画面完全变为纯白空白，仅有微弱的光影缓慢流动，无任何实体物体出现，承担前后内容块的桥接过渡作用"
+          "durationMs": 16000.0,
+          "description": "黄色笔记本完全离开画面，剩余全白纯色背景缓慢平移，无任何实体产品出现，作为前后两个产品展示的空白过渡段"
         },
         {
           "id": "micro_004",
           "role": "post_transition",
-          "durationMs": 7000.0,
-          "description": "一只手从画面左侧托着灰色哑光质感的笔记本进入，将其平稳放置在白色桌面上，另一只手从画面右侧进入准备操作笔记本"
+          "durationMs": 10940.0,
+          "description": "灰色薄型平板状产品从画面左侧伸入，被手托举着缓慢放置到白色背景的台面上，展示产品的金属拉丝质感表面"
         }
       ],
-      "evidence": "前序黄色笔记本完全移出画面后进入纯白空白过渡状态，自然衔接后续灰色哑光笔记本的出场，完成两个不同产品展示段落的平滑切换"
+      "evidence": "前序黄色笔记本完全移出画面后，通过全白空白画面的平滑过渡，衔接后续灰色全新产品的登场，完成两个不同产品展示内容块的切换"
     },
     {
       "id": "boundary_002",
@@ -1779,29 +3090,29 @@
         {
           "id": "micro_001",
           "role": "pre_transition",
-          "durationMs": 8600.0,
-          "description": "双手托住哑光灰色悬空笔记本，缓慢向下移动，将笔记本平稳放置在桌面上，随后双手从画面两侧移出"
+          "durationMs": 15500.0,
+          "description": "双手托举灰色笔记本缓慢放置到白色背景桌面上，随后双手逐步从画面两侧向外撤离，笔记本保持静止"
         },
         {
           "id": "micro_002",
           "role": "transition_peak",
-          "durationMs": 2400.0,
-          "description": "笔记本静止放置在亮白背景的桌面上，无手部动作，画面保持静态展示产品外观"
+          "durationMs": 6000.0,
+          "description": "双手完全离开画面，正常明亮光照下的灰色笔记本单独静置在桌面，无任何动作，画面状态稳定"
         },
         {
           "id": "micro_003",
           "role": "transition_peak",
-          "durationMs": 8000.0,
-          "description": "双手从画面两侧入镜，手掌逐渐亮起粉紫色荧光，同时整体环境同步缓慢变暗，亮白背景逐步过渡为纯黑暗调，完成从产品静态展示到特效互动场景的切换"
+          "durationMs": 14500.0,
+          "description": "双手从画面两侧重新进入，手部逐渐被紫色半透明发光特效覆盖，整体环境亮度持续同步降低，从亮白背景逐步过渡到暗调环境"
         },
         {
           "id": "micro_004",
           "role": "post_transition",
-          "durationMs": 4976.0,
-          "description": "全暗环境下，双手之间的粉紫色发光软质物件被逐步揉搓挤压，光线形态随手部动作不断变化，进入后续创意特效环节"
+          "durationMs": 23940.0,
+          "description": "完全进入低亮度暗环境，双手完全呈现为紫色发光特效状态，开始揉搓、捏合手中的紫色发光软质物体，紫色光线在暗环境下持续变化"
         }
       ],
-      "evidence": "通过双手发光特效搭配环境同步渐暗，把前序的产品静态展示段落平滑过渡到后续的创意特效互动段落，实现两个内容块的自然衔接"
+      "evidence": "通过环境光逐步变暗+手部从普通实体形态渐变转化为紫色发光特效形态的连续过程，将前序的产品静态展示内容平滑衔接至后序的暗环境特效功能演示内容"
     },
     {
       "id": "boundary_003",
@@ -1813,17 +3124,23 @@
         {
           "id": "micro_001",
           "role": "pre_transition",
-          "durationMs": 10800.0,
-          "description": "单手握持白色小型物件，逐渐张开手掌，随后另一手入画，双手合掌揉搓，将手中物体向上抛出，背景中出现显示紫蓝渐变图案的笔记本电脑"
+          "durationMs": 17000.0,
+          "description": "握拳的手在纯白背景下缓慢转动，展示指节上的白色方形物件，手部动作平缓无剧烈位移"
         },
         {
           "id": "micro_002",
+          "role": "transition_peak",
+          "durationMs": 15000.0,
+          "description": "手掌张开，带紫绿渐变屏幕的笔记本从画面左侧入画，双手移动至笔记本前方完成合掌动作"
+        },
+        {
+          "id": "micro_003",
           "role": "post_transition",
-          "durationMs": 13176.0,
-          "description": "被抛出的物体在空中碎裂，逐步分解为大量键盘按键碎片，所有碎片向四周缓慢漂浮展开"
+          "durationMs": 27940.0,
+          "description": "双手向上移出画面，笔记本逐渐从画面中消失，大量键盘碎片从空中散开并缓慢舒展形态"
         }
       ],
-      "evidence": "前序动作中抛出的小物件在空中完成碎裂变形，转化为笔记本键盘的全部按键碎片，自然衔接后续键盘自动组装的演示内容"
+      "evidence": "前序展示手部与笔记本的画面中，双手移出、笔记本消失，替换为键盘碎片在空中散开舒展的画面，自然衔接前序的物件展示和后续的键盘组装内容块"
     },
     {
       "id": "boundary_004",
@@ -1835,159 +3152,165 @@
         {
           "id": "micro_001",
           "role": "pre_transition",
-          "durationMs": 3400.0,
-          "description": "画面静止展示笔记本键盘右上角的圆形指纹按键特写，旁边散落彩色碎纸屑，无额外动作"
+          "durationMs": 20000.0,
+          "description": "初始画面为静止的笔记本键盘搭配散落彩屑背景，手指从画面右侧进入，按压键盘右上角圆形触控板按键，保持按压一段时间后松开手指"
         },
         {
           "id": "micro_002",
           "role": "transition_peak",
-          "durationMs": 6800.0,
-          "description": "手指从画面下方进入，按压圆形指纹按键，保持按压状态数秒后松开，随后手指移出画面"
+          "durationMs": 18000.0,
+          "description": "镜头缓慢向上移动，笔记本屏幕画面逐步展开，App Store应用购买弹窗从局部到完整清晰显示"
         },
         {
           "id": "micro_003",
-          "role": "transition_peak",
-          "durationMs": 3000.0,
-          "description": "镜头从键盘区域向上缓慢平移，逐步移出键盘画面，向笔记本屏幕区域移动，完成从硬件特写向屏幕界面的过渡"
-        },
-        {
-          "id": "micro_004",
           "role": "post_transition",
-          "durationMs": 10776.0,
-          "description": "镜头继续移动展示笔记本屏幕上的App Store购买弹窗，弹窗加载完成后自动收起，露出完整的系统渐变界面"
+          "durationMs": 21940.0,
+          "description": "镜头持续向后拉远，应用购买弹窗逐步向画面右侧移出视野，画面从聚焦屏幕交互内容过渡到露出笔记本机身侧边边框，完成内容块切换"
         }
       ],
-      "evidence": "通过镜头向上平移的连续运动，将前序的键盘硬件操作演示画面平滑过渡到后续的屏幕系统界面展示画面，完成两个内容块的自然衔接"
+      "evidence": "通过镜头持续拉远的运动，将前序按键操作后弹出的应用购买弹窗逐步移出画面核心区域，平滑把视觉焦点从屏幕软件交互内容切换到笔记本机身硬件部分，衔接前序的功能操作演示和后续的硬件特性展示两个内容块"
     },
     {
       "id": "boundary_005",
       "from": "seg_block_005",
       "to": "seg_block_006",
-      "transitionType": "morph",
+      "transitionType": "fade",
       "intensity": "strong",
       "microShots": [
         {
           "id": "micro_001",
           "role": "pre_transition",
-          "durationMs": 11200.0,
-          "description": "手指从屏幕上方移开，镜头持续向前推近聚焦屏幕顶部的前置摄像头，给到镜头完整特写后，摄像头逐步缩小向上移动，最终几乎完全移出画面消失在全黑背景中"
+          "durationMs": 7500.0,
+          "description": "双手的两根手指将圆形镜片按压进设备顶部的黑色边框缝隙中，手指随后完全移开"
         },
         {
           "id": "micro_002",
           "role": "transition_peak",
-          "durationMs": 2800.0,
-          "description": "全黑画面向下滑动露出笔记本屏幕内播放的敞篷跑车行驶画面，随后镜头同步向外拉远，逐步展示出完整的笔记本机身轮廓"
+          "durationMs": 27000.0,
+          "description": "镜头持续向边框上的摄像头推进放大，完整展示摄像头镜片的蓝紫色炫光细节，随后镜头拉远，摄像头整体逐渐缩小并向画面顶部移动直至几乎消失"
         },
         {
           "id": "micro_003",
+          "role": "transition_peak",
+          "durationMs": 6500.0,
+          "description": "全黑画面逐渐显影，露出笔记本屏幕上正在播放的蓝白敞篷跑车行驶的动态画面，镜头同步向后拉远"
+        },
+        {
+          "id": "micro_004",
           "role": "post_transition",
-          "durationMs": 9900.0,
-          "description": "镜头完全拉远展示完整的银色笔记本整机，随后两只手从画面两侧入画，指尖相碰后拉伸展开金属网罩部件，展示其表面的镂空网格纹理"
+          "durationMs": 18940.0,
+          "description": "镜头继续向后移动，完整展示银色笔记本的整机外观，随后两只手从画面两侧伸入，两根手指相对靠近捏住格栅状的长条部件"
         }
       ],
-      "evidence": "从全黑状态向下滑出画面，先露出笔记本屏幕内的跑车行驶视频，再通过拉镜逐步展示完整笔记本，将前序的摄像头特写内容和后续的笔记本功能演示内容自然衔接"
+      "evidence": "前序内容块的摄像头镜片元素向上移出画面进入全黑状态，随后通过淡入效果显影出后序内容块的笔记本屏幕跑车画面，完成从摄像头细节展示到笔记本整机使用演示的衔接"
     },
     {
       "id": "boundary_006",
       "from": "seg_block_006",
       "to": "seg_block_007",
-      "transitionType": "morph",
-      "intensity": "strong",
-      "microShots": [
-        {
-          "id": "micro_001",
-          "role": "pre_transition",
-          "durationMs": 9600.0,
-          "description": "打开状态的笔记本屏幕播放敞篷车行驶的视频，手从画面右侧伸入，向下滑动将笔记本完全闭合，最终笔记本平放在桌面上"
-        },
-        {
-          "id": "micro_002",
-          "role": "transition_peak",
-          "durationMs": 5600.0,
-          "description": "手调整姿势抠住闭合笔记本的边缘，将平放在桌面的笔记本向上抬起，另一只手从画面左侧伸出托住笔记本另一侧，完成产品从桌面放置到悬空持握的状态切换"
-        },
-        {
-          "id": "micro_003",
-          "role": "post_transition",
-          "durationMs": 8776.0,
-          "description": "双手共同持握悬空的笔记本，翻转机身展示笔记本背面的品牌标识与机身侧面细节，进入产品外观展示环节"
-        }
-      ],
-      "evidence": "通过连贯的手部操作动作，将刚完成闭合的笔记本从桌面抬起，自然衔接前序的视频播放演示环节与后续的产品外观多配色展示环节，实现内容块的平滑过渡"
-    },
-    {
-      "id": "boundary_007",
-      "from": "seg_block_007",
-      "to": "seg_block_008",
       "transitionType": "unknown",
       "intensity": "strong",
       "microShots": [
         {
           "id": "micro_001",
           "role": "pre_transition",
-          "durationMs": 8000.0,
-          "description": "印有A18 PRO标识的芯片在空中旋转下落，黄色笔记本从画面下方升起，芯片最终悬浮在合上的笔记本上方"
+          "durationMs": 22500.0,
+          "description": "打开状态的银色笔记本缓慢旋转展示机身，屏幕持续播放敞篷跑车行驶的动态视频，无额外操作介入"
         },
         {
           "id": "micro_002",
           "role": "transition_peak",
-          "durationMs": 5600.0,
-          "description": "一只手抓住空中的芯片，另一只手掀开合上的笔记本上盖，将芯片装入笔记本机身内部"
+          "durationMs": 8500.0,
+          "description": "手掌从画面右侧伸入，从上向下逐步按压笔记本屏幕上沿，将原本打开的笔记本完全闭合，屏幕画面随闭合逐渐消失"
         },
         {
           "id": "micro_003",
           "role": "transition_peak",
-          "durationMs": 5200.0,
-          "description": "笔记本完全打开，屏幕从暗态逐步点亮，显示出带有招财猫图案的彩色应用界面，原本握拳的双手松开落到键盘和触控板区域"
+          "durationMs": 12000.0,
+          "description": "手掌短暂停留在闭合的笔记本顶盖上，随后手指抠住笔记本边缘，将平放在桌面上的笔记本向上抬起"
         },
         {
           "id": "micro_004",
           "role": "post_transition",
-          "durationMs": 5176.0,
-          "description": "双手保持放在笔记本触控板和键盘上的操作姿态，屏幕稳定展示多个并列的应用窗口界面，进入软件使用演示的稳定状态"
+          "durationMs": 16940.0,
+          "description": "另一只手从画面左侧伸出，双手共同托住闭合的笔记本，翻转调整角度展示笔记本背面的品牌标识，开始呈现产品外观细节"
         }
       ],
-      "evidence": "通过掀开笔记本上盖、装入芯片的连贯动作，让笔记本屏幕从暗态逐步点亮，将前序的硬件安装展示内容块平滑衔接至后续的软件多场景使用演示内容块"
+      "evidence": "通过手掌闭合笔记本的连贯操作，从正在播放跑车视频的使用演示场景，平滑过渡到闭合状态的产品外观展示环节，完成两个内容块的自然桥接"
     },
     {
-      "id": "boundary_008",
-      "from": "seg_block_008",
-      "to": "seg_block_009",
+      "id": "boundary_007",
+      "from": "seg_block_007",
+      "to": "seg_block_008",
       "transitionType": "morph",
       "intensity": "strong",
       "microShots": [
         {
           "id": "micro_001",
           "role": "pre_transition",
-          "durationMs": 3200.0,
-          "description": "黄绿色笔记本处于画面中心，使用者左手放在触控板上，右手握着触控笔，屏幕同时显示日程表格和视频通话窗口，画面状态稳定"
+          "durationMs": 14000.0,
+          "description": "印有A18 Pro字样的芯片从空中落下，悬浮定位在黄色笔记本正上方，随后芯片开始向上缓慢漂浮"
         },
         {
           "id": "micro_002",
           "role": "transition_peak",
-          "durationMs": 3200.0,
-          "description": "硬切到笔记本屏幕显示被百叶窗遮挡的人物画面，双手位置保持不变，画面状态稳定"
+          "durationMs": 14500.0,
+          "description": "右手从画面右侧伸入，接住漂浮的芯片，左手扶住笔记本边缘，双手配合将芯片按压装入笔记本机身内部"
         },
         {
           "id": "micro_003",
           "role": "transition_peak",
-          "durationMs": 5400.0,
-          "description": "镜头开始向右平移，笔记本和桌面逐渐移出画面，背景从浅灰过渡到纯白，完成从笔记本演示场景到空白展示场景的切换"
+          "durationMs": 4500.0,
+          "description": "笔记本自动缓缓向上翻开，屏幕从暗态逐步点亮，显示出彩色的应用界面，原本握拳的双手逐渐松开"
+        },
+        {
+          "id": "micro_004",
+          "role": "post_transition",
+          "durationMs": 26940.0,
+          "description": "双手放置在笔记本的键盘和触控板区域，保持待操作状态，屏幕稳定显示包含LUCKY CHARMS图案的应用界面"
+        }
+      ],
+      "evidence": "通过笔记本自动开盖、屏幕点亮的连贯动画，将前序的硬件芯片安装环节，平滑衔接到后续的笔记本软件应用操作演示环节"
+    },
+    {
+      "id": "boundary_008",
+      "from": "seg_block_008",
+      "to": "seg_block_009",
+      "transitionType": "fade",
+      "intensity": "strong",
+      "microShots": [
+        {
+          "id": "micro_001",
+          "role": "pre_transition",
+          "durationMs": 13800.0,
+          "description": "人物双手在绿色笔记本旁操作，笔记本屏幕显示带彩色色块的表格和右上角的视频通话窗口，表格内的彩色色块持续移动调整，画面整体保持稳定"
+        },
+        {
+          "id": "micro_002",
+          "role": "transition_peak",
+          "durationMs": 8200.0,
+          "description": "硬切后笔记本屏幕切换为带百叶窗格的画面，画面内的人物双手贴在窗格上向外推，呈现受限的视觉效果，画面保持静止稳定"
+        },
+        {
+          "id": "micro_003",
+          "role": "transition_peak",
+          "durationMs": 12500.0,
+          "description": "笔记本连同旁边的手一起缓慢向画面右侧平移移出，背景逐渐过渡为全白，笔记本完全移出画面，仅剩余部分手部轮廓"
         },
         {
           "id": "micro_004",
           "role": "transition_peak",
-          "durationMs": 4400.0,
-          "description": "纯白背景下，手从画面右侧进入，手指保持捏合悬空的状态，没有露出任何物体，画面状态稳定"
+          "durationMs": 13000.0,
+          "description": "纯白背景下，一只手从画面右侧逐步完全进入画面，手指保持捏合的姿势，指尖之间没有任何物体，画面稳定"
         },
         {
           "id": "micro_005",
           "role": "post_transition",
-          "durationMs": 7776.0,
-          "description": "手展开捏出蓝色的Finder笑脸图标，将图标展示在画面中心，画面状态稳定"
+          "durationMs": 12440.0,
+          "description": "捏合的手指之间逐步显现出蓝色的系统图标方块，图标上的笑脸图案慢慢变得清晰，最终完整展示在指尖"
         }
       ],
-      "evidence": "通过镜头向右平移的运动，将前序的笔记本演示场景完全移出画面，过渡到纯白空白背景，自然衔接后续手持系统小图标的展示内容"
+      "evidence": "将前序笔记本多应用演示的场景，通过笔记本整体移出、背景渐变为纯白的方式，平滑过渡到空白背景下展示系统图标的全新场景，完成两个内容块的桥接"
     },
     {
       "id": "boundary_009",
@@ -1999,29 +3322,57 @@
         {
           "id": "micro_001",
           "role": "pre_transition",
-          "durationMs": 9600.0,
-          "description": "双手置于黄色MacBook触控板两侧，屏幕显示跨设备同步的地图界面，双手保持初始姿态，画面整体状态稳定无大幅动作变化"
+          "durationMs": 24000.0,
+          "description": "MacBook屏幕上同时显示购物网页和聊天窗口，聊天消息逐条加载显示，镜头保持固定近景聚焦笔记本屏幕内容"
         },
         {
           "id": "micro_002",
           "role": "transition_peak",
-          "durationMs": 4600.0,
-          "description": "左手抬起从屏幕上方向前划过，带动笔记本屏幕逐步向下闭合，最终完全合上露出黄色笔记本顶盖"
+          "durationMs": 11000.0,
+          "description": "镜头缓慢向左平移，MacBook屏幕逐步移出画面左侧，空白背景露出，随后手持iPhone从画面右侧进入视野，完成两个设备场景的视觉过渡"
+        },
+        {
+          "id": "micro_003",
+          "role": "post_transition",
+          "durationMs": 24940.0,
+          "description": "画面稳定展示手持的iPhone屏幕，聊天界面持续加载新的消息，最终屏幕底部显示出文字“Thank you!”"
+        }
+      ],
+      "evidence": "通过镜头横向平移的运动，将前序的MacBook交互场景逐步移出画面，同时自然引入后序的手持iPhone交互场景，平滑衔接两个不同设备的演示内容"
+    },
+    {
+      "id": "boundary_010",
+      "from": "seg_block_010",
+      "to": "seg_block_011",
+      "transitionType": "morph",
+      "intensity": "strong",
+      "microShots": [
+        {
+          "id": "micro_001",
+          "role": "pre_transition",
+          "durationMs": 18000.0,
+          "description": "双手握持黄色笔记本的触控板区域，笔记本屏幕显示带有悬浮手机窗口的系统桌面，画面整体保持静态，仅手部有极细微的位置调整"
+        },
+        {
+          "id": "micro_002",
+          "role": "transition_peak",
+          "durationMs": 11000.0,
+          "description": "左手从触控板抬起，伸向笔记本屏幕上沿，逐步向下按压屏幕，将笔记本完全闭合，最终呈现合上的黄色笔记本上盖画面"
         },
         {
           "id": "micro_003",
           "role": "transition_peak",
-          "durationMs": 5600.0,
-          "description": "双手放在闭合的黄色笔记本两侧，缓慢调整笔记本在桌面的居中位置，准备开启包装盒封边"
+          "durationMs": 16000.0,
+          "description": "双手移动到合上的笔记本左右两侧，捏住侧边的白色封条向外拉动，两侧白色包装纸同步向外弹出"
         },
         {
           "id": "micro_004",
           "role": "post_transition",
-          "durationMs": 4176.0,
-          "description": "双手拉开包装盒左右两侧的白色封边，松开手后包装盒四周的白色结构向上收拢，完全包裹住笔记本，进入产品包装展示阶段"
+          "durationMs": 14940.0,
+          "description": "双手从画面中移出，四周的白色包装结构逐步向四周展开，完全露出放置在白色包装盒内的黄色笔记本，完成开箱展示的起始画面"
         }
       ],
-      "evidence": "通过合上正在演示功能的笔记本，顺势引出隐藏在笔记本下方的白色包装盒，完成从功能演示环节到产品包装展示环节的平滑衔接"
+      "evidence": "通过合上笔记本的连贯动作自然衔接后续的开箱包装展开动画，将前序的产品功能使用演示内容平滑过渡到后序的产品包装展示/收尾宣传内容"
     }
   ]
 }
