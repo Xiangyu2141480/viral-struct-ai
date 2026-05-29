@@ -15,14 +15,22 @@ export function QualityReportPanel() {
 }
 
 function QualityTable({ report }: { report: QualityReport }) {
-  const metrics = [
+  const metrics: Array<[string, number, string]> = [
     ['结构匹配度', report.structureMatch, '保留样例 Hook-痛点-卖点-证明-CTA 的迁移结构'],
     ['素材覆盖率', report.slotCoverage, '按 matched / partial / missing 计算槽位覆盖'],
     ['画文一致性', report.visualScriptAlignment, '检查画面动作和脚本文案是否对应'],
     ['事实性', report.factuality, '卖点主要来自用户输入，避免无来源强承诺'],
     ['连贯性', report.coherence, '时间线段落顺序与表达推进是否顺畅'],
     ['字幕可读性', report.subtitleReadability, '字幕长度与节奏是否适合短视频']
-  ] as const;
+  ];
+
+  if (report.transitionFidelity !== undefined) {
+    metrics.push([
+      '转场保真度',
+      report.transitionFidelity,
+      '源视频 boundary micro scan 的转场类型与生成时间线包装转场的一致性'
+    ]);
+  }
 
   return (
     <>
