@@ -1,10 +1,18 @@
 import { Router } from 'express';
-import { matchSlots } from '../services/slotMatcher';
+import { matchSlotsWithFallback } from '../services/slotMatcher';
 
 export const slotsRouter = Router();
 
 slotsRouter.post('/match', async (req, res) => {
-  const { structureGraph, assetCards } = req.body;
-  const result = matchSlots(structureGraph, assetCards ?? []);
-  res.json(result);
+  const { structureGraph, assetCards, boundaries } = req.body;
+  const result = await matchSlotsWithFallback({
+    graph: structureGraph,
+    assets: assetCards ?? [],
+    boundaries: boundaries ?? structureGraph?.boundaries
+  });
+
+  res.json({
+    ...result,
+    warnings: result.warning ? [result.warning] : []
+  });
 });

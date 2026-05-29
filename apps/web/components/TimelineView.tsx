@@ -1,15 +1,22 @@
 'use client';
 
 import { useState } from 'react';
-import type { AssetCard, QualityReport, ScriptSegment, StoryboardShot, TimelineItem, ViralStructureGraph } from '@viral-struct/shared';
+import type { AssetCard, QualityReport, ScriptSegment, ScriptSource, StoryboardShot, TimelineItem, ViralStructureGraph } from '@viral-struct/shared';
 import { apiPost } from '../lib/api';
-import { type GenerationVariant, useWorkflowStore } from '../lib/workflowStore';
+import { type GenerationVariant, type TimelineEditResult, useWorkflowStore } from '../lib/workflowStore';
+import { MigrationEvidencePanel } from './MigrationEvidencePanel';
+import { GenerationTracePanel, PipelineSourceBadge, PipelineWarningCallout } from './PipelineStatus';
+import { TimelineEditSummary } from './TimelineEditSummary';
+import { VariantDiffPanel } from './VariantDiffPanel';
 import { VisualTimelinePreview } from './VisualTimelinePreview';
 
 interface TimelineResponse {
   script: ScriptSegment[];
   storyboard: StoryboardShot[];
   timeline: TimelineItem[];
+  scriptSource?: ScriptSource;
+  warning?: string;
+  warnings?: string[];
 }
 
 interface QualityResponse {
@@ -26,18 +33,21 @@ export function TimelineView() {
   const structureGraph = useWorkflowStore((state) => state.structureGraph);
   const contentBrief = useWorkflowStore((state) => state.contentBrief);
   const slotMatches = useWorkflowStore((state) => state.slotMatches);
+  const materialGaps = useWorkflowStore((state) => state.materialGaps);
   const repairs = useWorkflowStore((state) => state.repairs);
   const script = useWorkflowStore((state) => state.script);
   const storyboard = useWorkflowStore((state) => state.storyboard);
   const timeline = useWorkflowStore((state) => state.timeline);
   const assetCards = useWorkflowStore((state) => state.assetCards);
+  const pipelineTrace = useWorkflowStore((state) => state.pipelineTrace);
   const generationVariant = useWorkflowStore((state) => state.generationVariant);
-  const editNotes = useWorkflowStore((state) => state.editNotes);
+  const timelineEditSummary = useWorkflowStore((state) => state.timelineEditSummary);
   const setGenerationVariant = useWorkflowStore((state) => state.setGenerationVariant);
   const setGenerationResult = useWorkflowStore((state) => state.setGenerationResult);
   const setQualityReport = useWorkflowStore((state) => state.setQualityReport);
-  const applyLocalEdit = useWorkflowStore((state) => state.applyLocalEdit);
+  const applyTimelineEditResult = useWorkflowStore((state) => state.applyTimelineEditResult);
   const [loading, setLoading] = useState(false);
+  const [editLoading, setEditLoading] = useState(false);
   const [instruction, setInstruction] = useState('开头更抓人一些，把商品信息提前，节奏更快。');
   const [error, setError] = useState<string | null>(null);
 
@@ -56,21 +66,51 @@ export function TimelineView() {
         newContent: contentBrief,
         matches: slotMatches,
         repairs,
+        assets: assetCards,
         variant: generationVariant,
         boundaries: structureGraph.boundaries
       });
-      setGenerationResult(result);
+      setGenerationResult(result, {
+        scriptSource: result.scriptSource,
+        warnings: collectWarnings(result)
+      });
 
       const quality = await apiPost<QualityResponse>('/api/quality/evaluate', {
         matches: slotMatches,
         timeline: result.timeline,
-        boundaries: structureGraph.boundaries
+        boundaries: structureGraph.boundaries,
+        contentBrief,
+        assets: assetCards
       });
       setQualityReport(quality.qualityReport);
     } catch (err) {
       setError(errorMessage(err));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleApplyEdit() {
+    const normalized = instruction.trim();
+    if (!normalized || !timeline.length) {
+      setError('请先生成 timeline，并输入改片指令。');
+      return;
+    }
+
+    setEditLoading(true);
+    setError(null);
+
+    try {
+      const result = await apiPost<TimelineEditResult>('/api/timeline/apply-edit', {
+        instruction: normalized,
+        timeline,
+        contentBrief
+      });
+      applyTimelineEditResult(result);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setEditLoading(false);
     }
   }
 
@@ -100,6 +140,34 @@ export function TimelineView() {
       </div>
 
       {timeline.length ? <Preview timeline={timeline} assetCards={assetCards} structureGraph={structureGraph} /> : null}
+      {(slotMatches.length || repairs.length || timeline.length) ? (
+        <GenerationTracePanel
+          alignmentSource={pipelineTrace.alignmentSource}
+          gapSpecSource={pipelineTrace.gapSpecSource}
+          scriptSource={pipelineTrace.scriptSource}
+          warnings={pipelineTrace.warnings}
+          qualityContext={`${contentBrief.productName} · ${assetCards.length} assets · ${slotMatches.length} slot matches`}
+        />
+      ) : null}
+      {timeline.length ? (
+        <VariantDiffPanel
+          variant={generationVariant}
+          timeline={timeline}
+          contentBrief={contentBrief}
+        />
+      ) : null}
+      {timeline.length ? (
+        <MigrationEvidencePanel
+          structureGraph={structureGraph}
+          contentBrief={contentBrief}
+          assetCards={assetCards}
+          slotMatches={slotMatches}
+          materialGaps={materialGaps}
+          repairs={repairs}
+          timeline={timeline}
+          storyboard={storyboard}
+        />
+      ) : null}
       {timeline.length ? (
         <section className="card" style={{ marginBottom: 16 }}>
           <h2>人工可调 / 自然语言改片</h2>
@@ -108,23 +176,28 @@ export function TimelineView() {
             onChange={(event) => setInstruction(event.target.value)}
             style={{ width: '100%', minHeight: 72 }}
           />
-          <button type="button" onClick={() => applyLocalEdit(instruction)} style={{ marginTop: 8 }}>
-            应用调整
+          <button
+            type="button"
+            onClick={handleApplyEdit}
+            disabled={editLoading || !timeline.length || !instruction.trim()}
+            style={{ marginTop: 8 }}
+          >
+            {editLoading ? '应用中...' : '应用调整'}
           </button>
-          {editNotes.length ? (
-            <ul>
-              {editNotes.map((note) => (
-                <li key={note}>{note}</li>
-              ))}
-            </ul>
-          ) : null}
         </section>
       ) : null}
+      <TimelineEditSummary summary={timelineEditSummary} />
 
       {script.length ? <ScriptList script={script} /> : null}
       {storyboard.length ? <StoryboardList storyboard={storyboard} /> : null}
-      {timeline.length ? <MappingView timeline={timeline} structureGraph={structureGraph} /> : null}
-      {timeline.length ? <TimelineList timeline={timeline} structureGraph={structureGraph} /> : <p>尚未生成。点击按钮后会调用 `/api/timeline/generate`。</p>}
+      {timeline.length ? (
+        <TimelineList
+          timeline={timeline}
+          structureGraph={structureGraph}
+          scriptSource={pipelineTrace.scriptSource}
+          warnings={pipelineTrace.warnings}
+        />
+      ) : <p>尚未生成。点击按钮后会调用 `/api/timeline/generate`。</p>}
     </section>
   );
 }
@@ -181,47 +254,26 @@ function StoryboardList({ storyboard }: { storyboard: StoryboardShot[] }) {
   );
 }
 
-function MappingView({ timeline, structureGraph }: { timeline: TimelineItem[]; structureGraph: ViralStructureGraph | null }) {
-  const slotById = new Map((structureGraph?.shotSlots ?? []).map((slot) => [slot.id, slot]));
-
-  return (
-    <section className="card" style={{ marginBottom: 16 }}>
-      <h2>样例结构 → 新结果映射</h2>
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-        <thead>
-          <tr>
-            <th align="left">样例段落</th>
-            <th align="left">槽位</th>
-            <th align="left">迁移意图</th>
-            <th align="left">素材/补全</th>
-            <th align="left">新结果</th>
-          </tr>
-        </thead>
-        <tbody>
-          {timeline.map((item) => {
-            const slot = slotById.get(item.slotId);
-            return (
-              <tr key={item.id}>
-                <td style={{ padding: 8 }}>{item.sourceSegmentId}</td>
-                <td style={{ padding: 8 }}>{item.slotId}</td>
-                <td style={{ padding: 8 }}>{slot?.intent?.purpose ?? '沿用槽位转移规则'}</td>
-                <td style={{ padding: 8 }}>{item.assetId ?? item.repair?.strategy ?? 'packaging'}</td>
-                <td style={{ padding: 8 }}>{item.script}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </section>
-  );
-}
-
-function TimelineList({ timeline, structureGraph }: { timeline: TimelineItem[]; structureGraph: ViralStructureGraph | null }) {
+function TimelineList({
+  timeline,
+  structureGraph,
+  scriptSource,
+  warnings
+}: {
+  timeline: TimelineItem[];
+  structureGraph: ViralStructureGraph | null;
+  scriptSource?: ScriptSource;
+  warnings: string[];
+}) {
   const slotById = new Map((structureGraph?.shotSlots ?? []).map((slot) => [slot.id, slot]));
 
   return (
     <section className="card">
       <h2>时间线草案</h2>
+      <div style={{ display: 'grid', gap: 10, marginBottom: 12 }}>
+        <PipelineSourceBadge label="Timeline" kind="script" source={scriptSource} />
+        <PipelineWarningCallout warnings={warnings} />
+      </div>
       {timeline.map((item) => {
         const slot = slotById.get(item.slotId);
         return (
@@ -235,6 +287,7 @@ function TimelineList({ timeline, structureGraph }: { timeline: TimelineItem[]; 
             <p>
               包装：{item.packaging.cardType ?? 'none'} · {item.packaging.transition ?? 'none'} · {item.packaging.motion ?? 'none'}
             </p>
+            <p>脚本来源：{item.scriptSource === 'llm_generated' ? 'LLM Script Generation' : item.scriptSource === 'template' ? 'Template fallback' : 'Not run'}</p>
             {slot?.intent ? <p>迁移意图：{slot.intent.purpose}</p> : null}
             {slot?.acceptanceCriteria ? (
               <p>替代标准：{slot.acceptanceCriteria.anyOf.flatMap((criterion) => criterion.examples).slice(0, 3).join(' / ')}</p>
@@ -253,4 +306,8 @@ function formatSeconds(value: number): string {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function collectWarnings(response: { warning?: string; warnings?: string[] }): string[] {
+  return [...(response.warnings ?? []), response.warning].filter((warning): warning is string => Boolean(warning));
 }
