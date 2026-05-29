@@ -149,6 +149,13 @@ function buildEvidenceTrace({
   const analysisId = showcase.case.seedFilename.replace(/\.[^.]+$/, '');
   const matchedCount = matches.filter((match) => match.status === 'matched').length;
   const partialOrMissingCount = matches.length - matchedCount;
+  const migrationContractCount = structure.structureGraph.shotSlots.filter(
+    (slot) => slot.intent && slot.sourceInstance && slot.acceptanceCriteria
+  ).length;
+  const transitionFidelity =
+    qualityReport.transitionFidelity === undefined
+      ? '转场保真 n/a'
+      : `转场保真 ${qualityReport.transitionFidelity.toFixed(2)}`;
 
   return [
     {
@@ -158,6 +165,14 @@ function buildEvidenceTrace({
       artifactPath: `seed_assets/analysis/${analysisId}/structure_graph.json`,
       detail: `${structure.structureGraph.segments.length} 个段落，${structure.structureGraph.shotSlots.length} 个槽位，${structure.structureGraph.creativeIngredients.length} 个创作要素`,
       judgeBenefit: '证明样例拆解不是静态 mock，而是优先使用队友 rough/fine scan adapter 产物。'
+    },
+    {
+      id: 'migration_contract',
+      label: 'Migration Contract 迁移契约',
+      source: structure.structureGraph.schemaVersion ?? 'v0',
+      artifactPath: `seed_assets/analysis/${analysisId}/structure_graph.json`,
+      detail: `${migrationContractCount} 个槽位含迁移契约：可迁移意图 / 源片实例 / 可接受替代标准`,
+      judgeBenefit: '证明系统迁移的是结构方法，而不是复制源片具体产品和画面。'
     },
     {
       id: 'asset_library',
@@ -178,7 +193,7 @@ function buildEvidenceTrace({
       id: 'timeline_quality',
       label: 'Timeline / Quality',
       source: 'timeline_generator',
-      detail: `${timeline.length} 个时间线 item，结构匹配 ${qualityReport.structureMatch.toFixed(2)}，素材覆盖 ${qualityReport.slotCoverage.toFixed(2)}`,
+      detail: `${timeline.length} 个时间线 item，结构匹配 ${qualityReport.structureMatch.toFixed(2)}，素材覆盖 ${qualityReport.slotCoverage.toFixed(2)}，${transitionFidelity}`,
       judgeBenefit: '把评审要求的脚本、分镜、时间线和结果可验证性集中输出。'
     }
   ];

@@ -305,6 +305,10 @@ export function DemoShowcasePanel() {
       stylePreference: showcase.case.stylePreference
     };
   }, [showcase]);
+  const migrationContractCount = useMemo(
+    () => structureGraph?.shotSlots.filter((slot) => slot.intent && slot.sourceInstance && slot.acceptanceCriteria).length ?? 0,
+    [structureGraph]
+  );
 
   async function handleRunDemo() {
     if (!showcase || !demoBrief) {
@@ -392,9 +396,9 @@ export function DemoShowcasePanel() {
 
       <section style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
         <Metric label="真实解析" value={videoAnalysis?.analysisSource === 'real_ffmpeg' ? '已完成' : '待运行'} detail={videoAnalysis ? `${videoAnalysis.keyframes.length} keyframes` : showcase.case.seedFilename} />
-        <Metric label="结构槽位" value={structureGraph ? String(structureGraph.shotSlots.length) : '0'} detail={structureGraph?.structureSummary ?? '等待结构图谱'} />
+        <Metric label="结构槽位" value={structureGraph ? String(structureGraph.shotSlots.length) : '0'} detail={structureGraph ? `${migrationContractCount} 个迁移契约` : '等待结构图谱'} />
         <Metric label="素材缺口" value={String(materialGaps.length)} detail={repairs.length ? `${repairs.length} repairs` : '等待缺口识别'} />
-        <Metric label="结果时间线" value={String(timeline.length)} detail={qualityReport ? `quality ${qualityReport.structureMatch.toFixed(2)}` : '等待生成'} />
+        <Metric label="结果时间线" value={String(timeline.length)} detail={qualityReport ? `quality ${qualityReport.structureMatch.toFixed(2)} · fidelity ${qualityReport.transitionFidelity?.toFixed(2) ?? 'n/a'}` : '等待生成'} />
       </section>
 
       <EvidenceTracePanel evidenceTrace={evidenceTrace} />
@@ -457,6 +461,7 @@ export function DemoShowcasePanel() {
         <ResultSnapshot
           timeline={timeline}
           assetCards={assetCards}
+          structureGraph={structureGraph}
           qualityReport={qualityReport}
           gaps={materialGaps}
           repairs={repairs}
@@ -571,6 +576,14 @@ const fallbackEvidenceTrace: DemoEvidenceTraceItem[] = [
     judgeBenefit: '证明样例结构来自 rough/fine scan adapter 产物。'
   },
   {
+    id: 'migration_contract',
+    label: 'Migration Contract 迁移契约',
+    source: '等待运行',
+    artifactPath: 'seed_assets/analysis/macbook_neo/structure_graph.json',
+    detail: '一键运行后展示可迁移意图、源片实例和替代标准。',
+    judgeBenefit: '证明系统迁移结构方法，不复制样例产品画面。'
+  },
+  {
     id: 'asset_library',
     label: 'AssetCard 素材库',
     source: '等待运行',
@@ -583,12 +596,14 @@ const fallbackEvidenceTrace: DemoEvidenceTraceItem[] = [
 function ResultSnapshot({
   timeline,
   assetCards,
+  structureGraph,
   qualityReport,
   gaps,
   repairs
 }: {
   timeline: TimelineItem[];
   assetCards: AssetCard[];
+  structureGraph: ViralStructureGraph | null;
   qualityReport: QualityReport | null;
   gaps: MaterialGap[];
   repairs: GapRepair[];
@@ -597,14 +612,14 @@ function ResultSnapshot({
     <section className="card">
       <h2>最终结果快照</h2>
       <div style={{ display: 'grid', gap: 16 }}>
-        <VisualTimelinePreview timeline={timeline} assetCards={assetCards} compact />
+        <VisualTimelinePreview timeline={timeline} assetCards={assetCards} structureGraph={structureGraph} compact />
 
         <div style={{ display: 'grid', gap: 12, alignContent: 'start' }}>
           <div>
             <strong>质量自检</strong>
             <p>
               {qualityReport
-                ? `结构匹配 ${qualityReport.structureMatch.toFixed(2)} · 素材覆盖 ${qualityReport.slotCoverage.toFixed(2)} · 连贯性 ${qualityReport.coherence.toFixed(2)}`
+                ? `结构匹配 ${qualityReport.structureMatch.toFixed(2)} · 素材覆盖 ${qualityReport.slotCoverage.toFixed(2)} · 连贯性 ${qualityReport.coherence.toFixed(2)} · 转场保真 ${qualityReport.transitionFidelity?.toFixed(2) ?? 'n/a'}`
                 : '等待质量报告'}
             </p>
           </div>

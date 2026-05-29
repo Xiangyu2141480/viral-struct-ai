@@ -93,3 +93,25 @@ test('POST /api/demo/run propagates boundaries into qualityReport.transitionFide
   assert.equal(typeof body.qualityReport.transitionFidelity, 'number');
   assert.ok(body.qualityReport.transitionFidelity >= 0 && body.qualityReport.transitionFidelity <= 1);
 });
+
+test('POST /api/demo/run surfaces migration contracts and transition fidelity in evidence trace', async () => {
+  const response = await fetch(`${baseUrl}/api/demo/run`, { method: 'POST' });
+  assert.equal(response.status, 200);
+  const body = await response.json();
+
+  const slotsWithContract = body.structureGraph.shotSlots.filter((slot: {
+    intent?: unknown;
+    sourceInstance?: unknown;
+    acceptanceCriteria?: unknown;
+  }) => slot.intent && slot.sourceInstance && slot.acceptanceCriteria);
+  assert.ok(slotsWithContract.length >= 3, 'demo graph should expose migration contracts on key slots');
+
+  const migrationTrace = body.evidenceTrace.find((item: { id: string }) => item.id === 'migration_contract');
+  assert.ok(migrationTrace, 'evidenceTrace should include a migration_contract node');
+  assert.match(migrationTrace.detail, /迁移契约/);
+  assert.match(migrationTrace.detail, /可迁移意图/);
+
+  const timelineTrace = body.evidenceTrace.find((item: { id: string }) => item.id === 'timeline_quality');
+  assert.ok(timelineTrace, 'evidenceTrace should include timeline_quality');
+  assert.match(timelineTrace.detail, /转场保真/);
+});
