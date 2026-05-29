@@ -82,7 +82,9 @@ demoRouter.post('/run', async (_req, res) => {
     const qualityReport = evaluateQuality({
       matches: slotResult.matches,
       timeline: generation.timeline,
-      boundaries
+      boundaries,
+      contentBrief,
+      assets: assetLoad.assetCards
     });
 
     const llmWarnings = [slotResult.warning, repairResult.warning, generation.warning].filter(
