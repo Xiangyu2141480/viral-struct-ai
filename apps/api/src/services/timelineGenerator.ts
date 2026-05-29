@@ -1,13 +1,18 @@
+import { z } from 'zod';
 import type {
+  AssetCard,
   Boundary,
   ContentBrief,
   GapRepair,
   ScriptSegment,
+  SegmentNode,
+  SlotTreatmentSpec,
   StoryboardShot,
   TimelineItem,
   ViralStructureGraph,
   SlotMatch
 } from '@viral-struct/shared';
+import { createOpenAICompatibleClient } from './llmProvider';
 
 type GenerationVariant = 'high_click' | 'high_conversion' | 'premium';
 
@@ -182,4 +187,314 @@ function motionForVariant(
   if (variant === 'premium') return 'push_in';
   if (variant === 'high_click') return 'push_in';
   return 'static';
+}
+
+// ---------------------------------------------------------------------------
+// LLM script generator — per-segment call.
+// source-of-truth prompt at prompts/migration/script_generation_v0.md
+// ---------------------------------------------------------------------------
+
+const SCRIPT_SYSTEM_PROMPT = `你是一个短视频脚本与分镜的资深创作者。
+
+你将看到一个 segment 内部的全部 timelineItem（1-3 条），每条 item 已经被对齐到具体素材或补全策略，并附带：
+- segment.intent：这一段要达成什么意图（可迁移层面）
+- segment.role：这一段的叙事角色
+- 该 item 对齐到的素材的 visualContent / motionPotential（如果有）
+- 该 item 的 treatmentSpec（已经决定好怎么处理素材）
+- 该 item 上下文的转场约束（borderTransition）
+- ContentBrief：产品名、目标人群、场景、卖点、CTA
+- 风格变体：high_click / high_conversion / premium
+
+创作原则：
+1. 必须利用素材的真实视觉细节（splash → "冰爆"，hand_demo → "手部入画"）。
+2. 必须利用 treatmentSpec.captionOverlay 作为字幕主线索（如有）。
+3. 段内连贯：3 条 item 的脚本要能串成一段流畅叙事，不要每句都重复产品名。
+4. 不同 variant 真不同：high_click 钩子前置、节奏快；high_conversion 先结论后理由、强 CTA；premium 克制、留白多。
+5. subtitles 按语义切，每行 6-14 字，不要把短语劈成两半。
+6. 不要写"3 秒看懂"、"你是不是也遇到过"这类俗套模板。
+7. 只输出 JSON，不要 Markdown，不要解释。`;
+
+const ScriptItemResponseSchema = z.object({
+  itemId: z.string(),
+  script: z.string().min(1),
+  visualAction: z.string().min(1),
+  captionStyle: z.string().min(1),
+  cardType: z.union([
+    z.enum(['title_card', 'selling_point_card', 'comparison_card', 'cta_card']),
+    z.null()
+  ]).optional(),
+  subtitles: z.array(z.string().min(1)).min(1)
+});
+
+const ScriptSegmentResponseSchema = z.object({
+  items: z.array(ScriptItemResponseSchema).min(1)
+});
+
+interface SegmentSkeleton {
+  segment: SegmentNode;
+  items: SkeletonItem[];
+  borderTransition?: Boundary;
+}
+
+interface SkeletonItem {
+  itemId: string;
+  slotId: string;
+  match?: SlotMatch;
+  repair?: GapRepair;
+  matchedAsset?: AssetCard;
+  treatmentSpec?: SlotTreatmentSpec;
+  start: number;
+  end: number;
+}
+
+function buildSegmentSkeleton(
+  graph: ViralStructureGraph,
+  matches: SlotMatch[],
+  repairs: GapRepair[],
+  assets: AssetCard[],
+  boundaries: Boundary[] | undefined
+): SegmentSkeleton[] {
+  const assetIndex = new Map(assets.map((a) => [a.id, a]));
+  const matchIndex = new Map(matches.map((m) => [m.slotId, m]));
+  const repairIndex = new Map(repairs.map((r) => [r.slotId, r]));
+
+  return graph.segments.map((segment) => {
+    const slotsInSeg = graph.shotSlots.filter((s) => s.segmentId === segment.id);
+    const items: SkeletonItem[] = slotsInSeg.map((slot, index) => {
+      const match = matchIndex.get(slot.id);
+      const repair = repairIndex.get(slot.id);
+      const matchedAsset = match?.assetId ? assetIndex.get(match.assetId) : undefined;
+      return {
+        itemId: `tl_${segment.id}_${index + 1}`,
+        slotId: slot.id,
+        match,
+        repair,
+        matchedAsset,
+        treatmentSpec: match?.treatmentSpec,
+        start: segment.start,
+        end: segment.end
+      };
+    });
+    const borderTransition = boundaries?.find((b) => b.from === segment.id);
+    return { segment, items, borderTransition };
+  });
+}
+
+function buildScriptUserPrompt(
+  variant: GenerationVariant,
+  brief: ContentBrief,
+  skeleton: SegmentSkeleton
+): string {
+  const itemsForPrompt = skeleton.items.map((item) => ({
+    itemId: item.itemId,
+    slotId: item.slotId,
+    assetId: item.matchedAsset?.id ?? null,
+    matchedAsset: item.matchedAsset
+      ? {
+          primarySubject: item.matchedAsset.visualContent?.primarySubject,
+          kinematicElements: item.matchedAsset.visualContent?.kinematicElements,
+          implicitMotion: item.matchedAsset.motionPotential?.implicitMotion
+        }
+      : null,
+    treatmentSpec: item.treatmentSpec ?? null,
+    repairStrategy: item.repair?.strategy ?? null
+  }));
+
+  return `风格变体：${variant}
+
+ContentBrief:
+${JSON.stringify(brief, null, 2)}
+
+Segment 上下文：
+${JSON.stringify({
+    segmentId: skeleton.segment.id,
+    role: skeleton.segment.role,
+    purpose: skeleton.segment.purpose,
+    transferRule: skeleton.segment.transferRule,
+    importance: skeleton.segment.importance
+  }, null, 2)}
+
+本段的 timelineItem 清单（已对齐）：
+${JSON.stringify(itemsForPrompt, null, 2)}
+
+转场约束（仅供参考）：
+${JSON.stringify(skeleton.borderTransition ?? null, null, 2)}
+
+请输出 JSON：
+
+{
+  "items": [
+    {
+      "itemId": "<对应 timelineItem 的 id>",
+      "script": "≤40 字单句。",
+      "visualAction": "≤30 字中文。",
+      "captionStyle": "click_large_bottom_bold | premium_minimal_top | conversion_bold_red | clean_subtitle_only",
+      "cardType": "title_card | selling_point_card | comparison_card | cta_card | null",
+      "subtitles": ["按语义切的字幕行"]
+    }
+  ]
+}
+
+约束：
+- items 长度必须等于输入清单长度；
+- itemId 必须严格对应输入；
+- script 不超过 40 字；subtitles 每行 6-14 字；
+- captionStyle 必须从枚举中选。
+
+只输出 JSON 本体。`;
+}
+
+function stripFenceTimeline(raw: string): string {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith('```')) {
+    return trimmed.replace(/^```(?:json)?\s*/i, '').replace(/```$/i, '').trim();
+  }
+  return trimmed;
+}
+
+type Client = ReturnType<typeof createOpenAICompatibleClient>;
+
+export interface GenerateTimelineLLMOptions {
+  structureGraph: ViralStructureGraph;
+  newContent: ContentBrief;
+  matches: SlotMatch[];
+  repairs: GapRepair[];
+  assets: AssetCard[];
+  variant?: GenerationVariant;
+  boundaries?: Boundary[];
+  clientFactory?: () => Client;
+  model?: string;
+}
+
+export async function generateTimelineLLM(opts: GenerateTimelineLLMOptions): Promise<{
+  script: ScriptSegment[];
+  storyboard: StoryboardShot[];
+  timeline: TimelineItem[];
+}> {
+  const { structureGraph, newContent, matches, repairs, assets, boundaries, clientFactory, model } = opts;
+  const variant = opts.variant ?? 'high_click';
+
+  const client = (clientFactory ?? createOpenAICompatibleClient)();
+  const modelId = model ?? process.env.LLM_MODEL;
+  if (!modelId) {
+    throw new Error('LLM_MODEL is required for generateTimelineLLM.');
+  }
+
+  const skeletons = buildSegmentSkeleton(structureGraph, matches, repairs, assets, boundaries);
+
+  const script: ScriptSegment[] = [];
+  const storyboard: StoryboardShot[] = [];
+  const timeline: TimelineItem[] = [];
+  let storyIdx = 0;
+  let tlIdx = 0;
+
+  for (const skel of skeletons) {
+    const response = await client.chat.completions.create({
+      model: modelId,
+      messages: [
+        { role: 'system', content: SCRIPT_SYSTEM_PROMPT },
+        { role: 'user', content: buildScriptUserPrompt(variant, newContent, skel) }
+      ],
+      temperature: 0.5,
+      response_format: { type: 'json_object' }
+    });
+    const raw = response.choices[0]?.message?.content ?? '';
+    const parsed = JSON.parse(stripFenceTimeline(raw));
+    const validated = ScriptSegmentResponseSchema.parse(parsed);
+
+    if (validated.items.length !== skel.items.length) {
+      throw new Error(
+        `Segment ${skel.segment.id}: LLM returned ${validated.items.length} items, expected ${skel.items.length}`
+      );
+    }
+
+    const byItemId = new Map(validated.items.map((i) => [i.itemId, i]));
+
+    // Segment-level aggregate script line (first item's text — segment summary)
+    const firstResp = byItemId.get(skel.items[0].itemId);
+    script.push({
+      segmentId: skel.segment.id,
+      role: skel.segment.role,
+      start: skel.segment.start,
+      end: skel.segment.end,
+      text: firstResp?.script ?? '',
+      evidence: ['llm_script_generation']
+    });
+
+    for (const item of skel.items) {
+      const resp = byItemId.get(item.itemId);
+      if (!resp) {
+        throw new Error(`Segment ${skel.segment.id}: missing item ${item.itemId} in LLM response`);
+      }
+
+      storyIdx += 1;
+      storyboard.push({
+        id: `story_${storyIdx}`,
+        start: item.start,
+        end: item.end,
+        visual: resp.visualAction,
+        narration: resp.script,
+        packaging: item.repair?.strategy ?? 'selling_point_card'
+      });
+
+      tlIdx += 1;
+      const transition = transitionFromBoundary(skel.segment.id, boundaries) ?? transitionForVariant(variant, tlIdx - 1);
+      const treatmentMotion = item.treatmentSpec?.motion;
+      timeline.push({
+        id: `tl_${tlIdx}`,
+        start: item.start,
+        end: item.end,
+        segmentRole: skel.segment.role,
+        sourceSegmentId: skel.segment.id,
+        slotId: item.slotId,
+        assetId: item.matchedAsset?.id,
+        script: resp.script,
+        subtitles: resp.subtitles,
+        visualAction: treatmentMotion
+          ? `${resp.visualAction}（处理：${treatmentMotion}）`
+          : resp.visualAction,
+        packaging: {
+          captionStyle: resp.captionStyle,
+          cardType: resp.cardType ?? undefined,
+          transition,
+          motion: motionForVariant(variant, item.repair)
+        },
+        repair: item.repair,
+        scriptSource: 'llm_generated',
+        treatmentSpec: item.treatmentSpec
+      });
+    }
+  }
+
+  return { script, storyboard, timeline };
+}
+
+export type GenerateTimelineResultWithSource = {
+  script: ScriptSegment[];
+  storyboard: StoryboardShot[];
+  timeline: TimelineItem[];
+  scriptSource: 'llm_generated' | 'template';
+  warning?: string;
+};
+
+export async function generateTimelineWithFallback(opts: GenerateTimelineLLMOptions): Promise<GenerateTimelineResultWithSource> {
+  try {
+    const result = await generateTimelineLLM(opts);
+    return { ...result, scriptSource: 'llm_generated' };
+  } catch (err) {
+    const fallback = await generateTimelineMock({
+      structureGraph: opts.structureGraph,
+      newContent: opts.newContent,
+      matches: opts.matches,
+      repairs: opts.repairs,
+      variant: opts.variant,
+      boundaries: opts.boundaries
+    });
+    return {
+      ...fallback,
+      timeline: fallback.timeline.map((t) => ({ ...t, scriptSource: 'template' as const })),
+      scriptSource: 'template',
+      warning: `LLM script generation failed (${err instanceof Error ? err.message : String(err)}); using template fallback.`
+    };
+  }
 }

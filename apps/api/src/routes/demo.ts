@@ -3,11 +3,11 @@ import type { AssetCard, ContentBrief, GapRepair, QualityReport, SlotMatch, Time
 import { analyzeAssetsMock } from '../services/assetAnalyzer';
 import { loadAssetLibrary } from '../services/assetLibraryLoader';
 import { type DemoShowcase, getDemoShowcase } from '../services/demoShowcase';
-import { planGapRepairs } from '../services/gapRepairPlanner';
+import { planGapRepairsWithFallback } from '../services/gapRepairPlanner';
 import { evaluateQuality } from '../services/qualityEvaluator';
-import { matchSlots } from '../services/slotMatcher';
+import { matchSlotsWithFallback } from '../services/slotMatcher';
 import { type StructureExtractionResult, extractStructureFromVideoAnalysis } from '../services/structureExtractor';
-import { generateTimelineMock } from '../services/timelineGenerator';
+import { generateTimelineWithFallback } from '../services/timelineGenerator';
 import { analyzeVideoFile, getSeedVideoPath } from '../services/videoAnalyzer';
 
 export const demoRouter = Router();
@@ -58,13 +58,24 @@ demoRouter.post('/run', async (_req, res) => {
     const structure = await extractStructureFromVideoAnalysis(videoAnalysis);
     const boundaries = structure.structureGraph.boundaries;
     const assetLoad = await loadDemoAssetCards(showcase);
-    const slotResult = matchSlots(structure.structureGraph, assetLoad.assetCards, boundaries);
-    const repairs = planGapRepairs(slotResult.gaps, assetLoad.assetCards, contentBrief, boundaries);
-    const generation = await generateTimelineMock({
+    const slotResult = await matchSlotsWithFallback({
+      graph: structure.structureGraph,
+      assets: assetLoad.assetCards,
+      boundaries
+    });
+    const repairResult = await planGapRepairsWithFallback({
+      gaps: slotResult.gaps,
+      assets: assetLoad.assetCards,
+      newContent: contentBrief,
+      graph: structure.structureGraph,
+      boundaries
+    });
+    const generation = await generateTimelineWithFallback({
       structureGraph: structure.structureGraph,
       newContent: contentBrief,
       matches: slotResult.matches,
-      repairs,
+      repairs: repairResult.repairs,
+      assets: assetLoad.assetCards,
       variant: 'high_click',
       boundaries
     });
@@ -73,6 +84,10 @@ demoRouter.post('/run', async (_req, res) => {
       timeline: generation.timeline,
       boundaries
     });
+
+    const llmWarnings = [slotResult.warning, repairResult.warning, generation.warning].filter(
+      (w): w is string => Boolean(w)
+    );
 
     res.json({
       showcase,
@@ -87,17 +102,28 @@ demoRouter.post('/run', async (_req, res) => {
       },
       slotMatches: slotResult.matches,
       materialGaps: slotResult.gaps,
-      repairs,
-      ...generation,
+      repairs: repairResult.repairs,
+      script: generation.script,
+      storyboard: generation.storyboard,
+      timeline: generation.timeline,
       qualityReport,
+      llmStageSources: {
+        alignment: slotResult.alignmentSource,
+        gapSpec: repairResult.gapSpecSource,
+        script: generation.scriptSource
+      },
+      llmWarnings,
       evidenceTrace: buildEvidenceTrace({
         showcase,
         structure,
         assetLoad,
         matches: slotResult.matches,
-        repairs,
+        repairs: repairResult.repairs,
         timeline: generation.timeline,
-        qualityReport
+        qualityReport,
+        alignmentSource: slotResult.alignmentSource,
+        gapSpecSource: repairResult.gapSpecSource,
+        scriptSource: generation.scriptSource
       })
     });
   } catch (error) {
@@ -136,7 +162,10 @@ function buildEvidenceTrace({
   matches,
   repairs,
   timeline,
-  qualityReport
+  qualityReport,
+  alignmentSource,
+  gapSpecSource,
+  scriptSource
 }: {
   showcase: DemoShowcase;
   structure: StructureExtractionResult;
@@ -145,6 +174,9 @@ function buildEvidenceTrace({
   repairs: GapRepair[];
   timeline: TimelineItem[];
   qualityReport: QualityReport;
+  alignmentSource: 'llm_judge' | 'rule_based';
+  gapSpecSource: 'llm_generated' | 'rule_based';
+  scriptSource: 'llm_generated' | 'template';
 }): DemoEvidenceTraceItem[] {
   const analysisId = showcase.case.seedFilename.replace(/\.[^.]+$/, '');
   const matchedCount = matches.filter((match) => match.status === 'matched').length;
@@ -185,16 +217,16 @@ function buildEvidenceTrace({
     {
       id: 'slot_gap_repair',
       label: 'Slot Match / Gap Repair',
-      source: 'rule_engine',
-      detail: `${matchedCount} 个 matched，${partialOrMissingCount} 个 partial/missing，${repairs.length} 个补全策略`,
-      judgeBenefit: '把结构槽位、素材能力和缺口补全串成可解释迁移链路。'
+      source: `${alignmentSource} + ${gapSpecSource}`,
+      detail: `${matchedCount} 个 matched，${partialOrMissingCount} 个 partial/missing，${repairs.length} 个补全策略；对齐来源 ${alignmentSource}；拍摄规格来源 ${gapSpecSource}`,
+      judgeBenefit: '把结构槽位、素材能力和缺口补全串成可解释迁移链路，并标注每一段是 LLM 真判断还是规则降级。'
     },
     {
       id: 'timeline_quality',
       label: 'Timeline / Quality',
-      source: 'timeline_generator',
-      detail: `${timeline.length} 个时间线 item，结构匹配 ${qualityReport.structureMatch.toFixed(2)}，素材覆盖 ${qualityReport.slotCoverage.toFixed(2)}，${transitionFidelity}`,
-      judgeBenefit: '把评审要求的脚本、分镜、时间线和结果可验证性集中输出。'
+      source: scriptSource,
+      detail: `${timeline.length} 个时间线 item，结构匹配 ${qualityReport.structureMatch.toFixed(2)}，素材覆盖 ${qualityReport.slotCoverage.toFixed(2)}，${transitionFidelity}；脚本来源 ${scriptSource}`,
+      judgeBenefit: '把评审要求的脚本、分镜、时间线和结果可验证性集中输出，并标注脚本是 LLM 写的还是模板降级。'
     }
   ];
 }

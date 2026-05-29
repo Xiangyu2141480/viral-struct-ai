@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { Boundary, MaterialGap } from '@viral-struct/shared';
-import { planGapRepairs } from './gapRepairPlanner';
+import type { Boundary, ContentBrief, MaterialGap } from '@viral-struct/shared';
+import { planGapRepairs, planGapRepairsLLM, planGapRepairsWithFallback } from './gapRepairPlanner';
 
 const gap: MaterialGap = {
   slotId: 'slot_x',
@@ -48,4 +48,107 @@ test('planGapRepairs does not annotate for weak boundaries', () => {
     boundaries
   );
   assert.ok(!repair.explanation.startsWith('[boundary:'));
+});
+
+// ---------------------------------------------------------------------------
+// LLM gap-spec tests
+// ---------------------------------------------------------------------------
+
+interface FakeClient {
+  chat: { completions: { create: (req: unknown) => Promise<{ choices: Array<{ message: { content: string } }> }> } };
+}
+
+function makeFakeClient(json: string): FakeClient {
+  return {
+    chat: {
+      completions: {
+        create: async () => ({ choices: [{ message: { content: json } }] })
+      }
+    }
+  };
+}
+
+const brief: ContentBrief = {
+  productName: '冰红茶',
+  targetAudience: '夏季通勤',
+  scenario: '午后高温',
+  sellingPoints: ['冰爽', '柠檬茶香'],
+  cta: '来一瓶'
+};
+
+test('planGapRepairsLLM enriches repairs with three-tier gapSpec', async () => {
+  const llmResponse = JSON.stringify({
+    slot_x: {
+      ideal: '一段 3-4 秒手持横屏视频：手部入画拧瓶盖 → 倒入透明玻璃杯 → 杯内液体特写带冰块滚动。手机 1080p 即可。',
+      minimalAcceptable: '2-3 张连拍静图：拧瓶盖瞬间 + 倒水入画 + 杯内液面。',
+      alternativeIfNoShoot: '用 asset_1 (splash 图) + 加倒水音效 + 字幕「瞬间冰爽」，ken_burns 推近到瓶口。'
+    }
+  });
+  const repairs = await planGapRepairsLLM({
+    gaps: [gap],
+    assets: [],
+    newContent: brief,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    clientFactory: () => makeFakeClient(llmResponse) as any,
+    model: 'fake'
+  });
+  assert.equal(repairs.length, 1);
+  assert.ok(repairs[0].gapSpec?.ideal?.includes('3-4 秒'));
+  assert.ok(repairs[0].gapSpec?.alternativeIfNoShoot?.includes('ken_burns'));
+});
+
+test('planGapRepairsLLM rejects when LLM omits a slot', async () => {
+  const incomplete = JSON.stringify({});
+  await assert.rejects(
+    planGapRepairsLLM({
+      gaps: [gap],
+      assets: [],
+      newContent: brief,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      clientFactory: () => makeFakeClient(incomplete) as any,
+      model: 'fake'
+    }),
+    /missing slot/
+  );
+});
+
+test('planGapRepairsLLM rejects when an output field is empty', async () => {
+  const empty = JSON.stringify({
+    slot_x: { ideal: '', minimalAcceptable: 'x', alternativeIfNoShoot: 'y' }
+  });
+  await assert.rejects(
+    planGapRepairsLLM({
+      gaps: [gap],
+      assets: [],
+      newContent: brief,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      clientFactory: () => makeFakeClient(empty) as any,
+      model: 'fake'
+    })
+  );
+});
+
+test('planGapRepairsWithFallback falls back to rule-based when LLM throws', async () => {
+  const result = await planGapRepairsWithFallback({
+    gaps: [gap],
+    assets: [],
+    newContent: brief,
+    clientFactory: () => { throw new Error('boom'); }
+  });
+  assert.equal(result.gapSpecSource, 'rule_based');
+  assert.equal(result.repairs.length, 1);
+  assert.equal(result.repairs[0].gapSpec, undefined);
+  assert.ok(result.warning?.includes('boom'));
+});
+
+test('planGapRepairsLLM returns empty array for zero gaps without calling LLM', async () => {
+  let called = 0;
+  const repairs = await planGapRepairsLLM({
+    gaps: [],
+    assets: [],
+    newContent: brief,
+    clientFactory: () => { called += 1; throw new Error('should not be invoked'); }
+  });
+  assert.equal(repairs.length, 0);
+  assert.equal(called, 0);
 });

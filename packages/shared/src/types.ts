@@ -332,6 +332,15 @@ export interface AssetCard {
   analysisSource?: AssetAnalysisSource;
 }
 
+export interface SlotTreatmentSpec {
+  motion?: string;
+  durationMs?: number;
+  syncPoint?: string;
+  captionOverlay?: string;
+}
+
+export type SlotAlignmentSource = 'llm_judge' | 'rule_based';
+
 export interface SlotMatch {
   slotId: string;
   assetId?: string;
@@ -340,6 +349,11 @@ export interface SlotMatch {
   missingIngredients?: CreativeIngredientType[];
   status: 'matched' | 'partial' | 'missing';
   reason: string;
+  quality?: number;
+  matchedCriteria?: string[];
+  missingDescription?: string;
+  treatmentSpec?: SlotTreatmentSpec;
+  alignmentSource?: SlotAlignmentSource;
 }
 
 export type MaterialGapType =
@@ -357,6 +371,14 @@ export type MaterialGapType =
   | 'missing_scene_style'
   | 'missing_visual_ingredient';
 
+export interface GapShootSpec {
+  ideal?: string;
+  minimalAcceptable?: string;
+  alternativeIfNoShoot?: string;
+}
+
+export type GapSpecSource = 'llm_generated' | 'rule_based';
+
 export interface MaterialGap {
   slotId: string;
   role: ShotSlotRole;
@@ -366,6 +388,8 @@ export interface MaterialGap {
   impact: string;
   affectedSegmentId?: string;
   missingIngredients?: CreativeIngredientType[];
+  gapSpec?: GapShootSpec;
+  gapSpecSource?: GapSpecSource;
 }
 
 export interface GapRepair {
@@ -373,6 +397,7 @@ export interface GapRepair {
   strategy: GapRepairStrategy;
   explanation: string;
   generatedAssetHint?: string;
+  gapSpec?: GapShootSpec;
 }
 
 export interface ScriptSegment {
@@ -393,6 +418,8 @@ export interface StoryboardShot {
   packaging: string;
 }
 
+export type ScriptSource = 'llm_generated' | 'template';
+
 export interface TimelineItem {
   id: string;
   start: number;
@@ -411,6 +438,8 @@ export interface TimelineItem {
     motion?: 'crop_zoom' | 'pan' | 'static' | 'push_in';
   };
   repair?: GapRepair;
+  scriptSource?: ScriptSource;
+  treatmentSpec?: SlotTreatmentSpec;
 }
 
 export interface QualityReport {
