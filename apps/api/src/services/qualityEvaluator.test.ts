@@ -10,6 +10,8 @@ import {
   evaluateQuality
 } from './qualityEvaluator';
 
+type SlotMatchWithQuality = SlotMatch & { quality?: number };
+
 const baseTimeline: TimelineItem[] = [
   {
     id: 'tl_1', start: 0, end: 5, segmentRole: 'hook', sourceSegmentId: 'seg_a', slotId: 's1',
@@ -62,7 +64,7 @@ test('computeStructureMatch falls back to status mapping when match.quality abse
 });
 
 test('computeStructureMatch prefers LLM quality when present (PR #36 path)', () => {
-  const matches: SlotMatch[] = [
+  const matches: SlotMatchWithQuality[] = [
     { slotId: 's1', score: 0, status: 'matched', reason: '', quality: 0.88 },
     { slotId: 's2', score: 0, status: 'partial', reason: '', quality: 0.55 }
   ];

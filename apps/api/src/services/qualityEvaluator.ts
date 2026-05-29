@@ -35,7 +35,7 @@ export function evaluateQuality(input: {
 
 // ---------------------------------------------------------------------------
 // structureMatch — weighted alignment quality across matched/partial/missing slots.
-// Uses match.quality (PR #36 LLM-judge path) when present; otherwise maps status.
+// Uses match.quality from richer LLM-judge payloads when present; otherwise maps status.
 // ---------------------------------------------------------------------------
 
 export function computeStructureMatch(matches: SlotMatch[]): number {
@@ -47,9 +47,15 @@ export function computeStructureMatch(matches: SlotMatch[]): number {
   };
   let sum = 0;
   for (const m of matches) {
-    sum += typeof m.quality === 'number' ? m.quality : STATUS_SCORE[m.status];
+    const quality = getOptionalMatchQuality(m);
+    sum += quality ?? STATUS_SCORE[m.status];
   }
   return round3(sum / matches.length);
+}
+
+function getOptionalMatchQuality(match: SlotMatch): number | undefined {
+  const quality = (match as SlotMatch & { quality?: unknown }).quality;
+  return typeof quality === 'number' ? quality : undefined;
 }
 
 // ---------------------------------------------------------------------------
