@@ -1,6 +1,7 @@
 'use client';
 
 import type { TimelineEditSummaryState } from '../lib/workflowStore';
+import { useGsapReveal } from '../lib/useGsapReveal';
 
 const editTypeLabels: Record<string, string> = {
   hook_stronger: '开头更抓人',
@@ -13,10 +14,17 @@ const editTypeLabels: Record<string, string> = {
 };
 
 export function TimelineEditSummary({ summary }: { summary: TimelineEditSummaryState | null }) {
+  const pulseRef = useGsapReveal<HTMLElement>({
+    selector: '[data-edit-change]',
+    mode: 'pulse',
+    dependencyKey: summary?.changedItems.map((item) => `${item.itemId}:${item.changes.join(',')}`).join('|') ?? 'none',
+    disabled: !summary?.changedItems.length
+  });
+
   if (!summary) return null;
 
   return (
-    <section className="card" style={{ marginBottom: 16 }}>
+    <section ref={pulseRef} className="card" style={{ marginBottom: 16 }}>
       <h2>Edit Summary</h2>
       <p>
         <strong>{editTypeLabels[summary.editType] ?? summary.editType}</strong> · {summary.patchSummary}
@@ -38,6 +46,7 @@ export function TimelineEditSummary({ summary }: { summary: TimelineEditSummaryS
           {summary.changedItems.map((item) => (
             <article
               key={item.itemId}
+              data-edit-change="true"
               style={{
                 border: '1px solid rgba(255,255,255,0.12)',
                 borderRadius: 8,

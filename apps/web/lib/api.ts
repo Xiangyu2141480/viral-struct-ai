@@ -1,4 +1,22 @@
+import type { DemoEstimate, MissingMaterialGenerationJob, StoryboardFrame } from '@viral-struct/shared';
+
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:4000';
+
+export interface StoryboardPlanResponse {
+  frames: StoryboardFrame[];
+  source: 'storyboard_prompt_planner';
+  warnings: string[];
+}
+
+export interface MissingMaterialGenerationPlanResponse {
+  jobs: MissingMaterialGenerationJob[];
+  source: 'missing_material_generation_planner';
+  warnings: string[];
+}
+
+export interface DemoEstimateResponse {
+  demoEstimate: DemoEstimate;
+}
 
 export function apiUrl(path: string): string {
   return `${API_BASE}${path}`;
@@ -47,4 +65,16 @@ export async function apiPostForm<T>(path: string, body: FormData): Promise<T> {
   }
 
   return res.json() as Promise<T>;
+}
+
+export function planStoryboardFrames(body: unknown): Promise<StoryboardPlanResponse> {
+  return apiPost<StoryboardPlanResponse>('/api/storyboard/plan', body);
+}
+
+export function planMissingMaterialGeneration(body: unknown): Promise<MissingMaterialGenerationPlanResponse> {
+  return apiPost<MissingMaterialGenerationPlanResponse>('/api/material-generation/plan', body);
+}
+
+export function estimateDemoAnalytics(body: unknown): Promise<DemoEstimateResponse> {
+  return apiPost<DemoEstimateResponse>('/api/analytics/demo-estimate', body);
 }

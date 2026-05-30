@@ -452,3 +452,119 @@ export interface QualityReport {
   warnings: string[];
   transitionFidelity?: number;  // 0..1; only populated when source boundaries exist
 }
+
+export type SafetyStatusLevel = 'passed' | 'needs_review' | 'blocked';
+export type SafetyRiskLevel = 'low' | 'medium' | 'high';
+
+export interface SafetyStatus {
+  status: SafetyStatusLevel;
+  ipRisk: SafetyRiskLevel;
+  brandRisk: SafetyRiskLevel;
+  claimRisk: SafetyRiskLevel;
+  reasons: string[];
+}
+
+export type StoryboardFrameType =
+  | 'opening_hook'
+  | 'product_closeup'
+  | 'benefit_usage'
+  | 'gap_repair'
+  | 'cta_cover';
+
+export interface StoryboardImagePrompt {
+  positivePrompt: string;
+  negativePrompt: string;
+  aspectRatio: '9:16' | '16:9' | '1:1' | 'unknown';
+  styleHints: string[];
+  promptSource: 'storyboard_prompt_planner';
+}
+
+export interface GeneratedVisualAsset {
+  id: string;
+  type: 'placeholder_svg' | 'external_image';
+  url: string;
+  mimeType: 'image/svg+xml' | 'image/png' | 'image/jpeg';
+  generationSource: 'placeholder' | 'image_api';
+  promptId: string;
+  label: string;
+}
+
+export interface StoryboardFrame {
+  id: string;
+  frameIndex: number;
+  frameType: StoryboardFrameType;
+  title: string;
+  timelineItemId: string;
+  slotId?: string;
+  structureIntent: string;
+  sourceInstance: string;
+  acceptanceCriteria: string[];
+  matchedAsset?: Pick<AssetCard, 'id' | 'type' | 'url' | 'text' | 'spatialDescription' | 'temporalDescription' | 'qualityScore'>;
+  slotMatch?: Pick<SlotMatch, 'slotId' | 'assetId' | 'score' | 'status' | 'reason' | 'alignmentSource'>;
+  materialGap?: Pick<MaterialGap, 'slotId' | 'role' | 'type' | 'severity' | 'reason' | 'impact' | 'gapSpecSource'>;
+  repair?: GapRepair;
+  imagePrompt: StoryboardImagePrompt;
+  generatedVisualAsset?: GeneratedVisualAsset;
+  safetyStatus: SafetyStatus;
+  rationale: string;
+}
+
+export type GenerationProvider = 'mock' | 'seedance_2_0';
+export type MissingMaterialGenerationMode = 'image_to_video' | 'text_to_video';
+export type MissingMaterialGenerationStatus = 'planned' | 'ready' | 'blocked';
+
+export interface MissingMaterialGenerationRequest {
+  materialGaps: MaterialGap[];
+  repairs?: GapRepair[];
+  storyboardFrames?: StoryboardFrame[];
+  timeline?: TimelineItem[];
+  contentBrief?: ContentBrief;
+  aspectRatio?: '9:16' | '16:9' | '1:1' | 'unknown';
+  provider?: GenerationProvider;
+}
+
+export interface MissingMaterialGenerationJob {
+  id: string;
+  gapId: string;
+  repairId?: string;
+  timelineItemId?: string;
+  provider: GenerationProvider;
+  providerLabel: string;
+  mode: MissingMaterialGenerationMode;
+  status: MissingMaterialGenerationStatus;
+  durationSec: number;
+  aspectRatio: '9:16' | '16:9' | '1:1' | 'unknown';
+  positivePrompt: string;
+  negativePrompt: string;
+  shotSpec: string;
+  gapType?: MaterialGapType;
+  gapSeverity: MaterialGap['severity'];
+  repairStrategy?: GapRepairStrategy;
+  storyboardFrameId?: string;
+  safetyStatus: SafetyStatus;
+  blockedReason?: string;
+  disclaimer: string;
+}
+
+export interface DemoEstimateMetric {
+  score: number;
+  label: string;
+  explanation: string;
+  formula?: string;
+  simulated?: boolean;
+}
+
+export interface DemoEstimate {
+  disclaimer: 'Offline heuristic estimate. Not based on real user behavior.';
+  generatedAt: string;
+  metrics: {
+    viralPotential: DemoEstimateMetric;
+    templateFit: DemoEstimateMetric;
+    gapRepairCoverage: DemoEstimateMetric;
+    evidenceConfidence: DemoEstimateMetric;
+    variantDistinctiveness: DemoEstimateMetric;
+    estimatedCtrLift: DemoEstimateMetric;
+  };
+  components: Record<string, number>;
+  warnings: string[];
+}

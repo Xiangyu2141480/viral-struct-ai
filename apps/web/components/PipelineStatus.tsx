@@ -1,6 +1,7 @@
 'use client';
 
 import type { GapSpecSource, ScriptSource, SlotAlignmentSource } from '@viral-struct/shared';
+import { useGsapReveal } from '../lib/useGsapReveal';
 
 type PipelineKind = 'alignment' | 'gap' | 'script';
 type PipelineSource = SlotAlignmentSource | GapSpecSource | ScriptSource | undefined;
@@ -37,6 +38,7 @@ export function PipelineSourceBadge({
 
   return (
     <span
+      data-pipeline-item="true"
       title={source ? `${label}: ${source}` : `${label}: not available yet`}
       style={{
         display: 'inline-flex',
@@ -66,6 +68,7 @@ export function PipelineWarningCallout({ warnings }: { warnings?: string[] }) {
 
   return (
     <div
+      data-pipeline-item="true"
       style={{
         border: '1px solid rgba(253,186,116,0.34)',
         borderRadius: 8,
@@ -97,8 +100,14 @@ export function GenerationTracePanel({
   warnings?: string[];
   qualityContext?: string;
 }) {
+  const traceRef = useGsapReveal<HTMLElement>({
+    selector: '[data-pipeline-item]',
+    dependencyKey: `${alignmentSource ?? 'none'}:${gapSpecSource ?? 'none'}:${scriptSource ?? 'none'}:${warnings?.join('|') ?? ''}`
+  });
+
   return (
     <section
+      ref={traceRef}
       className="card"
       style={{
         marginBottom: 16,

@@ -1,6 +1,7 @@
 'use client';
 
 import type { ContentBrief, TimelineItem } from '@viral-struct/shared';
+import { useGsapReveal } from '../lib/useGsapReveal';
 import type { GenerationVariant } from '../lib/workflowStore';
 
 const variantCopy: Record<GenerationVariant, {
@@ -46,6 +47,12 @@ export function VariantDiffPanel({
   timeline: TimelineItem[];
   contentBrief: ContentBrief;
 }) {
+  const highlightRef = useGsapReveal<HTMLElement>({
+    selector: '[data-variant-highlight]',
+    mode: 'highlight',
+    dependencyKey: `${variant}:${timeline.map((item) => `${item.id}:${item.script}:${item.packaging.transition ?? ''}`).join('|')}`
+  });
+
   if (!timeline.length) return null;
 
   const copy = variantCopy[variant];
@@ -57,7 +64,7 @@ export function VariantDiffPanel({
   const avgSubtitleLines = timeline.reduce((sum, item) => sum + item.subtitles.length, 0) / Math.max(timeline.length, 1);
 
   return (
-    <section className="card" style={{ marginBottom: 16 }}>
+    <section ref={highlightRef} className="card" style={{ marginBottom: 16 }}>
       <h2>Variant Diff</h2>
       <p>
         当前版本：<strong>{copy.label}</strong> · {copy.goal}
@@ -88,6 +95,7 @@ export function VariantDiffPanel({
           {timeline.slice(0, 5).map((item) => (
             <article
               key={item.id}
+              data-variant-highlight="true"
               style={{
                 border: '1px solid rgba(255,255,255,0.1)',
                 borderRadius: 8,
@@ -111,6 +119,7 @@ export function VariantDiffPanel({
 function DiffCard({ title, lines }: { title: string; lines: string[] }) {
   return (
     <article
+      data-variant-highlight="true"
       style={{
         border: '1px solid rgba(255,255,255,0.12)',
         borderRadius: 8,

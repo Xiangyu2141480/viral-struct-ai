@@ -5,14 +5,17 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import type {
   AssetCard,
   ContentBrief,
+  DemoEstimate,
   GapRepair,
   GapSpecSource,
   MaterialGap,
+  MissingMaterialGenerationJob,
   QualityReport,
   ScriptSegment,
   ScriptSource,
   SlotAlignmentSource,
   SlotMatch,
+  StoryboardFrame,
   StoryboardShot,
   TimelineItem,
   VideoAnalysis,
@@ -101,8 +104,13 @@ interface WorkflowState {
   repairs: GapRepair[];
   script: ScriptSegment[];
   storyboard: StoryboardShot[];
+  storyboardFrames: StoryboardFrame[];
+  storyboardFrameWarnings: string[];
+  missingMaterialJobs: MissingMaterialGenerationJob[];
+  missingMaterialJobWarnings: string[];
   timeline: TimelineItem[];
   qualityReport: QualityReport | null;
+  demoEstimate: DemoEstimate | null;
   pipelineTrace: PipelineTrace;
   generationVariant: GenerationVariant;
   timelineEditSummary: TimelineEditSummaryState | null;
@@ -116,8 +124,11 @@ interface WorkflowState {
   setSlotResult: (slotMatches: SlotMatch[], materialGaps: MaterialGap[], trace?: Partial<PipelineTrace>) => void;
   setRepairs: (repairs: GapRepair[], trace?: Partial<PipelineTrace>) => void;
   setGenerationResult: (result: GenerationResult, trace?: Partial<PipelineTrace>) => void;
+  setStoryboardFrames: (frames: StoryboardFrame[], warnings?: string[]) => void;
+  setMissingMaterialJobs: (jobs: MissingMaterialGenerationJob[], warnings?: string[]) => void;
   applyTimelineEditResult: (result: TimelineEditResult) => void;
   setQualityReport: (qualityReport: QualityReport) => void;
+  setDemoEstimate: (demoEstimate: DemoEstimate | null) => void;
   setGenerationVariant: (variant: GenerationVariant) => void;
   resetWorkflow: () => void;
 }
@@ -138,8 +149,13 @@ export const useWorkflowStore = create<WorkflowState>()(
       repairs: [],
       script: [],
       storyboard: [],
+      storyboardFrames: [],
+      storyboardFrameWarnings: [],
+      missingMaterialJobs: [],
+      missingMaterialJobWarnings: [],
       timeline: [],
       qualityReport: null,
+      demoEstimate: null,
       pipelineTrace: emptyPipelineTrace(),
       generationVariant: 'high_click',
       timelineEditSummary: null,
@@ -158,8 +174,13 @@ export const useWorkflowStore = create<WorkflowState>()(
           repairs: [],
           script: [],
           storyboard: [],
+          storyboardFrames: [],
+          storyboardFrameWarnings: [],
+          missingMaterialJobs: [],
+          missingMaterialJobWarnings: [],
           timeline: [],
           qualityReport: null,
+          demoEstimate: null,
           pipelineTrace: emptyPipelineTrace(),
           timelineEditSummary: null,
           editNotes: []
@@ -175,8 +196,13 @@ export const useWorkflowStore = create<WorkflowState>()(
           repairs: [],
           script: [],
           storyboard: [],
+          storyboardFrames: [],
+          storyboardFrameWarnings: [],
+          missingMaterialJobs: [],
+          missingMaterialJobWarnings: [],
           timeline: [],
           qualityReport: null,
+          demoEstimate: null,
           pipelineTrace: emptyPipelineTrace(),
           timelineEditSummary: null,
           editNotes: []
@@ -191,8 +217,13 @@ export const useWorkflowStore = create<WorkflowState>()(
           repairs: [],
           script: [],
           storyboard: [],
+          storyboardFrames: [],
+          storyboardFrameWarnings: [],
+          missingMaterialJobs: [],
+          missingMaterialJobWarnings: [],
           timeline: [],
           qualityReport: null,
+          demoEstimate: null,
           pipelineTrace: emptyPipelineTrace(),
           timelineEditSummary: null,
           editNotes: []
@@ -206,8 +237,13 @@ export const useWorkflowStore = create<WorkflowState>()(
           repairs: [],
           script: [],
           storyboard: [],
+          storyboardFrames: [],
+          storyboardFrameWarnings: [],
+          missingMaterialJobs: [],
+          missingMaterialJobWarnings: [],
           timeline: [],
           qualityReport: null,
+          demoEstimate: null,
           pipelineTrace: emptyPipelineTrace(),
           timelineEditSummary: null,
           editNotes: []
@@ -219,8 +255,13 @@ export const useWorkflowStore = create<WorkflowState>()(
           repairs: [],
           script: [],
           storyboard: [],
+          storyboardFrames: [],
+          storyboardFrameWarnings: [],
+          missingMaterialJobs: [],
+          missingMaterialJobWarnings: [],
           timeline: [],
           qualityReport: null,
+          demoEstimate: null,
           pipelineTrace: mergePipelineTrace(emptyPipelineTrace(), trace),
           timelineEditSummary: null,
           editNotes: []
@@ -230,8 +271,13 @@ export const useWorkflowStore = create<WorkflowState>()(
           repairs,
           script: [],
           storyboard: [],
+          storyboardFrames: [],
+          storyboardFrameWarnings: [],
+          missingMaterialJobs: [],
+          missingMaterialJobWarnings: [],
           timeline: [],
           qualityReport: null,
+          demoEstimate: null,
           pipelineTrace: mergePipelineTrace(state.pipelineTrace, trace),
           timelineEditSummary: null,
           editNotes: []
@@ -240,27 +286,53 @@ export const useWorkflowStore = create<WorkflowState>()(
         set((state) => ({
           script,
           storyboard,
+          storyboardFrames: [],
+          storyboardFrameWarnings: [],
+          missingMaterialJobs: [],
+          missingMaterialJobWarnings: [],
           timeline,
           qualityReport: null,
+          demoEstimate: null,
           pipelineTrace: mergePipelineTrace(state.pipelineTrace, trace),
           timelineEditSummary: null,
           editNotes: []
         })),
+      setStoryboardFrames: (storyboardFrames, storyboardFrameWarnings) =>
+        set({
+          storyboardFrames,
+          storyboardFrameWarnings: storyboardFrameWarnings ?? []
+        }),
+      setMissingMaterialJobs: (missingMaterialJobs, missingMaterialJobWarnings) =>
+        set({
+          missingMaterialJobs,
+          missingMaterialJobWarnings: missingMaterialJobWarnings ?? []
+        }),
       applyTimelineEditResult: ({ updatedTimeline, ...summary }) =>
         set((state) => ({
           timeline: updatedTimeline,
+          storyboardFrames: [],
+          storyboardFrameWarnings: [],
+          missingMaterialJobs: [],
+          missingMaterialJobWarnings: [],
           qualityReport: null,
+          demoEstimate: null,
           timelineEditSummary: summary,
           editNotes: [`自然语言改片：${summary.patchSummary}`, ...state.editNotes]
         })),
       setQualityReport: (qualityReport) => set({ qualityReport }),
+      setDemoEstimate: (demoEstimate) => set({ demoEstimate }),
       setGenerationVariant: (generationVariant) =>
         set((state) => ({
           generationVariant,
           script: [],
           storyboard: [],
+          storyboardFrames: [],
+          storyboardFrameWarnings: [],
+          missingMaterialJobs: [],
+          missingMaterialJobWarnings: [],
           timeline: [],
           qualityReport: null,
+          demoEstimate: null,
           pipelineTrace: clearGenerationTrace(state.pipelineTrace),
           timelineEditSummary: null,
           editNotes: []
@@ -280,8 +352,11 @@ export const useWorkflowStore = create<WorkflowState>()(
           repairs: [],
           script: [],
           storyboard: [],
+          storyboardFrames: [],
+          storyboardFrameWarnings: [],
           timeline: [],
           qualityReport: null,
+          demoEstimate: null,
           pipelineTrace: emptyPipelineTrace(),
           generationVariant: 'high_click',
           timelineEditSummary: null,

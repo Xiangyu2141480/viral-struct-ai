@@ -2,6 +2,7 @@
 
 import type { QualityReport } from '@viral-struct/shared';
 import { useWorkflowStore } from '../lib/workflowStore';
+import { AnimatedScore } from './AnimatedScore';
 
 export function QualityReportPanel() {
   const qualityReport = useWorkflowStore((state) => state.qualityReport);
@@ -39,7 +40,9 @@ function QualityTable({ report }: { report: QualityReport }) {
           {metrics.map((metric) => (
             <tr key={metric[0]}>
               <td style={{ padding: 8 }}>{metric[0]}</td>
-              <td style={{ padding: 8 }}>{metric[1].toFixed(2)}</td>
+              <td style={{ padding: 8, fontVariantNumeric: 'tabular-nums', fontWeight: 800 }}>
+                <AnimatedScore value={metric[1]} decimals={2} />
+              </td>
               <td style={{ padding: 8 }}>{metric[2]}</td>
             </tr>
           ))}
