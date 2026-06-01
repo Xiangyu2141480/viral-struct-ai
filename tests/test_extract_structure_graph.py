@@ -409,3 +409,45 @@ class BuildStructureGraphSchemaVersionTests(unittest.TestCase):
         fine_doc = {"contentBlocks": [{"blockId": "block_001"}]}  # no migrationContract
         graph = self.module.build_structure_graph(rough_doc, fine_doc)
         self.assertNotIn("schemaVersion", graph)
+
+
+class ResolveAspectRatioTests(unittest.TestCase):
+    """_resolve_aspect_ratio: explicit flag wins, else auto-read media_technical.
+
+    Fixes the footgun where forgetting --aspect-ratio silently yields 'unknown'
+    even though media_technical already knows the real ratio (the bug that left
+    chocolate_mud_pie's graph at unknown on the first run).
+    """
+
+    def setUp(self):
+        self.module = load_module()
+
+    def test_explicit_override_wins(self):
+        self.assertEqual(self.module._resolve_aspect_ratio("any_vid", "16:9"), "16:9")
+
+    def test_unknown_without_media_returns_unknown(self):
+        # nonexistent video_id -> no media_technical on disk -> unknown
+        self.assertEqual(
+            self.module._resolve_aspect_ratio("no_such_video_xyz", "unknown"), "unknown"
+        )
+
+    def _patch_media_technical(self, aspect_ratio: str) -> Path:
+        tmp = tempfile.mkdtemp()
+        media = Path(tmp) / "media_technical.json"
+        media.write_text(f'{{"aspectRatio": "{aspect_ratio}"}}', encoding="utf-8")
+        orig = self.module.analysis_paths
+
+        class _FakePaths:
+            media_technical = media
+
+        self.module.analysis_paths = lambda vid: _FakePaths()
+        self.addCleanup(setattr, self.module, "analysis_paths", orig)
+        return media
+
+    def test_unknown_auto_reads_from_media_technical(self):
+        self._patch_media_technical("9:16")
+        self.assertEqual(self.module._resolve_aspect_ratio("x", "unknown"), "9:16")
+
+    def test_nonstandard_ratio_in_media_returns_unknown(self):
+        self._patch_media_technical("9:19.5")  # not in (9:16, 16:9, 1:1)
+        self.assertEqual(self.module._resolve_aspect_ratio("x", "unknown"), "unknown")

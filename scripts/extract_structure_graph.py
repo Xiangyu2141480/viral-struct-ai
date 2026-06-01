@@ -1129,6 +1129,26 @@ def _resolve_output(video_id: str, override: Path | None) -> Path:
     return analysis_paths(video_id).analysis_root / "structure_graph.json"
 
 
+def _resolve_aspect_ratio(video_id: str, override: str) -> str:
+    """Resolve aspect ratio: explicit --aspect-ratio wins; else auto-read from
+    the ffprobe-derived media_technical.json (accurate); else 'unknown'.
+
+    Avoids the footgun where forgetting --aspect-ratio silently yields
+    'unknown' even though media_technical already knows the real ratio.
+    """
+    if override and override != "unknown":
+        return override
+    media_path = analysis_paths(video_id).media_technical
+    if media_path.exists():
+        try:
+            ar = _load_json(media_path).get("aspectRatio")
+        except (OSError, ValueError):
+            ar = None
+        if ar in ("9:16", "16:9", "1:1"):
+            return ar
+    return "unknown"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--video-id", default=DEFAULT_VIDEO_ID)
@@ -1148,6 +1168,7 @@ def main() -> int:
     fine_path = _resolve_fine_scan(args.video_id, args.fine_scan)
     boundary_path = _resolve_boundary_scan(args.video_id, args.boundary_scan)
     out_path = _resolve_output(args.video_id, args.output)
+    aspect_ratio = _resolve_aspect_ratio(args.video_id, args.aspect_ratio)
 
     if not rough_path.exists():
         print(f"ERROR: rough scan not found: {rough_path}", file=sys.stderr)
@@ -1162,7 +1183,7 @@ def main() -> int:
     print(f"boundary_scan -> {boundary_path if boundary_path else '(absent)'}")
     print(f"output        -> {out_path}")
 
-    graph = build_structure_graph(rough_doc, fine_doc, aspect_ratio=args.aspect_ratio, boundary_doc=boundary_doc)
+    graph = build_structure_graph(rough_doc, fine_doc, aspect_ratio=aspect_ratio, boundary_doc=boundary_doc)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("w", encoding="utf-8") as f:
