@@ -644,5 +644,76 @@ class HttpConcurrencyControlsTests(unittest.TestCase):
         self.assertEqual(self.module.gated_call(fn, 1, 2, c=3), 6)
 
 
+class RequestJsonCurlPathTests(unittest.TestCase):
+    """request_json prefers curl (system TLS) to dodge OpenSSL SSL-EOF.
+
+    Mocks subprocess so no real network/curl runs. Locks the contract:
+    parsed JSON on 2xx, retryable RuntimeError on HTTP errors AND curl
+    transport failures, plus auth-header + stdin-body wiring.
+    """
+
+    def setUp(self):
+        self.module = load_module()
+
+    def _completed(self, *, stdout=b"", stderr=b"", returncode=0):
+        class _R:
+            pass
+        r = _R()
+        r.stdout, r.stderr, r.returncode = stdout, stderr, returncode
+        return r
+
+    def _use_fake_curl(self, fake_run):
+        orig_run, orig_curl = self.module.subprocess.run, self.module._CURL_PATH
+        self.module.subprocess.run = fake_run
+        self.module._CURL_PATH = "curl"
+        self.addCleanup(setattr, self.module.subprocess, "run", orig_run)
+        self.addCleanup(setattr, self.module, "_CURL_PATH", orig_curl)
+
+    def test_curl_success_returns_json_with_auth_and_stdin_body(self):
+        captured = {}
+
+        def fake_run(cmd, input=None, capture_output=None, timeout=None):
+            captured["cmd"], captured["input"] = cmd, input
+            return self._completed(stdout=b'{"id":"file-x"}\n200')
+
+        self._use_fake_curl(fake_run)
+        out = self.module.request_json(
+            method="POST", url="https://x/files", api_key="secret-k",
+            body=b"multipart-bytes",
+            content_type="multipart/form-data; boundary=b",
+        )
+        self.assertEqual(out, {"id": "file-x"})
+        self.assertIn("Authorization: Bearer secret-k", captured["cmd"])
+        self.assertEqual(captured["input"], b"multipart-bytes")
+
+    def test_curl_http_error_becomes_retryable_runtimeerror(self):
+        def fake_run(cmd, input=None, capture_output=None, timeout=None):
+            return self._completed(stdout=b'{"error":"overloaded"}\n503')
+
+        self._use_fake_curl(fake_run)
+        with self.assertRaises(RuntimeError) as ctx:
+            self.module.request_json(method="POST", url="https://x", api_key="k", body=b"x")
+        self.assertIn("HTTP 503", str(ctx.exception))
+        self.assertTrue(self.module._is_retryable_error(str(ctx.exception)))
+
+    def test_curl_transport_failure_is_retryable(self):
+        def fake_run(cmd, input=None, capture_output=None, timeout=None):
+            return self._completed(stderr=b"SSL connect error", returncode=35)
+
+        self._use_fake_curl(fake_run)
+        with self.assertRaises(RuntimeError) as ctx:
+            self.module.request_json(method="POST", url="https://x", api_key="k", body=b"x")
+        self.assertIn("curl transport error", str(ctx.exception))
+        self.assertTrue(self.module._is_retryable_error(str(ctx.exception)))
+
+    def test_curl_2xx_empty_body_returns_empty_dict(self):
+        def fake_run(cmd, input=None, capture_output=None, timeout=None):
+            return self._completed(stdout=b"\n200")
+
+        self._use_fake_curl(fake_run)
+        out = self.module.request_json(method="GET", url="https://x", api_key="k")
+        self.assertEqual(out, {})
+
+
 if __name__ == "__main__":
     unittest.main()
