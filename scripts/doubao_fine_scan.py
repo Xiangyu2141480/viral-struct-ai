@@ -336,7 +336,30 @@ def selected_blocks(blocks: list[dict[str, Any]], block_ids: str) -> list[dict[s
     return [block for block in blocks if block["id"] in wanted]
 
 
+PROMPT_BY_VERSION = {
+    "v0": "prompts/video_understanding/fine_structure_scan_v0.md",
+    "v1": "prompts/video_understanding/fine_structure_scan_v1.md",
+}
+
+
+def resolve_prompt_path(args: argparse.Namespace) -> str:
+    """Resolve the block-level fine_structure_scan prompt path.
+
+    Precedence: an explicit ``--prompt`` always wins (escape hatch / custom
+    prompt). Otherwise ``--prompt-version`` selects between the v0 (13-field)
+    and v1 (14-field, adds migrationContract) prompts. v1 lets the model emit
+    the migration contract, which ``{**block_metadata}`` then preserves into
+    the saved block output verbatim — no normalize change needed.
+    """
+    if args.prompt:
+        return args.prompt
+    return PROMPT_BY_VERSION[args.prompt_version]
+
+
 def run_fine_scan(args: argparse.Namespace) -> int:
+    # In-place resolve so all downstream args.prompt reads — and tests that
+    # call run_fine_scan directly — see the concrete prompt path.
+    args.prompt = resolve_prompt_path(args)
     env_values = load_dotenv(args.env)
     base_url = args.base_url or env_value("LLM_BASE_URL", env_values)
     api_key = args.api_key or env_value("LLM_API_KEY", env_values)
@@ -831,7 +854,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--video", default=str(_paths.raw_video))
     parser.add_argument("--beat-map", default=str(_paths.audio_beat_map))
     parser.add_argument("--video-id", default="")
-    parser.add_argument("--prompt", default="prompts/video_understanding/fine_structure_scan_v0.md")
+    # --prompt is an escape hatch (explicit path wins); --prompt-version is the
+    # ergonomic switch between v0 (no migration contract) and v1 (adds it).
+    parser.add_argument("--prompt", default=None)
+    parser.add_argument(
+        "--prompt-version",
+        choices=["v0", "v1"],
+        default="v0",
+        help="Block-level prompt version: v0 (13 fields) or v1 (adds "
+             "migrationContract for downstream structure-graph extraction). "
+             "Ignored if --prompt is given explicitly.",
+    )
     parser.add_argument(
         "--peak-micro-prompt",
         default="prompts/video_understanding/peak_micro_scan_v0.md",
