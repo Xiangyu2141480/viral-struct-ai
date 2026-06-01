@@ -1,0 +1,1271 @@
+{
+  "schemaVersion": "v1",
+  "meta": {
+    "duration": 45.45,
+    "aspectRatio": "9:16",
+    "videoType": "ecommerce",
+    "style": "fast_pace"
+  },
+  "structureSummary": "视频从拆袋展示巧克力泥巴派切入，依次展示产品外观、配料信息、多层内馅结构、不同口味细节，最后强调性价比引导观众下单购买",
+  "segments": [
+    {
+      "id": "seg_block_001",
+      "role": "hook",
+      "start": 0.0,
+      "end": 6.0,
+      "duration": 6.0,
+      "purpose": "建立第一眼注意力，揭示主体或制造好奇（精扫定位：该开场钩子覆盖整个当前内容块，从开头到结尾完整呈现，属于短视频常规开场钩子时长区间）",
+      "caption": "我吃它可不是因为它低卡 / 更不是因为它戒爆纯 / 低卡!! 饱腹!! 戒暴!! / 是因为它太好吃了",
+      "transferRule": "替换为新商品的高强度视觉揭示或反常识开场，保留 3 秒内主体亮相节奏",
+      "importance": 5
+    },
+    {
+      "id": "seg_block_002",
+      "role": "selling_point",
+      "start": 6.0,
+      "end": 13.0,
+      "duration": 7.0,
+      "purpose": "展示核心卖点，建立产品价值感知（精扫定位：开头展示的两袋产品，分别用红色标签标注纯可可味、蓝色标签标注蓝莓口味，色彩区分度高，可快速识别不同口味）",
+      "caption": "配料都是好东西",
+      "transferRule": "映射到新商品最能驱动转化的核心卖点",
+      "importance": 5
+    },
+    {
+      "id": "seg_block_003",
+      "role": "selling_point",
+      "start": 13.0,
+      "end": 23.0,
+      "duration": 10.0,
+      "purpose": "展示核心卖点，建立产品价值感知（精扫定位：全程通过手持掰开动作从外层到内层逐层呈现，多层结构展示非常清晰）",
+      "caption": "0蔗糖纯可可脂纯动物奶油的可可粉 / 包裹着梦龙脆皮 / 中间是用魔芋粉做的蛋糕 / 最中间还有一整块黑巧 / 嗯这一口下去真的太满足了",
+      "transferRule": "映射到新商品最能驱动转化的核心卖点",
+      "importance": 5
+    },
+    {
+      "id": "seg_block_004",
+      "role": "cta",
+      "start": 23.0,
+      "end": 45.45,
+      "duration": 22.45,
+      "purpose": "明确行动号召并收束（精扫定位：开头就手持两袋产品展示包装，随后端出整盘产品展示总数量，搭配对应字幕，份量和价格相关信息展示清晰直观）",
+      "caption": "关键现在到手两大包一共10块 / 你看才多少钱 / 真的贼划算 / 趁现在价格划算 / 巧克力脑袋直接闭眼冲",
+      "transferRule": "用新商品场景化 CTA 收束（价格、限时、优惠）",
+      "importance": 4
+    }
+  ],
+  "shotSlots": [
+    {
+      "id": "slot_block_001_asset_001",
+      "segmentId": "seg_block_001",
+      "role": "opening_attention",
+      "requiredAsset": {
+        "type": "video",
+        "subject": "我吃它可不是因为它低卡 / 更不是因为它戒爆纯 / 低卡!! 饱腹!! 戒暴!! / 是因为它太好吃了",
+        "camera": "closeup",
+        "motion": "hand_operation",
+        "minDuration": 1.3
+      },
+      "visualIngredientRequirements": [
+        "human_presence",
+        "hand_demo",
+        "product_closeup_trait"
+      ],
+      "humanRequirement": {
+        "required": true,
+        "role": "hand_only",
+        "framing": "hands",
+        "action": "holding_product"
+      },
+      "fallbackStrategies": [
+        "product_closeup_replacement",
+        "caption_rewrite",
+        "text_card"
+      ],
+      "importance": 5,
+      "intent": {
+        "purpose": "开场快速完成拆包动作，展示产品核心差异化外观，用反向话术制造好奇抓住用户注意力，引出后续内容",
+        "energyLevel": "high",
+        "motionPattern": "unboxing_followed_by_close_up_product_reveal",
+        "compositionPrincipal": "hand_held_subject_center_with_clean_background",
+        "durationMs": [
+          4000.0,
+          7000.0
+        ],
+        "soundDesignHint": "pop_sound_aligned_with_each_highlight_text"
+      },
+      "sourceInstance": {
+        "productInSource": "碧翠园巧克力泥巴派",
+        "specificAction": "手撕开外包装袋，取出内包装，手持咬开的派展示切面，露出袋内排列整齐的产品",
+        "colorSignature": "cocoa_brown_with_green_filling_contrast"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "examples": [
+              "手持产品展示切面",
+              "拆袋露出完整产品阵列"
+            ],
+            "motionType": "unboxing_action",
+            "compositionType": "centered_product_cutaway"
+          },
+          {
+            "examples": [
+              "展示产品分层内馅",
+              "特写产品特殊外观纹理"
+            ],
+            "motionType": "hand_held_product_presenting",
+            "compositionType": "high_color_contrast_subject"
+          },
+          {
+            "examples": [
+              "弹出强调关键词",
+              "顶部放置引导话术"
+            ],
+            "motionType": "text_pop_animation",
+            "compositionType": "top_center_text_overlay"
+          }
+        ],
+        "rejectIf": [
+          "无拆包或产品展示动作的纯文字素材",
+          "产品外观完全无差异化特征的素材"
+        ]
+      }
+    },
+    {
+      "id": "slot_block_001_asset_002",
+      "segmentId": "seg_block_001",
+      "role": "opening_attention",
+      "requiredAsset": {
+        "type": "video",
+        "subject": "我吃它可不是因为它低卡 / 更不是因为它戒爆纯 / 低卡!! 饱腹!! 戒暴!! / 是因为它太好吃了",
+        "camera": "closeup",
+        "motion": "static",
+        "minDuration": 1.3
+      },
+      "visualIngredientRequirements": [
+        "human_presence",
+        "hand_demo",
+        "product_closeup_trait"
+      ],
+      "humanRequirement": {
+        "required": false
+      },
+      "fallbackStrategies": [
+        "product_closeup_replacement",
+        "caption_rewrite",
+        "text_card"
+      ],
+      "importance": 5,
+      "intent": {
+        "purpose": "开场快速完成拆包动作，展示产品核心差异化外观，用反向话术制造好奇抓住用户注意力，引出后续内容",
+        "energyLevel": "high",
+        "motionPattern": "unboxing_followed_by_close_up_product_reveal",
+        "compositionPrincipal": "hand_held_subject_center_with_clean_background",
+        "durationMs": [
+          4000.0,
+          7000.0
+        ],
+        "soundDesignHint": "pop_sound_aligned_with_each_highlight_text"
+      },
+      "sourceInstance": {
+        "productInSource": "碧翠园巧克力泥巴派",
+        "specificAction": "手撕开外包装袋，取出内包装，手持咬开的派展示切面，露出袋内排列整齐的产品",
+        "colorSignature": "cocoa_brown_with_green_filling_contrast"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "examples": [
+              "手持产品展示切面",
+              "拆袋露出完整产品阵列"
+            ],
+            "motionType": "unboxing_action",
+            "compositionType": "centered_product_cutaway"
+          },
+          {
+            "examples": [
+              "展示产品分层内馅",
+              "特写产品特殊外观纹理"
+            ],
+            "motionType": "hand_held_product_presenting",
+            "compositionType": "high_color_contrast_subject"
+          },
+          {
+            "examples": [
+              "弹出强调关键词",
+              "顶部放置引导话术"
+            ],
+            "motionType": "text_pop_animation",
+            "compositionType": "top_center_text_overlay"
+          }
+        ],
+        "rejectIf": [
+          "无拆包或产品展示动作的纯文字素材",
+          "产品外观完全无差异化特征的素材"
+        ]
+      }
+    },
+    {
+      "id": "slot_block_001_asset_003",
+      "segmentId": "seg_block_001",
+      "role": "opening_attention",
+      "requiredAsset": {
+        "type": "text",
+        "subject": "我吃它可不是因为它低卡 / 更不是因为它戒爆纯 / 低卡!! 饱腹!! 戒暴!! / 是因为它太好吃了",
+        "camera": "unknown",
+        "motion": "static",
+        "minDuration": 1.3
+      },
+      "visualIngredientRequirements": [],
+      "humanRequirement": {
+        "required": false
+      },
+      "fallbackStrategies": [
+        "product_closeup_replacement",
+        "caption_rewrite",
+        "text_card"
+      ],
+      "importance": 5,
+      "intent": {
+        "purpose": "开场快速完成拆包动作，展示产品核心差异化外观，用反向话术制造好奇抓住用户注意力，引出后续内容",
+        "energyLevel": "high",
+        "motionPattern": "unboxing_followed_by_close_up_product_reveal",
+        "compositionPrincipal": "hand_held_subject_center_with_clean_background",
+        "durationMs": [
+          4000.0,
+          7000.0
+        ],
+        "soundDesignHint": "pop_sound_aligned_with_each_highlight_text"
+      },
+      "sourceInstance": {
+        "productInSource": "碧翠园巧克力泥巴派",
+        "specificAction": "手撕开外包装袋，取出内包装，手持咬开的派展示切面，露出袋内排列整齐的产品",
+        "colorSignature": "cocoa_brown_with_green_filling_contrast"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "examples": [
+              "手持产品展示切面",
+              "拆袋露出完整产品阵列"
+            ],
+            "motionType": "unboxing_action",
+            "compositionType": "centered_product_cutaway"
+          },
+          {
+            "examples": [
+              "展示产品分层内馅",
+              "特写产品特殊外观纹理"
+            ],
+            "motionType": "hand_held_product_presenting",
+            "compositionType": "high_color_contrast_subject"
+          },
+          {
+            "examples": [
+              "弹出强调关键词",
+              "顶部放置引导话术"
+            ],
+            "motionType": "text_pop_animation",
+            "compositionType": "top_center_text_overlay"
+          }
+        ],
+        "rejectIf": [
+          "无拆包或产品展示动作的纯文字素材",
+          "产品外观完全无差异化特征的素材"
+        ]
+      }
+    },
+    {
+      "id": "slot_block_002_asset_001",
+      "segmentId": "seg_block_002",
+      "role": "product_closeup",
+      "requiredAsset": {
+        "type": "video",
+        "subject": "配料都是好东西",
+        "camera": "closeup",
+        "motion": "static",
+        "minDuration": 1.4
+      },
+      "visualIngredientRequirements": [
+        "human_presence",
+        "hand_demo",
+        "product_closeup_trait"
+      ],
+      "humanRequirement": {
+        "required": false
+      },
+      "fallbackStrategies": [
+        "selling_point_card",
+        "crop_zoom",
+        "caption_rewrite"
+      ],
+      "importance": 5,
+      "intent": {
+        "purpose": "依次展示产品外包装、实物整体外观，最后引导观众关注包装上的核心品质说明信息，建立产品初印象",
+        "energyLevel": "medium",
+        "motionPattern": "multi_angle_product_presenting",
+        "compositionPrincipal": "symmetric_two_subjects_centered_then_close_up_detail",
+        "durationMs": [
+          6000.0,
+          8000.0
+        ]
+      },
+      "sourceInstance": {
+        "productInSource": "碧翠园MCT巧克力泥巴派",
+        "specificAction": "双手托举两袋不同口味产品，多角度展示派的外观，手指指向配料表区域",
+        "colorSignature": "cocoa_brown_and_white_pack"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "examples": [
+              "手持产品缓慢旋转展示全外观",
+              "平置产品多角度特写"
+            ],
+            "motionType": "hand_held_product_rotate",
+            "compositionType": "centered_product_full_view"
+          },
+          {
+            "examples": [
+              "手指指向包装上的配料表",
+              "手指指向产品参数说明区域"
+            ],
+            "motionType": "finger_pointing_detail",
+            "compositionType": "close_up_text_focus"
+          },
+          {
+            "examples": [
+              "左右并排展示两款不同口味产品",
+              "对称摆放两款同系列产品"
+            ],
+            "motionType": "symmetric_double_product_display",
+            "compositionType": "left_right_equal_layout"
+          }
+        ],
+        "rejectIf": [
+          "产品被完全遮挡无法看清外观",
+          "配料表文字模糊无法识别"
+        ]
+      }
+    },
+    {
+      "id": "slot_block_002_asset_002",
+      "segmentId": "seg_block_002",
+      "role": "product_closeup",
+      "requiredAsset": {
+        "type": "video",
+        "subject": "配料都是好东西",
+        "camera": "closeup",
+        "motion": "hand_operation",
+        "minDuration": 1.4
+      },
+      "visualIngredientRequirements": [
+        "human_presence",
+        "hand_demo",
+        "product_closeup_trait"
+      ],
+      "humanRequirement": {
+        "required": true,
+        "role": "hand_only",
+        "framing": "hands",
+        "action": "holding_product"
+      },
+      "fallbackStrategies": [
+        "selling_point_card",
+        "crop_zoom",
+        "caption_rewrite"
+      ],
+      "importance": 5,
+      "intent": {
+        "purpose": "依次展示产品外包装、实物整体外观，最后引导观众关注包装上的核心品质说明信息，建立产品初印象",
+        "energyLevel": "medium",
+        "motionPattern": "multi_angle_product_presenting",
+        "compositionPrincipal": "symmetric_two_subjects_centered_then_close_up_detail",
+        "durationMs": [
+          6000.0,
+          8000.0
+        ]
+      },
+      "sourceInstance": {
+        "productInSource": "碧翠园MCT巧克力泥巴派",
+        "specificAction": "双手托举两袋不同口味产品，多角度展示派的外观，手指指向配料表区域",
+        "colorSignature": "cocoa_brown_and_white_pack"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "examples": [
+              "手持产品缓慢旋转展示全外观",
+              "平置产品多角度特写"
+            ],
+            "motionType": "hand_held_product_rotate",
+            "compositionType": "centered_product_full_view"
+          },
+          {
+            "examples": [
+              "手指指向包装上的配料表",
+              "手指指向产品参数说明区域"
+            ],
+            "motionType": "finger_pointing_detail",
+            "compositionType": "close_up_text_focus"
+          },
+          {
+            "examples": [
+              "左右并排展示两款不同口味产品",
+              "对称摆放两款同系列产品"
+            ],
+            "motionType": "symmetric_double_product_display",
+            "compositionType": "left_right_equal_layout"
+          }
+        ],
+        "rejectIf": [
+          "产品被完全遮挡无法看清外观",
+          "配料表文字模糊无法识别"
+        ]
+      }
+    },
+    {
+      "id": "slot_block_003_asset_001",
+      "segmentId": "seg_block_003",
+      "role": "product_closeup",
+      "requiredAsset": {
+        "type": "video",
+        "subject": "0蔗糖纯可可脂纯动物奶油的可可粉 / 包裹着梦龙脆皮 / 中间是用魔芋粉做的蛋糕 / 最中间还有一整块黑巧 / 嗯这一口下去真的太满足了",
+        "camera": "closeup",
+        "motion": "hand_operation",
+        "minDuration": 1.4
+      },
+      "visualIngredientRequirements": [
+        "human_presence",
+        "hand_demo",
+        "product_closeup_trait"
+      ],
+      "humanRequirement": {
+        "required": true,
+        "role": "hand_only",
+        "framing": "hands",
+        "action": "holding_product"
+      },
+      "fallbackStrategies": [
+        "selling_point_card",
+        "crop_zoom",
+        "caption_rewrite"
+      ],
+      "importance": 5,
+      "intent": {
+        "purpose": "通过手持拆解产品，逐层展示内部多层结构，清晰传递产品核心材质与内馅卖点，唤起用户食欲",
+        "energyLevel": "medium",
+        "motionPattern": "hand_held_layered_disassembly",
+        "compositionPrincipal": "center_focus_product_detail",
+        "durationMs": [
+          8000.0,
+          12000.0
+        ],
+        "soundDesignHint": "soft_crunch_sound_sync_with_break_action"
+      },
+      "sourceInstance": {
+        "productInSource": "碧翠园巧克力泥巴派",
+        "specificAction": "手持多块派依次掰开，展示不同内馅的横截面",
+        "colorSignature": "cocoa_brown_with_green_filling"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "examples": [
+              "手持糕点掰开露出夹心",
+              "手持零食撕开展示内部结构"
+            ],
+            "motionType": "object_break_to_reveal_inner",
+            "compositionType": "centered_product_detail"
+          },
+          {
+            "examples": [
+              "旋转展示食物横截面纹理",
+              "特写拍摄多层食物分层"
+            ],
+            "motionType": "slow_rotate_show_cross_section",
+            "compositionType": "close_up_texture_focus"
+          },
+          {
+            "examples": [
+              "手持两款不同内馅产品并排展示",
+              "摆放多款不同口味产品特写"
+            ],
+            "motionType": "hand_present_multi_variants",
+            "compositionType": "side_by_side_variant_compare"
+          }
+        ],
+        "rejectIf": [
+          "无实体分层结构的液态产品",
+          "无法手持展示内部的大型物件"
+        ]
+      }
+    },
+    {
+      "id": "slot_block_003_asset_002",
+      "segmentId": "seg_block_003",
+      "role": "usage_demo",
+      "requiredAsset": {
+        "type": "video",
+        "subject": "0蔗糖纯可可脂纯动物奶油的可可粉 / 包裹着梦龙脆皮 / 中间是用魔芋粉做的蛋糕 / 最中间还有一整块黑巧 / 嗯这一口下去真的太满足了",
+        "camera": "closeup",
+        "motion": "static",
+        "minDuration": 1.4
+      },
+      "visualIngredientRequirements": [
+        "human_presence",
+        "hand_demo",
+        "product_closeup_trait"
+      ],
+      "humanRequirement": {
+        "required": false
+      },
+      "fallbackStrategies": [
+        "selling_point_card",
+        "crop_zoom",
+        "caption_rewrite"
+      ],
+      "importance": 5,
+      "intent": {
+        "purpose": "通过手持拆解产品，逐层展示内部多层结构，清晰传递产品核心材质与内馅卖点，唤起用户食欲",
+        "energyLevel": "medium",
+        "motionPattern": "hand_held_layered_disassembly",
+        "compositionPrincipal": "center_focus_product_detail",
+        "durationMs": [
+          8000.0,
+          12000.0
+        ],
+        "soundDesignHint": "soft_crunch_sound_sync_with_break_action"
+      },
+      "sourceInstance": {
+        "productInSource": "碧翠园巧克力泥巴派",
+        "specificAction": "手持多块派依次掰开，展示不同内馅的横截面",
+        "colorSignature": "cocoa_brown_with_green_filling"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "examples": [
+              "手持糕点掰开露出夹心",
+              "手持零食撕开展示内部结构"
+            ],
+            "motionType": "object_break_to_reveal_inner",
+            "compositionType": "centered_product_detail"
+          },
+          {
+            "examples": [
+              "旋转展示食物横截面纹理",
+              "特写拍摄多层食物分层"
+            ],
+            "motionType": "slow_rotate_show_cross_section",
+            "compositionType": "close_up_texture_focus"
+          },
+          {
+            "examples": [
+              "手持两款不同内馅产品并排展示",
+              "摆放多款不同口味产品特写"
+            ],
+            "motionType": "hand_present_multi_variants",
+            "compositionType": "side_by_side_variant_compare"
+          }
+        ],
+        "rejectIf": [
+          "无实体分层结构的液态产品",
+          "无法手持展示内部的大型物件"
+        ]
+      }
+    },
+    {
+      "id": "slot_block_004_asset_001",
+      "segmentId": "seg_block_004",
+      "role": "cta_visual",
+      "requiredAsset": {
+        "type": "video",
+        "subject": "关键现在到手两大包一共10块 / 你看才多少钱 / 真的贼划算 / 趁现在价格划算 / 巧克力脑袋直接闭眼冲",
+        "camera": "closeup",
+        "motion": "hand_operation",
+        "minDuration": 1.3
+      },
+      "visualIngredientRequirements": [
+        "human_presence",
+        "hand_demo",
+        "product_closeup_trait"
+      ],
+      "humanRequirement": {
+        "required": true,
+        "role": "hand_only",
+        "framing": "hands",
+        "action": "holding_product"
+      },
+      "fallbackStrategies": [
+        "cta_card",
+        "selling_point_card",
+        "trust_card"
+      ],
+      "importance": 4,
+      "intent": {
+        "purpose": "通过展示产品足量、内部细节、适配人群，传递高性价比感知，最终引导用户完成下单转化",
+        "energyLevel": "medium",
+        "motionPattern": "hand_held_product_rotate_and_split",
+        "compositionPrincipal": "center_focus_on_product_detail",
+        "durationMs": [
+          20000.0,
+          25000.0
+        ],
+        "soundDesignHint": "warm_enthusiastic_voiceover_under_cta"
+      },
+      "sourceInstance": {
+        "productInSource": "碧翠园巧克力泥巴派蓝莓口味",
+        "specificAction": "双手交替掰开不同口味派展示分层内馅，多次托举整盘产品展示",
+        "colorSignature": "cocoa_brown_with_green_inner_contrast"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "examples": [
+              "掰开糕点展示分层内馅",
+              "撕开零食展示夹心细节"
+            ],
+            "motionType": "hand_split_food_texture_show",
+            "compositionType": "centered_hand_held_product"
+          },
+          {
+            "examples": [
+              "托盘端出全部产品",
+              "桌面整齐摆放多份产品"
+            ],
+            "motionType": "plate_present_full_product",
+            "compositionType": "clean_tabletop_background"
+          },
+          {
+            "examples": [
+              "双手各持一袋产品展示",
+              "两袋产品并排摆放展示"
+            ],
+            "motionType": "product_package_double_show",
+            "compositionType": "two_packages_symmetric"
+          }
+        ],
+        "rejectIf": [
+          "无实物仅使用纯包装素材",
+          "无内馅细节展示的空镜头"
+        ]
+      }
+    },
+    {
+      "id": "slot_block_004_asset_002",
+      "segmentId": "seg_block_004",
+      "role": "product_closeup",
+      "requiredAsset": {
+        "type": "video",
+        "subject": "关键现在到手两大包一共10块 / 你看才多少钱 / 真的贼划算 / 趁现在价格划算 / 巧克力脑袋直接闭眼冲",
+        "camera": "closeup",
+        "motion": "static",
+        "minDuration": 1.3
+      },
+      "visualIngredientRequirements": [
+        "human_presence",
+        "hand_demo",
+        "product_closeup_trait"
+      ],
+      "humanRequirement": {
+        "required": false
+      },
+      "fallbackStrategies": [
+        "cta_card",
+        "selling_point_card",
+        "trust_card"
+      ],
+      "importance": 4,
+      "intent": {
+        "purpose": "通过展示产品足量、内部细节、适配人群，传递高性价比感知，最终引导用户完成下单转化",
+        "energyLevel": "medium",
+        "motionPattern": "hand_held_product_rotate_and_split",
+        "compositionPrincipal": "center_focus_on_product_detail",
+        "durationMs": [
+          20000.0,
+          25000.0
+        ],
+        "soundDesignHint": "warm_enthusiastic_voiceover_under_cta"
+      },
+      "sourceInstance": {
+        "productInSource": "碧翠园巧克力泥巴派蓝莓口味",
+        "specificAction": "双手交替掰开不同口味派展示分层内馅，多次托举整盘产品展示",
+        "colorSignature": "cocoa_brown_with_green_inner_contrast"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "examples": [
+              "掰开糕点展示分层内馅",
+              "撕开零食展示夹心细节"
+            ],
+            "motionType": "hand_split_food_texture_show",
+            "compositionType": "centered_hand_held_product"
+          },
+          {
+            "examples": [
+              "托盘端出全部产品",
+              "桌面整齐摆放多份产品"
+            ],
+            "motionType": "plate_present_full_product",
+            "compositionType": "clean_tabletop_background"
+          },
+          {
+            "examples": [
+              "双手各持一袋产品展示",
+              "两袋产品并排摆放展示"
+            ],
+            "motionType": "product_package_double_show",
+            "compositionType": "two_packages_symmetric"
+          }
+        ],
+        "rejectIf": [
+          "无实物仅使用纯包装素材",
+          "无内馅细节展示的空镜头"
+        ]
+      }
+    },
+    {
+      "id": "slot_block_004_asset_003",
+      "segmentId": "seg_block_004",
+      "role": "cta_visual",
+      "requiredAsset": {
+        "type": "text",
+        "subject": "关键现在到手两大包一共10块 / 你看才多少钱 / 真的贼划算 / 趁现在价格划算 / 巧克力脑袋直接闭眼冲",
+        "camera": "unknown",
+        "motion": "static",
+        "minDuration": 1.3
+      },
+      "visualIngredientRequirements": [],
+      "humanRequirement": {
+        "required": false
+      },
+      "fallbackStrategies": [
+        "cta_card",
+        "selling_point_card",
+        "trust_card"
+      ],
+      "importance": 4,
+      "intent": {
+        "purpose": "通过展示产品足量、内部细节、适配人群，传递高性价比感知，最终引导用户完成下单转化",
+        "energyLevel": "medium",
+        "motionPattern": "hand_held_product_rotate_and_split",
+        "compositionPrincipal": "center_focus_on_product_detail",
+        "durationMs": [
+          20000.0,
+          25000.0
+        ],
+        "soundDesignHint": "warm_enthusiastic_voiceover_under_cta"
+      },
+      "sourceInstance": {
+        "productInSource": "碧翠园巧克力泥巴派蓝莓口味",
+        "specificAction": "双手交替掰开不同口味派展示分层内馅，多次托举整盘产品展示",
+        "colorSignature": "cocoa_brown_with_green_inner_contrast"
+      },
+      "acceptanceCriteria": {
+        "anyOf": [
+          {
+            "examples": [
+              "掰开糕点展示分层内馅",
+              "撕开零食展示夹心细节"
+            ],
+            "motionType": "hand_split_food_texture_show",
+            "compositionType": "centered_hand_held_product"
+          },
+          {
+            "examples": [
+              "托盘端出全部产品",
+              "桌面整齐摆放多份产品"
+            ],
+            "motionType": "plate_present_full_product",
+            "compositionType": "clean_tabletop_background"
+          },
+          {
+            "examples": [
+              "双手各持一袋产品展示",
+              "两袋产品并排摆放展示"
+            ],
+            "motionType": "product_package_double_show",
+            "compositionType": "two_packages_symmetric"
+          }
+        ],
+        "rejectIf": [
+          "无实物仅使用纯包装素材",
+          "无内馅细节展示的空镜头"
+        ]
+      }
+    }
+  ],
+  "rhythm": {
+    "avgShotDuration": 1.38,
+    "cutFrequency": "high",
+    "pattern": "avg_1.38s_per_shot_high_cut",
+    "peakAt": 0.5
+  },
+  "packaging": {
+    "captionDensity": "medium",
+    "captionPosition": "mixed",
+    "titleStyle": "balanced_text",
+    "cardTypes": [
+      "selling_point_card"
+    ],
+    "transitions": [
+      "hard_cut"
+    ],
+    "coverStyle": "product_centered_clean_background"
+  },
+  "creativeIngredients": [
+    {
+      "id": "ing_human_presence",
+      "type": "human_presence",
+      "name": "人物出镜要求",
+      "description": "需要新素材提供人物或手部参与画面",
+      "segmentIds": [
+        "seg_block_001",
+        "seg_block_002",
+        "seg_block_003",
+        "seg_block_004"
+      ],
+      "requiredForSlotIds": [
+        "slot_block_001_asset_001",
+        "slot_block_001_asset_002",
+        "slot_block_001_asset_003",
+        "slot_block_002_asset_001",
+        "slot_block_002_asset_002",
+        "slot_block_003_asset_001",
+        "slot_block_003_asset_002",
+        "slot_block_004_asset_001",
+        "slot_block_004_asset_002",
+        "slot_block_004_asset_003"
+      ],
+      "transferability": "requires_user_asset",
+      "fallbackStrategies": [
+        "hand_demo",
+        "ask_user_for_human_demo"
+      ],
+      "evidence": [
+        {
+          "type": "model_observation",
+          "value": "block_001: requiredAssetType=hand_demo, purpose=hook_visual"
+        },
+        {
+          "type": "model_observation",
+          "value": "block_002: requiredAssetType=hand_demo, purpose=feature_demo"
+        },
+        {
+          "type": "model_observation",
+          "value": "block_003: requiredAssetType=hand_demo, purpose=feature_demo"
+        },
+        {
+          "type": "model_observation",
+          "value": "block_004: requiredAssetType=hand_demo, purpose=feature_demo"
+        }
+      ],
+      "confidence": 0.85
+    },
+    {
+      "id": "ing_hand_demo",
+      "type": "hand_demo",
+      "name": "手部操作演示",
+      "description": "需要新视频提供手部展示/操作素材",
+      "segmentIds": [
+        "seg_block_001",
+        "seg_block_002",
+        "seg_block_003",
+        "seg_block_004"
+      ],
+      "requiredForSlotIds": [
+        "slot_block_001_asset_001",
+        "slot_block_001_asset_002",
+        "slot_block_001_asset_003",
+        "slot_block_002_asset_001",
+        "slot_block_002_asset_002",
+        "slot_block_003_asset_001",
+        "slot_block_003_asset_002",
+        "slot_block_004_asset_001",
+        "slot_block_004_asset_002",
+        "slot_block_004_asset_003"
+      ],
+      "transferability": "requires_user_asset",
+      "fallbackStrategies": [
+        "hand_demo",
+        "ask_user_for_human_demo"
+      ],
+      "evidence": [
+        {
+          "type": "model_observation",
+          "value": "block_001: requiredAssetType=hand_demo, purpose=hook_visual"
+        },
+        {
+          "type": "model_observation",
+          "value": "block_001: 拆袋后第一时间展示产品切面的分层内馅，直接呈现产品核心外观差异点"
+        },
+        {
+          "type": "model_observation",
+          "value": "block_002: requiredAssetType=hand_demo, purpose=feature_demo"
+        },
+        {
+          "type": "model_observation",
+          "value": "block_002: 双手对称托举两个同系列不同款产品，左右对齐展示外观差异"
+        },
+        {
+          "type": "model_observation",
+          "value": "block_002: 手指指向产品包装上的核心信息区域，引导观众视线聚焦重点卖点"
+        }
+      ],
+      "confidence": 0.85
+    },
+    {
+      "id": "ing_product_closeup_trait",
+      "type": "product_closeup_trait",
+      "name": "产品本体近景特写",
+      "description": "需要新视频提供产品清晰特写素材",
+      "segmentIds": [
+        "seg_block_001",
+        "seg_block_002",
+        "seg_block_003",
+        "seg_block_004"
+      ],
+      "requiredForSlotIds": [
+        "slot_block_001_asset_001",
+        "slot_block_001_asset_002",
+        "slot_block_001_asset_003",
+        "slot_block_002_asset_001",
+        "slot_block_002_asset_002",
+        "slot_block_003_asset_001",
+        "slot_block_003_asset_002",
+        "slot_block_004_asset_001",
+        "slot_block_004_asset_002",
+        "slot_block_004_asset_003"
+      ],
+      "transferability": "requires_user_asset",
+      "fallbackStrategies": [
+        "product_closeup_replacement",
+        "crop_zoom"
+      ],
+      "evidence": [
+        {
+          "type": "model_observation",
+          "value": "block_001: requiredAssetType=product_video, purpose=product_reveal"
+        },
+        {
+          "type": "model_observation",
+          "value": "block_002: requiredAssetType=product_video, purpose=product_reveal"
+        },
+        {
+          "type": "model_observation",
+          "value": "block_003: requiredAssetType=product_video, purpose=feature_demo"
+        },
+        {
+          "type": "model_observation",
+          "value": "block_004: requiredAssetType=product_video, purpose=cta"
+        }
+      ],
+      "confidence": 0.85
+    },
+    {
+      "id": "ing_premium_visual",
+      "type": "premium_visual",
+      "name": "创意特效与高级包装",
+      "description": "可通过 AIGC 包装或转场动画复现核心创意",
+      "segmentIds": [
+        "seg_block_001",
+        "seg_block_002",
+        "seg_block_003",
+        "seg_block_004"
+      ],
+      "requiredForSlotIds": [
+        "slot_block_001_asset_001",
+        "slot_block_001_asset_002",
+        "slot_block_001_asset_003",
+        "slot_block_002_asset_001",
+        "slot_block_002_asset_002",
+        "slot_block_003_asset_001",
+        "slot_block_003_asset_002",
+        "slot_block_004_asset_001",
+        "slot_block_004_asset_002",
+        "slot_block_004_asset_003"
+      ],
+      "transferability": "can_be_recreated_by_packaging",
+      "fallbackStrategies": [
+        "aigc_background",
+        "style_filter_suggestion"
+      ],
+      "evidence": [
+        {
+          "type": "model_observation",
+          "value": "block_001: 先抛出反向否定话术，随后逐个弹出带感叹号的强调关键词，最后点出核心吸引点"
+        },
+        {
+          "type": "model_observation",
+          "value": "block_002: 多角度环绕展示产品完整外观，无遮挡呈现产品整体形态"
+        },
+        {
+          "type": "model_observation",
+          "value": "block_003: 顶部字幕跟随当前展示的产品部位同步弹出对应卖点，图文完全匹配"
+        },
+        {
+          "type": "model_observation",
+          "value": "block_004: 顶部逐行弹出对应卖点字幕，和画面展示内容完全同步"
+        },
+        {
+          "type": "model_observation",
+          "value": "block_004: 将多份产品整齐摆放在盘中托举展示，直观体现产品足量属性"
+        }
+      ],
+      "confidence": 0.85
+    }
+  ],
+  "edges": [
+    {
+      "from": "seg_block_001",
+      "to": "seg_block_002",
+      "type": "sequence"
+    },
+    {
+      "from": "seg_block_002",
+      "to": "seg_block_003",
+      "type": "sequence"
+    },
+    {
+      "from": "seg_block_003",
+      "to": "seg_block_004",
+      "type": "sequence"
+    },
+    {
+      "from": "slot_block_001_asset_001",
+      "to": "seg_block_001",
+      "type": "maps_to"
+    },
+    {
+      "from": "slot_block_001_asset_002",
+      "to": "seg_block_001",
+      "type": "maps_to"
+    },
+    {
+      "from": "slot_block_001_asset_003",
+      "to": "seg_block_001",
+      "type": "maps_to"
+    },
+    {
+      "from": "slot_block_002_asset_001",
+      "to": "seg_block_002",
+      "type": "maps_to"
+    },
+    {
+      "from": "slot_block_002_asset_002",
+      "to": "seg_block_002",
+      "type": "maps_to"
+    },
+    {
+      "from": "slot_block_003_asset_001",
+      "to": "seg_block_003",
+      "type": "maps_to"
+    },
+    {
+      "from": "slot_block_003_asset_002",
+      "to": "seg_block_003",
+      "type": "maps_to"
+    },
+    {
+      "from": "slot_block_004_asset_001",
+      "to": "seg_block_004",
+      "type": "maps_to"
+    },
+    {
+      "from": "slot_block_004_asset_002",
+      "to": "seg_block_004",
+      "type": "maps_to"
+    },
+    {
+      "from": "slot_block_004_asset_003",
+      "to": "seg_block_004",
+      "type": "maps_to"
+    },
+    {
+      "from": "ing_human_presence",
+      "to": "seg_block_001",
+      "type": "requires"
+    },
+    {
+      "from": "ing_human_presence",
+      "to": "seg_block_002",
+      "type": "requires"
+    },
+    {
+      "from": "ing_human_presence",
+      "to": "seg_block_003",
+      "type": "requires"
+    },
+    {
+      "from": "ing_human_presence",
+      "to": "seg_block_004",
+      "type": "requires"
+    },
+    {
+      "from": "ing_hand_demo",
+      "to": "seg_block_001",
+      "type": "requires"
+    },
+    {
+      "from": "ing_hand_demo",
+      "to": "seg_block_002",
+      "type": "requires"
+    },
+    {
+      "from": "ing_hand_demo",
+      "to": "seg_block_003",
+      "type": "requires"
+    },
+    {
+      "from": "ing_hand_demo",
+      "to": "seg_block_004",
+      "type": "requires"
+    },
+    {
+      "from": "ing_product_closeup_trait",
+      "to": "seg_block_001",
+      "type": "requires"
+    },
+    {
+      "from": "ing_product_closeup_trait",
+      "to": "seg_block_002",
+      "type": "requires"
+    },
+    {
+      "from": "ing_product_closeup_trait",
+      "to": "seg_block_003",
+      "type": "requires"
+    },
+    {
+      "from": "ing_product_closeup_trait",
+      "to": "seg_block_004",
+      "type": "requires"
+    },
+    {
+      "from": "ing_premium_visual",
+      "to": "seg_block_001",
+      "type": "requires"
+    },
+    {
+      "from": "ing_premium_visual",
+      "to": "seg_block_002",
+      "type": "requires"
+    },
+    {
+      "from": "ing_premium_visual",
+      "to": "seg_block_003",
+      "type": "requires"
+    },
+    {
+      "from": "ing_premium_visual",
+      "to": "seg_block_004",
+      "type": "requires"
+    }
+  ],
+  "boundaries": [
+    {
+      "id": "boundary_001",
+      "from": "seg_block_001",
+      "to": "seg_block_002",
+      "transitionType": "cut",
+      "intensity": "strong",
+      "microShots": [
+        {
+          "id": "micro_001",
+          "role": "pre_transition",
+          "durationMs": 28800.0,
+          "description": "先展示手持咬开后露出双色内馅的巧克力泥巴派特写，随后手撕开印有品牌标识的包装纸，露出袋内整齐排列的多块深棕色巧克力派，镜头缓慢移动展示派的完整外观"
+        },
+        {
+          "id": "micro_002",
+          "role": "transition_peak",
+          "durationMs": 17600.0,
+          "description": "画面直接切换到手举两袋不同口味的碧翠园巧克力泥巴派，镜头从远到近移动，完整展示包装袋正面的品牌标识、产品名称和口味信息"
+        },
+        {
+          "id": "micro_003",
+          "role": "post_transition",
+          "durationMs": 25600.0,
+          "description": "画面切换到盘装的巧克力派，随后多角度分别展示盘装和包装纸上排列的派的完整外观细节"
+        }
+      ],
+      "evidence": "通过硬切直接从袋内排列的巧克力派特写画面，切换到双手举两袋完整产品外包装的画面，将前半部分的产品实物内馅展示，自然衔接至后半部分的品牌产品包装介绍环节"
+    },
+    {
+      "id": "boundary_002",
+      "from": "seg_block_002",
+      "to": "seg_block_003",
+      "transitionType": "cut",
+      "intensity": "strong",
+      "microShots": [
+        {
+          "id": "micro_001",
+          "role": "pre_transition",
+          "durationMs": 9000.0,
+          "description": "双手持两块巧克力泥巴派，缓慢转动展示派的侧面粗糙质感，背景可见产品包装袋和盘装派"
+        },
+        {
+          "id": "micro_002",
+          "role": "transition_peak",
+          "durationMs": 19600.0,
+          "description": "单手持一块巧克力泥巴派，手指缓慢撕动派底部的红色包装纸，逐步露出派的完整横截面"
+        },
+        {
+          "id": "micro_003",
+          "role": "transition_peak",
+          "durationMs": 19600.0,
+          "description": "镜头聚焦产品包装袋背面的配料说明区域，手指沿着印刷文字缓慢滑动，依次指向产品名称、配料、保质期、食用方法等标注信息"
+        },
+        {
+          "id": "micro_004",
+          "role": "post_transition",
+          "durationMs": 23800.0,
+          "description": "画面硬切回室内桌面场景，桌面摆放着产品包装袋和三块盘装派，手从画面右侧取出三块叠放的派，缓慢移动到镜头前展示派的表面细腻纹理"
+        }
+      ],
+      "evidence": "通过硬切直接从包装袋配料表展示画面切换到手持多块派准备展示内部结构的画面，完成从产品参数介绍到产品质感/结构展示的内容衔接"
+    },
+    {
+      "id": "boundary_003",
+      "from": "seg_block_003",
+      "to": "seg_block_004",
+      "transitionType": "cut",
+      "intensity": "strong",
+      "microShots": [
+        {
+          "id": "micro_001",
+          "role": "pre_transition",
+          "durationMs": 13400.0,
+          "description": "手持深棕色内馅的巧克力派特写，轻微转动展示掰开后的横截面分层细节，背景保持不变"
+        },
+        {
+          "id": "micro_002",
+          "role": "transition_peak",
+          "durationMs": 22400.0,
+          "description": "画面切换到桌面场景，左手持深棕色内馅派固定不动，右手将绿色夹心的派从画面右侧缓慢移入，逐步展示绿色内馅的完整横截面结构"
+        },
+        {
+          "id": "micro_003",
+          "role": "transition_peak",
+          "durationMs": 16800.0,
+          "description": "画面从派特写硬切到桌面场景，手将蓝莓口味的巧克力泥巴派包装袋从画面下方逐步移动到前景，完整展示包装袋上的产品信息"
+        },
+        {
+          "id": "micro_004",
+          "role": "transition_peak",
+          "durationMs": 12600.0,
+          "description": "第二袋同款产品从画面右侧移入，双手同时握持两袋产品，对齐展示两袋完整的产品包装外观"
+        },
+        {
+          "id": "micro_005",
+          "role": "post_transition",
+          "durationMs": 6800.0,
+          "description": "画面切换回桌面，手端着装满巧克力派的白色盘子从画面右侧缓慢移入，展示整盘摆放好的产品"
+        }
+      ],
+      "evidence": "通过硬切直接从绿色夹心派的内馅特写画面，切换到摆放有产品包装袋的桌面场景，将前面的产品内馅展示内容自然衔接过渡到后续的产品包装和整盘产品展示环节"
+    }
+  ]
+}
