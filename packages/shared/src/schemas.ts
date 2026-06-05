@@ -306,3 +306,175 @@ export const ViralStructureGraphSchema = z.object({
   })),
   boundaries: z.array(BoundarySchema).optional()
 });
+
+export const SafetyStatusSchema = z.object({
+  status: z.enum(['passed', 'needs_review', 'blocked']),
+  ipRisk: z.enum(['low', 'medium', 'high']),
+  brandRisk: z.enum(['low', 'medium', 'high']),
+  claimRisk: z.enum(['low', 'medium', 'high']),
+  reasons: z.array(z.string())
+});
+
+export const StoryboardFrameTypeSchema = z.enum([
+  'opening_hook',
+  'product_closeup',
+  'benefit_usage',
+  'gap_repair',
+  'cta_cover'
+]);
+
+export const StoryboardImagePromptSchema = z.object({
+  positivePrompt: z.string().min(1),
+  negativePrompt: z.string().min(1),
+  aspectRatio: z.enum(['9:16', '16:9', '1:1', 'unknown']),
+  styleHints: z.array(z.string()),
+  promptSource: z.literal('storyboard_prompt_planner')
+});
+
+export const GeneratedVisualAssetSchema = z.object({
+  id: z.string(),
+  type: z.enum(['placeholder_svg', 'external_image']),
+  url: z.string(),
+  mimeType: z.enum(['image/svg+xml', 'image/png', 'image/jpeg']),
+  generationSource: z.enum(['placeholder', 'image_api']),
+  promptId: z.string(),
+  label: z.string()
+});
+
+export const StoryboardFrameSchema = z.object({
+  id: z.string(),
+  frameIndex: z.number().int().min(0),
+  frameType: StoryboardFrameTypeSchema,
+  title: z.string(),
+  timelineItemId: z.string(),
+  slotId: z.string().optional(),
+  structureIntent: z.string(),
+  sourceInstance: z.string(),
+  acceptanceCriteria: z.array(z.string()),
+  matchedAsset: z.object({
+    id: z.string(),
+    type: z.enum(['image', 'video', 'text']),
+    url: z.string().optional(),
+    text: z.string().optional(),
+    spatialDescription: z.string().optional(),
+    temporalDescription: z.string().optional(),
+    qualityScore: z.number().min(0).max(1)
+  }).optional(),
+  slotMatch: z.object({
+    slotId: z.string(),
+    assetId: z.string().optional(),
+    score: z.number(),
+    status: z.enum(['matched', 'partial', 'missing']),
+    reason: z.string(),
+    alignmentSource: z.enum(['llm_judge', 'rule_based']).optional()
+  }).optional(),
+  materialGap: z.object({
+    slotId: z.string(),
+    role: ShotSlotRoleSchema,
+    type: MaterialGapTypeSchema.optional(),
+    severity: z.enum(['low', 'medium', 'high']),
+    reason: z.string(),
+    impact: z.string(),
+    gapSpecSource: z.enum(['llm_generated', 'rule_based']).optional()
+  }).optional(),
+  repair: z.object({
+    slotId: z.string(),
+    strategy: GapRepairStrategySchema,
+    explanation: z.string(),
+    generatedAssetHint: z.string().optional(),
+    gapSpec: z.object({
+      ideal: z.string().optional(),
+      minimalAcceptable: z.string().optional(),
+      alternativeIfNoShoot: z.string().optional()
+    }).optional()
+  }).optional(),
+  imagePrompt: StoryboardImagePromptSchema,
+  generatedVisualAsset: GeneratedVisualAssetSchema.optional(),
+  safetyStatus: SafetyStatusSchema,
+  rationale: z.string()
+});
+
+export const GenerationProviderSchema = z.enum(['mock', 'seedance_2_0']);
+export const MissingMaterialGenerationModeSchema = z.enum(['image_to_video', 'text_to_video']);
+export const MissingMaterialGenerationStatusSchema = z.enum(['planned', 'ready', 'blocked']);
+
+export const MissingMaterialGenerationJobSchema = z.object({
+  id: z.string(),
+  gapId: z.string(),
+  repairId: z.string().optional(),
+  timelineItemId: z.string().optional(),
+  provider: GenerationProviderSchema,
+  providerLabel: z.string(),
+  mode: MissingMaterialGenerationModeSchema,
+  status: MissingMaterialGenerationStatusSchema,
+  durationSec: z.number().positive(),
+  aspectRatio: z.enum(['9:16', '16:9', '1:1', 'unknown']),
+  positivePrompt: z.string().min(1),
+  negativePrompt: z.string().min(1),
+  shotSpec: z.string().min(1),
+  gapType: MaterialGapTypeSchema.optional(),
+  gapSeverity: z.enum(['low', 'medium', 'high']),
+  repairStrategy: GapRepairStrategySchema.optional(),
+  storyboardFrameId: z.string().optional(),
+  safetyStatus: SafetyStatusSchema,
+  blockedReason: z.string().optional(),
+  disclaimer: z.string()
+});
+
+export const MissingMaterialGenerationRequestSchema = z.object({
+  materialGaps: z.array(z.object({
+    slotId: z.string(),
+    role: ShotSlotRoleSchema,
+    type: MaterialGapTypeSchema.optional(),
+    severity: z.enum(['low', 'medium', 'high']),
+    reason: z.string(),
+    impact: z.string(),
+    affectedSegmentId: z.string().optional(),
+    missingIngredients: z.array(CreativeIngredientTypeSchema).optional(),
+    gapSpec: z.object({
+      ideal: z.string().optional(),
+      minimalAcceptable: z.string().optional(),
+      alternativeIfNoShoot: z.string().optional()
+    }).optional(),
+    gapSpecSource: z.enum(['llm_generated', 'rule_based']).optional()
+  })),
+  repairs: z.array(z.object({
+    slotId: z.string(),
+    strategy: GapRepairStrategySchema,
+    explanation: z.string(),
+    generatedAssetHint: z.string().optional(),
+    gapSpec: z.object({
+      ideal: z.string().optional(),
+      minimalAcceptable: z.string().optional(),
+      alternativeIfNoShoot: z.string().optional()
+    }).optional()
+  })).optional(),
+  storyboardFrames: z.array(StoryboardFrameSchema).optional(),
+  timeline: z.array(z.unknown()).optional(),
+  contentBrief: ContentBriefSchema.optional(),
+  aspectRatio: z.enum(['9:16', '16:9', '1:1', 'unknown']).optional(),
+  provider: GenerationProviderSchema.optional()
+});
+
+export const DemoEstimateMetricSchema = z.object({
+  score: z.number(),
+  label: z.string(),
+  explanation: z.string(),
+  formula: z.string().optional(),
+  simulated: z.boolean().optional()
+});
+
+export const DemoEstimateSchema = z.object({
+  disclaimer: z.literal('Offline heuristic estimate. Not based on real user behavior.'),
+  generatedAt: z.string(),
+  metrics: z.object({
+    viralPotential: DemoEstimateMetricSchema,
+    templateFit: DemoEstimateMetricSchema,
+    gapRepairCoverage: DemoEstimateMetricSchema,
+    evidenceConfidence: DemoEstimateMetricSchema,
+    variantDistinctiveness: DemoEstimateMetricSchema,
+    estimatedCtrLift: DemoEstimateMetricSchema
+  }),
+  components: z.record(z.number()),
+  warnings: z.array(z.string())
+});

@@ -124,6 +124,39 @@ test('generateTimelineMock puts proof and CTA emphasis into high-conversion vari
   assert.ok(result.timeline.every((item) => item.packaging.captionStyle.includes('conversion')));
 });
 
+test('generateTimelineMock makes all three variants visibly different without LLM', async () => {
+  const highClick = await generateTimelineMock({
+    structureGraph: graph,
+    newContent: brief,
+    matches: [],
+    repairs: [],
+    variant: 'high_click'
+  });
+  const highConversion = await generateTimelineMock({
+    structureGraph: graph,
+    newContent: brief,
+    matches: [],
+    repairs: [],
+    variant: 'high_conversion'
+  });
+  const premium = await generateTimelineMock({
+    structureGraph: graph,
+    newContent: brief,
+    matches: [],
+    repairs: [],
+    variant: 'premium'
+  });
+
+  assert.notEqual(highClick.timeline[0].script, highConversion.timeline[0].script);
+  assert.notEqual(highConversion.timeline[0].script, premium.timeline[0].script);
+  assert.match(highConversion.timeline.at(-1)?.script ?? '', /立即行动/);
+  assert.ok(highClick.timeline[0].subtitles.length > premium.timeline[0].subtitles.length);
+  assert.equal(highClick.timeline[0].packaging.transition, 'quick_cut');
+  assert.equal(highConversion.timeline[0].packaging.transition, 'push');
+  assert.equal(premium.timeline[0].packaging.transition, 'fade');
+  assert.notEqual(highClick.timeline[1].visualAction, premium.timeline[1].visualAction);
+});
+
 test('generateTimelineMock uses default per-variant transitions when boundaries absent', async () => {
   const result = await generateTimelineMock({
     structureGraph: graph,

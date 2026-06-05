@@ -4,10 +4,13 @@ import { useEffect, useMemo, useState } from 'react';
 import type {
   AssetCard,
   ContentBrief,
+  GapSpecSource,
   GapRepair,
   MaterialGap,
   QualityReport,
   ScriptSegment,
+  ScriptSource,
+  SlotAlignmentSource,
   SlotMatch,
   StoryboardShot,
   TimelineItem,
@@ -102,6 +105,12 @@ interface DemoRunResponse {
   storyboard: StoryboardShot[];
   timeline: TimelineItem[];
   qualityReport: QualityReport;
+  llmStageSources?: {
+    alignment?: SlotAlignmentSource;
+    gapSpec?: GapSpecSource;
+    script?: ScriptSource;
+  };
+  llmWarnings?: string[];
   evidenceTrace?: DemoEvidenceTraceItem[];
 }
 
@@ -335,13 +344,21 @@ export function DemoShowcasePanel() {
             ? `队友 AssetCard 库：${result.assetSource.libraryId}`
             : 'Demo fallback 素材分析'
       });
-      setSlotResult(result.slotMatches, result.materialGaps);
-      setRepairs(result.repairs);
+      const pipelineWarnings = result.llmWarnings ?? [];
+      setSlotResult(result.slotMatches, result.materialGaps, {
+        alignmentSource: result.llmStageSources?.alignment,
+        warnings: pipelineWarnings
+      });
+      setRepairs(result.repairs, {
+        gapSpecSource: result.llmStageSources?.gapSpec
+      });
       setGenerationVariant('high_click');
       setGenerationResult({
         script: result.script,
         storyboard: result.storyboard,
         timeline: result.timeline
+      }, {
+        scriptSource: result.llmStageSources?.script
       });
       setQualityReport(result.qualityReport);
       setEvidenceTrace(result.evidenceTrace ?? []);

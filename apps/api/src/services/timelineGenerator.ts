@@ -73,13 +73,11 @@ export async function generateTimelineMock(input: {
       slotId: slot.id,
       assetId: match?.assetId,
       script: text,
-      subtitles: splitSubtitle(text),
-      visualAction: match?.status === 'matched'
-        ? 'use_matched_asset'
-        : `repair_with_${repair?.strategy ?? 'caption_rewrite'}`,
+      subtitles: splitSubtitle(text, variant),
+      visualAction: visualActionForVariant(variant, match, repair),
       packaging: {
         captionStyle: captionStyleForVariant(variant),
-        cardType: cardTypeByRole(seg.role),
+        cardType: cardTypeByRole(seg.role, variant),
         transition: transitionFromBoundary(seg.id, boundaries)
           ?? transitionForVariant(variant, index),
         motion: motionForVariant(variant, repair)
@@ -121,20 +119,40 @@ function buildLinesByRole(newContent: ContentBrief, variant: GenerationVariant):
   };
 }
 
-function splitSubtitle(text: string): string[] {
-  if (text.length <= 12) return [text];
+function splitSubtitle(text: string, variant: GenerationVariant): string[] {
+  const maxChars = variant === 'premium' ? 18 : variant === 'high_click' ? 8 : 12;
+  if (text.length <= maxChars) return [text];
   const chunks: string[] = [];
-  for (let i = 0; i < text.length; i += 12) {
-    chunks.push(text.slice(i, i + 12));
+  for (let i = 0; i < text.length; i += maxChars) {
+    chunks.push(text.slice(i, i + maxChars));
   }
   return chunks;
 }
 
-function cardTypeByRole(role: string): TimelineItem['packaging']['cardType'] {
+function cardTypeByRole(role: string, variant: GenerationVariant): TimelineItem['packaging']['cardType'] {
   if (role === 'hook') return 'title_card';
   if (role === 'comparison') return 'comparison_card';
   if (role === 'cta') return 'cta_card';
+  if (variant === 'premium') return undefined;
   return 'selling_point_card';
+}
+
+function visualActionForVariant(
+  variant: GenerationVariant,
+  match: SlotMatch | undefined,
+  repair: GapRepair | undefined
+): string {
+  const base = match?.status === 'matched'
+    ? `使用匹配素材 ${match.assetId ?? 'asset'}`
+    : `使用补全策略 ${repair?.strategy ?? 'caption_rewrite'}`;
+
+  if (variant === 'high_click') {
+    return `${base}，快节奏推近，前 3 秒强化冲突和停留。`;
+  }
+  if (variant === 'high_conversion') {
+    return `${base}，商品和核心卖点提前，画面服务购买理由。`;
+  }
+  return `${base}，克制推近和留白构图，弱化强字幕干扰。`;
 }
 
 function captionStyleForVariant(variant: GenerationVariant): string {
