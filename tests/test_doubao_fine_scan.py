@@ -589,5 +589,48 @@ class DoubaoFineScanTests(unittest.TestCase):
             self.assertEqual(upload_calls[0]["fps"], None)
 
 
+class PromptVersionResolutionTests(unittest.TestCase):
+    """--prompt-version switch + --prompt escape-hatch resolution.
+
+    v1 is what lets fine_scan emit migrationContract for downstream
+    structure-graph extraction; v0 stays the backward-compatible default.
+    """
+
+    def setUp(self):
+        self.module = load_module()
+
+    def test_prompt_default_is_none_sentinel(self):
+        # default must be None so resolve_prompt_path can fall back to version
+        args = self.module.build_parser().parse_args([])
+        self.assertIsNone(args.prompt)
+
+    def test_default_resolves_to_v0_prompt(self):
+        args = self.module.build_parser().parse_args([])
+        self.assertEqual(
+            self.module.resolve_prompt_path(args),
+            "prompts/video_understanding/fine_structure_scan_v0.md",
+        )
+
+    def test_prompt_version_v1_resolves_to_v1_prompt(self):
+        args = self.module.build_parser().parse_args(["--prompt-version", "v1"])
+        self.assertEqual(
+            self.module.resolve_prompt_path(args),
+            "prompts/video_understanding/fine_structure_scan_v1.md",
+        )
+
+    def test_explicit_prompt_overrides_version(self):
+        # explicit --prompt wins even when --prompt-version is v1
+        args = self.module.build_parser().parse_args(
+            ["--prompt", "custom/my_prompt.md", "--prompt-version", "v1"]
+        )
+        self.assertEqual(
+            self.module.resolve_prompt_path(args), "custom/my_prompt.md"
+        )
+
+    def test_prompt_version_rejects_unknown_value(self):
+        with self.assertRaises(SystemExit):
+            self.module.build_parser().parse_args(["--prompt-version", "v2"])
+
+
 if __name__ == "__main__":
     unittest.main()

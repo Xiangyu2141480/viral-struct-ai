@@ -19,9 +19,7 @@ from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from path_layout import DEFAULT_VIDEO_ID, analysis_paths  # noqa: E402
-
-_DEFAULT_PATHS = analysis_paths(DEFAULT_VIDEO_ID)
+from path_layout import DEFAULT_VIDEO_ID, apply_video_id_defaults  # noqa: E402
 
 SCHEMA_VERSION = "media_technical_v1"
 
@@ -176,26 +174,29 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Extract technical media metadata via ffprobe (v2 stage1_media)."
     )
+    # Path defaults are None; resolved from --video-id after parse so that
+    # --video-id alone re-derives them (see apply_video_id_defaults).
     parser.add_argument(
         "--video",
-        default=str(_DEFAULT_PATHS.raw_video),
-        help="Source video path.",
+        default=None,
+        help="Source video path (default: derived from --video-id).",
     )
     parser.add_argument(
         "--video-id",
         default=DEFAULT_VIDEO_ID,
-        help="Video id stamped into the output.",
+        help="Video id (also derives default --video / --out paths).",
     )
     parser.add_argument(
         "--out",
-        default=str(_DEFAULT_PATHS.media_technical),
-        help="Output JSON path.",
+        default=None,
+        help="Output JSON path (default: derived from --video-id).",
     )
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    apply_video_id_defaults(args, {"video": "raw_video", "out": "media_technical"})
     video_path = Path(args.video)
     probe = run_ffprobe(video_path)
     payload = build_media_technical(probe, video_id=args.video_id)

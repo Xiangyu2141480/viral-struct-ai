@@ -5,6 +5,7 @@ script depends on. If any of these break, every other script's tests
 will also break, so keep the assertions specific (one path per test).
 """
 
+import argparse
 import importlib.util
 import sys
 import unittest
@@ -218,6 +219,42 @@ class RootOverrideTests(unittest.TestCase):
         )
         self.assertEqual(paths.analysis_root, Path("custom_a/macbook_neo"))
         self.assertEqual(paths.raw_video, Path("custom_raw/macbook_neo.mp4"))
+
+
+class ApplyVideoIdDefaultsTests(unittest.TestCase):
+    """apply_video_id_defaults: --video-id re-derives None path args.
+
+    This is the fix for the footgun where passing --video-id without every
+    --out silently wrote into macbook_neo's directory.
+    """
+
+    def setUp(self):
+        self.module = load_module()
+
+    def test_fills_none_paths_from_video_id(self):
+        ns = argparse.Namespace(video_id="chocolate_mud_pie", out=None, video=None)
+        self.module.apply_video_id_defaults(
+            ns, {"out": "media_technical", "video": "raw_video"}
+        )
+        self.assertIn("chocolate_mud_pie", ns.out)
+        self.assertTrue(ns.out.endswith("media_technical.json"))
+        self.assertIn("chocolate_mud_pie", ns.video)
+        self.assertTrue(ns.video.endswith("chocolate_mud_pie.mp4"))
+
+    def test_explicit_paths_are_preserved(self):
+        # an explicitly-passed (non-None) path must win over derivation
+        ns = argparse.Namespace(video_id="chocolate_mud_pie", out="custom/x.json", video=None)
+        self.module.apply_video_id_defaults(
+            ns, {"out": "media_technical", "video": "raw_video"}
+        )
+        self.assertEqual(ns.out, "custom/x.json")
+        self.assertIn("chocolate_mud_pie", ns.video)
+
+    def test_default_video_id_still_derives_macbook(self):
+        # backward compat: unchanged video_id derives macbook_neo paths
+        ns = argparse.Namespace(video_id="macbook_neo", out=None)
+        self.module.apply_video_id_defaults(ns, {"out": "media_technical"})
+        self.assertIn("macbook_neo", ns.out)
 
 
 if __name__ == "__main__":

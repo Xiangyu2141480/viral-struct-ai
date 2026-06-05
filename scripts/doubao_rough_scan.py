@@ -14,6 +14,8 @@ import mimetypes
 import os
 import random
 import re
+import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -21,6 +23,12 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable, TypeVar
 from urllib import error, request
+
+# curl uses the system TLS stack (Schannel on Windows) and reliably handles
+# large multipart uploads to the Doubao endpoint, where Python's OpenSSL
+# (_ssl) — shared by urllib AND requests — intermittently raises
+# "EOF occurred in violation of protocol". Resolved once; None => urllib.
+_CURL_PATH = shutil.which("curl")
 
 # scripts/ is on sys.path[0] when this file is run as __main__; sibling
 # imports also work when loaded via importlib.spec_from_file_location
@@ -55,6 +63,7 @@ _RETRYABLE_ERROR_PATTERNS = (
     "timeout",           # alternate phrasing
     "Connection reset",  # transient TCP teardown under load
     "Connection aborted",
+    "curl transport error",  # curl subprocess transport failure (retryable)
 )
 
 _HTTP_SEMAPHORE: threading.BoundedSemaphore | None = None
@@ -292,6 +301,39 @@ def request_json(
     headers = {"Authorization": f"Bearer {api_key}"}
     if content_type:
         headers["Content-Type"] = content_type
+
+    # Prefer curl (system TLS / Schannel): Python's OpenSSL (_ssl) — used by
+    # BOTH urllib and requests — intermittently fails large multipart uploads
+    # to this endpoint with "EOF occurred in violation of protocol". curl is
+    # reliable. Transport/timeout failures are surfaced as RuntimeError with
+    # "curl transport error" / "timed out" text so gated_call's existing
+    # retry classifier handles them unchanged. urllib is the stdlib fallback
+    # when curl is absent.
+    if _CURL_PATH:
+        cmd = [_CURL_PATH, "-sS", "-X", method, url, "--max-time", str(int(timeout))]
+        for header_name, header_value in headers.items():
+            cmd += ["-H", f"{header_name}: {header_value}"]
+        if body is not None:
+            cmd += ["--data-binary", "@-"]  # read raw body (multipart/json) from stdin
+        cmd += ["-w", "\n%{http_code}"]  # append status code as the final line
+        try:
+            result = subprocess.run(
+                cmd, input=body, capture_output=True, timeout=int(timeout) + 15
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(f"curl request timed out after {timeout}s") from exc
+        if result.returncode != 0:
+            err = result.stderr.decode("utf-8", errors="replace").strip()
+            raise RuntimeError(
+                f"curl transport error (exit {result.returncode}): {err}"
+            )
+        raw = result.stdout.decode("utf-8", errors="replace")
+        sep = raw.rfind("\n")
+        payload, code_str = (raw[:sep], raw[sep + 1:].strip()) if sep != -1 else (raw, "")
+        http_code = int(code_str) if code_str.isdigit() else 0
+        if http_code >= 400:
+            raise RuntimeError(f"HTTP {http_code}: {payload}")
+        return json.loads(payload) if payload.strip() else {}
 
     req = request.Request(url, data=body, headers=headers, method=method)
     try:

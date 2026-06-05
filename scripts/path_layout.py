@@ -38,7 +38,7 @@ field accessors.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 
 # ---------------------------------------------------------------------------
@@ -165,3 +165,26 @@ def analysis_paths(
         rough_response_text=debug / "rough_structure_scan_response_text.txt",
         uploaded_file_info=debug / "uploaded_file_info.json",
     )
+
+
+def apply_video_id_defaults(args: Any, mapping: dict[str, str]) -> None:
+    """Fill ``None`` path arguments from ``analysis_paths(args.video_id)``.
+
+    For each ``arg_attr -> VideoPaths field`` pair in ``mapping``, if
+    ``getattr(args, arg_attr)`` is ``None``, set it to the string form of the
+    corresponding path derived from ``args.video_id``. Mutates ``args``.
+
+    This makes ``--video-id`` actually re-derive the default input/output
+    paths. Without it, every path argument defaults to the module-level
+    DEFAULT_VIDEO_ID layout, so passing ``--video-id other`` *without* also
+    passing every ``--out`` silently reads/writes macbook_neo's directory —
+    the footgun that once overwrote macbook_neo's media_technical.json.
+
+    Usage: declare the relevant path args with ``default=None`` in the parser,
+    then call this once after ``parse_args``. Explicitly-passed paths (non-None)
+    always win.
+    """
+    paths = analysis_paths(args.video_id)
+    for arg_attr, field in mapping.items():
+        if getattr(args, arg_attr, None) is None:
+            setattr(args, arg_attr, str(getattr(paths, field)))

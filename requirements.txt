@@ -7,3 +7,9 @@ scipy>=1.11
 opencv-python>=4.8
 av>=11.0
 ruptures>=1.1
+
+# Note: Doubao API calls prefer the `curl` binary (system TLS / Schannel) over
+# Python's OpenSSL-based urllib for large multipart uploads — stdlib urllib
+# (and requests, same _ssl) intermittently SSL-EOF on some Windows TLS stacks.
+# See scripts/doubao_rough_scan.request_json. curl is a runtime (not pip)
+# dependency; urllib is the automatic fallback when curl is absent.
