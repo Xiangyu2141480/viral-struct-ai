@@ -53,3 +53,9 @@ personal_workspace/
 # Claude Code session-local config + personal plans
 .claude*
 docs/superpowers/
+
+# Local dev logs / scratch artifacts (not for commit)
+*.log
+demo-output*.json
+fine_scan_compare/
+scripts/_dump_demo.py
