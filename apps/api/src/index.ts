@@ -10,7 +10,8 @@ import { gapsRouter } from './routes/gaps';
 import { timelineRouter } from './routes/timeline';
 import { qualityRouter } from './routes/quality';
 import { demoRouter } from './routes/demo';
-import { getCoverDir, getDemoAssetDir, getFrameDir, getUploadDir } from './services/videoPaths';
+import { renderRouter } from './routes/render';
+import { getCoverDir, getDemoAssetDir, getFrameDir, getRenderDir, getUploadDir } from './services/videoPaths';
 
 const app = express();
 const port = Number(process.env.API_PORT ?? 4000);
@@ -18,6 +19,7 @@ const uploadDir = getUploadDir();
 const frameDir = getFrameDir();
 const coverDir = getCoverDir();
 const demoAssetDir = getDemoAssetDir();
+const renderDir = getRenderDir();
 const allowedOrigins = (process.env.WEB_ORIGIN ?? 'http://localhost:3000,http://localhost:3001')
   .split(',')
   .map((origin) => origin.trim())
@@ -27,6 +29,7 @@ mkdirSync(uploadDir, { recursive: true });
 mkdirSync(frameDir, { recursive: true });
 mkdirSync(coverDir, { recursive: true });
 mkdirSync(demoAssetDir, { recursive: true });
+mkdirSync(renderDir, { recursive: true });
 
 app.use(cors({
   origin(origin, callback) {
@@ -42,6 +45,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use('/media/frames', express.static(frameDir));
 app.use('/media/covers', express.static(coverDir));
 app.use('/media/demo-assets', express.static(demoAssetDir));
+app.use('/media/renders', express.static(renderDir));
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'viral-struct-api' });
@@ -55,6 +59,7 @@ app.use('/api/gaps', gapsRouter);
 app.use('/api/timeline', timelineRouter);
 app.use('/api/quality', qualityRouter);
 app.use('/api/demo', demoRouter);
+app.use('/api/render', renderRouter);
 
 app.listen(port, () => {
   console.log(`ViralStruct API listening on http://localhost:${port}`);
