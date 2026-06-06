@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { RenderExecutor, RenderInput, RenderResult, RenderSegmentManifestEntry } from './RenderContract';
+import { buildRenderTrack } from './renderTrack';
 
 /**
  * Deterministic, pixel-free executor: produces an honest render PLAN (frame counts, durations, hash)
@@ -22,7 +23,9 @@ export class ManifestRenderExecutor implements RenderExecutor {
       label: segment.label
     }));
 
-    const frameCount = manifest.reduce((sum, entry) => sum + entry.frames, 0);
+    // Frame count reflects the actual rendered track (timeline span), not the sum of overlapping items.
+    const track = buildRenderTrack(input);
+    const frameCount = track.reduce((sum, slice) => sum + framesFor(slice.startMs, slice.endMs, fps), 0);
     const unresolvedSegmentIds = input.segments.filter((segment) => segment.unresolvedEvidence).map((segment) => segment.id);
     const contentHash = createHash('sha256').update(JSON.stringify(input)).digest('hex').slice(0, 16);
 

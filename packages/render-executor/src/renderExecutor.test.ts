@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import type { TimelineItem } from '@viral-struct/shared';
 import { compileTimelineToRenderInput } from './compileRenderInput';
 import { ManifestRenderExecutor } from './manifestExecutor';
+import { buildRenderTrack } from './renderTrack';
 
 function makeTimeline(): TimelineItem[] {
   return [
@@ -80,4 +81,36 @@ test('an empty timeline yields a valid empty plan with a warning, not a crash', 
   assert.equal(result.segmentCount, 0);
   assert.equal(result.frameCount, 0);
   assert.ok(result.warnings.length > 0);
+});
+
+test('overlapping items flatten to one track whose duration is the span, not the sum (renderer↔timeline fix)', async () => {
+  // 3 items share the same [0,4] segment bounds (as timelineGenerator stamps them) + 1 item [4,6].
+  // Span = 6s. Naive concat would (wrongly) be 4+4+4+2 = 14s.
+  const overlapping: TimelineItem[] = [
+    { id: 'a1', start: 0, end: 4, segmentRole: 'hook', sourceSegmentId: 'seg1', slotId: 's1', script: '', subtitles: [], visualAction: '', packaging: { captionStyle: 'b' } },
+    { id: 'a2', start: 0, end: 4, segmentRole: 'hook', sourceSegmentId: 'seg1', slotId: 's2', script: '', subtitles: [], visualAction: '', packaging: { captionStyle: 'b' } },
+    { id: 'a3', start: 0, end: 4, segmentRole: 'hook', sourceSegmentId: 'seg1', slotId: 's3', script: '', subtitles: [], visualAction: '', packaging: { captionStyle: 'b' } },
+    { id: 'b1', start: 4, end: 6, segmentRole: 'cta', sourceSegmentId: 'seg2', slotId: 's4', script: '', subtitles: [], visualAction: '', packaging: { captionStyle: 'b' } }
+  ];
+  const input = compileTimelineToRenderInput(overlapping);
+  assert.equal(input.totalDurationMs, 6000); // span, not 14000
+
+  const result = await new ManifestRenderExecutor().render(input);
+  assert.equal(result.durationMs, 6000);
+  // frame count must equal the SPAN (6s), not the overlapping sum (14s)
+  assert.equal(result.frameCount, Math.round((6000 / 1000) * input.profile.fps));
+  assert.equal(result.segmentCount, 4); // original items still accounted for in the manifest
+});
+
+test('buildRenderTrack tiles [0, span] exactly: collapses overlaps and fills gaps', () => {
+  const withGap: TimelineItem[] = [
+    { id: 'x1', start: 0, end: 2, segmentRole: 'hook', sourceSegmentId: 's', slotId: 'sa', script: '', subtitles: [], visualAction: '', packaging: { captionStyle: 'b' } },
+    { id: 'x2', start: 3, end: 5, segmentRole: 'cta', sourceSegmentId: 's', slotId: 'sb', script: '', subtitles: [], visualAction: '', packaging: { captionStyle: 'b' } }
+  ]; // gap from 2s to 3s
+  const input = compileTimelineToRenderInput(withGap);
+  const track = buildRenderTrack(input);
+
+  const tiled = track.reduce((sum, slice) => sum + (slice.endMs - slice.startMs), 0);
+  assert.equal(tiled, input.totalDurationMs); // non-overlapping, no gaps, exactly covers [0, span]
+  assert.ok(track.some((slice) => slice.sourceSegmentId === '__gap__')); // the 2-3s gap is filled
 });

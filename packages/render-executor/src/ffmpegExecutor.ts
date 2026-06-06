@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { framesFor } from './manifestExecutor';
 import type { RenderExecutor, RenderInput, RenderResult, RenderSegmentManifestEntry } from './RenderContract';
+import { buildRenderTrack } from './renderTrack';
 
 // ffmpeg-static is CommonJS (module.exports = path); load via createRequire to avoid ESM default-interop friction.
 const requireCjs = createRequire(import.meta.url);
@@ -29,16 +30,18 @@ export class FfmpegRenderExecutor implements RenderExecutor {
     if (input.segments.length === 0) throw new Error('cannot render an empty timeline');
 
     const { width, height, fps } = input.profile;
+    const track = buildRenderTrack(input);
+    if (track.length === 0) throw new Error('cannot render an empty track');
     const args: string[] = [];
-    for (const segment of input.segments) {
-      const durationSec = Math.max(0.1, (segment.endMs - segment.startMs) / 1000);
+    for (const slice of track) {
+      const durationSec = Math.max(0.1, (slice.endMs - slice.startMs) / 1000);
       args.push(
         '-f', 'lavfi',
-        '-i', `color=c=${toFfmpegColor(segment.background)}:s=${width}x${height}:d=${durationSec.toFixed(3)}:r=${fps}`
+        '-i', `color=c=${toFfmpegColor(slice.background)}:s=${width}x${height}:d=${durationSec.toFixed(3)}:r=${fps}`
       );
     }
-    const n = input.segments.length;
-    const concat = input.segments.map((_, index) => `[${index}:v]`).join('') + `concat=n=${n}:v=1:a=0[v]`;
+    const n = track.length;
+    const concat = track.map((_, index) => `[${index}:v]`).join('') + `concat=n=${n}:v=1:a=0[v]`;
     args.push('-filter_complex', concat, '-map', '[v]', '-pix_fmt', 'yuv420p', '-y', this.options.outputPath);
 
     await runFfmpeg(ffmpegPath, args);
@@ -53,7 +56,7 @@ export class FfmpegRenderExecutor implements RenderExecutor {
       unresolvedEvidence: segment.unresolvedEvidence,
       label: segment.label
     }));
-    const frameCount = manifest.reduce((sum, entry) => sum + entry.frames, 0);
+    const frameCount = track.reduce((sum, slice) => sum + framesFor(slice.startMs, slice.endMs, fps), 0);
     const contentHash = createHash('sha256').update(JSON.stringify(input)).digest('hex').slice(0, 16);
 
     return {
@@ -64,7 +67,7 @@ export class FfmpegRenderExecutor implements RenderExecutor {
       outputPath: this.options.outputPath,
       durationMs: input.totalDurationMs,
       frameCount,
-      segmentCount: n,
+      segmentCount: input.segments.length,
       unresolvedSegmentIds: input.segments.filter((segment) => segment.unresolvedEvidence).map((segment) => segment.id),
       manifest,
       contentHash,

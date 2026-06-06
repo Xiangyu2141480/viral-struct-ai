@@ -96,10 +96,12 @@ demoRouter.post('/run', async (_req, res) => {
     // analysis demo, so it is wrapped and surfaced as a warning instead.
     let renderMediaUrl: string | null = null;
     let renderManifest: Awaited<ReturnType<typeof renderTimeline>>['render'] | null = null;
+    let renderDurationCheck: Awaited<ReturnType<typeof renderTimeline>>['durationCheck'] = null;
     try {
       const rendered = await renderTimeline({ timeline: generation.timeline });
       renderMediaUrl = rendered.mediaUrl;
       renderManifest = rendered.render;
+      renderDurationCheck = rendered.durationCheck;
     } catch (error) {
       llmWarnings.push(`render skipped: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -124,6 +126,7 @@ demoRouter.post('/run', async (_req, res) => {
       qualityReport,
       renderMediaUrl,
       renderManifest,
+      renderDurationCheck,
       llmStageSources: {
         alignment: slotResult.alignmentSource,
         gapSpec: repairResult.gapSpecSource,

@@ -27,6 +27,7 @@ test('renderTimeline compiles the timeline and runs it through an injected execu
   assert.equal(result.render.durationMs, 5000);
   assert.equal(result.render.rendered, false); // manifest executor produces no pixels
   assert.equal(result.mediaUrl, null); // so no servable file URL
+  assert.equal(result.durationCheck, null); // no real file -> nothing to probe
 });
 
 test('renderTimeline rejects an empty timeline', async () => {
