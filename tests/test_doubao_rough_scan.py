@@ -526,6 +526,51 @@ class HttpConcurrencyControlsTests(unittest.TestCase):
             f" check L1/L2 thread setup",
         )
 
+    def test_wait_for_file_poll_requests_are_gated_by_global_semaphore(self):
+        """File-status polling is HTTP traffic and must respect the global cap.
+
+        PR #44 lowers the poll interval and raises block concurrency, so direct
+        retrieve_file calls would bypass --max-concurrent-http and create an
+        unbounded GET poll stream. Hold the only semaphore slot and verify the
+        poll does not start until the slot is released.
+        """
+        sem = self.module.configure_http_semaphore(1)
+        self.assertTrue(sem.acquire(blocking=False))
+
+        called = threading.Event()
+        result: dict[str, object] = {}
+        original_retrieve_file = self.module.retrieve_file
+
+        def fake_retrieve_file(**kwargs):
+            called.set()
+            return {"status": "processed", "id": kwargs["file_id"]}
+
+        def worker() -> None:
+            result["value"] = self.module.wait_for_file(
+                base_url="https://example.invalid/api/v3",
+                api_key="dummy",
+                file_id="file-001",
+                poll_interval=0.001,
+                max_wait_seconds=1,
+            )
+
+        self.module.retrieve_file = fake_retrieve_file
+        thread = threading.Thread(target=worker)
+        thread.start()
+
+        try:
+            self.assertFalse(
+                called.wait(0.05),
+                "wait_for_file called retrieve_file while the global semaphore was held",
+            )
+        finally:
+            sem.release()
+            thread.join(timeout=1)
+            self.module.retrieve_file = original_retrieve_file
+
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(result["value"], {"status": "processed", "id": "file-001"})
+
     def test_get_http_semaphore_creates_with_max_concurrent(self):
         sem = self.module.get_http_semaphore(max_concurrent=5)
         # BoundedSemaphore exposes acquire/release; verify it's bounded by trying to
