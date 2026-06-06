@@ -52,7 +52,7 @@ degradation is an **overclaim** (to be flagged by the delivery-promise gate). In
 1. **`packagingVocabulary.ts`** — closed id unions + registries + `PackagingCardSpec` + Zod + `motionTransform()`. ✅ **DONE**
 2. Tighten `TimelineItem.packaging.captionStyle`→`CaptionStyleId`, widen `motion`→`MotionPresetId`; tighten `HyperFramesFillSpec` to ids.
 3. `RenderSegment.card?: PackagingCardSpec` + `cardSpecFromTimelineItem()`; `THEME_REGISTRY.roleBackground` replaces `BACKGROUND_BY_ROLE`.
-4. **`CARD_RENDERERS` in `ffmpegExecutor`** — paint styled cards (libass + drawbox) instead of solid colour. ← *the visible colour-block fix lands here*. Colour-block stays the honest fallback.
+4. **`CARD_RENDERERS` in `ffmpegExecutor`** — paint styled cards (registry-driven libass styles) instead of one solid colour. ← *the visible colour-block fix*. Colour-block + substitute marker stay the honest fallback. ✅ **DONE** (commit b726d35)
 5. `derivePackagingTheme()` in video-agent; wire into the timeline generator + `buildDeterministicEditingSpec`.
 6. `preflightRenderInput()` + `captionFits()` — render-side guardrail pass.
 7. `scoreSlideshowRisk()` + `QualityReport.slideshowRisk` + a `motion_variation` verifier check (pending until motion lands).
@@ -67,5 +67,14 @@ degradation is an **overclaim** (to be flagged by the delivery-promise gate). In
 single source of truth), the renderer-resolvable registries (`CARD_/CAPTION_/TRANSITION_/MOTION_/THEME_`),
 the discriminated `PackagingCardSpec` + schema, loose-parse guards, and the pure `motionTransform()`.
 
-Typecheck + build green. This is the dependency root; it does **not** change the rendered video yet — that
-is **step 4** (`CARD_RENDERERS`), which is the next visible win.
+Typecheck + build green. This is the dependency root.
+
+**Step 4 — registry-driven card styling** (`packages/render-executor`, commit b726d35): `compileTimelineToRenderInput`
+paints a pure CARD segment with `CARD_REGISTRY[cardType].background` (assets/substitutes keep the role colour;
+unknown ids fall back to the role palette); `RenderSegment`/`RenderTrackSlice` carry `cardType`/`captionStyle`/
+`segmentRole`; and `ffmpegExecutor.buildAss` emits one libass style per known card type derived from
+`CARD_REGISTRY` (`fontWeight`→size+bold, `safeArea`→alignment). Honesty precedence held: the `（替代卡片 · 素材缺失）`
+marker is its own top-of-frame yellow event, drawn whenever evidence is unresolved even with no caption, so card
+styling cannot mask it. Frame-verified (title=navy/center, selling-point=blue/lower, comparison=green/center,
+cta=red/center, substitute=teal + yellow top marker). Not yet consumed: per-`captionStyle` styling via
+`CAPTION_REGISTRY` and accent boxes/bars (a later motion/box pass).
