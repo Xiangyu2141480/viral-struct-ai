@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { AssetCard } from '@viral-struct/shared';
 import { AssetCardSchema } from '@viral-struct/shared';
 import { getAssetLibraryDir } from './videoPaths';
+import { normalizeAssetCards } from './assetManager/assetNormalizer';
 
 const AssetCardArraySchema = z.array(AssetCardSchema);
 const LibraryIdSchema = z.string().trim().min(1).regex(/^[A-Za-z0-9_-]+$/);
@@ -15,5 +16,5 @@ export async function loadAssetLibrary(libraryId: string): Promise<AssetCard[]> 
   const safeLibraryId = LibraryIdSchema.parse(libraryId);
   const filePath = join(getAssetLibraryDir(), safeLibraryId, 'asset_cards.json');
   const raw = await readFile(filePath, 'utf-8');
-  return AssetCardArraySchema.parse(JSON.parse(raw));
+  return normalizeAssetCards(AssetCardArraySchema.parse(JSON.parse(raw)));
 }

@@ -1,10 +1,14 @@
 import { z } from 'zod';
 import type {
   AssetCard,
+  AssetManagerRole,
+  AssetMatchEvidence,
   Boundary,
   CreativeIngredientType,
   MaterialGap,
   MaterialGapType,
+  RoleAffordanceScore,
+  ShotSlotRole,
   SlotMatch,
   ViralStructureGraph
 } from '@viral-struct/shared';
@@ -18,7 +22,7 @@ export function matchSlots(
   const matches: SlotMatch[] = graph.shotSlots.map((slot) => {
     const ranked = assets
       .map((asset) => {
-        const semanticMatch = asset.suitableSlots.includes(slot.role) ? 0.35 : 0;
+        const semanticMatch = getSemanticMatch(slot.role, asset);
         const typeMatch =
           slot.requiredAsset.type === 'generated'
             ? 0.12
@@ -30,10 +34,14 @@ export function matchSlots(
           asset.detectedIngredients
         );
         const motionMatch = getMotionMatch(slot.requiredAsset.motion, asset);
-        const quality = asset.qualityScore * 0.1;
-        const score =
+        const quality = getAssetQualityScore(asset) * 0.1;
+        const analysisFit = getRoleAffordanceFit(slot.role, asset) * 0.15;
+        const score = clampScore(
           semanticMatch + typeMatch + ingredientMatchScore * 0.2 + motionMatch + quality
-          + boundaryBonus(slot.segmentId, boundaries);
+          + analysisFit
+          + boundaryBonus(slot.segmentId, boundaries)
+          - getAnalysisPenalty(asset)
+        );
         return {
           asset,
           score,
@@ -58,7 +66,8 @@ export function matchSlots(
         ingredientMatchScore: best.ingredientMatchScore,
         missingIngredients: sanitizeMissingIngredients(best.missingIngredients),
         status: 'matched',
-        reason: '素材类型、槽位语义、关键创作要素和质量均满足。'
+        reason: '素材类型、槽位语义、关键创作要素和质量均满足。',
+        assetEvidence: buildAssetMatchEvidence(best.asset, slot.role)
       };
     }
 
@@ -72,7 +81,8 @@ export function matchSlots(
         status: 'partial',
         reason: humanBlocked
           ? '槽位需要授权演示或指定动作，但当前素材缺少对应动作要素，最多只能部分满足。'
-          : '素材语义部分满足，但类型、动作、时长或创作要素不足，需要补全。'
+          : '素材语义部分满足，但类型、动作、时长或创作要素不足，需要补全。',
+        assetEvidence: buildAssetMatchEvidence(best.asset, slot.role)
       };
     }
 
@@ -82,7 +92,8 @@ export function matchSlots(
       ingredientMatchScore: best?.ingredientMatchScore ?? 0,
       missingIngredients: sanitizeMissingIngredients(best?.missingIngredients ?? slot.visualIngredientRequirements ?? []),
       status: 'missing',
-      reason: '没有找到能支撑该结构槽位的素材。'
+      reason: '没有找到能支撑该结构槽位的素材。',
+      assetEvidence: best ? buildAssetMatchEvidence(best.asset, slot.role) : undefined
     };
   });
 
@@ -105,6 +116,95 @@ export function matchSlots(
     });
 
   return { matches, gaps };
+}
+
+const SLOT_ROLE_TO_ASSET_MANAGER_ROLE: Record<ShotSlotRole, AssetManagerRole> = {
+  opening_attention: 'opening_hook',
+  product_closeup: 'product_closeup',
+  usage_demo: 'usage_demo',
+  benefit_visual: 'benefit_proof',
+  comparison: 'comparison',
+  testimonial: 'benefit_proof',
+  cta_visual: 'cta'
+};
+
+function clampScore(value: number): number {
+  return Math.max(0, Math.min(0.99, Number(value.toFixed(4))));
+}
+
+function getSemanticMatch(role: ShotSlotRole, asset: AssetCard): number {
+  if (asset.suitableSlots.includes(role)) return 0.35;
+  if (asset.analysis?.slotAffordance.suitableSlots.includes(role)) return 0.35;
+  const targetAffordance = getTargetAffordance(role, asset);
+  if ((targetAffordance?.score ?? 0) >= 75) return 0.35;
+  return 0;
+}
+
+function getAssetQualityScore(asset: AssetCard): number {
+  return asset.analysis?.quality.overallScore ?? asset.qualityScore;
+}
+
+function getRoleAffordanceFit(role: ShotSlotRole, asset: AssetCard): number {
+  const target = getTargetAffordance(role, asset);
+  if (target) return target.score / 100;
+  const primary = asset.analysis?.slotAffordance.primaryRoles.find((entry) => entry.role === role);
+  if (primary) return primary.confidence;
+  return asset.candidateSlotRoles?.find((entry) => entry.role === role)?.confidence ?? 0;
+}
+
+function getAnalysisPenalty(asset: AssetCard): number {
+  const warnings = asset.analysis?.warnings ?? [];
+  const warningPenalty = Math.min(0.12, warnings.length * 0.035);
+  const quality = getAssetQualityScore(asset);
+  const lowQualityPenalty = quality < 0.5 ? (0.5 - quality) * 0.12 : 0;
+  const safetyPenalty = asset.analysis?.safety.status === 'blocked'
+    ? 0.2
+    : asset.analysis?.safety.status === 'needs_review'
+      ? 0.08
+      : 0;
+  return warningPenalty + lowQualityPenalty + safetyPenalty;
+}
+
+function getTargetAffordance(role: ShotSlotRole, asset: AssetCard): RoleAffordanceScore | undefined {
+  const targetRole = SLOT_ROLE_TO_ASSET_MANAGER_ROLE[role];
+  return asset.analysis?.roleAffordance?.find((entry) => entry.role === targetRole);
+}
+
+function getTopAffordance(role: ShotSlotRole, asset: AssetCard): RoleAffordanceScore | undefined {
+  return getTargetAffordance(role, asset)
+    ?? asset.analysis?.roleAffordance?.slice().sort((a, b) => b.score - a.score)[0];
+}
+
+function buildAssetMatchEvidence(asset: AssetCard, slotRole: ShotSlotRole): AssetMatchEvidence {
+  const topAffordance = getTopAffordance(slotRole, asset);
+  const keyframes = asset.analysis?.media.keyframes ?? [];
+  const qualityScore = getAssetQualityScore(asset);
+  const productVisibilityScore =
+    topAffordance?.components.productVisibilityFit
+    ?? (asset.analysis?.quality.productFocus !== undefined ? Math.round(asset.analysis.quality.productFocus * 100) : undefined);
+  const reasons = [
+    topAffordance ? `${topAffordance.role} affordance ${Math.round(topAffordance.score)}: ${topAffordance.rationale}` : undefined,
+    asset.analysis?.semantic.summary ? `semantic: ${asset.analysis.semantic.summary}` : undefined,
+    asset.analysis?.slotAffordance.rationale ? `slot affordance: ${asset.analysis.slotAffordance.rationale}` : undefined,
+    `quality: ${qualityScore.toFixed(2)}`
+  ].filter((reason): reason is string => Boolean(reason));
+
+  return {
+    assetId: asset.id,
+    qualityScore,
+    topAffordanceRole: topAffordance?.role,
+    topAffordanceScore: topAffordance?.score,
+    productVisibilityScore,
+    keyframeIds: keyframes.map((keyframe) => keyframe.id),
+    keyframeCaptions: keyframes
+      .map((keyframe) => keyframe.description)
+      .filter((caption): caption is string => Boolean(caption)),
+    reasons,
+    warnings: [
+      ...(asset.analysis?.warnings ?? []),
+      ...(asset.analysis?.quality.issues.map((issue) => issue.message) ?? [])
+    ]
+  };
 }
 
 function getIngredientMatchScore(
@@ -275,6 +375,21 @@ interface AssetSummary {
   candidateSlotRoles?: AssetCard['candidateSlotRoles'];
   detectedObjects?: AssetCard['detectedObjects'];
   suitableSlots?: AssetCard['suitableSlots'];
+  analysisEvidence?: {
+    semanticShortCaption?: string;
+    topAffordances: Array<{
+      role: AssetManagerRole;
+      score: number;
+      rationale: string;
+    }>;
+    quality: number;
+    productVisibilityScore?: number;
+    keyframes: Array<{
+      id: string;
+      caption?: string;
+    }>;
+    warnings: string[];
+  };
 }
 
 function summarizeSlot(slot: ViralStructureGraph['shotSlots'][number]): SlotSummary {
@@ -297,7 +412,33 @@ function summarizeAsset(asset: AssetCard): AssetSummary {
     motionPotential: asset.motionPotential,
     candidateSlotRoles: asset.candidateSlotRoles,
     detectedObjects: asset.detectedObjects,
-    suitableSlots: asset.suitableSlots
+    suitableSlots: asset.suitableSlots,
+    analysisEvidence: summarizeAssetAnalysisEvidence(asset)
+  };
+}
+
+function summarizeAssetAnalysisEvidence(asset: AssetCard): AssetSummary['analysisEvidence'] | undefined {
+  const analysis = asset.analysis;
+  if (!analysis) return undefined;
+  const topAffordances = (analysis.roleAffordance ?? [])
+    .slice()
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3)
+    .map((entry) => ({
+      role: entry.role,
+      score: Math.round(entry.score),
+      rationale: entry.rationale
+    }));
+  return {
+    semanticShortCaption: analysis.semantic.summary,
+    topAffordances,
+    quality: Number(analysis.quality.overallScore.toFixed(2)),
+    productVisibilityScore: Math.round(analysis.quality.productFocus * 100),
+    keyframes: analysis.media.keyframes.slice(0, 3).map((keyframe) => ({
+      id: keyframe.id,
+      caption: keyframe.description
+    })),
+    warnings: analysis.warnings.slice(0, 5)
   };
 }
 
@@ -354,7 +495,11 @@ function reasonFromAlignment(result: AlignmentResult, status: SlotMatch['status'
   return result.missing || '没有候选素材能达到该槽位的接受标准。';
 }
 
-function buildLLMMatch(slot: ViralStructureGraph['shotSlots'][number], result: AlignmentResult): SlotMatch {
+function buildLLMMatch(
+  slot: ViralStructureGraph['shotSlots'][number],
+  result: AlignmentResult,
+  asset?: AssetCard
+): SlotMatch {
   const assetId = result.assetId ?? undefined;
   const status = statusFromQuality(result.quality, result.assetId);
   const treatmentSpec = cleanTreatmentSpec(result.treatmentSpec);
@@ -368,7 +513,8 @@ function buildLLMMatch(slot: ViralStructureGraph['shotSlots'][number], result: A
     matchedCriteria: result.matchedCriteria.length ? result.matchedCriteria : undefined,
     missingDescription: result.missing || undefined,
     treatmentSpec,
-    alignmentSource: 'llm_judge'
+    alignmentSource: 'llm_judge',
+    assetEvidence: asset ? buildAssetMatchEvidence(asset, slot.role) : undefined
   };
 }
 
@@ -419,6 +565,7 @@ export async function matchSlotsLLM(opts: MatchSlotsLLMOptions): Promise<{ match
   const validated = SlotAlignmentResponseSchema.parse(parsed);
 
   const knownAssetIds = new Set(assets.map((a) => a.id));
+  const assetById = new Map(assets.map((asset) => [asset.id, asset]));
   const matches: SlotMatch[] = graph.shotSlots.map((slot) => {
     const aligned = validated[slot.id];
     if (!aligned) {
@@ -427,7 +574,7 @@ export async function matchSlotsLLM(opts: MatchSlotsLLMOptions): Promise<{ match
     if (aligned.assetId && !knownAssetIds.has(aligned.assetId)) {
       throw new Error(`LLM returned unknown assetId ${aligned.assetId} for slot ${slot.id}`);
     }
-    return buildLLMMatch(slot, aligned);
+    return buildLLMMatch(slot, aligned, aligned.assetId ? assetById.get(aligned.assetId) : undefined);
   });
 
   const gaps: MaterialGap[] = matches

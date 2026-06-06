@@ -92,7 +92,18 @@ test('buildMigrationEvidenceRows joins source structure, asset match, gap, repai
     assetId: 'asset_splash',
     score: 0.88,
     status: 'partial',
-    reason: '素材可表达冰爽，但缺少真实动作。'
+    reason: '素材可表达冰爽，但缺少真实动作。',
+    assetEvidence: {
+      assetId: 'asset_splash',
+      qualityScore: 0.88,
+      topAffordanceRole: 'opening_hook',
+      topAffordanceScore: 91,
+      productVisibilityScore: 87,
+      keyframeIds: ['kf_splash'],
+      keyframeCaptions: ['冰块飞溅产品图'],
+      reasons: ['opening_hook affordance 91: high energy splash'],
+      warnings: ['missing real motion']
+    }
   };
 
   const gap: MaterialGap = {
@@ -150,4 +161,10 @@ test('buildMigrationEvidenceRows joins source structure, asset match, gap, repai
   assert.equal(rows[0].gap.hasGap, true);
   assert.equal(rows[0].repair.strategy, 'text_card');
   assert.equal(rows[0].final.timelineId, 'tl_1');
+  assert.equal(rows[0].assetEvidence.assetId, 'asset_splash');
+  assert.equal(rows[0].assetEvidence.topAffordanceRole, 'opening_hook');
+  assert.deepEqual(rows[0].assetEvidence.keyframeIds, ['kf_splash']);
+  assert.match(rows[0].whyMatched, /opening_hook/);
+  assert.match(rows[0].whyWeakOrMissing, /缺少真实入画视频/);
+  assert.match(rows[0].suggestedRepair, /标题卡/);
 });

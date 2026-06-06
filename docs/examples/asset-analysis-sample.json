@@ -1,0 +1,154 @@
+{
+  "assetCards": [
+    {
+      "id": "asset_001",
+      "type": "image",
+      "url": "/media/demo-assets/kangshifu_iced_tea/kangshifu-iced-tea-product-shot.png",
+      "spatialDescription": "冰红茶瓶身居中，纯白背景，正面近景构图，瓶标文字清晰可辨。",
+      "detectedObjects": ["beverage bottle", "label", "product"],
+      "suitableSlots": ["product_closeup", "cta_visual"],
+      "qualityScore": 0.84,
+      "detectedIngredients": ["product_closeup_trait", "clean_background", "premium_visual"],
+      "humanPresence": { "hasHuman": false },
+      "visualStyleTags": ["clean_background", "premium_visual"],
+      "analysisSource": "static_library",
+      "analysis": {
+        "profileVersion": "asset_analysis_v1",
+        "analyzedAt": "1970-01-01T00:00:00.000Z",
+        "source": "static_library",
+        "fallbackUsed": true,
+        "warnings": [],
+        "media": {
+          "kind": "image",
+          "sourceUrl": "/media/demo-assets/kangshifu_iced_tea/kangshifu-iced-tea-product-shot.png",
+          "width": 1024,
+          "height": 1024,
+          "aspectRatio": "1:1",
+          "format": "png",
+          "fileExtension": "png",
+          "keyframes": []
+        },
+        "semantic": {
+          "summary": "Product bottle packshot with clean background and clear label.",
+          "detectedObjects": ["beverage bottle", "label", "product"],
+          "detectedIngredients": ["product_closeup_trait", "clean_background", "premium_visual"],
+          "visualStyleTags": ["clean_background", "premium_visual"],
+          "humanPresence": { "hasHuman": false }
+        },
+        "quality": {
+          "overallScore": 0.84,
+          "resolution": 0.84,
+          "sharpness": 0.84,
+          "brightness": 0.72,
+          "contrast": 0.76,
+          "clarity": 0.84,
+          "composition": 0.84,
+          "lighting": 0.76,
+          "subjectProminence": 0.84,
+          "productFocus": 0.84,
+          "textSafeArea": 0.7,
+          "issues": []
+        },
+        "slotAffordance": {
+          "suitableSlots": ["product_closeup", "cta_visual"],
+          "primaryRoles": [
+            { "role": "product_closeup", "confidence": 0.9 },
+            { "role": "cta_visual", "confidence": 0.72 }
+          ],
+          "missingRoles": ["opening_attention", "usage_demo", "benefit_visual", "comparison", "testimonial"],
+          "rationale": "Derived from existing suitableSlots and deterministic role scoring."
+        },
+        "editability": {
+          "canCropZoom": true,
+          "canUseAsBackground": true,
+          "canLoop": false,
+          "canExtendWithCards": true,
+          "suggestedEdits": ["crop_zoom", "ken_burns_motion", "add_cta_overlay"]
+        },
+        "safety": {
+          "status": "passed",
+          "brandRisk": "low",
+          "ipRisk": "low",
+          "claimRisk": "low",
+          "reasons": []
+        },
+        "search": {
+          "tags": ["image", "beverage bottle", "label", "product", "product_closeup", "cta_visual"],
+          "keywords": ["beverage bottle", "label", "product", "packshot"],
+          "embeddingText": "Product bottle packshot | product closeup | CTA visual"
+        },
+        "roleAffordance": [
+          {
+            "role": "product_closeup",
+            "score": 89.8,
+            "components": {
+              "semanticFit": 92,
+              "visualSignalFit": 88,
+              "productVisibilityFit": 92,
+              "qualityFit": 84,
+              "formatFit": 92,
+              "editabilityFit": 86,
+              "safetyFit": 100
+            },
+            "rationale": "asset_001 scores 89.8 for product_closeup; strongest=semanticFit, weakest=qualityFit."
+          },
+          {
+            "role": "cta",
+            "score": 86,
+            "components": {
+              "semanticFit": 92,
+              "visualSignalFit": 82,
+              "productVisibilityFit": 92,
+              "qualityFit": 84,
+              "formatFit": 64,
+              "editabilityFit": 88,
+              "safetyFit": 100
+            },
+            "rationale": "asset_001 can support a CTA card with product visibility and overlay."
+          }
+        ],
+        "vlm": {
+          "source": "optional_vlm",
+          "provider": "openai_compatible",
+          "model": "example-vlm-model",
+          "analyzedAt": "1970-01-01T00:00:00.000Z",
+          "shortCaption": "Cold iced tea bottle with bright lemon and ice cues.",
+          "sceneType": "product_packshot",
+          "productVisible": true,
+          "productVisibilityScore": 93,
+          "detectedObjects": ["beverage bottle", "lemon slice", "ice cubes"],
+          "textVisible": true,
+          "suggestedRoles": ["product_closeup", "cover"],
+          "rationale": "The centered bottle label and clean negative space support product closeup and cover roles.",
+          "risks": []
+        }
+      }
+    },
+    {
+      "id": "asset_002",
+      "type": "image",
+      "url": "/media/demo-assets/kangshifu_iced_tea/kangshifu-iced-tea-splash.png",
+      "spatialDescription": "饮料液体高速飞溅，冰块散落画面四周，产品瓶身居中偏下。",
+      "detectedObjects": ["beverage bottle", "ice cubes", "liquid splash", "product"],
+      "suitableSlots": ["opening_attention", "benefit_visual"],
+      "qualityScore": 0.88,
+      "detectedIngredients": ["product_closeup_trait", "premium_visual", "lifestyle_context"],
+      "humanPresence": { "hasHuman": false },
+      "visualStyleTags": ["premium_visual", "lifestyle_context"]
+    },
+    {
+      "id": "asset_text_brief",
+      "type": "text",
+      "text": "冰爽解腻，饭后来一瓶。立即购买。",
+      "detectedObjects": ["text_copy", "selling_point_copy", "cta_copy"],
+      "suitableSlots": ["benefit_visual", "cta_visual"],
+      "qualityScore": 0.72,
+      "detectedIngredients": ["trust_building", "product_closeup_trait", "social_proof"],
+      "humanPresence": { "hasHuman": false },
+      "analysisSource": "deterministic"
+    }
+  ],
+  "source": "deterministic_asset_manager",
+  "vlmStatus": "enhanced",
+  "warnings": []
+}

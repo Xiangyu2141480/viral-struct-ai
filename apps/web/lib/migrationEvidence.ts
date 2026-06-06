@@ -1,5 +1,6 @@
 import type {
   AssetCard,
+  AssetMatchEvidence,
   ContentBrief,
   GapRepair,
   MaterialGap,
@@ -46,6 +47,20 @@ export interface MigrationEvidenceRow {
     status: string;
     reason: string;
   };
+  assetEvidence: {
+    assetId: string;
+    qualityScore: number | null;
+    topAffordanceRole: string;
+    topAffordanceScore: number | null;
+    productVisibilityScore: number | null;
+    keyframeIds: string[];
+    keyframeCaptions: string[];
+    reasons: string[];
+    warnings: string[];
+  };
+  whyMatched: string;
+  whyWeakOrMissing: string;
+  suggestedRepair: string;
   gap: {
     hasGap: boolean;
     type: string;
@@ -104,6 +119,7 @@ export function buildMigrationEvidenceRows(input: MigrationEvidenceInput): Migra
     const repair = item.repair ?? repairBySlotId.get(item.slotId);
     const asset = item.assetId ? assetById.get(item.assetId) : match?.assetId ? assetById.get(match.assetId) : undefined;
     const story = storyByTime.find((shot) => closeEnough(shot.start, item.start) && closeEnough(shot.end, item.end));
+    const assetEvidence = formatAssetEvidence(match?.assetEvidence, asset);
 
     return {
       id: item.id,
@@ -131,6 +147,10 @@ export function buildMigrationEvidenceRows(input: MigrationEvidenceInput): Migra
         status: match?.status ?? 'Not available',
         reason: match?.reason ?? 'Not available'
       },
+      assetEvidence,
+      whyMatched: formatWhyMatched(match, assetEvidence),
+      whyWeakOrMissing: formatWhyWeakOrMissing(match, gap),
+      suggestedRepair: formatSuggestedRepair(repair, gap),
       gap: {
         hasGap: Boolean(gap),
         type: gap?.type ?? 'No material gap',
@@ -151,6 +171,66 @@ export function buildMigrationEvidenceRows(input: MigrationEvidenceInput): Migra
       }
     };
   });
+}
+
+function formatAssetEvidence(
+  evidence: AssetMatchEvidence | undefined,
+  asset: AssetCard | undefined
+): MigrationEvidenceRow['assetEvidence'] {
+  if (evidence) {
+    return {
+      assetId: evidence.assetId,
+      qualityScore: evidence.qualityScore,
+      topAffordanceRole: evidence.topAffordanceRole ?? 'Not available',
+      topAffordanceScore: evidence.topAffordanceScore ?? null,
+      productVisibilityScore: evidence.productVisibilityScore ?? null,
+      keyframeIds: evidence.keyframeIds,
+      keyframeCaptions: evidence.keyframeCaptions ?? [],
+      reasons: evidence.reasons,
+      warnings: evidence.warnings
+    };
+  }
+
+  const topAffordance = asset?.analysis?.roleAffordance?.slice().sort((a, b) => b.score - a.score)[0];
+  const keyframes = asset?.analysis?.media.keyframes ?? [];
+  return {
+    assetId: asset?.id ?? 'Not available',
+    qualityScore: asset?.analysis?.quality.overallScore ?? asset?.qualityScore ?? null,
+    topAffordanceRole: topAffordance?.role ?? 'Not available',
+    topAffordanceScore: topAffordance?.score ?? null,
+    productVisibilityScore: topAffordance?.components.productVisibilityFit
+      ?? (asset?.analysis?.quality.productFocus !== undefined ? Math.round(asset.analysis.quality.productFocus * 100) : null),
+    keyframeIds: keyframes.map((keyframe) => keyframe.id),
+    keyframeCaptions: keyframes
+      .map((keyframe) => keyframe.description)
+      .filter((caption): caption is string => Boolean(caption)),
+    reasons: topAffordance
+      ? [`${topAffordance.role} affordance ${Math.round(topAffordance.score)}: ${topAffordance.rationale}`]
+      : [],
+    warnings: asset?.analysis?.warnings ?? []
+  };
+}
+
+function formatWhyMatched(
+  match: SlotMatch | undefined,
+  assetEvidence: MigrationEvidenceRow['assetEvidence']
+): string {
+  const evidenceReason = assetEvidence.reasons[0];
+  if (evidenceReason) return evidenceReason;
+  return match?.reason ?? 'Not available';
+}
+
+function formatWhyWeakOrMissing(match: SlotMatch | undefined, gap: MaterialGap | undefined): string {
+  if (gap) return `${gap.reason} ${gap.impact}`.trim();
+  if (match && match.status !== 'matched') return match.reason;
+  return 'No weak or missing coverage for this row.';
+}
+
+function formatSuggestedRepair(repair: GapRepair | undefined, gap: MaterialGap | undefined): string {
+  if (repair?.explanation) return repair.explanation;
+  if (repair?.gapSpec) return formatRepairSpec(repair);
+  if (gap) return 'Use the listed fallback strategy or request additional user material.';
+  return 'No repair required.';
 }
 
 function formatSourceInstance(source: ViralStructureGraph['shotSlots'][number]['sourceInstance']): string {

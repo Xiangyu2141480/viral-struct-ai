@@ -18,6 +18,9 @@ Recommended documentation set:
 - `docs/scoring-map.md`
 - `docs/safety-and-ai-tools.md`
 - `docs/TOOL_PROTOCOL.md`
+- `docs/asset-manager-ui-contract.md`
+- `docs/asset-manager-video-agent-contract.md`
+- `docs/examples/*.json`
 
 ## 2. Main Demo Path
 
@@ -63,6 +66,10 @@ Use this route to show the product form:
 | Variant Diff | Complete | `/result` |
 | Natural Language Edit Patch | Complete as rule-based patch | `/api/timeline/apply-edit`, Edit Summary |
 | Quality metrics | Complete | `/api/quality/evaluate`, `/demo` |
+| Asset Manager data contract | Complete for backend/data handoff | `AssetAnalysisProfile`, `AssetLibraryReport`, `SlotCoverageMatrix`, `AssetSupplyContext` |
+| Asset supply context | Complete for contract/API handoff | `/api/assets/manager/asset-supply-context`, `docs/examples/asset-supply-context.sample.json`; legacy `/video-agent-bundle` returns the same `asset-supply-v1` response |
+| Asset Evidence integration | Complete in data layer | `SlotMatch.assetEvidence`, `apps/web/lib/migrationEvidence.ts` |
+| Optional VLM asset analyzer | Available but disabled by default | deterministic fallback, `ASSET_VLM_ENABLED=false` |
 | LLM fallback | Complete | source fields and warnings |
 | Deterministic fallback without key | Complete | tests and demo-safe flow |
 | Web visual preview | Complete | `/result` |
@@ -90,11 +97,12 @@ Expected:
 - Start on `/demo`.
 - Run the demo and show evidence trace.
 - Open `/result` and show:
-  - Generation Trace
-  - Migration Evidence
-  - Variant Diff
-  - Edit Summary after natural-language edit
-  - Quality metrics
+- Generation Trace
+- Migration Evidence
+- Asset Evidence if UI handoff fields are being shown
+- Variant Diff
+- Edit Summary after natural-language edit
+- Quality metrics
 - Mention fallback safety.
 - Mention known limits honestly.
 
@@ -103,6 +111,9 @@ Expected:
 - Remotion is not the stable main delivery surface.
 - Real MP4 export is not the focus of this checkpoint.
 - Video material understanding is lightweight and protocol-oriented.
+- Asset Manager UI panels are a handoff target for frontend teammates; this checkpoint completes the backend/data contract and examples.
+- Deterministic asset analysis is the main path; optional VLM enrichment is disabled by default and must not be required for the demo.
+- SAM2, GroundingDINO, SigLIP2, VideoRAG, and complete long-video temporal grounding are not implemented.
 - Natural-language editing is deterministic rule-based patching.
 - The system does not copy source video content.
 

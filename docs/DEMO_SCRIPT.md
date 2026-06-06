@@ -71,7 +71,7 @@ Show:
 
 - `/analyze`: video metadata/keyframes.
 - `/graph`: structure graph and migration contract.
-- `/adapt`: product brief and AssetCard material library.
+- `/adapt`: product brief and AssetCard material library. Asset Manager backend now provides deterministic analysis, quality scores, slot affordance, contextual coverage, and material coverage observations for the UI to consume.
 - `/gaps`: matching/gap/repair source badges.
 
 ## 1:50 - 2:40 Migration Evidence
@@ -84,7 +84,7 @@ Open:
 
 Say:
 
-> This is the key scoring evidence. Each row explains how a source structure becomes a new result: source pattern, migrated content, asset coverage or gap, repair strategy and final timeline item.
+> This is the key scoring evidence. Each row explains how a source structure becomes a new result: source pattern, migrated content, asset coverage or gap, repair strategy and final timeline item. The data layer can also attach Asset Evidence, including quality score, top slot affordance, keyframe ids and match rationale.
 
 Show:
 
@@ -146,6 +146,10 @@ Show:
 Say:
 
 > The project is intentionally transparent about limits. Remotion is not claimed as a final MP4 export path in this checkpoint. ASR is not required for the main demo. Natural-language editing is a rule-based timeline patch, not a full professional editor. API keys are never committed; model failures are shown as fallback warnings.
+
+Also say:
+
+> Asset Manager uses deterministic analysis as the stable path. Optional VLM enrichment is off by default and is not required for the recording. Advanced modules such as SAM2, GroundingDINO, SigLIP2, VideoRAG and complete long-video temporal grounding are not claimed as finished.
 
 Show:
 
