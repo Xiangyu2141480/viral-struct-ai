@@ -4,7 +4,7 @@
 
 ## 用途
 
-demo 的 store 在接口调用失败时会静默回退到本地 fixtures(`mode='mock'`)。跑这个 mock server 后,每屏都会切到 `LIVE`(右上角角标变绿),证明 fetch → 解析 → 渲染整条链路与 [`api/types.ts`](../app/demo/_struct/api/types.ts) 里的形状一致。
+demo 的 store 在接口调用失败时会静默回退到本地 fixtures(`mode='mock'`)。跑这个 mock server 后,每屏都会切到 `LIVE`(右上角角标变绿),证明 fetch → 解析 → 渲染整条链路与 [`api/types.ts`](../app/_struct/api/types.ts) 里的形状一致。
 
 每个响应都带一条 `warnings: ['🔌 来自契约 mock server(非真实后端)']`,所以 demo 顶部的 StatusBanner 会提醒你这些是桩数据,而非真实 pipeline。
 
