@@ -9,6 +9,8 @@
 // `warnings`, so the prototype renders end-to-end with or without a backend.
 
 import { create } from 'zustand';
+import type { AssetSupplyContext } from '@viral-struct/shared';
+import { analyzeStructAssetManagerCoverage } from '../api/assetManager';
 import { compile as compileApi, exportVideo as exportApi, nlEdit as nlEditApi } from '../api/compile';
 import { applyStrategy as applyStrategyApi, diagnose as diagnoseApi } from '../api/diagnose';
 import { matchMaterials as matchMaterialsApi, uploadMaterials as uploadMaterialsApi } from '../api/materials';
@@ -40,6 +42,7 @@ interface ProjectState {
   selectedVersionId: string;
   timeline: TimelineSeg[] | null;
   exportResult: ExportResult | null;
+  assetSupplyContext: AssetSupplyContext | null;
 
   // ── status ────────────────────────────────────────────────
   mode: ApiMode;
@@ -50,6 +53,9 @@ interface ProjectState {
   compiling: boolean;
   nlApplying: boolean;
   exporting: boolean;
+  assetManagerLoading: boolean;
+  assetManagerWarnings: string[];
+  assetManagerLastError: string | null;
   warnings: string[];
   /** Real error message from the last failed API call (null when the last call
    * succeeded or no call has been made yet). Distinguishes a genuine failure
@@ -58,6 +64,7 @@ interface ProjectState {
 
   // ── actions ───────────────────────────────────────────────
   dismissWarnings: () => void;
+  refreshAssetManagerCoverage: () => Promise<void>;
   analyzeSample: (input: { file?: File; sampleId?: string }) => Promise<void>;
   addMaterials: (files: File[]) => Promise<void>;
   setSlot: (materialId: string, slot: string | null) => void;
@@ -103,6 +110,7 @@ const initialState = {
   selectedVersionId: COMPILE_VERSIONS[0].id,
   timeline: null as TimelineSeg[] | null,
   exportResult: null as ExportResult | null,
+  assetSupplyContext: null as AssetSupplyContext | null,
   mode: 'mock' as ApiMode,
   analyzing: false,
   uploading: false,
@@ -111,6 +119,9 @@ const initialState = {
   compiling: false,
   nlApplying: false,
   exporting: false,
+  assetManagerLoading: false,
+  assetManagerWarnings: [] as string[],
+  assetManagerLastError: null as string | null,
   warnings: [] as string[],
   lastError: null as string | null,
 };
@@ -120,16 +131,42 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
 
   dismissWarnings: () => set({ warnings: [], lastError: null }),
 
+  refreshAssetManagerCoverage: async () => {
+    set({ assetManagerLoading: true, assetManagerLastError: null });
+    try {
+      const { assetSupplyContext, warnings } = await analyzeStructAssetManagerCoverage({
+        sourceVideo: get().sourceVideo,
+        materials: get().materials,
+        product: get().product,
+      });
+      set({
+        assetSupplyContext: assetSupplyContext ?? null,
+        assetManagerWarnings: warnings ?? assetSupplyContext?.warnings ?? [],
+        assetManagerLastError: null,
+      });
+    } catch (e) {
+      set({
+        assetSupplyContext: null,
+        assetManagerWarnings: ['Asset Manager coverage API unavailable · 使用本地素材槽位预览继续演示'],
+        assetManagerLastError: errMsg(e),
+      });
+    } finally {
+      set({ assetManagerLoading: false });
+    }
+  },
+
   analyzeSample: async (input) => {
     set({ analyzing: true, lastError: null });
     try {
       const { sourceVideo, warnings } = await analyzeSampleApi(input);
       set({ sourceVideo, mode: 'live', warnings: warnings ?? [] });
+      void get().refreshAssetManagerCoverage();
     } catch (e) {
       // Fallback: keep the mock sample (optionally retitle to the uploaded file).
       const base = get().sourceVideo;
       const sourceVideo = input.file ? { ...base, title: input.file.name.replace(/\.[^.]+$/, '') } : base;
       set({ sourceVideo, mode: 'mock', warnings: [MOCK_NOTE], lastError: errMsg(e) });
+      void get().refreshAssetManagerCoverage();
     } finally {
       set({ analyzing: false });
     }
@@ -141,6 +178,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     try {
       const { materials, warnings } = await uploadMaterialsApi(files, get().product);
       set({ materials, mode: 'live', warnings: warnings ?? [] });
+      void get().refreshAssetManagerCoverage();
     } catch (e) {
       // Fallback: synthesize material cards from the file list.
       const existing = get().materials;
@@ -153,6 +191,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         color: '#3d4a3a',
       }));
       set({ materials: [...existing, ...synthesized], mode: 'mock', warnings: [MOCK_NOTE], lastError: errMsg(e) });
+      void get().refreshAssetManagerCoverage();
     } finally {
       set({ uploading: false });
     }
@@ -176,17 +215,23 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         assignments,
       });
       set({ materials, mode: 'live', warnings: warnings ?? [] });
+      void get().refreshAssetManagerCoverage();
     } catch (e) {
       set({ materials: local, mode: 'mock', warnings: [MOCK_NOTE], lastError: errMsg(e) });
+      void get().refreshAssetManagerCoverage();
     } finally {
       set({ matching: false });
     }
   },
 
-  updateProduct: (product) => set({ product }),
+  updateProduct: (product) => {
+    set({ product });
+    void get().refreshAssetManagerCoverage();
+  },
 
   runDiagnosis: async () => {
     set({ diagnosing: true, lastError: null });
+    void get().refreshAssetManagerCoverage();
     try {
       const { diagnosis, warnings } = await diagnoseApi({
         sourceVideo: get().sourceVideo,
