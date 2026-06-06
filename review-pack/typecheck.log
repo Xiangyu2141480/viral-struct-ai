@@ -1,0 +1,40 @@
+
+> viral-struct-ai@ typecheck C:\Users\cuixi\Documents\Codex\2026-05-20\plugin-browser-openai-bundled-github-plugin\viral-struct-ai
+> turbo typecheck
+
+• turbo 2.9.14
+
+   • Packages in scope: @viral-struct/api, @viral-struct/remotion-video, @viral-struct/shared, @viral-struct/web
+   • Running typecheck in 4 packages
+   • Remote caching disabled
+
+@viral-struct/shared:typecheck: cache hit, replaying logs 2bd10cf467b12679
+@viral-struct/shared:build: cache hit, replaying logs d7860ab0526e3785
+@viral-struct/shared:typecheck: 
+@viral-struct/shared:typecheck: > @viral-struct/shared@0.1.0 typecheck C:\Users\cuixi\Documents\Codex\2026-05-20\plugin-browser-openai-bundled-github-plugin\viral-struct-ai\packages\shared
+@viral-struct/shared:typecheck: > tsc -p tsconfig.json --noEmit
+@viral-struct/shared:typecheck: 
+@viral-struct/shared:build: 
+@viral-struct/shared:build: > @viral-struct/shared@0.1.0 build C:\Users\cuixi\Documents\Codex\2026-05-20\plugin-browser-openai-bundled-github-plugin\viral-struct-ai\packages\shared
+@viral-struct/shared:build: > tsc -p tsconfig.json
+@viral-struct/shared:build: 
+@viral-struct/web:typecheck: cache hit, replaying logs 58dd694a693ebbdf
+@viral-struct/web:typecheck: 
+@viral-struct/web:typecheck: > @viral-struct/web@0.1.0 typecheck C:\Users\cuixi\Documents\Codex\2026-05-20\plugin-browser-openai-bundled-github-plugin\viral-struct-ai\apps\web
+@viral-struct/web:typecheck: > tsc -p tsconfig.json --noEmit
+@viral-struct/web:typecheck: 
+@viral-struct/remotion-video:typecheck: cache hit, replaying logs 133da6c5edb7ffec
+@viral-struct/remotion-video:typecheck: 
+@viral-struct/remotion-video:typecheck: > @viral-struct/remotion-video@0.1.0 typecheck C:\Users\cuixi\Documents\Codex\2026-05-20\plugin-browser-openai-bundled-github-plugin\viral-struct-ai\packages\remotion-video
+@viral-struct/remotion-video:typecheck: > tsc -p tsconfig.json --noEmit
+@viral-struct/remotion-video:typecheck: 
+@viral-struct/api:typecheck: cache hit, replaying logs f730de0c7e6b0794
+@viral-struct/api:typecheck: 
+@viral-struct/api:typecheck: > @viral-struct/api@0.1.0 typecheck C:\Users\cuixi\Documents\Codex\2026-05-20\plugin-browser-openai-bundled-github-plugin\viral-struct-ai\apps\api
+@viral-struct/api:typecheck: > tsc -p tsconfig.json --noEmit
+@viral-struct/api:typecheck: 
+
+ Tasks:    5 successful, 5 total
+Cached:    5 cached, 5 total
+  Time:    29ms >>> FULL TURBO
+
