@@ -6,6 +6,8 @@ export interface RenderTrackSlice {
   background: string;
   sourceSegmentId: string;
   unresolvedEvidence: boolean;
+  captionLines: string[];
+  label: string;
 }
 
 /**
@@ -45,10 +47,12 @@ export function buildRenderTrack(input: RenderInput): RenderTrackSlice[] {
         endMs: end,
         background: active.background,
         sourceSegmentId: active.id,
-        unresolvedEvidence: active.unresolvedEvidence
+        unresolvedEvidence: active.unresolvedEvidence,
+        captionLines: active.captionLines,
+        label: active.label
       });
     } else {
-      slices.push({ startMs: start, endMs: end, background: '0x000000', sourceSegmentId: '__gap__', unresolvedEvidence: false });
+      slices.push({ startMs: start, endMs: end, background: '0x000000', sourceSegmentId: '__gap__', unresolvedEvidence: false, captionLines: [], label: 'gap' });
     }
   }
 
