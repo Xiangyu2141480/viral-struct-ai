@@ -495,6 +495,50 @@ export const LIBRARY_VIDEOS: LibraryVideo[] = [
   },
 ];
 
+// ─── 成片编译版本预设 (Screen 04) ──────────────────────────
+export interface CompileVersion {
+  id: string;
+  name: string;
+  desc: string;
+  bias: string;
+  stats: { k: string; v: string; up: boolean }[];
+  mainStrat: string;
+}
+
+export const COMPILE_VERSIONS: CompileVersion[] = [
+  {
+    id: 'click',
+    name: '高点击版',
+    desc: '强化 Hook + 痛点前置',
+    bias: '前 3 秒拉满抓人,牺牲 1 段卖点深度',
+    stats: [{ k: 'CTR', v: '+24%', up: true }, { k: '完播', v: '+12pt', up: true }, { k: '加购', v: '+8%', up: true }],
+    mainStrat: 'pack',
+  },
+  {
+    id: 'convert',
+    name: '高转化版',
+    desc: '侧重卖点 + 价值对比',
+    bias: '卖点段加长,加入 ¥599 vs ¥2999 锚价卡',
+    stats: [{ k: 'CTR', v: '+15%', up: true }, { k: '完播', v: '+18pt', up: true }, { k: '加购', v: '+30%', up: true }],
+    mainStrat: 'reuse',
+  },
+  {
+    id: 'premium',
+    name: '高质感版',
+    desc: '极简包装 + 慢节奏',
+    bias: '去除大字弹幕,用环境音 + Ken Burns 镜头',
+    stats: [{ k: '品牌好感', v: '+35%', up: true }, { k: '平均观看', v: '+22%', up: true }, { k: 'CTR', v: '-6%', up: false }],
+    mainStrat: 'aigc',
+  },
+];
+
+export const NL_PROMPTS: string[] = [
+  '把商品信息提前到第 3 秒',
+  '开头更抓人,加大字反问',
+  '减少字幕,节奏更快',
+  '保留情感铺垫但压到 4 秒内',
+];
+
 export interface HistoryRecord {
   id: string;
   title: string;

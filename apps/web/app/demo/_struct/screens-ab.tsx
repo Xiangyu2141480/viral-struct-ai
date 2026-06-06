@@ -4,14 +4,8 @@
 // (Ported from screens-ab.jsx; React/window globals replaced with imports.)
 
 import { useState } from 'react';
-import {
-  ROLES,
-  SOURCE_VIDEO,
-  TARGET_MATERIALS,
-  TARGET_PRODUCT,
-  type Seg,
-  type TargetProduct,
-} from './data';
+import { ROLES, type Seg, type TargetProduct } from './data';
+import { useProjectStore } from './store/useProjectStore';
 import {
   DropZone,
   Icon,
@@ -31,7 +25,9 @@ import { AbstractStructureBand, ConcreteFilmStrip, MigrationFlow, SyncRails } fr
    ============================================================ */
 
 export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
-  const v = SOURCE_VIDEO;
+  const v = useProjectStore((s) => s.sourceVideo);
+  const analyzing = useProjectStore((s) => s.analyzing);
+  const analyzeSample = useProjectStore((s) => s.analyzeSample);
   const T = v.duration;
   const [hoveredSeg, setHoveredSeg] = useState<Seg>(v.segments[0]);
   const [toastMsg, setToastMsg] = useState('');
@@ -57,7 +53,7 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
           </div>
         </div>
         <div className="screen-head-r">
-          <span className="pill"><span className="dot" style={{ background: 'var(--accent)' }} /> 已解析</span>
+          <span className="pill"><span className="dot" style={{ background: 'var(--accent)' }} /> {analyzing ? '解析中…' : '已解析'}</span>
           <span>{v.protocol_version}</span>
         </div>
       </div>
@@ -216,7 +212,11 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
         <DropZone
           accept="video/*"
           multiple={false}
-          onFiles={(files) => { setUploadOpen(false); showToast(`样例视频已上传: ${files[0].name}`); }}
+          onFiles={(files) => {
+            setUploadOpen(false);
+            showToast(`样例视频已上传: ${files[0].name} · 解析中…`);
+            void analyzeSample({ file: files[0] });
+          }}
           label="拖拽视频到此处，或点击选择"
         />
         <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-mute)', marginTop: 12, textAlign: 'center' }}>
@@ -235,7 +235,14 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
    ============================================================ */
 
 export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack: () => void }) => {
-  const v = SOURCE_VIDEO;
+  const v = useProjectStore((s) => s.sourceVideo);
+  const materials = useProjectStore((s) => s.materials);
+  const product = useProjectStore((s) => s.product);
+  const matching = useProjectStore((s) => s.matching);
+  const addMaterials = useProjectStore((s) => s.addMaterials);
+  const applyAssignments = useProjectStore((s) => s.applyAssignments);
+  const updateProduct = useProjectStore((s) => s.updateProduct);
+  const runDiagnosis = useProjectStore((s) => s.runDiagnosis);
   const T = v.duration;
 
   // Interactive states
@@ -244,7 +251,8 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
   const [batchOpen, setBatchOpen] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
-  const [productInfo, setProductInfo] = useState<TargetProduct>({ ...TARGET_PRODUCT });
+  const [productInfo, setProductInfo] = useState<TargetProduct>({ ...product });
+  const [assignDraft, setAssignDraft] = useState<Record<string, string>>({});
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
 
   const showToast = (msg: string) => {
@@ -257,12 +265,32 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
     const names = files.map(f => f.name).join(', ');
     setUploadedFiles(prev => [...prev, ...files.map(f => f.name)]);
     setUploadOpen(false);
+    void addMaterials(files);
     showToast(`已上传 ${files.length} 个文件: ${names}`);
   };
 
   const handleProductSave = () => {
+    updateProduct(productInfo);
     setEditOpen(false);
     showToast('商品信息已更新');
+  };
+
+  const openBatch = () => {
+    setAssignDraft(Object.fromEntries(materials.map(m => [m.id, m.slot ?? ''])));
+    setBatchOpen(true);
+  };
+
+  const handleBatchConfirm = () => {
+    const assignments: Record<string, string | null> = {};
+    for (const [id, slot] of Object.entries(assignDraft)) assignments[id] = slot || null;
+    void applyAssignments(assignments);
+    setBatchOpen(false);
+    showToast('槽位分配已更新');
+  };
+
+  const handleNext = () => {
+    void runDiagnosis();
+    onNext();
   };
 
   const editFields: { key: 'name' | 'price' | 'category' | 'industry'; label: string }[] = [
@@ -285,7 +313,7 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
           </div>
         </div>
         <div className="screen-head-r">
-          <span className="mono">{TARGET_MATERIALS.length} 个素材</span>
+          <span className="mono">{materials.length} 个素材</span>
           <span className="pill"><span className="dot" style={{ background: 'var(--accent)' }} /> 已适配</span>
         </div>
       </div>
@@ -294,7 +322,7 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
       <div className="panel" style={{ marginBottom: 16 }}>
         <div className="panel-head">
           <h4>新商品 · 素材入库</h4>
-          <span className="eyebrow">商品 · {TARGET_MATERIALS.length} 个素材</span>
+          <span className="eyebrow">商品 · {materials.length} 个素材</span>
         </div>
         <div className="panel-body" style={{
           display: 'grid',
@@ -322,21 +350,21 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
               }}>新品</span>
             </div>
             <div>
-              <div style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.3 }}>{TARGET_PRODUCT.name}</div>
+              <div style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.3 }}>{product.name}</div>
               <div className="mono dim" style={{ fontSize: 10.5, marginTop: 4, letterSpacing: '0.02em' }}>
-                {TARGET_PRODUCT.category}
+                {product.category}
               </div>
             </div>
             <dl className="kv" style={{ gridTemplateColumns: '60px 1fr' }}>
-              <dt>售价</dt><dd><b>{TARGET_PRODUCT.price}</b></dd>
-              <dt>库存</dt><dd>{TARGET_PRODUCT.stock.toLocaleString()}</dd>
-              <dt>定位</dt><dd>{TARGET_PRODUCT.industry}</dd>
+              <dt>售价</dt><dd><b>{product.price}</b></dd>
+              <dt>库存</dt><dd>{product.stock.toLocaleString()}</dd>
+              <dt>定位</dt><dd>{product.industry}</dd>
             </dl>
             <div style={{ display: 'flex', gap: 6 }}>
               <button className="btn" style={{ flex: 1, justifyContent: 'center' }} onClick={() => { const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/*'; input.onchange = (ev) => { const t = ev.target as HTMLInputElement; if (t.files && t.files.length) showToast('商品图已替换: ' + t.files[0].name); }; input.click(); }}>
                 <Icon name="upload" size={12} /> 替换图
               </button>
-              <button className="btn ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setEditOpen(true)}>编辑</button>
+              <button className="btn ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={() => { setProductInfo({ ...product }); setEditOpen(true); }}>编辑</button>
             </div>
           </div>
 
@@ -354,7 +382,7 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
                 <button className="btn" style={{ padding: '3px 9px', fontSize: 10.5 }} onClick={() => setUploadOpen(true)}>
                   <Icon name="upload" size={11} /> 上传
                 </button>
-                <button className="btn ghost" style={{ padding: '3px 9px', fontSize: 10.5 }} onClick={() => setBatchOpen(true)}>批量分配</button>
+                <button className="btn ghost" style={{ padding: '3px 9px', fontSize: 10.5 }} onClick={openBatch}>批量分配</button>
               </div>
             </div>
 
@@ -363,7 +391,7 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
               gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
               gap: 10,
             }}>
-              {TARGET_MATERIALS.map(m => {
+              {materials.map(m => {
                 const targetSeg = m.slot ? v.segments.find(s => s.id === m.slot) : null;
                 return (
                   <div key={m.id} className="mat-card">
@@ -460,11 +488,11 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
             <div className="stat" style={{ background: 'var(--surface)' }}>
               <div className="stat-label">已覆盖槽位</div>
-              <div className="stat-value">5<small>/ 7</small></div>
+              <div className="stat-value">{v.segments.filter(s => materials.some(m => m.slot === s.id)).length}<small>/ {v.segments.length}</small></div>
             </div>
             <div className="stat" style={{ background: 'var(--surface)' }}>
               <div className="stat-label">素材利用率</div>
-              <div className="stat-value">83<small>%</small></div>
+              <div className="stat-value">{materials.length ? Math.round(materials.filter(m => m.slot).length / materials.length * 100) : 0}<small>%</small></div>
             </div>
             <div className="stat" style={{ background: 'var(--surface)' }}>
               <div className="stat-label">下一步</div>
@@ -474,7 +502,7 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
           <div className="eyebrow" style={{ marginBottom: 8 }}>逐槽位匹配概览</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0 24px' }}>
             {v.segments.map(s => {
-              const matched = TARGET_MATERIALS.filter(m => m.slot === s.id);
+              const matched = materials.filter(m => m.slot === s.id);
               return (
                 <div key={s.id} style={{
                   display: 'flex', alignItems: 'center', gap: 10,
@@ -502,7 +530,7 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
         status="6 项素材入库 · 5 / 7 槽位已分配"
         statusTone="warn"
         secondary={[{ label: '返回结构', onClick: onBack }]}
-        primary={{ label: '识别并诊断缺口', onClick: onNext }}
+        primary={{ label: matching ? '匹配中…' : '识别并诊断缺口', onClick: handleNext }}
       />
 
       {/* ── Upload Modal ── */}
@@ -578,7 +606,7 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
           为每个素材分配目标槽位。选择后点击「确认分配」。
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {TARGET_MATERIALS.map(m => (
+          {materials.map(m => (
             <div key={m.id} style={{
               display: 'flex', alignItems: 'center', gap: 12,
               padding: '8px 12px', background: 'var(--bg-2)',
@@ -586,11 +614,15 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
             }}>
               <span className="mono" style={{ fontSize: 11, width: 36, color: 'var(--text-mute)' }}>{m.id.toUpperCase()}</span>
               <span style={{ flex: 1, fontSize: 12 }}>{m.subject}</span>
-              <select style={{
-                padding: '4px 8px', background: 'var(--bg)',
-                border: '1px solid var(--border)', borderRadius: 4,
-                color: 'var(--text)', fontSize: 11, fontFamily: 'var(--ff-mono)',
-              }}>
+              <select
+                value={assignDraft[m.id] ?? ''}
+                onChange={(e) => setAssignDraft(prev => ({ ...prev, [m.id]: e.target.value }))}
+                style={{
+                  padding: '4px 8px', background: 'var(--bg)',
+                  border: '1px solid var(--border)', borderRadius: 4,
+                  color: 'var(--text)', fontSize: 11, fontFamily: 'var(--ff-mono)',
+                }}
+              >
                 <option value="">未分配</option>
                 {v.segments.map(s => (
                   <option key={s.id} value={s.id}>{s.id.toUpperCase()} · {s.label}</option>
@@ -601,7 +633,7 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
         </div>
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
           <button className="btn" onClick={() => setBatchOpen(false)}>取消</button>
-          <button className="btn primary" onClick={() => { setBatchOpen(false); showToast('槽位分配已更新'); }}>确认分配</button>
+          <button className="btn primary" onClick={handleBatchConfirm}>确认分配</button>
         </div>
       </Modal>
 

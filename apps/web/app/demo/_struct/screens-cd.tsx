@@ -4,7 +4,8 @@
 // (Ported from screens-cd.jsx; React/window globals replaced with imports.)
 
 import { useEffect, useRef, useState, type CSSProperties, type ReactElement } from 'react';
-import { ROLES, SLOT_DIAGNOSIS, SOURCE_VIDEO, type StateKey } from './data';
+import { NL_PROMPTS, ROLES, type StateKey } from './data';
+import { useProjectStore } from './store/useProjectStore';
 import {
   FramePlaceholder,
   Icon,
@@ -33,11 +34,12 @@ const STATE_ORDER: StateKey[] = ['filled', 'weakly', 'missing', 'critical'];
 const STATE_LABELS: Record<string, string> = { filled: '已满足', weakly: '弱满足', missing: '缺失', critical: '关键缺失' };
 
 export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack: () => void }) => {
-  const v = SOURCE_VIDEO;
+  const v = useProjectStore((s) => s.sourceVideo);
+  const diagnosis = useProjectStore((s) => s.diagnosis);
+  const appliedSlots = useProjectStore((s) => s.appliedSlots);
+  const applyStrategy = useProjectStore((s) => s.applyStrategy);
   const T = v.duration;
-  const [filter, setFilter] = useState('all');
   const [selected, setSelected] = useState('s2');
-  const [appliedSlots, setAppliedSlots] = useState<Record<string, boolean>>({});
   const [previewSlot, setPreviewSlot] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
@@ -49,11 +51,9 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
   };
 
   const summary = STATE_ORDER.reduce<Record<string, number>>((acc, st) => {
-    acc[st] = Object.values(SLOT_DIAGNOSIS).filter(d => d.state === st).length;
+    acc[st] = Object.values(diagnosis).filter(d => d.state === st).length;
     return acc;
   }, {});
-
-  const visibleSegs = v.segments;
 
   return (
     <div className="screen">
@@ -158,7 +158,7 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
           </div>
           <div className="sband" style={{ height: 38 }}>
             {v.segments.map(seg => {
-              const d = SLOT_DIAGNOSIS[seg.id];
+              const d = diagnosis[seg.id];
               const dur = seg.end - seg.start;
               const w = (dur / T) * 100;
               const stateClass = d.state;
@@ -219,7 +219,7 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
                 </thead>
                 <tbody>
                   {v.segments.map(seg => {
-                    const d = SLOT_DIAGNOSIS[seg.id];
+                    const d = diagnosis[seg.id];
                     return (
                       <tr key={seg.id} onClick={() => setSelected(seg.id)} style={{ cursor: 'pointer', background: selected === seg.id ? 'var(--accent-dim)' : 'transparent' }}>
                         <td>
@@ -247,7 +247,7 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
           {(() => {
             const seg = v.segments.find(s => s.id === selected);
             if (!seg) return null;
-            const d = SLOT_DIAGNOSIS[selected];
+            const d = diagnosis[selected];
             const role = ROLES[seg.role];
             const stratKind = d.strategy;
             return (
@@ -368,7 +368,7 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
                         </button>
                         <button className="btn primary" style={{ padding: '5px 12px', fontSize: 11.5 }}
                           disabled={appliedSlots[selected]}
-                          onClick={() => { setAppliedSlots(prev => ({ ...prev, [selected]: true })); showToast(`${seg.label} 补全策略已应用`); }}>
+                          onClick={() => { void applyStrategy(selected); showToast(`${seg.label} 补全策略已应用`); }}>
                           <Icon name={appliedSlots[selected] ? 'check' : 'sparkle'} size={11} /> {appliedSlots[selected] ? '已应用' : '应用策略'}
                         </button>
                       </div>
@@ -405,7 +405,7 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
           if (!previewSlot) return null;
           const seg = v.segments.find(s => s.id === previewSlot);
           if (!seg) return null;
-          const d = SLOT_DIAGNOSIS[previewSlot];
+          const d = diagnosis[previewSlot];
           const SVG_BY_ROLE: Record<string, ReactElement> = {
             hook: <SvgHookShape />, pain: <SvgPainShape />, emotion: <SvgEmotionShape />,
             product: <SvgProductShape />, compare: <SvgCompareShape />, social: <SvgSocialShape />, cta: <SvgCtaShape />,
@@ -455,59 +455,21 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
    屏 4 · 缺口补全与成片编译
    ============================================================ */
 
-interface CompileVersion {
-  id: string;
-  name: string;
-  desc: string;
-  bias: string;
-  stats: { k: string; v: string; up: boolean }[];
-  mainStrat: string;
-}
-
-const COMPILE_VERSIONS: CompileVersion[] = [
-  {
-    id: 'click',
-    name: '高点击版',
-    desc: '强化 Hook + 痛点前置',
-    bias: '前 3 秒拉满抓人,牺牲 1 段卖点深度',
-    stats: [{ k: 'CTR', v: '+24%', up: true }, { k: '完播', v: '+12pt', up: true }, { k: '加购', v: '+8%', up: true }],
-    mainStrat: 'pack',
-  },
-  {
-    id: 'convert',
-    name: '高转化版',
-    desc: '侧重卖点 + 价值对比',
-    bias: '卖点段加长,加入 ¥599 vs ¥2999 锚价卡',
-    stats: [{ k: 'CTR', v: '+15%', up: true }, { k: '完播', v: '+18pt', up: true }, { k: '加购', v: '+30%', up: true }],
-    mainStrat: 'reuse',
-  },
-  {
-    id: 'premium',
-    name: '高质感版',
-    desc: '极简包装 + 慢节奏',
-    bias: '去除大字弹幕,用环境音 + Ken Burns 镜头',
-    stats: [{ k: '品牌好感', v: '+35%', up: true }, { k: '平均观看', v: '+22%', up: true }, { k: 'CTR', v: '-6%', up: false }],
-    mainStrat: 'aigc',
-  },
-];
-
-const NL_PROMPTS = [
-  '把商品信息提前到第 3 秒',
-  '开头更抓人,加大字反问',
-  '减少字幕,节奏更快',
-  '保留情感铺垫但压到 4 秒内',
-];
-
 export const ScreenCompile = ({ onBack }: { onBack: () => void }) => {
-  const v = SOURCE_VIDEO;
+  const v = useProjectStore((s) => s.sourceVideo);
+  const diagnosis = useProjectStore((s) => s.diagnosis);
+  const versions = useProjectStore((s) => s.versions);
+  const selectedVersionId = useProjectStore((s) => s.selectedVersionId);
+  const selectVersion = useProjectStore((s) => s.selectVersion);
+  const compile = useProjectStore((s) => s.compile);
+  const applyNlEdit = useProjectStore((s) => s.applyNlEdit);
+  const exportVideo = useProjectStore((s) => s.exportVideo);
+  const compiling = useProjectStore((s) => s.compiling);
+  const nlApplying = useProjectStore((s) => s.nlApplying);
+  const exporting = useProjectStore((s) => s.exporting);
   const T = v.duration;
-  const [openFix, setOpenFix] = useState('s2');
-  const [versionId, setVersionId] = useState('click');
   const [nlText, setNlText] = useState('');
   const [playingSeg, setPlayingSeg] = useState<string | null>(null);
-  const [rendering, setRendering] = useState(false);
-  const [renderDone, setRenderDone] = useState(false);
-  const [nlApplying, setNlApplying] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [autoPlaying, setAutoPlaying] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
@@ -543,8 +505,8 @@ export const ScreenCompile = ({ onBack }: { onBack: () => void }) => {
     return () => { if (autoPlayRef.current) clearInterval(autoPlayRef.current); };
   }, []);
 
-  const fixSegs = v.segments.filter(s => SLOT_DIAGNOSIS[s.id].fix);
-  const currentVersion = COMPILE_VERSIONS.find(c => c.id === versionId)!;
+  const fixSegs = v.segments.filter(s => diagnosis[s.id]?.fix);
+  const currentVersion = versions.find(c => c.id === selectedVersionId)!;
   const playingSegData = playingSeg ? v.segments.find(s => s.id === playingSeg) : null;
   const playingRole = playingSegData ? ROLES[playingSegData.role] : null;
 
@@ -561,11 +523,10 @@ export const ScreenCompile = ({ onBack }: { onBack: () => void }) => {
           </div>
         </div>
         <div className="screen-head-r">
-          <button className="btn primary" disabled={rendering} onClick={() => {
-            setRendering(true); setRenderDone(false);
-            setTimeout(() => { setRendering(false); setRenderDone(true); showToast('渲染完成 · 成片已生成'); }, 2500);
+          <button className="btn primary" disabled={compiling} onClick={() => {
+            void compile().then(() => showToast('渲染完成 · 成片已生成'));
           }}>
-            <Icon name="sparkle" size={12} /> {rendering ? '渲染中…' : '渲染成片'}
+            <Icon name="sparkle" size={12} /> {compiling ? '渲染中…' : '渲染成片'}
           </button>
         </div>
       </div>
@@ -578,12 +539,12 @@ export const ScreenCompile = ({ onBack }: { onBack: () => void }) => {
         </div>
         <div className="panel-body">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
-            {COMPILE_VERSIONS.map(ver => {
-              const active = ver.id === versionId;
+            {versions.map(ver => {
+              const active = ver.id === selectedVersionId;
               return (
                 <button
                   key={ver.id}
-                  onClick={() => setVersionId(ver.id)}
+                  onClick={() => selectVersion(ver.id)}
                   className={`version-card ${active ? 'active' : ''}`}
                   style={{
                     padding: 14,
@@ -737,7 +698,7 @@ export const ScreenCompile = ({ onBack }: { onBack: () => void }) => {
               <div className="eyebrow" style={{ marginBottom: 6, marginTop: 4 }}>▼ 编译后镜头层 + 补全标记</div>
               <div className="tline" style={{ height: 76 }}>
                 {v.segments.map(seg => {
-                  const d = SLOT_DIAGNOSIS[seg.id];
+                  const d = diagnosis[seg.id];
                   const dur = seg.end - seg.start;
                   const w = (dur / T) * 100;
                   const hasFix = d.fix !== null;
@@ -844,12 +805,11 @@ export const ScreenCompile = ({ onBack }: { onBack: () => void }) => {
                 <button
                   className="btn-cta"
                   onClick={() => {
-                    setNlApplying(true);
-                    setTimeout(() => {
-                      setNlApplying(false);
+                    const instruction = nlText;
+                    void applyNlEdit(instruction).then((summary) => {
                       setNlText('');
-                      showToast('NL 改片已应用 · 新草稿已生成');
-                    }, 1800);
+                      showToast(summary || 'NL 改片已应用 · 新草稿已生成');
+                    });
                   }}
                   disabled={!nlText.trim() || nlApplying}
                   style={{
@@ -903,8 +863,7 @@ export const ScreenCompile = ({ onBack }: { onBack: () => void }) => {
         status="v3 已编译 · CTR 4.7% / 完播 19%"
         statusTone="ok"
         secondary={[{ label: '返回诊断', onClick: onBack }, { label: '重新生成', onClick: () => {
-          setRendering(true);
-          setTimeout(() => { setRendering(false); showToast('已重新编译 · 新版本已生成'); }, 2000);
+          void compile().then(() => showToast('已重新编译 · 新版本已生成'));
         } }]}
         primary={{ label: '导出视频 MP4', onClick: () => setExportOpen(true) }}
       />
@@ -926,12 +885,19 @@ export const ScreenCompile = ({ onBack }: { onBack: () => void }) => {
                 border: '1px solid var(--border)', borderRadius: 6,
                 cursor: 'pointer', transition: 'all 150ms',
               }}
-              onClick={() => { setExportOpen(false); showToast(`正在导出 ${opt.format}…`); }}>
+              onClick={() => {
+                setExportOpen(false);
+                showToast(`正在导出 ${opt.format}…`);
+                void exportVideo(opt.format).then((r) => showToast(r.downloadUrl ? '导出完成 · 可下载' : '导出完成'));
+              }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{opt.format}</div>
                 <div style={{ fontSize: 11, color: 'var(--text-mute)', marginTop: 3 }}>{opt.desc}</div>
               </div>
             ))}
           </div>
+          {exporting && (
+            <div className="mono dim" style={{ fontSize: 10.5, textAlign: 'center' }}>导出中…</div>
+          )}
         </div>
       </Modal>
 

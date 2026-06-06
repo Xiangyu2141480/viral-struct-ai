@@ -4,7 +4,8 @@
 // (Ported from viz.jsx; React/window globals replaced with imports.)
 
 import { Fragment, type CSSProperties } from 'react';
-import { ROLES, SLOT_DIAGNOSIS, SOURCE_VIDEO, TARGET_MATERIALS, type Seg } from './data';
+import { ROLES, type Seg, type StateKey } from './data';
+import { useProjectStore } from './store/useProjectStore';
 
 /* ============================================================
    ISSUE 2 · Abstract structure band ↔ Concrete film strip
@@ -130,8 +131,10 @@ interface FlowLink {
 }
 
 export const MigrationFlow = () => {
-  const segs = SOURCE_VIDEO.segments;
-  const mats = TARGET_MATERIALS;
+  const segs = useProjectStore((s) => s.sourceVideo.segments);
+  const mats = useProjectStore((s) => s.materials);
+  const diagnosis = useProjectStore((s) => s.diagnosis);
+  const stateOf = (id: string): StateKey => diagnosis[id]?.state ?? 'missing';
 
   const MAT_H = 54,MAT_GAP = 8;
   const SLOT_H = 46,SLOT_GAP = 10;
@@ -251,8 +254,7 @@ export const MigrationFlow = () => {
           {segs.map((s, i) => {
             const incoming = links.filter((l) => l.slotId === s.id).length;
             if (incoming > 0) return null;
-            const d = SLOT_DIAGNOSIS[s.id];
-            const color = d.state === 'critical' ? 'var(--st-critical)' : 'var(--st-missing)';
+            const color = stateOf(s.id) === 'critical' ? 'var(--st-critical)' : 'var(--st-missing)';
             return (
               <span key={`open-${s.id}`} className="patch-jack open" style={{
                 top: slotCy(i) - 5, right: -5,
@@ -266,8 +268,8 @@ export const MigrationFlow = () => {
         {segs.map((s, i) => {
           const incoming = links.filter((l) => l.slotId === s.id).length;
           if (incoming > 0) return null;
-          const d = SLOT_DIAGNOSIS[s.id];
-          const color = d.state === 'critical' ? 'var(--st-critical)' : 'var(--st-missing)';
+          const state = stateOf(s.id);
+          const color = state === 'critical' ? 'var(--st-critical)' : 'var(--st-missing)';
           return (
             <span key={s.id} className="migrate-gap-label" style={{
               position: 'absolute',
@@ -284,7 +286,7 @@ export const MigrationFlow = () => {
               borderRadius: 3,
               pointerEvents: 'none'
             }}>
-              {d.state === 'critical' ? 'KEY GAP' : 'MISS'}
+              {state === 'critical' ? 'KEY GAP' : 'MISS'}
             </span>);
 
         })}
@@ -298,17 +300,17 @@ export const MigrationFlow = () => {
         </div>
         {segs.map((s, i) => {
           const y = slotCy(i) - SLOT_H / 2;
-          const d = SLOT_DIAGNOSIS[s.id];
-          const fillPct = fillByState[d.state];
+          const state = stateOf(s.id);
+          const fillPct = fillByState[state];
           const incoming = links.filter((l) => l.slotId === s.id);
           const stateColor = {
             filled: 'var(--st-filled)',
             weakly: 'var(--st-weakly)',
             missing: 'var(--st-missing)',
             critical: 'var(--st-critical)'
-          }[d.state];
+          }[state];
           return (
-            <div key={s.id} className={`slot-vessel ${d.state}`} style={{ top: y, height: SLOT_H }}>
+            <div key={s.id} className={`slot-vessel ${state}`} style={{ top: y, height: SLOT_H }}>
               <div
                 className="slot-vessel-fill"
                 style={{
@@ -324,7 +326,7 @@ export const MigrationFlow = () => {
                 </div>
                 <div className="slot-vessel-row" style={{ marginTop: 2 }}>
                   <span className="mono" style={{ fontSize: 9.5, color: stateColor }}>
-                    {{ filled: 'FILLED', weakly: 'WEAK', missing: 'MISS', critical: 'KEY GAP' }[d.state]}
+                    {{ filled: 'FILLED', weakly: 'WEAK', missing: 'MISS', critical: 'KEY GAP' }[state]}
                   </span>
                   <span className="mono" style={{ fontSize: 9.5, color: 'var(--text-mute)' }}>
                     {fillPct}% · {(s.end - s.start).toFixed(1)}s
@@ -358,7 +360,9 @@ export const DiagnosticRadar = ({
   selected?: string;
   onSelect?: (id: string) => void;
 }) => {
-  const segs = SOURCE_VIDEO.segments;
+  const segs = useProjectStore((s) => s.sourceVideo.segments);
+  const diagnosis = useProjectStore((s) => s.diagnosis);
+  const stateOf = (id: string): StateKey => diagnosis[id]?.state ?? 'missing';
   const cx = size / 2,cy = size / 2;
   const pad = 52;
   const rMax = size / 2 - pad;
@@ -376,7 +380,7 @@ export const DiagnosticRadar = ({
   };
 
   const innerPoints = segs.map((s, i) => {
-    const r = rMax * fillByState[SLOT_DIAGNOSIS[s.id].state];
+    const r = rMax * fillByState[stateOf(s.id)];
     return pointAt(i, r).join(',');
   }).join(' ');
 
@@ -435,13 +439,13 @@ export const DiagnosticRadar = ({
       {/* gap fill — between outer and actual (shaded danger zone) */}
       {segs.map((s, i) => {
         const next = (i + 1) % n;
-        const r1 = rMax * fillByState[SLOT_DIAGNOSIS[s.id].state];
-        const r2 = rMax * fillByState[SLOT_DIAGNOSIS[segs[next].id].state];
+        const r1 = rMax * fillByState[stateOf(s.id)];
+        const r2 = rMax * fillByState[stateOf(segs[next].id)];
         const [x1i, y1i] = pointAt(i, r1);
         const [x2i, y2i] = pointAt(next, r2);
         const [x1o, y1o] = pointAt(i, rMax);
         const [x2o, y2o] = pointAt(next, rMax);
-        const state = SLOT_DIAGNOSIS[s.id].state;
+        const state = stateOf(s.id);
         if (state === 'filled') return null;
         const opacity = state === 'critical' ? 0.16 : state === 'missing' ? 0.10 : 0.06;
         const color = state === 'critical' ? 'var(--st-critical)' : state === 'missing' ? 'var(--st-missing)' : 'var(--st-weakly)';
@@ -464,7 +468,7 @@ export const DiagnosticRadar = ({
 
       {/* vertices */}
       {segs.map((s, i) => {
-        const state = SLOT_DIAGNOSIS[s.id].state;
+        const state = stateOf(s.id);
         const r = rMax * fillByState[state];
         const [x, y] = pointAt(i, r);
         const sel = selected === s.id;
@@ -493,7 +497,7 @@ export const DiagnosticRadar = ({
             </text>
             <text x={lx} y={ly + 10} fontSize="9.5"
             fill="var(--text-mute)" fontFamily="var(--ff-mono)">
-              {s.id.toUpperCase()} · {Math.round(fillByState[SLOT_DIAGNOSIS[s.id].state] * 100)}%
+              {s.id.toUpperCase()} · {Math.round(fillByState[stateOf(s.id)] * 100)}%
             </text>
           </g>);
 
@@ -532,7 +536,7 @@ export const GapHeatmap = ({
   selected?: string;
   onSelect?: (id: string) => void;
 }) => {
-  const segs = SOURCE_VIDEO.segments;
+  const segs = useProjectStore((s) => s.sourceVideo.segments);
   const cellColor = (v: number) => {
     if (v >= 0.8) return 'var(--st-filled)';
     if (v >= 0.5) return 'var(--st-weakly)';
@@ -565,7 +569,7 @@ export const GapHeatmap = ({
                 <span style={{ fontSize: 11, color: 'var(--text)' }}>{s.label}</span>
               </div>
               {HEATMAP_DIMS.map((d) => {
-                const v = HEATMAP_MATRIX[s.id][d.key];
+                const v = HEATMAP_MATRIX[s.id]?.[d.key] ?? 0;
                 const c = cellColor(v);
                 return (
                   <div
