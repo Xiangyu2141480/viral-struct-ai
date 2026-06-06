@@ -18,7 +18,12 @@ export interface RenderSegment {
   endMs: number;
   source: RenderSegmentSource;
   assetId?: string;
+  /** Closed CardTypeId (or unknown string); the renderer snaps it via isKnownCardType before styling. */
   cardType?: string;
+  /** Closed CaptionStyleId (or unknown string); the renderer snaps it via isKnownCaptionStyle. */
+  captionStyle?: string;
+  /** Structural role (hook/cta/...) — used as a styling fallback when cardType is absent. */
+  segmentRole?: string;
   captionLines: string[];
   /** Deterministic background colour token ('0xRRGGBB'). */
   background: string;

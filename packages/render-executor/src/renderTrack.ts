@@ -8,6 +8,10 @@ export interface RenderTrackSlice {
   unresolvedEvidence: boolean;
   captionLines: string[];
   label: string;
+  /** Carried from the active segment so the renderer can style cards (title/CTA/...) distinctly. */
+  cardType?: string;
+  captionStyle?: string;
+  segmentRole?: string;
 }
 
 /**
@@ -49,7 +53,10 @@ export function buildRenderTrack(input: RenderInput): RenderTrackSlice[] {
         sourceSegmentId: active.id,
         unresolvedEvidence: active.unresolvedEvidence,
         captionLines: active.captionLines,
-        label: active.label
+        label: active.label,
+        cardType: active.cardType,
+        captionStyle: active.captionStyle,
+        segmentRole: active.segmentRole
       });
     } else {
       slices.push({ startMs: start, endMs: end, background: '0x000000', sourceSegmentId: '__gap__', unresolvedEvidence: false, captionLines: [], label: 'gap' });

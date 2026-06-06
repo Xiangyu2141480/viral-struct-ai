@@ -4,6 +4,7 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { CARD_REGISTRY, isKnownCardType, type CardTypeId } from '@viral-struct/shared';
 import { framesFor } from './manifestExecutor';
 import type { RenderExecutor, RenderInput, RenderResult, RenderSegmentManifestEntry } from './RenderContract';
 import { buildRenderTrack, type RenderTrackSlice } from './renderTrack';
@@ -125,23 +126,39 @@ function resolveFont(explicitPath?: string): ResolvedFont | null {
   return null;
 }
 
+/**
+ * Build the libass script. Card styling is REGISTRY-DRIVEN (the "CARD_RENDERERS" skill): each known card
+ * type gets its own `.ass` style derived from CARD_REGISTRY (font weight -> size+bold, safeArea -> alignment),
+ * so title / selling-point / comparison / CTA cards read distinctly — paired with CARD_REGISTRY backgrounds
+ * already applied in compileTimelineToRenderInput. Unknown / cardless slices fall back to a plain lower-third
+ * `Body` style (the closed-vocabulary safety net). The honest substitute marker is its OWN top-of-frame event
+ * (style `Marker`), emitted whenever evidence is unresolved EVEN IF the slice has no caption, so styling can
+ * never mask honesty (invariants #1/#2 outrank polish).
+ */
 function buildAss(
   track: RenderTrackSlice[],
   width: number,
   height: number,
   fontFamily: string
 ): { content: string; hasEvents: boolean } {
-  const fontSize = Math.max(28, Math.round(height * 0.038));
-  const marginV = Math.round(height * 0.1);
+  const base = Math.max(28, Math.round(height * 0.038));
 
   const events: string[] = [];
+  const usedCardTypes = new Set<CardTypeId>();
   for (const slice of track) {
     const lines = slice.captionLines.map((line) => sanitizeAss(line.trim())).filter(Boolean);
-    if (slice.unresolvedEvidence) lines.push('（替代卡片 · 素材缺失）');
-    if (lines.length === 0) continue;
-    events.push(`Dialogue: 0,${msToAss(slice.startMs)},${msToAss(slice.endMs)},Default,,0,0,0,,${lines.join('\\N')}`);
+    if (lines.length > 0) {
+      const styleName = cardStyleName(slice.cardType, usedCardTypes);
+      events.push(`Dialogue: 0,${msToAss(slice.startMs)},${msToAss(slice.endMs)},${styleName},,0,0,0,,${lines.join('\\N')}`);
+    }
+    if (slice.unresolvedEvidence) {
+      events.push(`Dialogue: 0,${msToAss(slice.startMs)},${msToAss(slice.endMs)},Marker,,0,0,0,,（替代卡片 · 素材缺失）`);
+    }
   }
   if (events.length === 0) return { content: '', hasEvents: false };
+
+  const styles: string[] = [bodyStyleLine(fontFamily, base, height), markerStyleLine(fontFamily, base, height)];
+  for (const cardType of usedCardTypes) styles.push(cardStyleLine(cardType, fontFamily, base, height));
 
   const content = [
     '[Script Info]',
@@ -153,7 +170,7 @@ function buildAss(
     '',
     '[V4+ Styles]',
     'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
-    `Style: Default,${fontFamily},${fontSize},&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,4,2,2,80,80,${marginV},1`,
+    ...styles,
     '',
     '[Events]',
     'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
@@ -161,6 +178,50 @@ function buildAss(
   ].join('\n');
 
   return { content, hasEvents: true };
+}
+
+/** Pick the style name for a slice, registering known card types so their style is emitted. */
+function cardStyleName(cardType: string | undefined, used: Set<CardTypeId>): string {
+  if (cardType && isKnownCardType(cardType)) {
+    used.add(cardType);
+    return `Card_${cardType}`;
+  }
+  return 'Body';
+}
+
+/** Per-card-type style derived from CARD_REGISTRY: fontWeight -> (size, bold); safeArea -> alignment. */
+function cardStyleLine(cardType: CardTypeId, fontFamily: string, base: number, height: number): string {
+  const spec = CARD_REGISTRY[cardType];
+  const scale = spec.fontWeight === 'black' ? 1.6 : spec.fontWeight === 'bold' ? 1.18 : 1.0;
+  const bold = spec.fontWeight === 'regular' ? 0 : -1;
+  const fontSize = Math.round(base * scale);
+  const alignment = spec.safeArea === 'center' ? 5 : 2; // 5 = mid-center, 2 = bottom-center
+  const marginV = alignment === 2 ? Math.round(height * 0.1) : Math.round(height * 0.04);
+  // Text stays white-on-dark-outline for legibility (differentiation comes from size/weight/alignment +
+  // the CARD_REGISTRY background); accent colours drive boxes/bars in a later motion/box pass, not body text.
+  return `Style: Card_${cardType},${fontFamily},${fontSize},${hexToAss('0xffffff')},&H000000FF,${hexToAss('0x000000')},&H64000000,${bold},0,0,0,100,100,0,0,1,4,2,${alignment},80,80,${marginV},1`;
+}
+
+/** Plain lower-third caption — the fallback for cardless / unknown-card slices. */
+function bodyStyleLine(fontFamily: string, base: number, height: number): string {
+  const marginV = Math.round(height * 0.1);
+  return `Style: Body,${fontFamily},${base},${hexToAss('0xffffff')},&H000000FF,${hexToAss('0x000000')},&H64000000,0,0,0,0,100,100,0,0,1,4,2,2,80,80,${marginV},1`;
+}
+
+/** Substitute marker — small, top-center, warning-yellow, bold; visually distinct from any caption. */
+function markerStyleLine(fontFamily: string, base: number, height: number): string {
+  const fontSize = Math.max(22, Math.round(base * 0.66));
+  const marginV = Math.round(height * 0.05);
+  return `Style: Marker,${fontFamily},${fontSize},${hexToAss('0xffd400')},&H000000FF,${hexToAss('0x000000')},&H64000000,-1,0,0,0,100,100,0,0,1,3,1,8,60,60,${marginV},1`;
+}
+
+/** '0xRRGGBB' / '#RRGGBB' / 'RRGGBB' -> libass '&H00BBGGRR' (opaque, byte-swapped). */
+function hexToAss(token: string): string {
+  const hex = token.replace(/^0x/i, '').replace(/^#/, '').padStart(6, '0').slice(-6);
+  const rr = hex.slice(0, 2);
+  const gg = hex.slice(2, 4);
+  const bb = hex.slice(4, 6);
+  return `&H00${bb}${gg}${rr}`.toUpperCase();
 }
 
 function sanitizeAss(line: string): string {
