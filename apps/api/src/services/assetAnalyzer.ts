@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { AssetCard } from '@viral-struct/shared';
 import { AssetCardSchema } from '@viral-struct/shared';
+import { analyzeAssetsWithAssetManager, type AssetManagerAnalyzeResult } from './assetManager/assetManagerService';
 import { createOpenAICompatibleClient } from './llmProvider';
 
 const SYSTEM_PROMPT = `你是一个电商/广告短视频素材分类专家。你会通过多模态输入看到一个独立的素材片段（一张图或一段短视频帧序列），需要做结构化分类，使其能被自动化匹配系统(slotMatcher)评估为某个分镜槽位(shotSlot)的候选素材。
@@ -144,6 +145,9 @@ type Client = ReturnType<typeof createOpenAICompatibleClient>;
 interface AnalyzeOpts {
   files: Express.Multer.File[];
   textBrief?: string;
+  ffprobePath?: string;
+  ffmpegPath?: string;
+  frameDir?: string;
   /** Optional override for tests. */
   clientFactory?: () => Client;
   /** Override the configured model. */
@@ -302,15 +306,22 @@ export async function analyzeAssetsMock(
 }
 
 /**
- * Convenience wrapper used by demo / upload routes: tries the multimodal LLM
- * path first, then falls back to the filename-keyword mock if the LLM is not
- * reachable or returns malformed output. The returned cards keep
- * `analysisSource` set so callers know whether the data is real or synthetic.
+ * Convenience wrapper used by demo / upload routes: runs deterministic local
+ * media/text analysis first so the asset manager does not depend on a VLM key.
+ * The legacy filename mock remains as a controlled last-resort fallback.
  */
 export async function analyzeAssetsWithFallback(opts: AnalyzeOpts): Promise<AssetCard[]> {
+  return (await analyzeAssetsWithFallbackResult(opts)).assetCards;
+}
+
+export async function analyzeAssetsWithFallbackResult(opts: AnalyzeOpts): Promise<AssetManagerAnalyzeResult> {
   try {
-    return await analyzeAssetsLLM(opts);
+    return await analyzeAssetsWithAssetManager(opts);
   } catch (err) {
-    return analyzeAssetsMock(opts.files, opts.textBrief);
+    return {
+      assetCards: await analyzeAssetsMock(opts.files, opts.textBrief),
+      warnings: [`Deterministic asset analysis failed (${err instanceof Error ? err.message : String(err)}); using filename/text fallback.`],
+      vlmStatus: 'fallback'
+    };
   }
 }

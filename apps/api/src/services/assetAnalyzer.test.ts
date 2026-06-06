@@ -144,18 +144,20 @@ test('analyzeAssetsLLM rejects video files (not yet supported)', async () => {
 // analyzeAssetsWithFallback
 // ---------------------------------------------------------------------------
 
-test('analyzeAssetsWithFallback falls back to mock when LLM throws', async () => {
+test('analyzeAssetsWithFallback uses deterministic analysis without an LLM key', async () => {
   const fakeFile = {
     originalname: 'kangshifu-iced-tea-splash.png',
     path: '/nonexistent/path/that/will/fail.png'
   } as Express.Multer.File;
   const cards = await analyzeAssetsWithFallback({
     files: [fakeFile],
-    // Throwing client triggers fallback
+    // Deterministic analysis should not call the LLM client.
     clientFactory: () => { throw new Error('LLM unreachable'); }
   });
   assert.equal(cards.length, 1);
-  assert.equal(cards[0].analysisSource, 'mock_filename_rules');
+  assert.equal(cards[0].analysisSource, 'deterministic');
+  assert.equal(cards[0].analysis?.source, 'deterministic');
+  assert.equal(cards[0].analysis?.fallbackUsed, true);
 });
 
 // ---------------------------------------------------------------------------

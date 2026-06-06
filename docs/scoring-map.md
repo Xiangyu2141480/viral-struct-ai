@@ -20,7 +20,7 @@ This file maps the competition scoring criteria to concrete code, pages and demo
 | 结果可验证 | Web visual preview, timeline list, quality report | `/result`, `/demo` | preview + timeline + quality metrics | Complete as Web preview; no MP4 claim |
 | 画面包装能力 | subtitle style, title/selling/CTA cards, transitions, motions | `/result` | Timeline packaging and Variant Diff | Complete |
 | 多版本生成 | high_click, high_conversion, premium | `/result` | Variant Diff and changed timeline/script/packaging | Complete |
-| 真实素材适配 | AssetCard library and lightweight analyzer | `/adapt`, `/gaps` | `AssetCard`, suitable slots, detected objects | Partially complete |
+| 真实素材适配 | Asset Manager backend contract: deterministic analysis, keyframes, quality scoring, slot affordance, contextual coverage, Asset Evidence | `/adapt`, `/gaps`, `/result` data layer | `AssetAnalysisProfile`, `AssetLibraryReport`, `SlotCoverageMatrix`, `AssetSupplyContext`, `SlotMatch.assetEvidence` | Backend/data complete; UI handoff pending |
 | 人工可调 | natural-language edit patch | `/result` | `/api/timeline/apply-edit`, Edit Summary | Complete as rule-based patch |
 | 自然语言编辑加分 | five supported edit intents | `/result` | changed items before/after | Partial add-on, rule-based |
 | 创意与产品完成度 | cohesive product flow and explainable UI | all pages | standard workflow + `/demo` | Complete for prototype |
@@ -35,6 +35,7 @@ Show these in the recording:
 4. `/result`: Variant Diff showing high_click / high_conversion / premium differences.
 5. `/result`: Natural-language edit patch with Edit Summary and changed items.
 6. `/gaps`: slot matching and repair source badges.
+7. API/docs: Asset Manager coverage matrix and Asset Evidence show why assets cover or miss source slots.
 
 ## 3. Recommended Scoring Narrative
 
@@ -51,7 +52,10 @@ sample pattern -> transferable intent -> new product mapping -> asset coverage -
 | MP4 export | Not a stable completed feature | Present Web preview and timeline protocol |
 | ASR | Not required in the main demo path | Mention manual transcript/artifact fallback |
 | Full editor | No drag-and-drop editor | Present natural-language patch and generated timeline |
-| VLM asset understanding | Lightweight and demo-oriented | Present AssetCard protocol and fallback |
+| Asset Manager UI | Backend/data contract is ready, but new visual panels are owned by UI teammate | Present docs/examples and current `/adapt` flow; do not claim the new inspector UI is implemented |
+| VLM asset understanding | Optional adapter only; deterministic analyzer is the main path | Present Asset Manager protocol, fallback, and `analysis.vlm` as optional |
+| Advanced vision stack | SAM2/GroundingDINO/SigLIP2/VideoRAG are not integrated | Mention as future enhancement only |
+| Long-video temporal grounding | Full temporal grounding is not completed | Use checked-in structure artifacts and deterministic/keyframe evidence |
 | AIGC video generation | Not a main capability | Present packaging/text/material repair instead |
 
 ## 5. Demo Case

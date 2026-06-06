@@ -9,6 +9,7 @@ Viral Struct AI 是一个面向营销短视频创作的 AI 平台原型：从优
 - 真实样例输入与基础解析：seed video / upload、ffprobe 元信息、封面、关键帧、手动字幕 fallback。
 - 结构抽取：`ViralStructureGraph`，包含脚本段落、节奏、包装、镜头槽位、migration contract、rough/fine scan artifact fallback。
 - 新内容与素材输入：商品 brief、康师傅冰红茶 demo 素材库、`AssetCard` 素材理解协议。
+- Asset Manager 数据层：素材解析、视频关键帧、质量评分、slot affordance、coverage matrix、Asset Evidence 输出，并提供 `AssetSupplyContext` 作为 UI / SlotMatcher / GapRepairPlanner / Video Agent 的素材供给证据合同。
 - 素材适配：`SlotMatch`、`MaterialGap`、`GapRepair`，支持 LLM enhanced 路径和 deterministic fallback。
 - 结果生成：脚本、分镜、`TimelineItem[]`、包装建议、Web 视觉预览。
 - 可解释展示：Generation Trace、Migration Evidence、Quality Report。
@@ -80,7 +81,11 @@ pnpm dev
 | `POST /api/videos/upload` | 上传视频 |
 | `POST /api/structure/extract` | 从 `VideoAnalysis` / artifact 抽取结构图 |
 | `GET /api/assets/libraries/:libraryId` | 加载预生成素材库 |
-| `POST /api/assets/analyze` | 规则/LLM 素材分析 |
+| `POST /api/assets/analyze` | deterministic 素材分析，可选 VLM enrichment，默认关闭 |
+| `POST /api/assets/manager/analyze-batch` | 归一化旧 AssetCard，输出 Asset Manager report |
+| `POST /api/assets/manager/coverage` | Asset Manager coverage matrix、library report、normalized AssetCard，并包含 contextual coverage |
+| `POST /api/assets/manager/asset-supply-context` | 输出 `asset-supply-v1` 素材供给上下文，不生成 fallback card 或 repair strategy |
+| `POST /api/assets/manager/video-agent-bundle` | legacy alias，返回 `asset-supply-v1` response |
 | `POST /api/slots/match` | `matchSlotsWithFallback` |
 | `POST /api/gaps/repair` | `planGapRepairsWithFallback` |
 | `POST /api/timeline/generate` | `generateTimelineWithFallback` |
@@ -91,10 +96,12 @@ pnpm dev
 ## 安全边界
 
 - API key 只能通过本地环境变量注入，不提交真实 key。
-- LLM / VLM / ASR 失败时必须 fallback，页面显示 source 和 warning。
+- LLM / optional VLM / ASR 失败时必须 fallback，页面显示 source 和 warning。
 - 只迁移样例的结构方法，不复制原视频内容、音乐、人物肖像或品牌表达。
 - 当前 Remotion package 仍是 placeholder，不把 MP4 导出作为本阶段主交付能力。
 - 当前自然语言改片是 rule-based timeline patch，不是完整智能剪辑器。
+- Asset Manager deterministic 是主路径；optional VLM 默认关闭，不是主 demo 依赖。
+- 当前未接入 SAM2 / GroundingDINO / SigLIP2 / VideoRAG，也未完成完整长视频 temporal grounding。
 
 ## 交付文档
 
@@ -104,4 +111,6 @@ pnpm dev
 - `docs/scoring-map.md`
 - `docs/final-delivery.md`
 - `docs/safety-and-ai-tools.md`
+- `docs/asset-manager-ui-contract.md`
+- `docs/asset-manager-video-agent-contract.md`
 - `docs/TOOL_PROTOCOL.md`

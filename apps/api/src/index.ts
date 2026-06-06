@@ -5,6 +5,7 @@ import express from 'express';
 import { videosRouter } from './routes/videos';
 import { structureRouter } from './routes/structure';
 import { assetsRouter } from './routes/assets';
+import { assetManagerRouter } from './routes/assetManager';
 import { analyticsRouter } from './routes/analytics';
 import { slotsRouter } from './routes/slots';
 import { gapsRouter } from './routes/gaps';
@@ -56,6 +57,7 @@ app.get('/health', (_req, res) => {
 app.use('/api/videos', videosRouter);
 app.use('/api/structure', structureRouter);
 app.use('/api/assets', assetsRouter);
+app.use('/api/assets/manager', assetManagerRouter);
 app.use('/api/analytics', analyticsRouter);
 app.use('/api/slots', slotsRouter);
 app.use('/api/gaps', gapsRouter);

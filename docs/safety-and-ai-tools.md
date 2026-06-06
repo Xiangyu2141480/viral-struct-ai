@@ -12,6 +12,7 @@
 | FFmpeg / ffprobe | metadata, covers, keyframes | only for authorized project/user media |
 | Python rough/fine scan scripts | visual rhythm, boundaries, structure artifacts | artifacts are checked and validated before use |
 | ASR tools | optional transcript extraction | not required for the standard demo; manual transcript fallback exists |
+| Optional VLM adapter | optional asset caption/object/role-rationale enhancement | disabled by default; invalid output falls back to deterministic asset analysis |
 | Remotion | future/rendering package skeleton | not claimed as stable MP4 export in this checkpoint |
 
 ## 2. Self-Designed System Parts
@@ -38,6 +39,7 @@ Allowed:
 LLM_API_KEY in local environment variables
 LLM_BASE_URL in local environment variables
 LLM_MODEL in local environment variables
+ASSET_VLM_ENABLED / ASSET_VLM_MODEL in local environment variables
 .env.example with empty placeholders
 ```
 
@@ -116,6 +118,18 @@ Current fallback-visible fields:
 - `scriptSource`
 - `warnings`
 - `analysisSource`
+- `vlmStatus`
+- `analysis.vlm` when optional VLM enhancement is enabled and valid
+
+Optional Asset Manager VLM policy:
+
+```txt
+ASSET_VLM_ENABLED=false -> deterministic AssetAnalysisProfile only
+ASSET_VLM_ENABLED=true but key/model/output invalid -> deterministic result + warning
+ASSET_VLM_ENABLED=true and valid output -> analysis.vlm added as optional evidence
+```
+
+The VLM adapter must not invent product efficacy, medical, ranking, sales, celebrity, or user-behavior claims. Risky model text is treated as evidence risk and should not be presented as verified marketing fact.
 
 ## 6. What We Do Not Claim
 
@@ -128,5 +142,8 @@ This checkpoint does not claim:
 - fully autonomous creative agent
 - guaranteed factual marketing claims
 - direct reproduction of sample content
+- optional VLM as a required dependency for the main demo
+- completed SAM2 / GroundingDINO / SigLIP2 / VideoRAG integration
+- complete long-video temporal grounding
 
 The demo should be presented as an explainable AI creation planning system with a Web visual preview and timeline protocol.

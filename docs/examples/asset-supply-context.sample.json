@@ -1,0 +1,647 @@
+{
+  "protocolVersion": "asset-supply-v1",
+  "libraryId": "kangshifu_demo",
+  "generatedAt": "1970-01-01T00:00:00.000Z",
+  "assets": [
+    {
+      "id": "asset_001",
+      "type": "image",
+      "url": "/media/demo-assets/kangshifu_iced_tea/kangshifu-iced-tea-product-shot.png",
+      "spatialDescription": "Centered Kangshifu iced tea bottle with clear label and clean background.",
+      "detectedObjects": ["beverage bottle", "label", "product"],
+      "suitableSlots": ["product_closeup", "cta_visual"],
+      "qualityScore": 0.84,
+      "detectedIngredients": ["product_closeup_trait", "clean_background", "premium_visual"],
+      "humanPresence": { "hasHuman": false },
+      "visualStyleTags": ["clean_background", "premium_visual"],
+      "analysisSource": "static_library",
+      "analysis": {
+        "profileVersion": "asset_analysis_v1",
+        "analyzedAt": "1970-01-01T00:00:00.000Z",
+        "source": "static_library",
+        "fallbackUsed": true,
+        "warnings": [],
+        "media": {
+          "kind": "image",
+          "sourceUrl": "/media/demo-assets/kangshifu_iced_tea/kangshifu-iced-tea-product-shot.png",
+          "width": 1024,
+          "height": 1024,
+          "aspectRatio": "1:1",
+          "format": "png",
+          "keyframes": []
+        },
+        "semantic": {
+          "summary": "Clean product packshot with strong label visibility.",
+          "detectedObjects": ["beverage bottle", "label", "product"],
+          "detectedIngredients": ["product_closeup_trait", "clean_background", "premium_visual"],
+          "visualStyleTags": ["clean_background", "premium_visual"],
+          "humanPresence": { "hasHuman": false }
+        },
+        "quality": {
+          "overallScore": 0.84,
+          "resolution": 0.84,
+          "sharpness": 0.84,
+          "brightness": 0.72,
+          "contrast": 0.76,
+          "clarity": 0.84,
+          "composition": 0.84,
+          "lighting": 0.76,
+          "subjectProminence": 0.84,
+          "productFocus": 0.84,
+          "textSafeArea": 0.7,
+          "formatFit": 0.78,
+          "issues": []
+        },
+        "slotAffordance": {
+          "suitableSlots": ["product_closeup", "cta_visual"],
+          "primaryRoles": [
+            { "role": "product_closeup", "confidence": 0.9 },
+            { "role": "cta_visual", "confidence": 0.72 }
+          ],
+          "missingRoles": ["opening_attention", "usage_demo", "benefit_visual", "comparison", "testimonial"],
+          "rationale": "Derived from existing suitableSlots and deterministic role scoring."
+        },
+        "editability": {
+          "canCropZoom": true,
+          "canUseAsBackground": true,
+          "canLoop": false,
+          "canExtendWithCards": true,
+          "suggestedEdits": ["crop_zoom", "ken_burns_motion", "add_cta_overlay"]
+        },
+        "safety": {
+          "status": "passed",
+          "brandRisk": "low",
+          "ipRisk": "low",
+          "claimRisk": "low",
+          "reasons": []
+        },
+        "search": {
+          "tags": ["image", "beverage bottle", "label", "product", "product_closeup", "cta_visual"],
+          "keywords": ["beverage bottle", "label", "product", "packshot"],
+          "embeddingText": "Clean product packshot | clear label | CTA visual"
+        },
+        "roleAffordance": [
+          {
+            "role": "product_closeup",
+            "score": 89.8,
+            "confidence": 0.898,
+            "components": {
+              "semanticFit": 92,
+              "visualSignalFit": 88,
+              "productVisibilityFit": 92,
+              "qualityFit": 84,
+              "formatFit": 92,
+              "editabilityFit": 86,
+              "safetyFit": 100
+            },
+            "rationale": "asset_001 scores strongly for product_closeup.",
+            "reasons": ["label is clear", "product is centered"],
+            "evidence": ["Clean product packshot with strong label visibility."]
+          }
+        ]
+      }
+    },
+    {
+      "id": "asset_002",
+      "type": "image",
+      "url": "/media/demo-assets/kangshifu_iced_tea/kangshifu-iced-tea-splash.png",
+      "spatialDescription": "Iced tea splash image with ice cubes and summer energy.",
+      "detectedObjects": ["beverage bottle", "ice cubes", "liquid splash", "product"],
+      "suitableSlots": ["opening_attention", "benefit_visual"],
+      "qualityScore": 0.88,
+      "detectedIngredients": ["product_closeup_trait", "premium_visual", "lifestyle_context"],
+      "humanPresence": { "hasHuman": false },
+      "visualStyleTags": ["premium_visual", "lifestyle_context"],
+      "analysisSource": "static_library",
+      "analysis": {
+        "profileVersion": "asset_analysis_v1",
+        "analyzedAt": "1970-01-01T00:00:00.000Z",
+        "source": "static_library",
+        "fallbackUsed": true,
+        "warnings": ["No real usage motion evidence is available."],
+        "media": {
+          "kind": "image",
+          "sourceUrl": "/media/demo-assets/kangshifu_iced_tea/kangshifu-iced-tea-splash.png",
+          "width": 1024,
+          "height": 1024,
+          "aspectRatio": "1:1",
+          "format": "png",
+          "keyframes": []
+        },
+        "semantic": {
+          "summary": "High-energy splash still with product and ice cues.",
+          "detectedObjects": ["beverage bottle", "ice cubes", "liquid splash", "product"],
+          "detectedIngredients": ["product_closeup_trait", "premium_visual", "lifestyle_context"],
+          "visualStyleTags": ["premium_visual", "lifestyle_context"],
+          "humanPresence": { "hasHuman": false }
+        },
+        "quality": {
+          "overallScore": 0.88,
+          "resolution": 0.88,
+          "sharpness": 0.86,
+          "brightness": 0.82,
+          "contrast": 0.84,
+          "clarity": 0.86,
+          "composition": 0.82,
+          "lighting": 0.84,
+          "subjectProminence": 0.82,
+          "productFocus": 0.76,
+          "textSafeArea": 0.58,
+          "formatFit": 0.78,
+          "issues": []
+        },
+        "slotAffordance": {
+          "suitableSlots": ["opening_attention", "benefit_visual"],
+          "primaryRoles": [
+            { "role": "opening_attention", "confidence": 0.89 },
+            { "role": "benefit_visual", "confidence": 0.76 }
+          ],
+          "missingRoles": ["product_closeup", "usage_demo", "comparison", "testimonial", "cta_visual"],
+          "rationale": "High-energy still supports hook/benefit but not a usage demo."
+        },
+        "editability": {
+          "canCropZoom": true,
+          "canUseAsBackground": true,
+          "canLoop": false,
+          "canExtendWithCards": true,
+          "suggestedEdits": ["crop_zoom", "ken_burns_motion"]
+        },
+        "safety": {
+          "status": "passed",
+          "brandRisk": "low",
+          "ipRisk": "low",
+          "claimRisk": "low",
+          "reasons": []
+        },
+        "search": {
+          "tags": ["image", "ice cubes", "liquid splash", "opening_attention", "benefit_visual"],
+          "keywords": ["splash", "ice", "summer", "refreshing"],
+          "embeddingText": "High-energy iced tea splash | opening hook | benefit visual"
+        },
+        "roleAffordance": [
+          {
+            "role": "opening_hook",
+            "score": 89,
+            "confidence": 0.89,
+            "components": {
+              "semanticFit": 86,
+              "visualSignalFit": 86,
+              "productVisibilityFit": 82,
+              "qualityFit": 88,
+              "formatFit": 82,
+              "editabilityFit": 86,
+              "safetyFit": 100
+            },
+            "rationale": "asset_002 has high-energy hook signals.",
+            "reasons": ["splash motion cue", "ice visual cue"],
+            "evidence": ["High-energy splash still with product and ice cues."]
+          }
+        ]
+      }
+    },
+    {
+      "id": "asset_text_cta",
+      "type": "text",
+      "text": "冰爽解腻，饭后来一瓶。立即购买。",
+      "detectedObjects": ["text_copy", "selling_point_copy", "cta_copy"],
+      "suitableSlots": ["benefit_visual", "cta_visual"],
+      "qualityScore": 0.72,
+      "detectedIngredients": ["trust_building", "social_proof"],
+      "humanPresence": { "hasHuman": false },
+      "analysisSource": "deterministic",
+      "analysis": {
+        "profileVersion": "asset_analysis_v1",
+        "analyzedAt": "1970-01-01T00:00:00.000Z",
+        "source": "deterministic",
+        "fallbackUsed": true,
+        "warnings": ["Text asset can support overlays but not standalone visual evidence."],
+        "media": {
+          "kind": "text",
+          "textLength": 17,
+          "keyframes": []
+        },
+        "semantic": {
+          "summary": "Selling point and CTA copy for iced tea.",
+          "detectedObjects": ["text_copy", "selling_point_copy", "cta_copy"],
+          "detectedIngredients": ["trust_building", "social_proof"],
+          "visualStyleTags": [],
+          "humanPresence": { "hasHuman": false }
+        },
+        "quality": {
+          "overallScore": 0.72,
+          "resolution": 0.72,
+          "sharpness": 0.72,
+          "brightness": 0.72,
+          "contrast": 0.72,
+          "clarity": 0.72,
+          "composition": 0.72,
+          "lighting": 0.72,
+          "subjectProminence": 0.72,
+          "productFocus": 0.62,
+          "textSafeArea": 0.88,
+          "formatFit": 0.86,
+          "issues": []
+        },
+        "slotAffordance": {
+          "suitableSlots": ["benefit_visual", "cta_visual"],
+          "primaryRoles": [
+            { "role": "cta_visual", "confidence": 0.86 },
+            { "role": "benefit_visual", "confidence": 0.72 }
+          ],
+          "missingRoles": ["opening_attention", "product_closeup", "usage_demo", "comparison", "testimonial"],
+          "rationale": "Text copy supports CTA and benefit overlays."
+        },
+        "editability": {
+          "canCropZoom": false,
+          "canUseAsBackground": false,
+          "canLoop": false,
+          "canExtendWithCards": true,
+          "suggestedEdits": ["turn_into_caption_card", "use_as_cta_copy"]
+        },
+        "safety": {
+          "status": "passed",
+          "brandRisk": "low",
+          "ipRisk": "low",
+          "claimRisk": "low",
+          "reasons": []
+        },
+        "search": {
+          "tags": ["text", "cta_copy", "benefit_visual", "cta_visual"],
+          "keywords": ["冰爽解腻", "立即购买", "来一瓶"],
+          "embeddingText": "CTA copy | selling point copy | iced tea"
+        },
+        "roleAffordance": [
+          {
+            "role": "cta",
+            "score": 88,
+            "confidence": 0.88,
+            "components": {
+              "semanticFit": 92,
+              "visualSignalFit": 82,
+              "productVisibilityFit": 75,
+              "qualityFit": 72,
+              "formatFit": 96,
+              "editabilityFit": 88,
+              "safetyFit": 100
+            },
+            "rationale": "asset_text_cta can support CTA copy.",
+            "reasons": ["contains action wording", "safe overlay surface"],
+            "evidence": ["Selling point and CTA copy for iced tea."]
+          }
+        ]
+      }
+    }
+  ],
+  "libraryProfile": {
+    "libraryId": "kangshifu_demo",
+    "assetCount": 3,
+    "byType": { "image": 2, "video": 0, "text": 1 },
+    "avgQualityScore": 0.813,
+    "qualitySummary": {
+      "avgQualityScore": 0.813,
+      "lowQualityAssetIds": [],
+      "warningCount": 2
+    },
+    "coveredSlots": ["product_closeup", "cta_visual"],
+    "missingSlots": ["usage_demo"],
+    "roleCoverage": {
+      "opening_hook": { "role": "opening_hook", "status": "covered", "bestAssetId": "asset_002", "bestScore": 89, "assetIds": ["asset_002"] },
+      "product_closeup": { "role": "product_closeup", "status": "covered", "bestAssetId": "asset_001", "bestScore": 89.8, "assetIds": ["asset_001"] },
+      "usage_demo": { "role": "usage_demo", "status": "missing", "bestScore": 48, "assetIds": [] },
+      "comparison": { "role": "comparison", "status": "weak", "bestAssetId": "asset_001", "bestScore": 55, "assetIds": ["asset_001"] },
+      "benefit_proof": { "role": "benefit_proof", "status": "covered", "bestAssetId": "asset_002", "bestScore": 78, "assetIds": ["asset_002"] },
+      "lifestyle_scene": { "role": "lifestyle_scene", "status": "weak", "bestAssetId": "asset_002", "bestScore": 58, "assetIds": ["asset_002"] },
+      "background": { "role": "background", "status": "covered", "bestAssetId": "asset_001", "bestScore": 82, "assetIds": ["asset_001"] },
+      "packaging_card": { "role": "packaging_card", "status": "covered", "bestAssetId": "asset_text_cta", "bestScore": 78, "assetIds": ["asset_text_cta"] },
+      "cta": { "role": "cta", "status": "covered", "bestAssetId": "asset_text_cta", "bestScore": 88, "assetIds": ["asset_text_cta", "asset_001"] },
+      "cover": { "role": "cover", "status": "covered", "bestAssetId": "asset_001", "bestScore": 84, "assetIds": ["asset_001"] }
+    },
+    "missingRoles": ["usage_demo"],
+    "weakRoles": ["comparison"],
+    "topAssetsByRole": {
+      "opening_hook": [{ "assetId": "asset_002", "assetType": "image", "score": 89, "roleAffordance": 89, "intentSemanticMatch": 80, "acceptanceCriteriaMatch": 76, "assetQuality": 88, "editabilityFit": 86, "rationale": "High-energy splash supports opening hook." }],
+      "product_closeup": [{ "assetId": "asset_001", "assetType": "image", "score": 89.8, "roleAffordance": 89.8, "intentSemanticMatch": 86, "acceptanceCriteriaMatch": 82, "assetQuality": 84, "editabilityFit": 86, "rationale": "Product label is clear." }],
+      "usage_demo": [{ "assetId": "asset_002", "assetType": "image", "score": 48, "roleAffordance": 48, "intentSemanticMatch": 44, "acceptanceCriteriaMatch": 30, "assetQuality": 88, "editabilityFit": 74, "rationale": "Image lacks hand-operation motion evidence." }],
+      "comparison": [{ "assetId": "asset_001", "assetType": "image", "score": 55, "roleAffordance": 55, "intentSemanticMatch": 45, "acceptanceCriteriaMatch": 45, "assetQuality": 84, "editabilityFit": 70, "rationale": "Single product image weakly supports comparison." }],
+      "benefit_proof": [{ "assetId": "asset_002", "assetType": "image", "score": 78, "roleAffordance": 78, "intentSemanticMatch": 76, "acceptanceCriteriaMatch": 72, "assetQuality": 88, "editabilityFit": 80, "rationale": "Ice and splash cues support benefit proof." }],
+      "lifestyle_scene": [{ "assetId": "asset_002", "assetType": "image", "score": 58, "roleAffordance": 58, "intentSemanticMatch": 54, "acceptanceCriteriaMatch": 50, "assetQuality": 88, "editabilityFit": 70, "rationale": "Summer mood exists, but no real scene context." }],
+      "background": [{ "assetId": "asset_001", "assetType": "image", "score": 82, "roleAffordance": 82, "intentSemanticMatch": 72, "acceptanceCriteriaMatch": 70, "assetQuality": 84, "editabilityFit": 86, "rationale": "Clean background supports overlay use." }],
+      "packaging_card": [{ "assetId": "asset_text_cta", "assetType": "text", "score": 78, "roleAffordance": 78, "intentSemanticMatch": 72, "acceptanceCriteriaMatch": 70, "assetQuality": 72, "editabilityFit": 88, "rationale": "Text can become packaging overlay." }],
+      "cta": [{ "assetId": "asset_text_cta", "assetType": "text", "score": 88, "roleAffordance": 88, "intentSemanticMatch": 88, "acceptanceCriteriaMatch": 84, "assetQuality": 72, "editabilityFit": 88, "rationale": "CTA wording is explicit." }],
+      "cover": [{ "assetId": "asset_001", "assetType": "image", "score": 84, "roleAffordance": 84, "intentSemanticMatch": 78, "acceptanceCriteriaMatch": 76, "assetQuality": 84, "editabilityFit": 86, "rationale": "Product packshot can support cover." }]
+    },
+    "recommendations": [
+      "Usage demo lacks motion and hand-operation evidence; pass this observation to SlotMatcher/GapRepairPlanner."
+    ],
+    "warnings": [],
+    "generatedAt": "1970-01-01T00:00:00.000Z"
+  },
+  "contextualCoverage": {
+    "graphId": "structure_graph_input",
+    "briefId": "kangshifu_demo",
+    "libraryId": "kangshifu_demo",
+    "coverageSummary": {
+      "totalSlots": 3,
+      "coveredSlots": 1,
+      "weakSlots": 1,
+      "insufficientSlots": 1,
+      "coverageScore": 50
+    },
+    "slotCoverages": [
+      {
+        "slotId": "slot_product",
+        "affectedSegmentId": "seg_product",
+        "slotRole": "product_closeup",
+        "slotIntent": "Show product and label clearly.",
+        "sourceInstance": "source packshot | label closeup",
+        "acceptanceCriteria": ["center product", "visible label"],
+        "requiredIngredients": [
+          {
+            "id": "slot_product_visual_subject",
+            "kind": "visual_subject",
+            "label": "clear bottle and label",
+            "requiredBy": { "segmentId": "seg_product", "slotId": "slot_product" },
+            "importance": "high"
+          }
+        ],
+        "availableIngredients": [
+          {
+            "requiredIngredientId": "slot_product_visual_subject",
+            "assetId": "asset_001",
+            "score": 89.8,
+            "evidence": ["label is clear", "product is centered"]
+          }
+        ],
+        "missingIngredients": [],
+        "weakIngredients": [],
+        "candidateAssets": [
+          {
+            "assetId": "asset_001",
+            "score": 89.8,
+            "fitStatus": "strong",
+            "usableAs": "image_clip",
+            "mediaReadiness": {
+              "hasUsableUrl": true,
+              "hasLocalPath": true,
+              "hasThumbnail": false,
+              "hasKeyframe": false,
+              "hasDuration": false
+            },
+            "constraints": {
+              "maxRecommendedDurationSec": 2.4,
+              "needsCrop": true,
+              "needsOverlaySupport": false,
+              "notEnoughForStandaloneShot": false,
+              "textSafeAreaRisk": false
+            },
+            "evidence": {
+              "affordanceScore": 89.8,
+              "qualityScore": 84,
+              "semanticSignals": ["Clean product packshot with strong label visibility.", "beverage bottle", "label", "product"],
+              "keyframeIds": [],
+              "reasons": ["Product label is clear."],
+              "warnings": []
+            }
+          }
+        ],
+        "coverageStatus": "covered",
+        "confidence": "high",
+        "evidence": ["coverageStatus=covered", "bestScore=89.8", "bestCandidate=asset_001"],
+        "limitations": ["Candidate may need crop or reframing for the target aspect ratio."]
+      },
+      {
+        "slotId": "slot_comparison",
+        "affectedSegmentId": "seg_compare",
+        "slotRole": "comparison",
+        "slotIntent": "Show a contrast or lineup moment.",
+        "sourceInstance": "source comparison beat",
+        "acceptanceCriteria": ["lineup", "before after"],
+        "requiredIngredients": [
+          {
+            "id": "slot_comparison_comparison_evidence",
+            "kind": "comparison_evidence",
+            "label": "comparison or lineup evidence",
+            "requiredBy": { "segmentId": "seg_compare", "slotId": "slot_comparison" },
+            "importance": "medium"
+          }
+        ],
+        "availableIngredients": [],
+        "missingIngredients": [],
+        "weakIngredients": [
+          {
+            "requiredIngredientId": "slot_comparison_comparison_evidence",
+            "label": "comparison or lineup evidence",
+            "reason": "Single product image only weakly supports comparison.",
+            "evidence": ["bestScore=55", "coverageStatus=weak"]
+          }
+        ],
+        "candidateAssets": [
+          {
+            "assetId": "asset_001",
+            "score": 55,
+            "fitStatus": "usable",
+            "usableAs": "image_clip",
+            "mediaReadiness": {
+              "hasUsableUrl": true,
+              "hasLocalPath": true,
+              "hasThumbnail": false,
+              "hasKeyframe": false,
+              "hasDuration": false
+            },
+            "constraints": {
+              "maxRecommendedDurationSec": 2.4,
+              "needsCrop": true,
+              "needsOverlaySupport": true,
+              "notEnoughForStandaloneShot": true,
+              "textSafeAreaRisk": false
+            },
+            "evidence": {
+              "affordanceScore": 55,
+              "qualityScore": 84,
+              "semanticSignals": ["Clean product packshot with strong label visibility."],
+              "keyframeIds": [],
+              "reasons": ["Single product image weakly supports comparison."],
+              "warnings": []
+            }
+          }
+        ],
+        "coverageStatus": "weak",
+        "confidence": "medium",
+        "evidence": ["coverageStatus=weak", "bestScore=55", "bestCandidate=asset_001"],
+        "limitations": ["Candidate should not be treated as a final standalone shot without downstream planning."]
+      },
+      {
+        "slotId": "slot_usage",
+        "affectedSegmentId": "seg_usage",
+        "slotRole": "usage_demo",
+        "slotIntent": "Prove the drink in a real usage moment.",
+        "sourceInstance": "source hand demo | hand-operation motion",
+        "acceptanceCriteria": ["hand operation", "usage moment", "believable action"],
+        "requiredIngredients": [
+          {
+            "id": "slot_usage_usage_evidence",
+            "kind": "usage_evidence",
+            "label": "real use or hand-operation evidence",
+            "requiredBy": { "segmentId": "seg_usage", "slotId": "slot_usage", "acceptanceCriteria": "hand operation" },
+            "importance": "high"
+          },
+          {
+            "id": "slot_usage_motion",
+            "kind": "motion",
+            "label": "hand_operation",
+            "requiredBy": { "segmentId": "seg_usage", "slotId": "slot_usage" },
+            "importance": "high"
+          }
+        ],
+        "availableIngredients": [],
+        "missingIngredients": [
+          {
+            "requiredIngredientId": "slot_usage_usage_evidence",
+            "label": "real use or hand-operation evidence",
+            "reason": "Current library has still images and text but no hand-operation footage.",
+            "evidence": ["bestScore=48", "coverageStatus=insufficient"]
+          },
+          {
+            "requiredIngredientId": "slot_usage_motion",
+            "label": "hand_operation",
+            "reason": "Current library has no video motion evidence.",
+            "evidence": ["bestScore=48", "coverageStatus=insufficient"]
+          }
+        ],
+        "weakIngredients": [],
+        "candidateAssets": [
+          {
+            "assetId": "asset_002",
+            "score": 48,
+            "fitStatus": "weak",
+            "usableAs": "image_clip",
+            "mediaReadiness": {
+              "hasUsableUrl": true,
+              "hasLocalPath": true,
+              "hasThumbnail": false,
+              "hasKeyframe": false,
+              "hasDuration": false
+            },
+            "constraints": {
+              "maxRecommendedDurationSec": 2.4,
+              "needsCrop": true,
+              "needsOverlaySupport": true,
+              "notEnoughForStandaloneShot": true,
+              "textSafeAreaRisk": false
+            },
+            "evidence": {
+              "affordanceScore": 48,
+              "qualityScore": 88,
+              "semanticSignals": ["High-energy splash still with product and ice cues.", "beverage bottle", "ice cubes", "liquid splash", "product"],
+              "keyframeIds": [],
+              "reasons": ["Image lacks hand-operation motion evidence."],
+              "warnings": ["No real usage motion evidence is available."]
+            }
+          }
+        ],
+        "coverageStatus": "insufficient",
+        "confidence": "low",
+        "evidence": ["coverageStatus=insufficient", "bestScore=48", "bestCandidate=asset_002"],
+        "limitations": ["Candidate should not be treated as a final standalone shot without downstream planning."]
+      }
+    ],
+    "observations": [
+      {
+        "id": "coverage_observation_001_slot_comparison",
+        "affectedSegmentId": "seg_compare",
+        "affectedSlotId": "slot_comparison",
+        "slotRole": "comparison",
+        "slotIntent": "Show a contrast or lineup moment.",
+        "observationType": "weak_semantic_fit",
+        "requiredIngredients": [
+          {
+            "id": "slot_comparison_comparison_evidence",
+            "kind": "comparison_evidence",
+            "label": "comparison or lineup evidence",
+            "requiredBy": { "segmentId": "seg_compare", "slotId": "slot_comparison" },
+            "importance": "medium"
+          }
+        ],
+        "missingIngredients": [],
+        "availableButWeakIngredients": [
+          {
+            "requiredIngredientId": "slot_comparison_comparison_evidence",
+            "label": "comparison or lineup evidence",
+            "reason": "Single product image only weakly supports comparison.",
+            "evidence": ["bestScore=55", "coverageStatus=weak"]
+          }
+        ],
+        "bestCandidateAssetIds": ["asset_001"],
+        "potentialImpact": [
+          {
+            "type": "comparison_weakened",
+            "description": "Comparison section may need restructuring or generated support.",
+            "affectedMetric": "visualScriptAlignment",
+            "severity": "low"
+          }
+        ],
+        "severityEstimate": "low",
+        "confidence": "medium",
+        "evidence": ["coverageStatus=weak", "bestScore=55", "bestCandidate=asset_001"],
+        "ownership": "asset_manager_observation_only"
+      },
+      {
+        "id": "coverage_observation_002_slot_usage",
+        "affectedSegmentId": "seg_usage",
+        "affectedSlotId": "slot_usage",
+        "slotRole": "usage_demo",
+        "slotIntent": "Prove the drink in a real usage moment.",
+        "observationType": "missing_usage_evidence",
+        "requiredIngredients": [
+          {
+            "id": "slot_usage_usage_evidence",
+            "kind": "usage_evidence",
+            "label": "real use or hand-operation evidence",
+            "requiredBy": { "segmentId": "seg_usage", "slotId": "slot_usage", "acceptanceCriteria": "hand operation" },
+            "importance": "high"
+          },
+          {
+            "id": "slot_usage_motion",
+            "kind": "motion",
+            "label": "hand_operation",
+            "requiredBy": { "segmentId": "seg_usage", "slotId": "slot_usage" },
+            "importance": "high"
+          }
+        ],
+        "missingIngredients": [
+          {
+            "requiredIngredientId": "slot_usage_usage_evidence",
+            "label": "real use or hand-operation evidence",
+            "reason": "Current library has still images and text but no hand-operation footage.",
+            "evidence": ["bestScore=48", "coverageStatus=insufficient"]
+          },
+          {
+            "requiredIngredientId": "slot_usage_motion",
+            "label": "hand_operation",
+            "reason": "Current library has no video motion evidence.",
+            "evidence": ["bestScore=48", "coverageStatus=insufficient"]
+          }
+        ],
+        "availableButWeakIngredients": [],
+        "bestCandidateAssetIds": ["asset_002"],
+        "potentialImpact": [
+          {
+            "type": "usage_proof_missing",
+            "description": "Usage proof may need GapRepairPlanner or Video Agent treatment.",
+            "affectedMetric": "slotCoverage",
+            "severity": "high"
+          }
+        ],
+        "severityEstimate": "high",
+        "confidence": "low",
+        "evidence": ["coverageStatus=insufficient", "bestScore=48", "bestCandidate=asset_002"],
+        "ownership": "asset_manager_observation_only"
+      }
+    ],
+    "warnings": []
+  },
+  "warnings": [
+    "No real usage motion evidence is available.",
+    "Text asset can support overlays but not standalone visual evidence."
+  ]
+}

@@ -64,7 +64,7 @@ Frontend state is centralized in `apps/web/lib/workflowStore.ts`. The store keep
 |---|---|---|
 | `/api/videos/*` | `videoAnalyzer`, `videoPaths` | seed/upload parsing, ffprobe metadata, cover/keyframes |
 | `/api/structure/extract` | `structureExtractor` | artifact-first structure graph extraction with fallback |
-| `/api/assets/*` | `assetAnalyzer`, `demoAssetLibrary` | AssetCard analysis and static library loading |
+| `/api/assets/*` | `assetAnalyzer`, `assetManagerService`, `demoAssetLibrary` | AssetCard analysis, optional VLM enrichment, and static library loading |
 | `/api/slots/match` | `slotMatcher` | `matchSlotsWithFallback` |
 | `/api/gaps/repair` | `gapRepairPlanner` | `planGapRepairsWithFallback` |
 | `/api/timeline/generate` | `timelineGenerator` | `generateTimelineWithFallback` |
@@ -121,6 +121,20 @@ Structured understanding of user or demo assets:
 - visual content
 - motion potential
 - creative ingredients
+- optional `analysis.vlm` evidence when `ASSET_VLM_ENABLED=true` and model output passes schema validation
+
+### `AssetSupplyContext`
+
+Asset Manager handoff packet for material-supply evidence:
+
+- normalized `AssetCard[]`
+- `AssetLibraryReport`
+- `ContextualAssetCoverageReport`
+- `ContextualSlotCoverage[]`
+- `MaterialCoverageObservation[]`
+- `SlotAssetCandidate[]`
+
+It does not own final slot matching, final material gap creation, repair strategy, fallback card rendering, timeline composition, or MP4 rendering.
 
 ### `SlotMatch`
 
@@ -181,6 +195,7 @@ Try LLM enhanced path
 
 Current fallback paths:
 
+- asset analysis: deterministic `AssetAnalysisProfile`; optional VLM adapter is disabled by default and falls back to deterministic output on missing key, invalid JSON, schema rejection, or safety risk
 - slot matching: rule-based `matchSlots`
 - gap repair: rule-based `planGapRepairs`
 - timeline generation: template `generateTimelineMock`
@@ -193,4 +208,4 @@ Current fallback paths:
 - Real MP4 export is not implemented as a stable user-facing feature.
 - ASR is not the main standard-flow dependency; manual transcript and artifacts remain important fallbacks.
 - Natural language editing is a rule-based timeline patch system, not a full intelligent video editor.
-- Asset understanding is lightweight and demo-oriented, not a full VLM asset management product.
+- Asset understanding has deterministic media/quality/affordance analysis plus an optional VLM adapter, but it is still demo-oriented and not a full VLM asset management product.
