@@ -51,8 +51,13 @@ interface ProjectState {
   nlApplying: boolean;
   exporting: boolean;
   warnings: string[];
+  /** Real error message from the last failed API call (null when the last call
+   * succeeded or no call has been made yet). Distinguishes a genuine failure
+   * from the default-mock state so the UI can surface it instead of swallowing it. */
+  lastError: string | null;
 
   // ── actions ───────────────────────────────────────────────
+  dismissWarnings: () => void;
   analyzeSample: (input: { file?: File; sampleId?: string }) => Promise<void>;
   addMaterials: (files: File[]) => Promise<void>;
   setSlot: (materialId: string, slot: string | null) => void;
@@ -68,6 +73,11 @@ interface ProjectState {
 }
 
 const MOCK_NOTE = '后端未连接 · 使用本地示例数据';
+
+/** Normalize a thrown value into a human-readable message. */
+function errMsg(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
 
 /** Derive a playable timeline from the structure + diagnosis (mock fallback). */
 function deriveTimeline(sourceVideo: SourceVideo, diagnosis: Record<string, Diagnosis>): TimelineSeg[] {
@@ -102,21 +112,24 @@ const initialState = {
   nlApplying: false,
   exporting: false,
   warnings: [] as string[],
+  lastError: null as string | null,
 };
 
 export const useProjectStore = create<ProjectState>()((set, get) => ({
   ...initialState,
 
+  dismissWarnings: () => set({ warnings: [], lastError: null }),
+
   analyzeSample: async (input) => {
-    set({ analyzing: true });
+    set({ analyzing: true, lastError: null });
     try {
       const { sourceVideo, warnings } = await analyzeSampleApi(input);
       set({ sourceVideo, mode: 'live', warnings: warnings ?? [] });
-    } catch {
+    } catch (e) {
       // Fallback: keep the mock sample (optionally retitle to the uploaded file).
       const base = get().sourceVideo;
       const sourceVideo = input.file ? { ...base, title: input.file.name.replace(/\.[^.]+$/, '') } : base;
-      set({ sourceVideo, mode: 'mock', warnings: [MOCK_NOTE] });
+      set({ sourceVideo, mode: 'mock', warnings: [MOCK_NOTE], lastError: errMsg(e) });
     } finally {
       set({ analyzing: false });
     }
@@ -124,11 +137,11 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
 
   addMaterials: async (files) => {
     if (files.length === 0) return;
-    set({ uploading: true });
+    set({ uploading: true, lastError: null });
     try {
       const { materials, warnings } = await uploadMaterialsApi(files, get().product);
       set({ materials, mode: 'live', warnings: warnings ?? [] });
-    } catch {
+    } catch (e) {
       // Fallback: synthesize material cards from the file list.
       const existing = get().materials;
       const synthesized: Material[] = files.map((f, i) => ({
@@ -139,7 +152,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         quality: 0.7,
         color: '#3d4a3a',
       }));
-      set({ materials: [...existing, ...synthesized], mode: 'mock', warnings: [MOCK_NOTE] });
+      set({ materials: [...existing, ...synthesized], mode: 'mock', warnings: [MOCK_NOTE], lastError: errMsg(e) });
     } finally {
       set({ uploading: false });
     }
@@ -151,7 +164,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     })),
 
   applyAssignments: async (assignments) => {
-    set({ matching: true });
+    set({ matching: true, lastError: null });
     // Optimistically apply locally first (keeps UI snappy + is the mock result).
     const local = get().materials.map((m) =>
       m.id in assignments ? { ...m, slot: assignments[m.id] } : m
@@ -163,8 +176,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         assignments,
       });
       set({ materials, mode: 'live', warnings: warnings ?? [] });
-    } catch {
-      set({ materials: local, mode: 'mock', warnings: [MOCK_NOTE] });
+    } catch (e) {
+      set({ materials: local, mode: 'mock', warnings: [MOCK_NOTE], lastError: errMsg(e) });
     } finally {
       set({ matching: false });
     }
@@ -173,7 +186,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   updateProduct: (product) => set({ product }),
 
   runDiagnosis: async () => {
-    set({ diagnosing: true });
+    set({ diagnosing: true, lastError: null });
     try {
       const { diagnosis, warnings } = await diagnoseApi({
         sourceVideo: get().sourceVideo,
@@ -181,8 +194,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         product: get().product,
       });
       set({ diagnosis, mode: 'live', warnings: warnings ?? [] });
-    } catch {
-      set({ diagnosis: SLOT_DIAGNOSIS, mode: 'mock', warnings: [MOCK_NOTE] });
+    } catch (e) {
+      set({ diagnosis: SLOT_DIAGNOSIS, mode: 'mock', warnings: [MOCK_NOTE], lastError: errMsg(e) });
     } finally {
       set({ diagnosing: false });
     }
@@ -190,7 +203,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
 
   applyStrategy: async (slotId) => {
     // Mark applied immediately for responsiveness.
-    set((state) => ({ appliedSlots: { ...state.appliedSlots, [slotId]: true } }));
+    set((state) => ({ appliedSlots: { ...state.appliedSlots, [slotId]: true }, lastError: null }));
     try {
       const { diagnosis, appliedSlots, warnings } = await applyStrategyApi({
         slotId,
@@ -201,15 +214,15 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       const applied: Record<string, boolean> = { ...get().appliedSlots };
       appliedSlots.forEach((s) => (applied[s] = true));
       set({ diagnosis, appliedSlots: applied, mode: 'live', warnings: warnings ?? [] });
-    } catch {
-      set({ mode: 'mock', warnings: [MOCK_NOTE] });
+    } catch (e) {
+      set({ mode: 'mock', warnings: [MOCK_NOTE], lastError: errMsg(e) });
     }
   },
 
   selectVersion: (selectedVersionId) => set({ selectedVersionId, timeline: null }),
 
   compile: async () => {
-    set({ compiling: true });
+    set({ compiling: true, lastError: null });
     try {
       const { version, timeline, warnings } = await compileApi({
         sourceVideo: get().sourceVideo,
@@ -218,15 +231,15 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         versionId: get().selectedVersionId,
       });
       set({ timeline, selectedVersionId: version.id, mode: 'live', warnings: warnings ?? [] });
-    } catch {
-      set({ timeline: deriveTimeline(get().sourceVideo, get().diagnosis), mode: 'mock', warnings: [MOCK_NOTE] });
+    } catch (e) {
+      set({ timeline: deriveTimeline(get().sourceVideo, get().diagnosis), mode: 'mock', warnings: [MOCK_NOTE], lastError: errMsg(e) });
     } finally {
       set({ compiling: false });
     }
   },
 
   applyNlEdit: async (instruction) => {
-    set({ nlApplying: true });
+    set({ nlApplying: true, lastError: null });
     const timeline = get().timeline ?? deriveTimeline(get().sourceVideo, get().diagnosis);
     try {
       const res = await nlEditApi({
@@ -237,8 +250,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       });
       set({ timeline: res.timeline, mode: 'live', warnings: res.warnings ?? [] });
       return res.patchSummary;
-    } catch {
-      set({ timeline, mode: 'mock', warnings: [MOCK_NOTE] });
+    } catch (e) {
+      set({ timeline, mode: 'mock', warnings: [MOCK_NOTE], lastError: errMsg(e) });
       return `已记录改片指令：${instruction}`;
     } finally {
       set({ nlApplying: false });
@@ -246,15 +259,15 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   },
 
   exportVideo: async (format) => {
-    set({ exporting: true });
+    set({ exporting: true, lastError: null });
     const timeline = get().timeline ?? deriveTimeline(get().sourceVideo, get().diagnosis);
     try {
       const result = await exportApi({ versionId: get().selectedVersionId, format, timeline });
       set({ exportResult: result, mode: 'live', warnings: result.warnings ?? [] });
       return result;
-    } catch {
+    } catch (e) {
       const result: ExportResult = { jobId: `mock-${Date.now()}`, status: 'done', progress: 100 };
-      set({ exportResult: result, mode: 'mock', warnings: [MOCK_NOTE] });
+      set({ exportResult: result, mode: 'mock', warnings: [MOCK_NOTE], lastError: errMsg(e) });
       return result;
     } finally {
       set({ exporting: false });

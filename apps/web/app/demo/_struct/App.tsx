@@ -5,6 +5,7 @@
 
 import { useState } from 'react';
 import { Sidebar, Spine } from './components';
+import { ConnectionBadge, StatusBanner } from './ConnectionStatus';
 import { ScreenMaterials, ScreenSource } from './screens-ab';
 import { ScreenCompile, ScreenDiagnose } from './screens-cd';
 import { ScreenLibrary } from './screen-library';
@@ -32,7 +33,9 @@ export default function App() {
           activeStep={step}
           setStep={(s) => { setStep(s); setToolView(null); }}
           projectId="JADE-MOM-2026"
+          statusSlot={<ConnectionBadge />}
         />
+        <StatusBanner />
         <div className="main" data-screen-label={screenLabel}>
           {toolView === 'library' && (
             <ScreenLibrary onBack={() => setToolView(null)} />
