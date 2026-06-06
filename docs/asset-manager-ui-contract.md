@@ -86,6 +86,12 @@ Fallback behavior: if `structureGraph.shotSlots` is missing or empty, coverage f
 
 Canonical handoff for UI teammates, SlotMatcher, GapRepairPlanner, and future Video Agent work.
 
+Versioning:
+
+- `protocolVersion` is `asset-supply-v1`.
+- New fields should be additive and optional where possible.
+- UI should tolerate missing optional fields and display `warnings`.
+
 Response:
 
 ```json
@@ -147,6 +153,16 @@ Not implemented. UI should filter returned `assetCards` client-side for now.
 
 Use `/api/slots/match` and `/api/gaps/repair` as the final sources of `SlotMatch`, `MaterialGap`, and `GapRepair`. Asset Manager rows are supporting material-supply evidence.
 
+Backend helpers for downstream data joins:
+
+- `getCoverageForSlot(assetSupplyContext, slotId)`
+- `getBestCandidatesForSlot(assetSupplyContext, slotId)`
+- `getObservationsForSlot(assetSupplyContext, slotId)`
+- `getMissingIngredientsForSlot(assetSupplyContext, slotId)`
+- `summarizeCoverageForSlot(assetSupplyContext, slotId)`
+
+These helpers are pure functions and return evidence only. UI should not present their result as final repair strategy.
+
 ## 6. Field Mapping for `/result` Migration Evidence
 
 | Evidence field | Source field |
@@ -179,10 +195,17 @@ Sample: `docs/examples/asset-evidence-sample.json`
 - Optional VLM is not required for the main demo.
 - `analysis.vlm` is optional model evidence, not proof of real product claims.
 - Do not claim complete video understanding.
+- Do not call Asset Manager output a full video understanding system.
 - Do not claim SAM2, GroundingDINO, SigLIP2, VideoRAG, or full long-video temporal grounding as implemented.
 - Do not claim real user data or real CTR.
 - Do not claim all missing assets are generated.
 - Asset Manager does not render fallback cards or choose repair strategy.
+
+Defense wording:
+
+> Asset Manager does not decide how to repair the gap. It explains why the asset supply is insufficient for a structural slot: which ingredient is missing, which segment is affected, which candidate assets are weak, and what impact this has on hook strength, product clarity, usage proof, CTA clarity, or packaging risk. SlotMatcher and GapRepairPlanner then use this evidence to make final matching and repair decisions.
+
+> Asset Manager 不决定怎么补缺口。它只解释为什么当前素材供给不足以支撑某个结构槽位：缺了哪个素材要素、影响哪个段落、哪些候选素材只是弱覆盖，以及这会怎样影响开头吸引力、商品清晰度、使用证明、CTA 清晰度或包装风险。最终的匹配和补全策略仍由 SlotMatcher 与 GapRepairPlanner 决定。
 
 ## 9. Integration Checklist
 

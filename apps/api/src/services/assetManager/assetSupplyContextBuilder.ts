@@ -110,7 +110,10 @@ function buildSlotCoverage(
   assetById: Map<string, AssetCard>
 ): ContextualSlotCoverage {
   const requiredIngredients = buildRequiredIngredients(row, slot);
-  const candidateAssets = row.candidates.slice(0, 3).map((candidate) => buildCandidate(candidate, row, assetById.get(candidate.assetId)));
+  const candidateAssets = row.candidates
+    .map((candidate) => buildCandidate(candidate, row, assetById.get(candidate.assetId)))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
   const coverageStatus = row.status === 'missing' ? 'insufficient' : row.status;
   const bestCandidate = candidateAssets[0];
   const availableIngredients = buildAvailableIngredients(requiredIngredients, row, bestCandidate);
@@ -154,70 +157,78 @@ function buildRequiredIngredients(row: SlotCoverageRow, slot?: ShotSlotNode): Re
   }];
 
   if (slot?.requiredAsset.motion && slot.requiredAsset.motion !== 'static' && slot.requiredAsset.motion !== 'unknown') {
-    base.push({
-      id: `${safeId(slotId)}_motion`,
-      kind: 'motion',
-      label: slot.requiredAsset.motion,
-      requiredBy: { segmentId, slotId },
-      importance: slot.requiredAsset.type === 'video' ? 'high' : 'medium'
-    });
+    addIngredient(base, slotId, segmentId, 'motion', slot.requiredAsset.motion, slot.requiredAsset.type === 'video' ? 'high' : 'medium');
   }
   if (slot?.requiredAsset.minDuration) {
-    base.push({
-      id: `${safeId(slotId)}_duration`,
-      kind: 'duration',
-      label: `${slot.requiredAsset.minDuration}s minimum duration`,
-      requiredBy: { segmentId, slotId },
-      importance: 'medium'
-    });
+    addIngredient(base, slotId, segmentId, 'duration', `${slot.requiredAsset.minDuration}s minimum duration`, 'medium');
   }
-  if (['product_closeup', 'opening_hook', 'cover'].includes(row.mappedRole)) {
-    base.push({
-      id: `${safeId(slotId)}_product_evidence`,
-      kind: 'product_evidence',
-      label: 'clear product or packaging evidence',
-      requiredBy: { segmentId, slotId, acceptanceCriteria: firstAcceptanceCriterion(slot) },
-      importance: 'high'
-    });
-  }
-  if (row.mappedRole === 'usage_demo') {
-    base.push({
-      id: `${safeId(slotId)}_usage_evidence`,
-      kind: 'usage_evidence',
-      label: 'real use or hand-operation evidence',
-      requiredBy: { segmentId, slotId, acceptanceCriteria: firstAcceptanceCriterion(slot) },
-      importance: 'high'
-    });
-  }
-  if (row.mappedRole === 'comparison') {
-    base.push({
-      id: `${safeId(slotId)}_comparison_evidence`,
-      kind: 'comparison_evidence',
-      label: 'before/after or lineup comparison evidence',
-      requiredBy: { segmentId, slotId },
-      importance: 'medium'
-    });
-  }
-  if (row.mappedRole === 'cta') {
-    base.push({
-      id: `${safeId(slotId)}_cta_surface`,
-      kind: 'cta_surface',
-      label: 'clear action or purchase guidance surface',
-      requiredBy: { segmentId, slotId },
-      importance: 'high'
-    });
-  }
-  if (row.mappedRole === 'packaging_card' || row.mappedRole === 'cta') {
-    base.push({
-      id: `${safeId(slotId)}_text_safe_area`,
-      kind: 'text_safe_area',
-      label: 'safe area for readable overlay text',
-      requiredBy: { segmentId, slotId },
-      importance: 'medium'
-    });
-  }
+  addRoleSpecificIngredients(base, row, slot);
 
   return base;
+}
+
+function addRoleSpecificIngredients(ingredients: RequiredIngredient[], row: SlotCoverageRow, slot?: ShotSlotNode): void {
+  const segmentId = row.segmentId;
+  const slotId = row.slotId;
+  const role = row.mappedRole;
+
+  if (role === 'opening_hook') {
+    addIngredient(ingredients, slotId, segmentId, 'text_safe_area', 'safe area for opening hook copy', 'medium');
+    addIngredient(ingredients, slotId, segmentId, 'aspect_ratio', 'target aspect ratio support', 'medium');
+    addIngredient(ingredients, slotId, segmentId, 'duration', 'enough hold time for opening hook', 'medium');
+    addIngredient(ingredients, slotId, segmentId, 'packaging_surface', 'surface for hook title or selling-point badge', 'medium');
+  }
+  if (role === 'product_closeup') {
+    addIngredient(ingredients, slotId, segmentId, 'product_evidence', 'clear product or packaging evidence', 'high', firstAcceptanceCriterion(slot));
+    addIngredient(ingredients, slotId, segmentId, 'text_safe_area', 'safe area for product label or short overlay', 'medium');
+    addIngredient(ingredients, slotId, segmentId, 'aspect_ratio', 'target aspect ratio support', 'medium');
+  }
+  if (role === 'usage_demo') {
+    addIngredient(ingredients, slotId, segmentId, 'usage_evidence', 'real use or hand-operation evidence', 'high', firstAcceptanceCriterion(slot));
+    addIngredient(ingredients, slotId, segmentId, 'motion', slot?.requiredAsset.motion ?? 'motion evidence', 'high');
+    addIngredient(ingredients, slotId, segmentId, 'duration', 'enough duration for a believable use moment', 'high');
+  }
+  if (role === 'comparison') {
+    addIngredient(ingredients, slotId, segmentId, 'comparison_evidence', 'before/after or lineup comparison evidence', 'medium');
+    addIngredient(ingredients, slotId, segmentId, 'text_safe_area', 'safe area for contrast copy', 'medium');
+    addIngredient(ingredients, slotId, segmentId, 'packaging_surface', 'surface for comparison label or callout', 'medium');
+  }
+  if (role === 'benefit_proof') {
+    addIngredient(ingredients, slotId, segmentId, 'product_evidence', 'product-linked proof for the selling point', 'medium');
+    addIngredient(ingredients, slotId, segmentId, 'packaging_surface', 'surface for benefit proof copy', 'medium');
+    addIngredient(ingredients, slotId, segmentId, 'text_safe_area', 'safe area for benefit caption', 'medium');
+  }
+  if (role === 'cta') {
+    addIngredient(ingredients, slotId, segmentId, 'cta_surface', 'clear action or purchase guidance surface', 'high');
+    addIngredient(ingredients, slotId, segmentId, 'product_evidence', 'product visible near CTA', 'medium');
+    addIngredient(ingredients, slotId, segmentId, 'text_safe_area', 'safe area for readable CTA copy', 'high');
+    addIngredient(ingredients, slotId, segmentId, 'duration', 'enough duration for action guidance', 'medium');
+  }
+  if (role === 'cover') {
+    addIngredient(ingredients, slotId, segmentId, 'product_evidence', 'clear product evidence for cover', 'high');
+    addIngredient(ingredients, slotId, segmentId, 'text_safe_area', 'safe area for cover title', 'medium');
+    addIngredient(ingredients, slotId, segmentId, 'aspect_ratio', 'cover aspect ratio support', 'medium');
+  }
+}
+
+function addIngredient(
+  ingredients: RequiredIngredient[],
+  slotId: string,
+  segmentId: string | undefined,
+  kind: RequiredIngredient['kind'],
+  label: string,
+  importance: RequiredIngredient['importance'],
+  acceptanceCriteria?: string
+): void {
+  const id = `${safeId(slotId)}_${kind}`;
+  if (ingredients.some((ingredient) => ingredient.id === id)) return;
+  ingredients.push({
+    id,
+    kind,
+    label,
+    requiredBy: { segmentId, slotId, acceptanceCriteria },
+    importance
+  });
 }
 
 function buildAvailableIngredients(
@@ -261,10 +272,24 @@ function buildMissingIngredients(
 function buildCandidate(candidate: SlotCandidateAsset, row: SlotCoverageRow, asset?: AssetCard): SlotAssetCandidate {
   const keyframes = asset?.analysis?.media.keyframes ?? [];
   const sourceUrl = asset?.analysis?.media.sourceUrl ?? asset?.url;
+  const mediaReadinessScore = scoreMediaReadiness(asset, sourceUrl, keyframes.length);
+  const safetyScore = asset?.analysis?.safety.status === 'blocked'
+    ? 0
+    : asset?.analysis?.safety.status === 'needs_review'
+      ? 55
+      : 100;
+  const score = roundScore(
+    0.30 * candidate.roleAffordance
+    + 0.20 * candidate.assetQuality
+    + 0.15 * mediaReadinessScore
+    + 0.15 * candidate.intentSemanticMatch
+    + 0.10 * candidate.editabilityFit
+    + 0.10 * safetyScore
+  );
   return {
     assetId: candidate.assetId,
-    score: candidate.score,
-    fitStatus: candidate.score >= 75 ? 'strong' : candidate.score >= 50 ? 'usable' : 'weak',
+    score,
+    fitStatus: score >= 75 ? 'strong' : score >= 50 ? 'usable' : 'weak',
     usableAs: mapUsableAs(asset, row.mappedRole),
     mediaReadiness: {
       hasUsableUrl: Boolean(sourceUrl),
@@ -285,10 +310,25 @@ function buildCandidate(candidate: SlotCandidateAsset, row: SlotCoverageRow, ass
       qualityScore: candidate.assetQuality,
       semanticSignals: buildSemanticSignals(asset),
       keyframeIds: keyframes.map((keyframe) => keyframe.id),
-      reasons: [candidate.rationale],
+      reasons: [
+        candidate.rationale,
+        `ranking=0.30*roleAffordance(${candidate.roleAffordance}) + 0.20*quality(${candidate.assetQuality}) + 0.15*mediaReadiness(${mediaReadinessScore}) + 0.15*semantic(${candidate.intentSemanticMatch}) + 0.10*editability(${candidate.editabilityFit}) + 0.10*safety(${safetyScore})`
+      ],
       warnings: asset?.analysis?.warnings ?? []
     }
   };
+}
+
+function scoreMediaReadiness(asset: AssetCard | undefined, sourceUrl: string | undefined, keyframeCount: number): number {
+  if (!asset) return 0;
+  let score = 0;
+  if (sourceUrl) score += 35;
+  if (sourceUrl && !/^https?:\/\//i.test(sourceUrl)) score += 10;
+  if (keyframeCount > 0) score += 20;
+  if (typeof asset.analysis?.media.durationSec === 'number') score += 15;
+  if (asset.type === 'image' || asset.type === 'text') score += 10;
+  if (asset.analysis?.media.width && asset.analysis.media.height) score += 10;
+  return Math.min(100, score);
 }
 
 function buildObservation(coverage: ContextualSlotCoverage, index: number): MaterialCoverageObservation {

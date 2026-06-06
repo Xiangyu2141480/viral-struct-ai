@@ -48,12 +48,15 @@ export function normalizeAssetCards(cards: AssetCard[]): AssetCard[] {
 
 function buildDefaultAnalysis(card: AssetCard): AssetAnalysisProfile {
   const issues = buildIssues(card);
+  const warnings = card.analysis
+    ? []
+    : ['Asset analysis was deterministically normalized from legacy AssetCard fields.'];
   return {
     profileVersion: 'asset_analysis_v1',
     analyzedAt: DEFAULT_ANALYZED_AT,
     source: card.analysisSource,
     fallbackUsed: card.analysisSource !== 'llm_multimodal',
-    warnings: [],
+    warnings,
     media: {
       kind: card.type,
       sourceUrl: card.url,

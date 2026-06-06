@@ -10,6 +10,7 @@ Asset Manager does not render fallback cards, choose repair strategy, create fin
 
 - Canonical response: `protocolVersion: "asset-supply-v1"`
 - Canonical endpoint: `POST /api/assets/manager/asset-supply-context`
+- Compatibility rule: new fields should be additive and optional where possible; consumers should tolerate missing optional fields and read `warnings`.
 - Legacy alias: `POST /api/assets/manager/video-agent-bundle`
   - The route name is kept for compatibility.
   - Its response is still `asset-supply-v1`.
@@ -89,12 +90,37 @@ For each `ContextualSlotCoverage`:
 4. Read `candidateAssets[].constraints`.
 5. If coverage is `weak` or `insufficient`, use `observations[]` as evidence, then wait for or request `GapRepair` output.
 
+Usage rules:
+
+1. `covered`
+   - Use the top candidate if `mediaReadiness` is sufficient.
+   - Still inspect `constraints` before treating the asset as a full clip.
+2. `weak`
+   - Use the candidate as supporting visual evidence only.
+   - Inspect `constraints`.
+   - Pair it with downstream `GapRepair`, overlay, card, or render treatment chosen by the Video Agent.
+3. `insufficient`
+   - Do not force media usage.
+   - Defer to GapRepairPlanner or Video Agent fallback rendering.
+   - Treat candidate assets as references or partial evidence, not complete material.
+
 For each `SlotAssetCandidate`:
 
 - `usableAs` means what the asset can safely support, such as `image_clip`, `video_clip`, `poster_frame`, or `overlay_support`.
 - `constraints.notEnoughForStandaloneShot` means the candidate should not be treated as a final shot without downstream planning.
+- `constraints.needsOverlaySupport` means the candidate is usable only with text/card/supporting render treatment.
+- `constraints.textSafeAreaRisk` means avoid heavy overlay or ask the Video Agent to create a safer card/layout.
 - `mediaReadiness.hasUsableUrl` and `hasLocalPath` are readiness evidence, not permission to read arbitrary paths.
 - `evidence` includes role affordance, quality, semantic signals, keyframe IDs, reasons, and warnings.
+
+Allowed `usableAs` values:
+
+- `video_clip`
+- `image_clip`
+- `poster_frame`
+- `background_plate`
+- `overlay_support`
+- `reference_only`
 
 For each `MaterialCoverageObservation`:
 
@@ -134,6 +160,26 @@ GapRepairPlanner should:
 - consume `MaterialCoverageObservation` as supporting evidence
 - choose repair strategy and shoot/spec/card guidance
 - own any title card, benefit card, CTA card, crop/reuse, AIGC, or shoot-request strategy
+
+Helper functions are available in `apps/api/src/services/assetManager/assetSupplyContextUtils.ts`:
+
+- `getCoverageForSlot(assetSupplyContext, slotId)`
+- `getBestCandidatesForSlot(assetSupplyContext, slotId)`
+- `getObservationsForSlot(assetSupplyContext, slotId)`
+- `getMissingIngredientsForSlot(assetSupplyContext, slotId)`
+- `summarizeCoverageForSlot(assetSupplyContext, slotId)`
+
+These helpers return evidence only. They must not be treated as final gap or repair decisions.
+
+## Defense Statement
+
+English:
+
+> Asset Manager does not decide how to repair the gap. It explains why the asset supply is insufficient for a structural slot: which ingredient is missing, which segment is affected, which candidate assets are weak, and what impact this has on hook strength, product clarity, usage proof, CTA clarity, or packaging risk. SlotMatcher and GapRepairPlanner then use this evidence to make final matching and repair decisions.
+
+中文：
+
+> Asset Manager 不决定怎么补缺口。它只解释为什么当前素材供给不足以支撑某个结构槽位：缺了哪个素材要素、影响哪个段落、哪些候选素材只是弱覆盖，以及这会怎样影响开头吸引力、商品清晰度、使用证明、CTA 清晰度或包装风险。最终的匹配和补全策略仍由 SlotMatcher 与 GapRepairPlanner 决定。
 
 ## Safety and Honesty
 
