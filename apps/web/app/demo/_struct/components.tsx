@@ -39,6 +39,9 @@ export const Icon = ({ name, size = 18 }: { name: string; size?: number }) => {
     check:     <path d="M5 12l5 5L20 7" fill="none" stroke="currentColor" strokeWidth="2" />,
     sparkle:   <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z" fill="currentColor" />,
     waveform:  <g stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M3 12h2M7 8v8M11 5v14M15 9v6M19 7v10M21 12h0" /></g>,
+    alert:     <g fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M12 3L1.5 21h21L12 3z" /><path d="M12 10v5" /><circle cx="12" cy="18" r="0.6" fill="currentColor" stroke="none" /></g>,
+    info:      <g fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="12" cy="12" r="9" /><path d="M12 11v5" /><circle cx="12" cy="7.5" r="0.6" fill="currentColor" stroke="none" /></g>,
+    close:     <path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />,
   };
   return (
     <svg width={size} height={size} viewBox="0 0 24 24">{paths[name] || null}</svg>
@@ -53,12 +56,14 @@ export const Spine = ({
   labOpen,
   setLabOpen,
   projectId,
+  statusSlot,
 }: {
   activeStep: string;
   setStep: (s: string) => void;
   labOpen?: boolean;
   setLabOpen?: (b: boolean) => void;
   projectId?: string;
+  statusSlot?: ReactNode;
 }) => {
   const activeIdx = STEPS.findIndex(s => s.id === activeStep);
   const totalSteps = STEPS.length;
@@ -105,6 +110,7 @@ export const Spine = ({
       </div>
 
       <div className="spine-side">
+        {statusSlot}
         <div className="spine-progress">
           <div className="spine-progress-bar">
             <div className="spine-progress-fill" style={{ width: `${progressPct}%` }} />
