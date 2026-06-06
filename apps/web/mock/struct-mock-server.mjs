@@ -3,7 +3,7 @@
 // Purpose: let the frontend verify its wiring against the documented contract
 // (docs/API_CONTRACT.md §10) BEFORE the real backend ships those routes. Run it,
 // open /demo, and every screen flips to LIVE — proving the fetch/parse/render
-// chain matches the shapes in apps/web/app/demo/_struct/api/types.ts.
+// chain matches the shapes in apps/web/app/_struct/api/types.ts.
 //
 // It impersonates the backend on port 4000 (the frontend's default
 // NEXT_PUBLIC_API_BASE), so no env config is needed. Run EITHER this OR the real

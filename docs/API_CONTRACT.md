@@ -586,12 +586,12 @@
 ## 10. StructMigrate 演示页专用接口（`/api/struct/*`）
 
 > ⚠️ 这一组是 **新增、待后端实现** 的接口，专供 `/demo` 的「爆款结构迁移引擎」四屏 UI
-> （`apps/web/app/demo/_struct/`）。与第 1–9 节不同，它们消费的是该 UI **自有的数据模型**，
+> （`apps/web/app/_struct/`）。与第 1–9 节不同，它们消费的是该 UI **自有的数据模型**，
 > **不复用** `@viral-struct/shared`，因此后端按本节给出的 TS 形状返回即可，前端无需做类型桥接。
 >
 > 类型源文件（以此为准）：
-> - 业务对象：`apps/web/app/demo/_struct/data.ts`（`SourceVideo` / `Material` / `Diagnosis` / `CompileVersion` / `TargetProduct` 等）
-> - 请求/响应 DTO：`apps/web/app/demo/_struct/api/types.ts`
+> - 业务对象：`apps/web/app/_struct/data.ts`（`SourceVideo` / `Material` / `Diagnosis` / `CompileVersion` / `TargetProduct` 等）
+> - 请求/响应 DTO：`apps/web/app/_struct/api/types.ts`
 >
 > **降级约定（重要）：** 这些接口任意一个不可用（网络错误 / 未实现 / 非 2xx）时，前端会 **自动回退到本地示例数据**
 > 并把 `mode` 标记为 `mock`，因此后端逐个上线即可，未实现的接口不会阻断演示。
@@ -809,7 +809,7 @@ type ExportJobStatus = 'pending' | 'rendering' | 'done' | 'failed';
 
 ### 备注：暂未启用的前端可视化组件
 
-`apps/web/app/demo/_struct/viz.tsx` 中还有两个 **已实现但当前未渲染** 的备选诊断视图：
+`apps/web/app/_struct/viz.tsx` 中还有两个 **已实现但当前未渲染** 的备选诊断视图：
 
 - `DiagnosticRadar`：7 角色 × 满足度 雷达图
 - `GapHeatmap`：槽位 × 维度 缺口热力表
