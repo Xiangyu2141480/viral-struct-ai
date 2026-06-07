@@ -477,6 +477,7 @@ export const TransitionMotionGrammarHandoffSchema = z.object({
 
 export const MotifTypeSchema = z.enum([
   'surreal_assembly',
+  'kinetic_assembly_reveal',
   'kinetic_product_reveal',
   'dynamic_entry',
   'impact_activation',
@@ -488,6 +489,12 @@ export const MotifTypeSchema = z.enum([
 
 export const MotionTokenSchema = z.enum([
   'dynamic_entry',
+  'component_cascade',
+  'chaos_to_order',
+  'assembly_completion',
+  'interaction_activation',
+  'spectacle_burst',
+  'cta_reveal',
   'falling_object',
   'impact_beat',
   'snap_open',

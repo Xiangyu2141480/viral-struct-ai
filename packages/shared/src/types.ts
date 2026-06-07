@@ -601,6 +601,7 @@ export interface TransitionMotionGrammarHandoff {
 
 export type MotifType =
   | 'surreal_assembly'
+  | 'kinetic_assembly_reveal'
   | 'kinetic_product_reveal'
   | 'dynamic_entry'
   | 'impact_activation'
@@ -611,6 +612,12 @@ export type MotifType =
 
 export type MotionToken =
   | 'dynamic_entry'
+  | 'component_cascade'
+  | 'chaos_to_order'
+  | 'assembly_completion'
+  | 'interaction_activation'
+  | 'spectacle_burst'
+  | 'cta_reveal'
   | 'falling_object'
   | 'impact_beat'
   | 'snap_open'
