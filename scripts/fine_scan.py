@@ -1020,11 +1020,14 @@ def build_parser() -> argparse.ArgumentParser:
                              "higher block_workers just flattens the wave structure — N blocks "
                              "interleave candidates into the shared HTTP pipe instead of "
                              "running in ceil(N/3) serial waves.")
-    parser.add_argument("--max-concurrent-http", type=int, default=25,
+    parser.add_argument("--max-concurrent-http", type=int, default=40,
                         help="Global semaphore cap on simultaneous LLM API calls "
-                             "(upload + responses combined). Default 25 (sweet spot "
-                             "from W2-B: 50 caused write timeouts on large block "
-                             "uploads, 20 was the conservative baseline).")
+                             "(upload + responses combined). Default 40: interleaved "
+                             "A/B on project_example_1 showed 25->40 = +30% wall-clock "
+                             "(clean, non-overlapping arms), then 40/60/80 flat — fine "
+                             "scan saturates at ~40 because the block-worker tail "
+                             "serializes. Keep <=40: W2-B saw 50 cause write timeouts "
+                             "on large block uploads (20 was the conservative baseline).")
     parser.add_argument("--env", default=".env")
     parser.add_argument("--base-url", default="")
     parser.add_argument("--api-key", default="")
