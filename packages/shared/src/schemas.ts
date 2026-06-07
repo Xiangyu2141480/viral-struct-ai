@@ -965,6 +965,15 @@ export const GenerationProviderSchema = z.enum(['mock', 'seedance_2_0']);
 export const MissingMaterialGenerationModeSchema = z.enum(['image_to_video', 'text_to_video']);
 export const MissingMaterialGenerationStatusSchema = z.enum(['planned', 'ready', 'blocked']);
 
+export const MissingMaterialPromptMetadataSchema = z.object({
+  source: z.literal('prompt_compactor'),
+  originalPositivePromptLength: z.number().int().nonnegative(),
+  compactPositivePromptLength: z.number().int().nonnegative(),
+  targetMaxCharacters: z.number().int().positive(),
+  shotSpecPreserved: z.boolean(),
+  warnings: z.array(z.string())
+});
+
 export const MissingMaterialGenerationJobSchema = z.object({
   id: z.string(),
   gapId: z.string(),
@@ -983,6 +992,7 @@ export const MissingMaterialGenerationJobSchema = z.object({
   gapSeverity: z.enum(['low', 'medium', 'high']),
   repairStrategy: GapRepairStrategySchema.optional(),
   storyboardFrameId: z.string().optional(),
+  promptMetadata: MissingMaterialPromptMetadataSchema.optional(),
   safetyStatus: SafetyStatusSchema,
   blockedReason: z.string().optional(),
   disclaimer: z.string()
