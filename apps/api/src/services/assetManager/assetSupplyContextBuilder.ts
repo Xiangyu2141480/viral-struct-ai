@@ -57,7 +57,8 @@ export function buildAssetSupplyContext(input: BuildAssetSupplyContextInput): As
     contextualCoverage,
     assetCards: coverage.assetCards,
     contentBrief: input.contentBrief,
-    materialScenario: preliminaryScenario
+    materialScenario: preliminaryScenario,
+    structureGraph: input.structureGraph
   });
   const materialScenario = classifyMaterialScenario({
     assets: coverage.assetCards,
