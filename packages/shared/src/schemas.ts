@@ -388,6 +388,93 @@ export const AssetCardSchema = z.object({
   analysis: AssetAnalysisProfileSchema.optional()
 });
 
+export const TransitionGrammarIdSchema = z.enum([
+  'dynamic_entry',
+  'impact_beat',
+  'assembly_reveal',
+  'activation_moment',
+  'lockup_transition'
+]);
+
+export const TargetTransitionEquivalentSchema = z.enum([
+  'ice_cube_drop',
+  'open_cap',
+  'pour_to_cup',
+  'drink_neck_down',
+  'bottle_rotation',
+  'lineup_sweep',
+  'clean_cta_end_frame',
+  'hyperframes_benefit_card_drop'
+]);
+
+export const TransitionIngredientSchema = z.object({
+  id: z.string(),
+  grammarId: TransitionGrammarIdSchema,
+  label: z.string(),
+  sourcePattern: z.string(),
+  targetEquivalent: TargetTransitionEquivalentSchema,
+  requiredEvidence: z.array(z.string()),
+  acceptableAssetRoles: z.array(AssetManagerRoleSchema),
+  avoidCopyingSource: z.array(z.string())
+});
+
+export const TransitionNeedSchema = z.object({
+  id: z.string(),
+  grammarId: TransitionGrammarIdSchema,
+  sourceMotif: z.string(),
+  transferableIntent: z.string(),
+  targetEquivalent: TargetTransitionEquivalentSchema,
+  targetSlots: z.array(z.string()),
+  importance: z.enum(['low', 'medium', 'high']),
+  ingredients: z.array(TransitionIngredientSchema)
+});
+
+export const AssetTransitionAffordanceSchema = z.object({
+  assetId: z.string(),
+  supportsGrammar: z.array(TransitionGrammarIdSchema),
+  supportedIngredients: z.array(z.string()),
+  confidence: z.number().min(0).max(1),
+  evidence: z.array(z.string()),
+  limitations: z.array(z.string())
+});
+
+export const TransitionCoverageObservationSchema = z.object({
+  id: z.string(),
+  transitionNeedId: z.string(),
+  grammarId: TransitionGrammarIdSchema,
+  coverageStatus: z.enum(['covered', 'weak', 'insufficient']),
+  candidateAssetIds: z.array(z.string()),
+  missingIngredientIds: z.array(z.string()),
+  potentialImpact: z.array(z.string()),
+  confidence: z.enum(['low', 'medium', 'high']),
+  ownership: z.literal('asset_manager_transition_observation_only')
+});
+
+export const TransitionHandoffBriefSchema = z.object({
+  id: z.string(),
+  owner: z.enum(['video_agent', 'gap_repair', 'hyperframes', 'aigc', 'manual_shoot']),
+  transitionNeedIds: z.array(z.string()),
+  brief: z.string(),
+  prompt: z.string().optional(),
+  negativePrompt: z.string().optional(),
+  safetyNotes: z.array(z.string()),
+  notRenderedOutput: z.boolean()
+});
+
+export const TransitionMotionGrammarHandoffSchema = z.object({
+  protocolVersion: z.literal('transition-handoff-v1'),
+  patternId: z.literal('kinetic_assembly'),
+  sourceExample: z.string(),
+  targetProduct: z.string(),
+  designLanguage: z.string(),
+  boundary: z.array(z.string()),
+  transitionNeeds: z.array(TransitionNeedSchema),
+  assetAffordances: z.array(AssetTransitionAffordanceSchema),
+  coverageObservations: z.array(TransitionCoverageObservationSchema),
+  downstreamHandoff: z.array(TransitionHandoffBriefSchema),
+  warnings: z.array(z.string())
+});
+
 export const RoleCoverageSummarySchema = z.object({
   role: AssetManagerRoleSchema,
   status: z.enum(['covered', 'weak', 'missing']),

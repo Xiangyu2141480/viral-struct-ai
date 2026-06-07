@@ -512,6 +512,91 @@ export interface AssetCard {
   analysis?: AssetAnalysisProfile;
 }
 
+export type TransitionGrammarId =
+  | 'dynamic_entry'
+  | 'impact_beat'
+  | 'assembly_reveal'
+  | 'activation_moment'
+  | 'lockup_transition';
+
+export type TargetTransitionEquivalent =
+  | 'ice_cube_drop'
+  | 'open_cap'
+  | 'pour_to_cup'
+  | 'drink_neck_down'
+  | 'bottle_rotation'
+  | 'lineup_sweep'
+  | 'clean_cta_end_frame'
+  | 'hyperframes_benefit_card_drop';
+
+export interface TransitionIngredient {
+  id: string;
+  grammarId: TransitionGrammarId;
+  label: string;
+  sourcePattern: string;
+  targetEquivalent: TargetTransitionEquivalent;
+  requiredEvidence: string[];
+  acceptableAssetRoles: AssetManagerRole[];
+  avoidCopyingSource: string[];
+}
+
+export interface TransitionNeed {
+  id: string;
+  grammarId: TransitionGrammarId;
+  sourceMotif: string;
+  transferableIntent: string;
+  targetEquivalent: TargetTransitionEquivalent;
+  targetSlots: string[];
+  importance: 'low' | 'medium' | 'high';
+  ingredients: TransitionIngredient[];
+}
+
+export interface AssetTransitionAffordance {
+  assetId: string;
+  supportsGrammar: TransitionGrammarId[];
+  supportedIngredients: string[];
+  confidence: number;
+  evidence: string[];
+  limitations: string[];
+}
+
+export interface TransitionCoverageObservation {
+  id: string;
+  transitionNeedId: string;
+  grammarId: TransitionGrammarId;
+  coverageStatus: 'covered' | 'weak' | 'insufficient';
+  candidateAssetIds: string[];
+  missingIngredientIds: string[];
+  potentialImpact: string[];
+  confidence: 'low' | 'medium' | 'high';
+  ownership: 'asset_manager_transition_observation_only';
+}
+
+export interface TransitionHandoffBrief {
+  id: string;
+  owner: 'video_agent' | 'gap_repair' | 'hyperframes' | 'aigc' | 'manual_shoot';
+  transitionNeedIds: string[];
+  brief: string;
+  prompt?: string;
+  negativePrompt?: string;
+  safetyNotes: string[];
+  notRenderedOutput: boolean;
+}
+
+export interface TransitionMotionGrammarHandoff {
+  protocolVersion: 'transition-handoff-v1';
+  patternId: 'kinetic_assembly';
+  sourceExample: string;
+  targetProduct: string;
+  designLanguage: string;
+  boundary: string[];
+  transitionNeeds: TransitionNeed[];
+  assetAffordances: AssetTransitionAffordance[];
+  coverageObservations: TransitionCoverageObservation[];
+  downstreamHandoff: TransitionHandoffBrief[];
+  warnings: string[];
+}
+
 export interface RoleCoverageSummary {
   role: AssetManagerRole;
   status: 'covered' | 'weak' | 'missing';

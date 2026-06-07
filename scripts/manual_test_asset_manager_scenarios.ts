@@ -1,9 +1,14 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { AssetCard, AssetSupplyContext, ContentBrief, MissingMaterialBrief, ViralStructureGraph } from '@viral-struct/shared';
+import type { AssetCard, ContentBrief, ViralStructureGraph } from '@viral-struct/shared';
 import { buildAssetSupplyContext } from '../apps/api/src/services/assetManager/assetSupplyContextBuilder';
 import { normalizeAssetCards } from '../apps/api/src/services/assetManager/assetNormalizer';
+import {
+  buildScenarioComparisonReport,
+  summarizeScenarioRun,
+  type ScenarioRun
+} from '../apps/api/src/services/assetManager/scenarioBenchmarkReporter';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const tmpDir = path.join(repoRoot, 'tmp');
@@ -11,7 +16,8 @@ const tmpDir = path.join(repoRoot, 'tmp');
 const INPUTS = {
   structureGraph: 'seed_assets/analysis/macbook_neo/structure_graph.json',
   originalAssetCards: 'seed_assets/asset_libraries/kangshifu_demo/asset_cards.json',
-  plainAssetCards: 'seed_assets/asset_libraries/kangshifu_plain_user_test/asset_cards.json'
+  plainAssetCards: 'seed_assets/asset_libraries/kangshifu_plain_user_test/asset_cards.json',
+  aigcSampleDescriptor: 'docs/examples/scenario-aigc-ready.sample.json'
 } as const;
 
 const OUTPUTS = {
@@ -30,22 +36,16 @@ const contentBrief: ContentBrief = {
   stylePreference: '普通用户真实素材，轻包装，重点验证素材缺口识别和补全输入简报'
 };
 
-interface ScenarioRun {
-  scenario: string;
-  context: AssetSupplyContext;
-  outputPath: string;
-}
-
 function main(): void {
   mkdirSync(tmpDir, { recursive: true });
   const structureGraph = readJson<ViralStructureGraph>(INPUTS.structureGraph);
   const originalCards = normalizeAssetCards(readJson<AssetCard[]>(INPUTS.originalAssetCards));
   const plainCards = normalizeAssetCards(readJson<AssetCard[]>(INPUTS.plainAssetCards));
   const productImage = originalCards.find((asset) => asset.type === 'image') ?? originalCards[0];
-  const aigcCards = buildAigcReadyCards(productImage);
+  const aigcCards = buildAigcReadyCards(productImage, readOptionalAigcDescriptor());
 
   const runs: ScenarioRun[] = [{
-    scenario: 'single image only',
+    scenario: 'single_image_only',
     outputPath: OUTPUTS.singleImage,
     context: buildAssetSupplyContext({
       structureGraph,
@@ -54,7 +54,7 @@ function main(): void {
       libraryId: 'scenario_single_image_only'
     })
   }, {
-    scenario: 'partial real footage',
+    scenario: 'partial_real_footage',
     outputPath: OUTPUTS.partialReal,
     context: buildAssetSupplyContext({
       structureGraph,
@@ -63,7 +63,7 @@ function main(): void {
       libraryId: 'scenario_partial_real_footage'
     })
   }, {
-    scenario: 'aigc ready / planned generation',
+    scenario: 'aigc_ready',
     outputPath: OUTPUTS.aigcReady,
     context: buildAssetSupplyContext({
       structureGraph,
@@ -77,22 +77,21 @@ function main(): void {
   for (const run of runs) {
     writeJson(run.outputPath, run.context);
   }
-  writeText(OUTPUTS.report, buildReport(runs));
+  writeText(OUTPUTS.report, buildScenarioComparisonReport(runs, INPUTS));
 
   console.log('Asset Manager scenario comparison complete.');
   for (const run of runs) {
-    const summary = run.context.contextualCoverage?.coverageSummary;
-    const scenario = run.context.materialScenario;
+    const summary = summarizeScenarioRun(run);
     console.log([
       `- ${run.scenario}:`,
-      `scenarioType=${scenario?.scenarioType ?? 'unknown'}`,
-      `evidence=${scenario?.evidenceCoverageScore ?? 0}`,
-      `feasibility=${scenario?.completionFeasibilityScore ?? 0}`,
-      `covered=${summary?.coveredSlots ?? 0}`,
-      `weak=${summary?.weakSlots ?? 0}`,
-      `insufficient=${summary?.insufficientSlots ?? 0}`,
-      `missingBriefs=${run.context.missingMaterialBriefs?.length ?? 0}`,
-      `mode=${scenario?.recommendedDownstreamMode ?? 'unknown'}`
+      `evidence=${summary.evidenceCoverage}`,
+      `feasibility=${summary.completionFeasibility}`,
+      `covered=${summary.covered}`,
+      `weak=${summary.weak}`,
+      `insufficient=${summary.insufficient}`,
+      `observations=${summary.observations}`,
+      `missingBriefs=${summary.missingBriefs}`,
+      `mode=${summary.downstreamMode}`
     ].join(' '));
   }
   console.log(`Wrote ${OUTPUTS.singleImage}`);
@@ -101,7 +100,7 @@ function main(): void {
   console.log(`Wrote ${OUTPUTS.report}`);
 }
 
-function buildAigcReadyCards(productImage?: AssetCard): AssetCard[] {
+function buildAigcReadyCards(productImage?: AssetCard, sampleDescriptor?: string): AssetCard[] {
   const reference: AssetCard = {
     ...(productImage ?? {
       id: 'asset_product_reference',
@@ -113,72 +112,26 @@ function buildAigcReadyCards(productImage?: AssetCard): AssetCard[] {
     id: 'planned_aigc_product_reference',
     url: undefined,
     analysisSource: 'planned_generation',
-    spatialDescription: 'Planned generation descriptor for a product reference; not real rendered output.',
+    spatialDescription: [
+      'Planned generation descriptor for a product reference; not real rendered output.',
+      sampleDescriptor ? `Descriptor source: ${sampleDescriptor}` : undefined
+    ].filter(Boolean).join(' '),
     temporalDescription: 'Prompt-ready descriptor only. No external image or video generation has run.'
   };
   return normalizeAssetCards([reference]);
 }
 
-function buildReport(runs: ScenarioRun[]): string {
-  const rows = runs.map((run) => {
-    const coverage = run.context.contextualCoverage?.coverageSummary;
-    const scenario = run.context.materialScenario;
-    return [
-      run.scenario,
-      scenario?.evidenceCoverageScore ?? 0,
-      scenario?.completionFeasibilityScore ?? 0,
-      coverage?.coveredSlots ?? 0,
-      coverage?.weakSlots ?? 0,
-      coverage?.insufficientSlots ?? 0,
-      run.context.missingMaterialBriefs?.length ?? 0,
-      scenario?.recommendedDownstreamMode ?? 'unknown'
-    ];
-  });
-
-  return `# Asset Manager Scenario Comparison Report
-
-Generated by \`scripts/manual_test_asset_manager_scenarios.ts\`.
-
-## Inputs
-
-- Structure graph: \`${INPUTS.structureGraph}\`
-- Product image library: \`${INPUTS.originalAssetCards}\`
-- Plain user video library: \`${INPUTS.plainAssetCards}\`
-
-## Scenario Summary
-
-| scenario | evidenceCoverage | completionFeasibility | covered | weak | insufficient | missingBriefs | recommended downstream mode |
-|---|---:|---:|---:|---:|---:|---:|---|
-${rows.map((row) => `| ${row[0]} | ${row[1]} | ${row[2]} | ${row[3]} | ${row[4]} | ${row[5]} | ${row[6]} | ${row[7]} |`).join('\n')}
-
-## Key Missing Material Briefs
-
-${runs.map(formatBriefSection).join('\n\n')}
-
-## Boundary
-
-Asset Manager outputs evidence and handoff briefs only. It does not choose the final repair strategy, render fallback cards, generate real video, or compose MP4.
-`;
-}
-
-function formatBriefSection(run: ScenarioRun): string {
-  const briefs = (run.context.missingMaterialBriefs ?? []).slice(0, 5);
-  if (!briefs.length) return `### ${run.scenario}\n\nNo missing material briefs.`;
-  return `### ${run.scenario}
-
-${briefs.map(formatBrief).join('\n')}`;
-}
-
-function formatBrief(brief: MissingMaterialBrief): string {
-  const channels = brief.channelEligibility
-    .filter((channel) => channel.eligible)
-    .map((channel) => channel.channel)
-    .join(', ');
-  return `- \`${brief.affectedSlotId}\` (${brief.slotRole}): ${brief.manualShootBrief?.title ?? 'material brief'}; channels=${channels}; prompt=${brief.aigcGenerationBrief?.prompt.slice(0, 120) ?? 'n/a'}...`;
-}
-
 function readJson<T>(relativePath: string): T {
   return JSON.parse(readFileSync(path.join(repoRoot, relativePath), 'utf8')) as T;
+}
+
+function readOptionalAigcDescriptor(): string | undefined {
+  const absolutePath = path.join(repoRoot, INPUTS.aigcSampleDescriptor);
+  if (!existsSync(absolutePath)) return undefined;
+  const descriptor = readJson<{ materialScenario?: { scenarioType?: string; recommendedDownstreamMode?: string } }>(INPUTS.aigcSampleDescriptor);
+  const scenarioType = descriptor.materialScenario?.scenarioType;
+  const mode = descriptor.materialScenario?.recommendedDownstreamMode;
+  return [scenarioType, mode].filter(Boolean).join(' / ') || INPUTS.aigcSampleDescriptor;
 }
 
 function writeJson(relativePath: string, value: unknown): void {
@@ -191,4 +144,6 @@ function writeText(relativePath: string, value: string): void {
   writeFileSync(absolutePath, value, 'utf8');
 }
 
-main();
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main();
+}
