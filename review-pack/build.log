@@ -1,0 +1,67 @@
+
+> viral-struct-ai@ build C:\Users\cuixi\Documents\Codex\2026-05-20\plugin-browser-openai-bundled-github-plugin\viral-struct-ai
+> turbo build
+
+• turbo 2.9.14
+
+   • Packages in scope: @viral-struct/api, @viral-struct/remotion-video, @viral-struct/shared, @viral-struct/web
+   • Running build in 4 packages
+   • Remote caching disabled
+
+@viral-struct/shared:build: cache hit, replaying logs d7860ab0526e3785
+@viral-struct/shared:build: 
+@viral-struct/shared:build: > @viral-struct/shared@0.1.0 build C:\Users\cuixi\Documents\Codex\2026-05-20\plugin-browser-openai-bundled-github-plugin\viral-struct-ai\packages\shared
+@viral-struct/shared:build: > tsc -p tsconfig.json
+@viral-struct/shared:build: 
+@viral-struct/remotion-video:build: cache hit, replaying logs 344bcb7b55cf1e23
+@viral-struct/remotion-video:build: 
+@viral-struct/remotion-video:build: > @viral-struct/remotion-video@0.1.0 build C:\Users\cuixi\Documents\Codex\2026-05-20\plugin-browser-openai-bundled-github-plugin\viral-struct-ai\packages\remotion-video
+@viral-struct/remotion-video:build: > echo remotion-build-placeholder
+@viral-struct/remotion-video:build: 
+@viral-struct/remotion-video:build: remotion-build-placeholder
+@viral-struct/api:build: cache hit, replaying logs 062ac83ce7b58c76
+@viral-struct/api:build: 
+@viral-struct/api:build: > @viral-struct/api@0.1.0 build C:\Users\cuixi\Documents\Codex\2026-05-20\plugin-browser-openai-bundled-github-plugin\viral-struct-ai\apps\api
+@viral-struct/api:build: > tsc -p tsconfig.json
+@viral-struct/api:build: 
+@viral-struct/web:build: cache hit, replaying logs fffaa8b985d009fd
+@viral-struct/web:build: 
+@viral-struct/web:build: > @viral-struct/web@0.1.0 build C:\Users\cuixi\Documents\Codex\2026-05-20\plugin-browser-openai-bundled-github-plugin\viral-struct-ai\apps\web
+@viral-struct/web:build: > next build
+@viral-struct/web:build: 
+@viral-struct/web:build:    ▲ Next.js 15.5.18
+@viral-struct/web:build: 
+@viral-struct/web:build:    Creating an optimized production build ...
+@viral-struct/web:build:  ✓ Compiled successfully in 1540ms
+@viral-struct/web:build:    Linting and checking validity of types ...
+@viral-struct/web:build:    Collecting page data ...
+@viral-struct/web:build:    Generating static pages (0/10) ...
+@viral-struct/web:build:    Generating static pages (2/10) 
+@viral-struct/web:build:    Generating static pages (4/10) 
+@viral-struct/web:build:    Generating static pages (7/10) 
+@viral-struct/web:build:  ✓ Generating static pages (10/10)
+@viral-struct/web:build:    Finalizing page optimization ...
+@viral-struct/web:build:    Collecting build traces ...
+@viral-struct/web:build: 
+@viral-struct/web:build: Route (app)                                 Size  First Load JS
+@viral-struct/web:build: ┌ ○ /                                      123 B         102 kB
+@viral-struct/web:build: ├ ○ /_not-found                            996 B         103 kB
+@viral-struct/web:build: ├ ○ /adapt                               3.94 kB         108 kB
+@viral-struct/web:build: ├ ○ /analyze                             3.99 kB         108 kB
+@viral-struct/web:build: ├ ○ /demo                                5.67 kB         114 kB
+@viral-struct/web:build: ├ ○ /gaps                                5.11 kB         110 kB
+@viral-struct/web:build: ├ ○ /graph                               4.56 kB         109 kB
+@viral-struct/web:build: └ ○ /result                              13.1 kB         121 kB
+@viral-struct/web:build: + First Load JS shared by all             102 kB
+@viral-struct/web:build:   ├ chunks/1403cfaa-6db8521358bcd91a.js  54.2 kB
+@viral-struct/web:build:   ├ chunks/159-2398f495578bc26c.js       45.7 kB
+@viral-struct/web:build:   └ other shared chunks (total)          2.02 kB
+@viral-struct/web:build: 
+@viral-struct/web:build: 
+@viral-struct/web:build: ○  (Static)  prerendered as static content
+@viral-struct/web:build: 
+
+ Tasks:    4 successful, 4 total
+Cached:    4 cached, 4 total
+  Time:    41ms >>> FULL TURBO
+

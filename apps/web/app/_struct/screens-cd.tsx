@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactElement } from 'react';
 import { NL_PROMPTS, ROLES, type StateKey } from './data';
 import { useProjectStore } from './store/useProjectStore';
+import { AssetManagerEvidencePanel } from './AssetManagerEvidence';
 import {
   FramePlaceholder,
   Icon,
@@ -37,6 +38,10 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
   const v = useProjectStore((s) => s.sourceVideo);
   const diagnosis = useProjectStore((s) => s.diagnosis);
   const appliedSlots = useProjectStore((s) => s.appliedSlots);
+  const assetSupplyContext = useProjectStore((s) => s.assetSupplyContext);
+  const assetManagerLoading = useProjectStore((s) => s.assetManagerLoading);
+  const assetManagerWarnings = useProjectStore((s) => s.assetManagerWarnings);
+  const assetManagerLastError = useProjectStore((s) => s.assetManagerLastError);
   const applyStrategy = useProjectStore((s) => s.applyStrategy);
   const T = v.duration;
   const [selected, setSelected] = useState('s2');
@@ -392,6 +397,15 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
           })()}
         </div>
       </div>
+
+      <AssetManagerEvidencePanel
+        context={assetSupplyContext}
+        loading={assetManagerLoading}
+        warnings={assetManagerWarnings}
+        error={assetManagerLastError}
+        selectedSlotId={selected}
+        variant="full"
+      />
       <ScreenFooter
         status="3 个核心缺口待补全 · 建议混合 AIGC + 包装策略"
         statusTone="critical"
@@ -460,6 +474,10 @@ export const ScreenCompile = ({ onBack }: { onBack: () => void }) => {
   const diagnosis = useProjectStore((s) => s.diagnosis);
   const versions = useProjectStore((s) => s.versions);
   const selectedVersionId = useProjectStore((s) => s.selectedVersionId);
+  const assetSupplyContext = useProjectStore((s) => s.assetSupplyContext);
+  const assetManagerLoading = useProjectStore((s) => s.assetManagerLoading);
+  const assetManagerWarnings = useProjectStore((s) => s.assetManagerWarnings);
+  const assetManagerLastError = useProjectStore((s) => s.assetManagerLastError);
   const selectVersion = useProjectStore((s) => s.selectVersion);
   const compile = useProjectStore((s) => s.compile);
   const applyNlEdit = useProjectStore((s) => s.applyNlEdit);
@@ -859,6 +877,14 @@ export const ScreenCompile = ({ onBack }: { onBack: () => void }) => {
           </div>
         </div>
       </div>
+      <AssetManagerEvidencePanel
+        context={assetSupplyContext}
+        loading={assetManagerLoading}
+        warnings={assetManagerWarnings}
+        error={assetManagerLastError}
+        selectedSlotId={playingSeg}
+        variant="compact"
+      />
       <ScreenFooter
         status="v3 已编译 · CTR 4.7% / 完播 19%"
         statusTone="ok"

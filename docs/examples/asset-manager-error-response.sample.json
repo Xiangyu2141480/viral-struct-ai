@@ -1,0 +1,3 @@
+{
+  "error": "Asset coverage analysis failed: assetCards must be an array of AssetCard objects."
+}

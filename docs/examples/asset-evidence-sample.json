@@ -1,0 +1,128 @@
+{
+  "rows": [
+    {
+      "id": "tl_product",
+      "order": 1,
+      "source": {
+        "segmentId": "seg_product",
+        "segmentRole": "selling_point",
+        "segmentPurpose": "Show the product clearly before benefit copy.",
+        "slotId": "slot_product",
+        "slotRole": "product_closeup",
+        "intent": "Use a clear product closeup to transfer the source packshot structure.",
+        "sourceInstance": "source packshot / label closeup / yellow-red contrast",
+        "acceptanceCriteria": "center composition / visible label / product fills frame"
+      },
+      "mapping": {
+        "summary": "康师傅冰红茶 -> 冰爽解腻",
+        "sellingPoint": "冰爽解腻",
+        "rationale": "Transfer the product closeup role, not the source product."
+      },
+      "asset": {
+        "assetId": "asset_001",
+        "assetLabel": "康师傅冰红茶瓶身特写",
+        "assetType": "image",
+        "score": "0.89",
+        "status": "matched",
+        "reason": "素材类型、槽位语义、关键创作要素和质量均满足。"
+      },
+      "assetEvidence": {
+        "assetId": "asset_001",
+        "qualityScore": 0.84,
+        "topAffordanceRole": "product_closeup",
+        "topAffordanceScore": 89.8,
+        "productVisibilityScore": 92,
+        "keyframeIds": [],
+        "keyframeCaptions": [],
+        "reasons": [
+          "product_closeup affordance 90: Product packshot has clear label, strong product visibility, and crop/zoom editability."
+        ],
+        "warnings": []
+      },
+      "whyMatched": "product_closeup affordance 90: Product packshot has clear label, strong product visibility, and crop/zoom editability.",
+      "whyWeakOrMissing": "No weak or missing coverage for this row.",
+      "gapRepairPlannerSuggestion": "No repair required.",
+      "gap": {
+        "hasGap": false,
+        "type": "No material gap",
+        "reason": "Asset coverage is enough for this slot.",
+        "impact": "No gap impact."
+      },
+      "repair": {
+        "strategy": "Not needed",
+        "explanation": "No repair required for this slot.",
+        "spec": "Not available"
+      },
+      "final": {
+        "timelineId": "tl_product",
+        "duration": "0s - 2s",
+        "script": "先看这一瓶，冰爽感直接拉满。",
+        "visual": "Product push-in with cold splash styling.",
+        "packaging": "selling_point_card / push / push_in / bold_bottom"
+      }
+    },
+    {
+      "id": "tl_usage",
+      "order": 2,
+      "source": {
+        "segmentId": "seg_usage",
+        "segmentRole": "usage",
+        "segmentPurpose": "Demonstrate use or consumption context.",
+        "slotId": "slot_usage",
+        "slotRole": "usage_demo",
+        "intent": "Transfer the usage demonstration slot into a summer drinking scenario.",
+        "sourceInstance": "source hand demo / fast movement / close framing",
+        "acceptanceCriteria": "hand operation / usage moment / believable action"
+      },
+      "mapping": {
+        "summary": "康师傅冰红茶 -> 午后高温",
+        "sellingPoint": "冰爽解腻",
+        "rationale": "The library has energetic stills but no real usage clip."
+      },
+      "asset": {
+        "assetId": "asset_002",
+        "assetLabel": "冰块飞溅产品图",
+        "assetType": "image",
+        "score": "0.54",
+        "status": "partial",
+        "reason": "素材语义部分满足，但类型、动作、时长或创作要素不足，需要补全。"
+      },
+      "assetEvidence": {
+        "assetId": "asset_002",
+        "qualityScore": 0.88,
+        "topAffordanceRole": "opening_hook",
+        "topAffordanceScore": 89,
+        "productVisibilityScore": 86,
+        "keyframeIds": [],
+        "keyframeCaptions": [],
+        "reasons": [
+          "opening_hook affordance 89: Splash image is high-energy but lacks real hand/video usage evidence."
+        ],
+        "warnings": [
+          "No video motion evidence available."
+        ]
+      },
+      "whyMatched": "opening_hook affordance 89: Splash image is high-energy but lacks real hand/video usage evidence.",
+      "whyWeakOrMissing": "usage_demo requires human/hand action coverage; current best asset asset_002 is insufficient. This weakens the usage proof section.",
+      "gapRepairPlannerSuggestion": "Use selling point card, storyboard still, or ask user for hand demo footage.",
+      "gap": {
+        "hasGap": true,
+        "type": "missing_usage_demo",
+        "reason": "usage_demo requires human/hand action coverage; current best asset asset_002 is insufficient.",
+        "impact": "This weakens the usage proof section."
+      },
+      "repair": {
+        "strategy": "selling_point_card",
+        "explanation": "Use selling point card, storyboard still, or ask user for hand demo footage.",
+        "spec": "Use asset_002 with push-in and concise usage caption."
+      },
+      "final": {
+        "timelineId": "tl_usage",
+        "duration": "2s - 5s",
+        "script": "饭后一口，清爽解腻。",
+        "visual": "Use splash still plus text card to cover missing usage footage.",
+        "packaging": "selling_point_card / quick_cut / crop_zoom / bold_bottom"
+      }
+    }
+  ]
+}

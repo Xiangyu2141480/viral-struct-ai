@@ -1,43 +1,56 @@
 import { Router } from 'express';
-import type { TimelineItem } from '@viral-struct/shared';
-import { generateTimelineMock } from '../services/timelineGenerator';
-import { applyNaturalLanguageEditWithFallback } from '../services/timelineEditor';
+import { applyTimelineEdit } from '../services/timelineEditPlanner';
+import { generateTimelineWithFallback } from '../services/timelineGenerator';
 
 export const timelineRouter = Router();
 
 timelineRouter.post('/generate', async (req, res) => {
-  const result = await generateTimelineMock(req.body);
-  res.json(result);
+  const {
+    structureGraph,
+    newContent,
+    matches,
+    repairs,
+    assets,
+    assetCards,
+    variant,
+    boundaries
+  } = req.body;
+  const result = await generateTimelineWithFallback({
+    structureGraph,
+    newContent,
+    matches: matches ?? [],
+    repairs: repairs ?? [],
+    assets: assets ?? assetCards ?? [],
+    variant,
+    boundaries: boundaries ?? structureGraph?.boundaries
+  });
+
+  res.json({
+    ...result,
+    warnings: result.warning ? [result.warning] : []
+  });
 });
 
 timelineRouter.post('/apply-edit', async (req, res) => {
-  const { instruction, timeline, contentBrief } = req.body ?? {};
-
-  if (typeof instruction !== 'string' || !instruction.trim()) {
-    res.status(400).json({ error: 'instruction (non-empty string) is required.' });
-    return;
-  }
+  const { instruction, timeline, contentBrief, newContent } = req.body;
   if (!Array.isArray(timeline)) {
-    res.status(400).json({ error: 'timeline (array of TimelineItem) is required.' });
+    res.status(400).json({
+      error: 'timeline must be an array',
+      updatedTimeline: [],
+      patchSummary: 'Timeline 缺失，无法应用自然语言改片。',
+      changedItems: [],
+      editType: 'unsupported',
+      appliedEditTypes: [],
+      rationale: '请求体需要提供 timeline。',
+      warnings: ['timeline must be an array'],
+      supportedEditSuggestions: ['开头更抓人', '商品信息提前', '减少字幕', '增强节奏感', 'CTA 更强 / 购买引导更明确']
+    });
     return;
   }
 
-  try {
-    const result = await applyNaturalLanguageEditWithFallback({
-      instruction,
-      timeline: timeline as TimelineItem[],
-      contentBrief
-    });
-    res.json({
-      updatedTimeline: result.timeline,
-      patches: result.patches,
-      operations: result.operations,
-      editSource: result.editSource,
-      warning: result.warning
-    });
-  } catch (error) {
-    res.status(500).json({
-      error: `apply-edit failed: ${error instanceof Error ? error.message : String(error)}`
-    });
-  }
+  res.json(applyTimelineEdit({
+    instruction: String(instruction ?? ''),
+    timeline,
+    contentBrief: contentBrief ?? newContent
+  }));
 });

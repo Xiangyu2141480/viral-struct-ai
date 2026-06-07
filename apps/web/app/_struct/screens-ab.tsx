@@ -3,9 +3,10 @@
 // screens-ab.tsx — Screens 1–2 (Source + Materials)
 // (Ported from screens-ab.jsx; React/window globals replaced with imports.)
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ROLES, type Seg, type TargetProduct } from './data';
 import { useProjectStore } from './store/useProjectStore';
+import { AssetAffordanceChips, AssetManagerEvidencePanel } from './AssetManagerEvidence';
 import {
   DropZone,
   Icon,
@@ -239,10 +240,15 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
   const materials = useProjectStore((s) => s.materials);
   const product = useProjectStore((s) => s.product);
   const matching = useProjectStore((s) => s.matching);
+  const assetSupplyContext = useProjectStore((s) => s.assetSupplyContext);
+  const assetManagerLoading = useProjectStore((s) => s.assetManagerLoading);
+  const assetManagerWarnings = useProjectStore((s) => s.assetManagerWarnings);
+  const assetManagerLastError = useProjectStore((s) => s.assetManagerLastError);
   const addMaterials = useProjectStore((s) => s.addMaterials);
   const applyAssignments = useProjectStore((s) => s.applyAssignments);
   const updateProduct = useProjectStore((s) => s.updateProduct);
   const runDiagnosis = useProjectStore((s) => s.runDiagnosis);
+  const refreshAssetManagerCoverage = useProjectStore((s) => s.refreshAssetManagerCoverage);
   const T = v.duration;
 
   // Interactive states
@@ -292,6 +298,10 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
     void runDiagnosis();
     onNext();
   };
+
+  useEffect(() => {
+    void refreshAssetManagerCoverage();
+  }, [refreshAssetManagerCoverage]);
 
   const editFields: { key: 'name' | 'price' | 'category' | 'industry'; label: string }[] = [
     { key: 'name', label: '商品名称' },
@@ -418,6 +428,7 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
                           <span className="tag" style={{ color: 'var(--text-mute)', padding: '1px 6px', fontSize: 10 }}>未分配</span>
                         </div>
                       )}
+                      <AssetAffordanceChips asset={assetSupplyContext?.assets.find((asset) => asset.id === m.id)} />
                     </div>
                   </div>
                 );
@@ -526,6 +537,14 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
           </div>
         </div>
       </div>
+
+      <AssetManagerEvidencePanel
+        context={assetSupplyContext}
+        loading={assetManagerLoading}
+        warnings={assetManagerWarnings}
+        error={assetManagerLastError}
+        variant="full"
+      />
       <ScreenFooter
         status="6 项素材入库 · 5 / 7 槽位已分配"
         statusTone="warn"

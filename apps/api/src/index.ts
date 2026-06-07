@@ -5,10 +5,15 @@ import express from 'express';
 import { videosRouter } from './routes/videos';
 import { structureRouter } from './routes/structure';
 import { assetsRouter } from './routes/assets';
+import { assetManagerRouter } from './routes/assetManager';
+import { analyticsRouter } from './routes/analytics';
 import { slotsRouter } from './routes/slots';
 import { gapsRouter } from './routes/gaps';
 import { timelineRouter } from './routes/timeline';
+import { materialGenerationRouter } from './routes/materialGeneration';
 import { qualityRouter } from './routes/quality';
+import { safetyRouter } from './routes/safety';
+import { storyboardRouter } from './routes/storyboard';
 import { demoRouter } from './routes/demo';
 import { renderRouter } from './routes/render';
 import { getCoverDir, getDemoAssetDir, getFrameDir, getRenderDir, getUploadDir } from './services/videoPaths';
@@ -20,7 +25,9 @@ const frameDir = getFrameDir();
 const coverDir = getCoverDir();
 const demoAssetDir = getDemoAssetDir();
 const renderDir = getRenderDir();
-const allowedOrigins = (process.env.WEB_ORIGIN ?? 'http://localhost:3000,http://localhost:3001')
+const allowedOrigins = (
+  process.env.WEB_ORIGIN ?? 'http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001'
+)
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
@@ -54,10 +61,15 @@ app.get('/health', (_req, res) => {
 app.use('/api/videos', videosRouter);
 app.use('/api/structure', structureRouter);
 app.use('/api/assets', assetsRouter);
+app.use('/api/assets/manager', assetManagerRouter);
+app.use('/api/analytics', analyticsRouter);
 app.use('/api/slots', slotsRouter);
 app.use('/api/gaps', gapsRouter);
 app.use('/api/timeline', timelineRouter);
+app.use('/api/material-generation', materialGenerationRouter);
+app.use('/api/storyboard', storyboardRouter);
 app.use('/api/quality', qualityRouter);
+app.use('/api/safety', safetyRouter);
 app.use('/api/demo', demoRouter);
 app.use('/api/render', renderRouter);
 

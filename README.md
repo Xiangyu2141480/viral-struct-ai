@@ -1,156 +1,116 @@
-# Viral Struct AI / 爆构引擎
+# Viral Struct AI / 爆款结构迁移引擎
 
-面向营销短视频的 **爆款结构迁移 + 素材缺口补全 + 时间线视频生成** 平台。
+Viral Struct AI 是一个面向营销短视频创作的 AI 平台原型：从优质样例视频中拆解可迁移的创作结构，再迁移到新的商品、主题和素材中，生成可解释的脚本、分镜、时间线草案和 Web 视觉预览。
 
-本项目不是做一个通用剪辑器，也不是简单让大模型写脚本，而是把优质样例短视频中的创作方法抽象成可迁移的结构协议，再迁移到新的商品、主题或用户素材中。
+本项目的重点不是复刻样例内容，也不是做完整剪辑器，而是展示“样例理解 -> 结构抽象 -> 素材适配 -> 缺口补全 -> 结果生成”的可验证闭环。
 
-## 一句话定位
+## 当前可演示能力
 
-> 从爆款样例中抽取 Hook、节奏、卖点推进、包装样式和镜头槽位，再根据新商品与用户素材自动匹配、识别缺口、补全表达，并生成脚本、分镜、时间线和可播放 demo。
-
-## 当前工程状态
-
-已经完成：
-
-- monorepo 项目骨架
-- `apps/web` 前端页面骨架
-- `apps/api` 后端 API 骨架
-- `packages/shared` 共享类型与结构协议
-- `packages/remotion-video` Remotion demo 包骨架
-- GitHub Actions CI 基础配置
-- 本地 `pnpm typecheck` 和 `pnpm build` 已通过
-- 结构迁移项目文档与 GitHub 任务体系初始化
+- 真实样例输入与基础解析：seed video / upload、ffprobe 元信息、封面、关键帧、手动字幕 fallback。
+- 结构抽取：`ViralStructureGraph`，包含脚本段落、节奏、包装、镜头槽位、migration contract、rough/fine scan artifact fallback。
+- 新内容与素材输入：商品 brief、康师傅冰红茶 demo 素材库、`AssetCard` 素材理解协议。
+- Asset Manager 数据层：素材解析、视频关键帧、质量评分、slot affordance、coverage matrix、Asset Evidence 输出，并提供 `AssetSupplyContext` 作为 UI / SlotMatcher / GapRepairPlanner / Video Agent 的素材供给证据合同。
+- 素材适配：`SlotMatch`、`MaterialGap`、`GapRepair`，支持 LLM enhanced 路径和 deterministic fallback。
+- 结果生成：脚本、分镜、`TimelineItem[]`、包装建议、Web 视觉预览。
+- 可解释展示：Generation Trace、Migration Evidence、Quality Report。
+- 多版本生成：高点击版、高转化版、高质感版，fallback 下也有真实差异。
+- 自然语言改片：`/api/timeline/apply-edit` rule-based patch，支持 hook、商品信息、字幕、节奏、CTA 五类指令。
 
 ## 技术栈
 
 - Frontend: Next.js / React / TypeScript
 - Backend: Node.js / Express / TypeScript
 - Shared Protocol: TypeScript + Zod
-- Video: FFmpeg / ffprobe / Remotion
-- AI: LLM / VLM / ASR / Agent
-- Repo: pnpm workspace + Turborepo
+- Video Analysis: FFmpeg / ffprobe / Python rough/fine scan scripts
+- AI Provider: OpenAI-compatible LLM client, Volcengine Doubao optional, deterministic fallback by default
+- Workspace: pnpm workspace + Turborepo
 
-## 推荐启动方式
+## 本地启动
 
 ```bash
 corepack enable
 corepack prepare pnpm@9.0.0 --activate
-
 pnpm install --no-frozen-lockfile
+
 pnpm typecheck
+pnpm test
 pnpm build
 pnpm dev
 ```
 
-本地启动后，评委演示入口是 `http://localhost:3000/demo`。
+默认入口：
 
-## 核心数据流
+- Web: `http://localhost:3000`
+- API: `http://localhost:4000`
+- 主评审演示：`http://localhost:3000/demo`
+- 标准产品流程：`/analyze -> /graph -> /adapt -> /gaps -> /result`
+
+## 核心流程
 
 ```txt
-Sample Video
-  ↓
-VideoAnalysis
-  ↓
-ViralStructureGraph
-  ↓
-New Content + User Assets
-  ↓
-AssetCard[]
-  ↓
-SlotMatch[] + MaterialGap[]
-  ↓
-GapRepair[]
-  ↓
-Script + Storyboard + TimelineItem[]
-  ↓
-Remotion Preview / MP4 Demo
-  ↓
-QualityReport
+样例视频分析
+  -> 结构抽取
+  -> 内容 brief 输入
+  -> 素材适配
+  -> 槽位匹配
+  -> 缺口识别
+  -> 缺口补全
+  -> timeline 生成
+  -> 多版本生成
+  -> 自然语言改片
+  -> 质量评估
 ```
 
-## 核心创新点
+## 关键页面
 
-1. **ViralStructureGraph**  
-   把短视频抽象成 Hook、痛点、卖点、证明、CTA、节奏、包装、镜头槽位和转场关系。
+| 页面 | 用途 |
+|---|---|
+| `/demo` | 主评审路径，一键展示 macbook_neo 样例到康师傅冰红茶的迁移闭环 |
+| `/analyze` | 选择 seed / 上传视频 / 手动字幕，展示真实视频元信息和关键帧 |
+| `/graph` | 展示样例结构图谱、rough/fine scan 结构、migration contract |
+| `/adapt` | 输入商品 brief，加载或分析 `AssetCard` 素材 |
+| `/gaps` | 展示 slot matching、material gaps、gap repairs 和 fallback source |
+| `/result` | 展示脚本、分镜、timeline、Web 预览、Generation Trace、Migration Evidence、Variant Diff、自然语言改片 |
 
-2. **Structure Slot Matching**  
-   不是先写脚本再硬匹配素材，而是先定义每个结构槽位需要什么素材，再匹配用户素材。
+## 关键 API
 
-3. **Material Gap Detection**  
-   明确识别缺少开头吸引镜头、商品特写、使用过程、对比镜头、CTA 镜头等问题。
-
-4. **Gap Repair Planner**  
-   通过标题卡、卖点卡、对比卡、CTA 卡、裁切放大、字幕补全、AIGC 背景等方式补足素材不足。
-
-5. **Explainable Timeline Protocol**  
-   输出不是纯文本，而是可以被 Remotion 或 FFmpeg 消费的时间线协议。
-
-## 评分目标
-
-目标不是“能生成一个视频”而已，而是尽量覆盖评分表所有得分点：
-
-- P0 基础闭环：25 分
-- P0 素材缺口识别与补全：20 分
-- P0 可视化与结果验证：20 分
-- P1 进阶创作能力：20 分
-- 人机协同与整体完成度：15 分
-- 加分项：最高 10 分
-
-详细见：
-
-- `docs/PROJECT_PLAN.md`
-- `docs/product-requirements.md`
-- `docs/scoring-matrix.md`
-- `docs/ARCHITECTURE.md`
-- `docs/safety-and-ai-tools.md`
-- `docs/demo-cases.md`
-- `docs/TEAM_HANDOFF.md`
-- `docs/AI_CONTEXT.md`
-- `docs/SCORING_EXECUTION_PLAN.md`
-- `docs/DEMO_TARGET.md`
-- `docs/CHAMPION_DEMO_CHECKLIST.md`
-- `docs/ISSUE_INDEX.md`
-
-## 当前分支策略
-
-- `main`：稳定主线。
-- `zsy`：已有协作分支。
-- `cxy`：当前拿奖冲刺分支；需求沉淀、评分映射和后续实现都先在该分支推进。
-
-## 拿奖执行原则
-
-1. P0 必须先做成评委可打分的闭环，而不是只做一个最终生成页。
-2. 每个评分点都要对应页面、代码、文档或 demo 证据。
-3. Demo 要故意展示素材不足，突出缺口识别与补全能力。
-4. AI 能力必须支持 mock / real 双模式，答辩现场不能因为 key 或网络失败而断链。
-5. 火山方舟 Doubao 作为 real mode 优先 provider；真实 key 只放本地 `.env`，不进入仓库。
-
-## Visual Peak Detector — Hard Requirements
-
-Fine Scan v0.3 visual peak detector (`scripts/visual_peak_detector.py`) is
-the core code-owned timing engine. Its dependencies are **non-optional**:
-
-| Package         | Min version | Used by                                          |
-|-----------------|-------------|--------------------------------------------------|
-| `av`            | >= 11.0     | `compute_visual_score_series_from_clip` (PyAV decode) |
-| `opencv-python` | >= 4.8      | DIS optical flow, MOG2, HSV histogram, resize    |
-| `scipy`         | >= 1.11     | `detect_visual_peaks_from_scores` (`find_peaks`) |
-| `ruptures`      | >= 1.1      | `detect_regime_boundaries_from_scores` (PELT)    |
-| `numpy`         | bundled     | All numeric paths                                |
-| `ffmpeg`        | on PATH     | Fixture generation + `video_tools.py` clipping   |
-
-Install with `pip install -r requirements.txt`. Without these packages,
-the heart of the v0.3 pipeline will not run; unit tests marked
-`@requires_video_stack` are skipped (visible in test output as
-`(skipped: needs av + ruptures + cv2 ...)`).
-
-CI runs all Python tests on Ubuntu (the `python-tests` job in
-`.github/workflows/ci.yml`) so the heart is exercised on every push.
+| API | 用途 |
+|---|---|
+| `GET /api/videos/seeds` | 列出 seed videos |
+| `POST /api/videos/seeds/analyze` | 解析 seed video |
+| `POST /api/videos/upload` | 上传视频 |
+| `POST /api/structure/extract` | 从 `VideoAnalysis` / artifact 抽取结构图 |
+| `GET /api/assets/libraries/:libraryId` | 加载预生成素材库 |
+| `POST /api/assets/analyze` | deterministic 素材分析，可选 VLM enrichment，默认关闭 |
+| `POST /api/assets/manager/analyze-batch` | 归一化旧 AssetCard，输出 Asset Manager report |
+| `POST /api/assets/manager/coverage` | Asset Manager coverage matrix、library report、normalized AssetCard，并包含 contextual coverage |
+| `POST /api/assets/manager/asset-supply-context` | 输出 `asset-supply-v1` 素材供给上下文，不生成 fallback card 或 repair strategy |
+| `POST /api/assets/manager/video-agent-bundle` | legacy alias，返回 `asset-supply-v1` response |
+| `POST /api/slots/match` | `matchSlotsWithFallback` |
+| `POST /api/gaps/repair` | `planGapRepairsWithFallback` |
+| `POST /api/timeline/generate` | `generateTimelineWithFallback` |
+| `POST /api/timeline/apply-edit` | 自然语言改片 rule-based patch |
+| `POST /api/quality/evaluate` | 质量评估 |
+| `POST /api/demo/run` | 主演示闭环 |
 
 ## 安全边界
 
-- 不复刻样例内容，只迁移结构方法。
-- 不复制他人肖像、品牌元素、音乐原片段和受版权保护的画面。
-- 用户上传素材默认视为用户有使用权。
-- 营销文案中的功效、价格、排名、认证等强事实必须有用户输入或证据来源。
-- API Key 只允许放在服务端 `.env`，不得提交到仓库。
+- API key 只能通过本地环境变量注入，不提交真实 key。
+- LLM / optional VLM / ASR 失败时必须 fallback，页面显示 source 和 warning。
+- 只迁移样例的结构方法，不复制原视频内容、音乐、人物肖像或品牌表达。
+- 当前 Remotion package 仍是 placeholder，不把 MP4 导出作为本阶段主交付能力。
+- 当前自然语言改片是 rule-based timeline patch，不是完整智能剪辑器。
+- Asset Manager deterministic 是主路径；optional VLM 默认关闭，不是主 demo 依赖。
+- 当前未接入 SAM2 / GroundingDINO / SigLIP2 / VideoRAG，也未完成完整长视频 temporal grounding。
+
+## 交付文档
+
+- `docs/ARCHITECTURE.md`
+- `docs/PROJECT_PLAN.md`
+- `docs/DEMO_SCRIPT.md`
+- `docs/scoring-map.md`
+- `docs/final-delivery.md`
+- `docs/safety-and-ai-tools.md`
+- `docs/asset-manager-ui-contract.md`
+- `docs/asset-manager-video-agent-contract.md`
+- `docs/TOOL_PROTOCOL.md`

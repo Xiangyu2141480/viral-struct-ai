@@ -1,98 +1,149 @@
 # Safety And AI Tools / 安全边界与 AI 工具说明
 
-## 1. AI 工具使用声明
+## 1. AI Tool Usage Statement
 
-本项目允许使用 AI 工具辅助完成方案设计、代码实现、文案生成、视频分析和内容生成，但核心产品定义、结构协议、任务拆解、评分映射、工程集成和 demo 链路由项目团队自主设计与实现。
+本项目允许使用 AI 工具辅助方案设计、编码、调试、脚本生成、视频分析和文档整理，但核心产品定义、结构协议、任务拆解、工程集成、演示链路和安全边界由项目团队自主设计与实现。
 
-| 工具/能力 | 使用环节 | 边界 |
+| Tool / Capability | Used For | Boundary |
 |---|---|---|
-| Codex / Cursor / Claude Code 类编码助手 | 代码生成、重构、调试、文档整理 | 不能替代核心设计判断；提交前必须人工审查 |
-| ChatGPT / Claude / 豆包类 LLM | 结构抽取、脚本草案、包装建议、评分说明 | 输出必须结构化并经过 schema 校验 |
-| 火山方舟 Doubao | real mode LLM provider，优先用于结构抽取和生成 | API key 只在本地 `.env`，不得入库 |
-| Whisper / ASR | 字幕或语音转写 | ASR 失败时必须支持手动字幕 fallback |
-| FFmpeg / ffprobe / OpenCV | 视频元信息、关键帧、镜头基础分析 | 只处理用户授权或项目自有素材 |
-| HyperFrames / FFmpeg-backed renderer | 时间线 preview / demo 视频 | 用于可验证展示，不伪装成真实剪辑软件完整能力 |
-| 即梦 / CapCut / 剪映 / Runway | 竞品参考或素材实验 | 不直接把现成产品结果冒充为自主系统输出 |
+| Codex / Cursor / Claude Code | coding, debugging, documentation, PR review | outputs require human review before merge |
+| ChatGPT / Claude / Doubao | script ideas, structured analysis, copy drafts | output must be converted into project protocols |
+| Volcengine Doubao | optional OpenAI-compatible LLM provider | API key only through local environment variables |
+| FFmpeg / ffprobe | metadata, covers, keyframes | only for authorized project/user media |
+| Python rough/fine scan scripts | visual rhythm, boundaries, structure artifacts | artifacts are checked and validated before use |
+| ASR tools | optional transcript extraction | not required for the standard demo; manual transcript fallback exists |
+| Optional VLM adapter | optional asset caption/object/role-rationale enhancement | disabled by default; invalid output falls back to deterministic asset analysis |
+| Remotion | future/rendering package skeleton | not claimed as stable MP4 export in this checkpoint |
 
-## 2. 自主设计部分
+## 2. Self-Designed System Parts
 
-项目必须在说明文档和答辩中强调以下自主设计：
+The following are project-owned designs:
 
-- `ViralStructureGraph`：短视频结构协议。
-- `Structure Slot Matching`：结构槽位与用户素材匹配机制。
-- `Material Gap Detection`：素材不足识别。
-- `Gap Repair Planner`：文案、包装、复用、AIGC 建议等补全策略。
-- `Explainable Timeline Protocol`：可解释、可渲染的时间线输出。
-- 评分导向的可视化链路：结构 -> 映射 -> 缺口 -> 补全 -> 结果。
+- `ViralStructureGraph`: structure protocol for short-video migration.
+- `ShotSlot`: slot-level requirements and migration contracts.
+- `AssetCard`: structured user/demo asset understanding.
+- `SlotMatch`: slot-to-asset alignment with source and rationale.
+- `MaterialGap`: explicit material shortage diagnosis.
+- `GapRepair`: repair strategy planning.
+- `TimelineItem`: explainable result timeline.
+- `QualityReport`: structure and result quality metrics.
+- `PipelineTrace`: source/warning evidence for the standard workflow.
+- `MigrationEvidence`: explainability chain from source pattern to final result.
+- `/api/timeline/apply-edit`: rule-based natural-language patch pipeline.
 
-## 3. 密钥与配置边界
+## 3. Secret Handling
 
-```txt
-允许：
-- 在本地 .env 中保存真实 API key。
-- 在 .env.example 中保留空字段和说明。
-- 在服务端读取 LLM_API_KEY。
-
-禁止：
-- 把真实 API key 写入仓库。
-- 把真实 API key 写入 README、docs、issue、PR、截图或日志。
-- 在前端代码中暴露密钥。
-- 在错误信息中打印密钥。
-```
-
-推荐环境变量：
+Allowed:
 
 ```txt
-LLM_PROVIDER=ark
-LLM_BASE_URL=
-LLM_API_KEY=
-LLM_MODEL=Doubao-Seed-2.0-lite
-ENABLE_MOCK_AI=true
+LLM_API_KEY in local environment variables
+LLM_BASE_URL in local environment variables
+LLM_MODEL in local environment variables
+ASSET_VLM_ENABLED / ASSET_VLM_MODEL in local environment variables
+.env.example with empty placeholders
 ```
 
-## 4. 内容安全边界
-
-系统只迁移：
+Forbidden:
 
 ```txt
-结构、节奏、包装方式、表达策略、槽位关系
+committing real API keys
+placing keys in README/docs/issues/PR descriptions
+placing keys in frontend code
+printing keys in logs or errors
+embedding keys in screenshots
 ```
 
-系统不迁移：
+Recommended local setup:
+
+```powershell
+$env:LLM_API_KEY="<local-only-key>"
+$env:LLM_BASE_URL="<provider-base-url>"
+$env:LLM_MODEL="Doubao-Seed-2.0-lite"
+```
+
+Before PR:
+
+```bash
+rg --hidden -n "ark-[A-Za-z0-9-]+" .
+```
+
+The command should return no matches.
+
+## 4. Content Safety Boundary
+
+The system migrates:
 
 ```txt
-原视频人物肖像、原文案、品牌元素、音乐原片段、受版权保护画面
+structure
+rhythm
+shot intent
+caption density
+packaging strategy
+CTA placement
+material coverage logic
 ```
 
-营销文案中的以下强事实必须来自用户输入或证据来源：
+The system does not migrate:
 
 ```txt
-功效、价格、优惠、认证、销量、排名、医疗/金融/教育承诺
+source video footage
+source music
+source speaker likeness
+copyrighted visual assets
+brand-owned expression from the sample video
 ```
 
-无证据时，系统应降级表达，例如从“销量第一”改为“适合高频通勤场景”。
+Strong marketing claims must come from user input or evidence. Without evidence, copy should be softened. Examples:
 
-## 5. Mock / Real 双模式
-
-为了保证答辩稳定，所有 AI 模块必须支持双模式：
-
-| 模式 | 作用 |
+| Unsafe Claim | Safer Fallback |
 |---|---|
-| mock mode | 无 key、无网络、模型失败时仍可演示完整闭环 |
-| real mode | 使用火山方舟 Doubao 或兼容 LLM provider 展示真实 AI 能力 |
+| "销量第一" | "适合高频使用场景" |
+| "立刻见效" | "强调使用体验" |
+| "官方认证" | "突出用户提供的证明材料" |
 
-real mode 失败时不得让 demo 中断，应返回：
+## 5. Fallback Policy
+
+All model-adjacent paths must be demo-safe:
 
 ```txt
-模型失败原因 -> mock fallback -> UI 标记当前结果来源
+LLM available and output valid -> use LLM enhanced result
+LLM unavailable / key missing / output invalid -> deterministic fallback
+UI displays source + warning
 ```
 
-## 6. 交付文档必须说明
+Current fallback-visible fields:
 
-最终项目说明文档必须包含：
+- `alignmentSource`
+- `gapSpecSource`
+- `scriptSource`
+- `warnings`
+- `analysisSource`
+- `vlmStatus`
+- `analysis.vlm` when optional VLM enhancement is enabled and valid
 
-- 使用了哪些 AI 工具。
-- 分别用于哪些环节。
-- 哪些部分是自主设计与实现。
-- 模型 provider、工具协议和安全边界。
-- 为什么本项目是结构迁移，而不是复制样例内容。
+Optional Asset Manager VLM policy:
+
+```txt
+ASSET_VLM_ENABLED=false -> deterministic AssetAnalysisProfile only
+ASSET_VLM_ENABLED=true but key/model/output invalid -> deterministic result + warning
+ASSET_VLM_ENABLED=true and valid output -> analysis.vlm added as optional evidence
+```
+
+The VLM adapter must not invent product efficacy, medical, ranking, sales, celebrity, or user-behavior claims. Risky model text is treated as evidence risk and should not be presented as verified marketing fact.
+
+## 6. What We Do Not Claim
+
+This checkpoint does not claim:
+
+- complete Remotion/MP4 export
+- complete ASR-first workflow
+- full professional video editor
+- model training
+- fully autonomous creative agent
+- guaranteed factual marketing claims
+- direct reproduction of sample content
+- optional VLM as a required dependency for the main demo
+- completed SAM2 / GroundingDINO / SigLIP2 / VideoRAG integration
+- complete long-video temporal grounding
+
+The demo should be presented as an explainable AI creation planning system with a Web visual preview and timeline protocol.

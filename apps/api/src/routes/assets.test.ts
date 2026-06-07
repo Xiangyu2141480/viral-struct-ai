@@ -60,7 +60,7 @@ test('GET /api/assets/libraries/:libraryId rejects traversal-like library ids', 
   assert.match(body.error, /could not be loaded/i);
 });
 
-test('POST /api/assets/analyze uses LLM fallback path and marks manual text separately', async () => {
+test('POST /api/assets/analyze uses deterministic local analysis without LLM keys', async () => {
   const previousModel = process.env.LLM_MODEL;
   const previousKey = process.env.LLM_API_KEY;
   const previousBaseUrl = process.env.LLM_BASE_URL;
@@ -88,10 +88,14 @@ test('POST /api/assets/analyze uses LLM fallback path and marks manual text sepa
 
     assert.equal(response.status, 200);
     const body = await response.json();
-    assert.equal(body.source, 'upload_analysis_fallback');
-    assert.equal(body.assetCards[0].analysisSource, 'mock_filename_rules');
+    assert.equal(body.source, 'upload_analysis_deterministic');
+    assert.equal(body.vlmStatus, 'disabled');
+    assert.deepEqual(body.warnings, []);
+    assert.equal(body.assetCards[0].analysisSource, 'deterministic');
+    assert.equal(body.assetCards[0].analysis.source, 'deterministic');
     assert.equal(body.assetCards[1].id, 'asset_text_brief');
-    assert.equal(body.assetCards[1].analysisSource, 'manual_text_brief');
+    assert.equal(body.assetCards[1].analysisSource, 'deterministic');
+    assert.equal(body.assetCards[1].analysis.semantic.detectedObjects.includes('selling_point_copy'), true);
   } finally {
     await rm(dir, { recursive: true, force: true });
     if (previousModel === undefined) {

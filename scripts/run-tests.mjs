@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process';
 const pythonCommand = findPythonCommand();
 run(pythonCommand, ['-m', 'unittest', 'discover', '-s', 'tests', '-v']);
 runPnpm(['--filter', '@viral-struct/api', 'test']);
+runPnpm(['--filter', '@viral-struct/api', 'exec', 'node', '--import', 'tsx', '../web/app/_struct/api/assetManager.test.ts']);
 
 function findPythonCommand() {
   for (const command of ['python', 'python3']) {

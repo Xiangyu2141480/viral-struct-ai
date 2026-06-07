@@ -315,7 +315,174 @@ export interface AssetCandidateSlotRole {
   caveat?: string;
 }
 
-export type AssetAnalysisSource = 'static_library' | 'mock_filename_rules' | 'llm_multimodal' | 'manual_text_brief';
+export type AssetManagerRole =
+  | 'opening_hook'
+  | 'product_closeup'
+  | 'usage_demo'
+  | 'comparison'
+  | 'benefit_proof'
+  | 'lifestyle_scene'
+  | 'background'
+  | 'packaging_card'
+  | 'cta'
+  | 'cover';
+
+export interface RoleAffordanceComponents {
+  semanticFit: number;
+  visualSignalFit: number;
+  productVisibilityFit: number;
+  qualityFit: number;
+  formatFit: number;
+  editabilityFit: number;
+  safetyFit: number;
+}
+
+export interface RoleAffordanceScore {
+  role: AssetManagerRole;
+  score: number;
+  confidence?: number;
+  components: RoleAffordanceComponents;
+  rationale: string;
+  reasons?: string[];
+  evidence?: string[];
+}
+
+export type AssetRole = AssetManagerRole | ShotSlotRole | 'title_card' | 'text_brief' | 'unknown';
+
+export interface AssetKeyframe {
+  id: string;
+  timeSec?: number;
+  url?: string;
+  description?: string;
+  source: 'uploaded_video' | 'sampled_frame' | 'placeholder' | 'manual';
+}
+
+export interface AssetMediaProfile {
+  kind: 'image' | 'video' | 'text';
+  sourceUrl?: string;
+  textLength?: number;
+  fileSizeBytes?: number;
+  format?: string;
+  durationSec?: number;
+  fps?: number;
+  width?: number;
+  height?: number;
+  aspectRatio?: '9:16' | '16:9' | '1:1' | 'unknown';
+  keyframes: AssetKeyframe[];
+  hasAudio?: boolean;
+  fileExtension?: string;
+}
+
+export interface AssetSemanticProfile {
+  summary: string;
+  detectedObjects: string[];
+  detectedIngredients: CreativeIngredientType[];
+  visualStyleTags: VisualStyleTag[];
+  humanPresence?: AssetCard['humanPresence'];
+  visualContent?: AssetVisualContent;
+  motionPotential?: AssetMotionPotential;
+}
+
+export interface AssetIssue {
+  type:
+    | 'missing_metadata'
+    | 'low_quality'
+    | 'low_resolution'
+    | 'no_motion_evidence'
+    | 'unsafe_claim'
+    | 'unknown';
+  severity: 'low' | 'medium' | 'high';
+  message: string;
+}
+
+export interface AssetQualityProfile {
+  overallScore: number;
+  resolution: number;
+  sharpness: number;
+  brightness: number;
+  contrast: number;
+  clarity: number;
+  composition: number;
+  lighting: number;
+  subjectProminence: number;
+  productFocus: number;
+  textSafeArea: number;
+  formatFit?: number;
+  issues: AssetIssue[];
+}
+
+export interface SlotAffordanceProfile {
+  suitableSlots: ShotSlotRole[];
+  primaryRoles: Array<{
+    role: ShotSlotRole;
+    confidence: number;
+    caveat?: string;
+  }>;
+  missingRoles: ShotSlotRole[];
+  rationale: string;
+}
+
+export interface AssetEditabilityProfile {
+  canCropZoom: boolean;
+  canUseAsBackground: boolean;
+  canLoop: boolean;
+  canExtendWithCards: boolean;
+  suggestedEdits: string[];
+}
+
+export interface AssetSafetyProfile {
+  status: 'passed' | 'needs_review' | 'blocked';
+  brandRisk: 'low' | 'medium' | 'high';
+  ipRisk: 'low' | 'medium' | 'high';
+  claimRisk: 'low' | 'medium' | 'high';
+  reasons: string[];
+}
+
+export interface AssetSearchProfile {
+  tags: string[];
+  keywords: string[];
+  embeddingText: string;
+}
+
+export interface AssetVlmAnalysisProfile {
+  source: 'optional_vlm';
+  provider: 'openai_compatible';
+  model: string;
+  analyzedAt: string;
+  shortCaption: string;
+  sceneType: string;
+  productVisible: boolean;
+  productVisibilityScore: number;
+  detectedObjects: string[];
+  textVisible: boolean;
+  suggestedRoles: AssetManagerRole[];
+  rationale: string;
+  risks: string[];
+}
+
+export type AssetAnalysisSource =
+  | 'static_library'
+  | 'mock_filename_rules'
+  | 'llm_multimodal'
+  | 'manual_text_brief'
+  | 'deterministic';
+
+export interface AssetAnalysisProfile {
+  profileVersion: 'asset_analysis_v1';
+  analyzedAt: string;
+  source?: AssetAnalysisSource;
+  fallbackUsed: boolean;
+  warnings: string[];
+  media: AssetMediaProfile;
+  semantic: AssetSemanticProfile;
+  quality: AssetQualityProfile;
+  slotAffordance: SlotAffordanceProfile;
+  editability: AssetEditabilityProfile;
+  safety: AssetSafetyProfile;
+  search: AssetSearchProfile;
+  roleAffordance?: RoleAffordanceScore[];
+  vlm?: AssetVlmAnalysisProfile;
+}
 
 export interface AssetCard {
   id: string;
@@ -339,6 +506,247 @@ export interface AssetCard {
   motionPotential?: AssetMotionPotential;
   candidateSlotRoles?: AssetCandidateSlotRole[];
   analysisSource?: AssetAnalysisSource;
+  analysis?: AssetAnalysisProfile;
+}
+
+export interface RoleCoverageSummary {
+  role: AssetManagerRole;
+  status: 'covered' | 'weak' | 'missing';
+  bestAssetId?: string;
+  bestScore: number;
+  assetIds: string[];
+}
+
+export interface SlotCandidateAsset {
+  assetId: string;
+  assetType: AssetCard['type'];
+  score: number;
+  roleAffordance: number;
+  intentSemanticMatch: number;
+  acceptanceCriteriaMatch: number;
+  assetQuality: number;
+  editabilityFit: number;
+  rationale: string;
+}
+
+export interface SlotCoverageRow {
+  slotId: string;
+  segmentId?: string;
+  slotRole?: ShotSlotRole;
+  mappedRole: AssetManagerRole;
+  requiredAssetType?: ShotSlotNode['requiredAsset']['type'];
+  status: 'covered' | 'weak' | 'missing';
+  bestAssetId?: string;
+  bestScore: number;
+  candidates: SlotCandidateAsset[];
+  gapReason?: string;
+}
+
+export interface AssetLibraryReport {
+  libraryId: string;
+  assetCount: number;
+  byType: Record<AssetCard['type'], number>;
+  avgQualityScore: number;
+  qualitySummary?: {
+    avgQualityScore: number;
+    lowQualityAssetIds: string[];
+    warningCount: number;
+  };
+  coveredSlots: ShotSlotRole[];
+  missingSlots: ShotSlotRole[];
+  roleCoverage: Record<AssetManagerRole, RoleCoverageSummary>;
+  missingRoles: AssetManagerRole[];
+  weakRoles: AssetManagerRole[];
+  topAssetsByRole: Record<AssetManagerRole, SlotCandidateAsset[]>;
+  recommendations: string[];
+  warnings: string[];
+  generatedAt: string;
+}
+
+export interface SlotCoverageMatrix {
+  slots: Array<{
+    role: ShotSlotRole | AssetManagerRole;
+    slotId?: string;
+    mappedRole?: AssetManagerRole;
+    assetIds: string[];
+    bestAssetId?: string;
+    bestScore: number;
+    coverage: 'covered' | 'weak' | 'partial' | 'missing';
+    candidates?: SlotCandidateAsset[];
+  }>;
+  slotRows: SlotCoverageRow[];
+  coveredSlotCount: number;
+  totalSlotCount: number;
+  coverageRatio: number;
+}
+
+export type NormalizedAssetCard = AssetCard & { analysis: AssetAnalysisProfile };
+
+export type AssetLibraryProfile = AssetLibraryReport;
+
+export interface AssetSupplyContext {
+  protocolVersion: 'asset-supply-v1';
+  libraryId: string;
+  generatedAt: string;
+  assets: NormalizedAssetCard[];
+  libraryProfile: AssetLibraryProfile;
+  contextualCoverage?: ContextualAssetCoverageReport;
+  warnings: string[];
+}
+
+export interface ContextualAssetCoverageReport {
+  graphId: string;
+  briefId?: string;
+  libraryId: string;
+  coverageSummary: {
+    totalSlots: number;
+    coveredSlots: number;
+    weakSlots: number;
+    insufficientSlots: number;
+    coverageScore: number;
+  };
+  slotCoverages: ContextualSlotCoverage[];
+  observations: MaterialCoverageObservation[];
+  warnings: string[];
+}
+
+export interface ContextualSlotCoverage {
+  slotId: string;
+  affectedSegmentId?: string;
+  slotRole: AssetRole;
+  slotIntent: string;
+  sourceInstance?: string;
+  acceptanceCriteria?: string[];
+  requiredIngredients: RequiredIngredient[];
+  availableIngredients: AvailableIngredient[];
+  missingIngredients: MissingIngredient[];
+  weakIngredients: MissingIngredient[];
+  candidateAssets: SlotAssetCandidate[];
+  coverageStatus: 'covered' | 'weak' | 'insufficient';
+  confidence: 'high' | 'medium' | 'low';
+  evidence: string[];
+  limitations: string[];
+}
+
+export interface MaterialCoverageObservation {
+  id: string;
+  affectedSegmentId?: string;
+  affectedSlotId: string;
+  slotRole: AssetRole;
+  slotIntent: string;
+  observationType:
+    | 'missing_required_ingredient'
+    | 'weak_candidate_quality'
+    | 'weak_semantic_fit'
+    | 'format_mismatch'
+    | 'duration_mismatch'
+    | 'missing_motion_evidence'
+    | 'missing_product_evidence'
+    | 'missing_usage_evidence'
+    | 'missing_cta_surface'
+    | 'missing_text_safe_area';
+  requiredIngredients: RequiredIngredient[];
+  missingIngredients: MissingIngredient[];
+  availableButWeakIngredients: MissingIngredient[];
+  bestCandidateAssetIds: string[];
+  potentialImpact: CoverageImpact[];
+  severityEstimate: 'low' | 'medium' | 'high';
+  confidence: 'high' | 'medium' | 'low';
+  evidence: string[];
+  ownership: 'asset_manager_observation_only';
+}
+
+export interface RequiredIngredient {
+  id: string;
+  kind:
+    | 'visual_subject'
+    | 'shot_type'
+    | 'motion'
+    | 'product_evidence'
+    | 'usage_evidence'
+    | 'comparison_evidence'
+    | 'cta_surface'
+    | 'text_safe_area'
+    | 'duration'
+    | 'aspect_ratio'
+    | 'packaging_surface';
+  label: string;
+  requiredBy: {
+    segmentId?: string;
+    slotId: string;
+    acceptanceCriteria?: string;
+  };
+  importance: 'low' | 'medium' | 'high';
+}
+
+export interface AvailableIngredient {
+  requiredIngredientId: string;
+  assetId: string;
+  score: number;
+  evidence: string[];
+}
+
+export interface MissingIngredient {
+  requiredIngredientId: string;
+  label: string;
+  reason: string;
+  evidence: string[];
+}
+
+export interface CoverageImpact {
+  type:
+    | 'hook_strength_reduced'
+    | 'product_clarity_reduced'
+    | 'usage_proof_missing'
+    | 'comparison_weakened'
+    | 'cta_clarity_reduced'
+    | 'rhythm_disrupted'
+    | 'packaging_overload_risk';
+  description: string;
+  affectedMetric?:
+    | 'hookStrength'
+    | 'slotCoverage'
+    | 'visualScriptAlignment'
+    | 'ctaClarity'
+    | 'transitionFidelity';
+  severity: 'low' | 'medium' | 'high';
+}
+
+export type SlotAssetUsableAs =
+  | 'video_clip'
+  | 'image_clip'
+  | 'poster_frame'
+  | 'background_plate'
+  | 'overlay_support'
+  | 'reference_only';
+
+export interface SlotAssetCandidate {
+  assetId: string;
+  score: number;
+  fitStatus: 'strong' | 'usable' | 'weak';
+  usableAs: SlotAssetUsableAs;
+  mediaReadiness: {
+    hasUsableUrl: boolean;
+    hasLocalPath: boolean;
+    hasThumbnail: boolean;
+    hasKeyframe: boolean;
+    hasDuration: boolean;
+  };
+  constraints: {
+    maxRecommendedDurationSec?: number;
+    needsCrop?: boolean;
+    needsOverlaySupport?: boolean;
+    notEnoughForStandaloneShot?: boolean;
+    textSafeAreaRisk?: boolean;
+  };
+  evidence: {
+    affordanceScore: number;
+    qualityScore: number;
+    semanticSignals: string[];
+    keyframeIds?: string[];
+    reasons: string[];
+    warnings: string[];
+  };
 }
 
 export interface SlotTreatmentSpec {
@@ -349,6 +757,18 @@ export interface SlotTreatmentSpec {
 }
 
 export type SlotAlignmentSource = 'llm_judge' | 'rule_based';
+
+export interface AssetMatchEvidence {
+  assetId: string;
+  qualityScore: number;
+  topAffordanceRole?: AssetManagerRole;
+  topAffordanceScore?: number;
+  productVisibilityScore?: number;
+  keyframeIds: string[];
+  keyframeCaptions?: string[];
+  reasons: string[];
+  warnings: string[];
+}
 
 export interface SlotMatch {
   slotId: string;
@@ -363,6 +783,7 @@ export interface SlotMatch {
   missingDescription?: string;
   treatmentSpec?: SlotTreatmentSpec;
   alignmentSource?: SlotAlignmentSource;
+  assetEvidence?: AssetMatchEvidence;
 }
 
 export type MaterialGapType =
@@ -460,4 +881,120 @@ export interface QualityReport {
   subtitleReadability: number;
   warnings: string[];
   transitionFidelity?: number;  // 0..1; only populated when source boundaries exist
+}
+
+export type SafetyStatusLevel = 'passed' | 'needs_review' | 'blocked';
+export type SafetyRiskLevel = 'low' | 'medium' | 'high';
+
+export interface SafetyStatus {
+  status: SafetyStatusLevel;
+  ipRisk: SafetyRiskLevel;
+  brandRisk: SafetyRiskLevel;
+  claimRisk: SafetyRiskLevel;
+  reasons: string[];
+}
+
+export type StoryboardFrameType =
+  | 'opening_hook'
+  | 'product_closeup'
+  | 'benefit_usage'
+  | 'gap_repair'
+  | 'cta_cover';
+
+export interface StoryboardImagePrompt {
+  positivePrompt: string;
+  negativePrompt: string;
+  aspectRatio: '9:16' | '16:9' | '1:1' | 'unknown';
+  styleHints: string[];
+  promptSource: 'storyboard_prompt_planner';
+}
+
+export interface GeneratedVisualAsset {
+  id: string;
+  type: 'placeholder_svg' | 'external_image';
+  url: string;
+  mimeType: 'image/svg+xml' | 'image/png' | 'image/jpeg';
+  generationSource: 'placeholder' | 'image_api';
+  promptId: string;
+  label: string;
+}
+
+export interface StoryboardFrame {
+  id: string;
+  frameIndex: number;
+  frameType: StoryboardFrameType;
+  title: string;
+  timelineItemId: string;
+  slotId?: string;
+  structureIntent: string;
+  sourceInstance: string;
+  acceptanceCriteria: string[];
+  matchedAsset?: Pick<AssetCard, 'id' | 'type' | 'url' | 'text' | 'spatialDescription' | 'temporalDescription' | 'qualityScore'>;
+  slotMatch?: Pick<SlotMatch, 'slotId' | 'assetId' | 'score' | 'status' | 'reason' | 'alignmentSource'>;
+  materialGap?: Pick<MaterialGap, 'slotId' | 'role' | 'type' | 'severity' | 'reason' | 'impact' | 'gapSpecSource'>;
+  repair?: GapRepair;
+  imagePrompt: StoryboardImagePrompt;
+  generatedVisualAsset?: GeneratedVisualAsset;
+  safetyStatus: SafetyStatus;
+  rationale: string;
+}
+
+export type GenerationProvider = 'mock' | 'seedance_2_0';
+export type MissingMaterialGenerationMode = 'image_to_video' | 'text_to_video';
+export type MissingMaterialGenerationStatus = 'planned' | 'ready' | 'blocked';
+
+export interface MissingMaterialGenerationRequest {
+  materialGaps: MaterialGap[];
+  repairs?: GapRepair[];
+  storyboardFrames?: StoryboardFrame[];
+  timeline?: TimelineItem[];
+  contentBrief?: ContentBrief;
+  aspectRatio?: '9:16' | '16:9' | '1:1' | 'unknown';
+  provider?: GenerationProvider;
+}
+
+export interface MissingMaterialGenerationJob {
+  id: string;
+  gapId: string;
+  repairId?: string;
+  timelineItemId?: string;
+  provider: GenerationProvider;
+  providerLabel: string;
+  mode: MissingMaterialGenerationMode;
+  status: MissingMaterialGenerationStatus;
+  durationSec: number;
+  aspectRatio: '9:16' | '16:9' | '1:1' | 'unknown';
+  positivePrompt: string;
+  negativePrompt: string;
+  shotSpec: string;
+  gapType?: MaterialGapType;
+  gapSeverity: MaterialGap['severity'];
+  repairStrategy?: GapRepairStrategy;
+  storyboardFrameId?: string;
+  safetyStatus: SafetyStatus;
+  blockedReason?: string;
+  disclaimer: string;
+}
+
+export interface DemoEstimateMetric {
+  score: number;
+  label: string;
+  explanation: string;
+  formula?: string;
+  simulated?: boolean;
+}
+
+export interface DemoEstimate {
+  disclaimer: 'Offline heuristic estimate. Not based on real user behavior.';
+  generatedAt: string;
+  metrics: {
+    viralPotential: DemoEstimateMetric;
+    templateFit: DemoEstimateMetric;
+    gapRepairCoverage: DemoEstimateMetric;
+    evidenceConfidence: DemoEstimateMetric;
+    variantDistinctiveness: DemoEstimateMetric;
+    estimatedCtrLift: DemoEstimateMetric;
+  };
+  components: Record<string, number>;
+  warnings: string[];
 }
