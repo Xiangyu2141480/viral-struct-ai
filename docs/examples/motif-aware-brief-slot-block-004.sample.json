@@ -1,0 +1,210 @@
+{
+  "id": "missing_material_brief_004_slot_block_004_asset_001",
+  "affectedSegmentId": "segment_block_004",
+  "affectedSlotId": "slot_block_004_asset_001",
+  "slotRole": "usage_demo",
+  "slotIntent": "Kinetic assembly reveal transferred into beverage-native cascade, activation, spectacle burst, and CTA lock-up.",
+  "missingIngredients": [
+    {
+      "requiredIngredientId": "motif_component_cascade",
+      "label": "chaos-to-order beverage ingredient cascade",
+      "reason": "The source slot depends on a cascade-to-assembly beat, not just a plain usage shot.",
+      "evidence": [
+        "component_cascade",
+        "chaos_to_order",
+        "assembly_completion"
+      ]
+    },
+    {
+      "requiredIngredientId": "motif_activation_moment",
+      "label": "cap opening or pour activation",
+      "reason": "The migrated structure needs a tactile action that activates the beverage reveal.",
+      "evidence": [
+        "interaction_activation",
+        "cap opening",
+        "pour to cup"
+      ]
+    },
+    {
+      "requiredIngredientId": "motif_cta_lockup",
+      "label": "clean CTA lock-up surface",
+      "reason": "The sequence resolves into a CTA reveal and needs a clean final visual surface.",
+      "evidence": [
+        "cta_reveal",
+        "clean CTA end frame"
+      ]
+    }
+  ],
+  "potentialImpact": [
+    {
+      "type": "usage_proof_missing",
+      "description": "If this is reduced to ordinary open-cap footage, the source chaos-to-order assembly structure is lost.",
+      "severity": "high"
+    },
+    {
+      "type": "cta_clarity_reduced",
+      "description": "The final activation/payoff needs a clean CTA surface instead of a generic usage clip.",
+      "severity": "medium"
+    }
+  ],
+  "manualShootBrief": {
+    "title": "补拍动势组装感饮料素材",
+    "objective": "保留 chaos-to-order / assembly / activation / spectacle / CTA 结构，但全部替换为饮料语境动作。",
+    "shotDescription": "Shoot 4-6 seconds of 康师傅冰红茶 in a vertical beverage-native kinetic reveal. Start with ice drop or lemon/tea-droplet cascade, move into cap opening or pour activation, then resolve into cold detail and clean CTA end frame.",
+    "durationSec": 5,
+    "framing": "vertical 9:16, hand-only or product-only, label readable before final lock-up",
+    "requiredProps": [
+      "康师傅冰红茶",
+      "ice cubes",
+      "lemon slices",
+      "clear cup",
+      "cold detail background",
+      "clean CTA end frame surface"
+    ],
+    "mustCapture": [
+      "ice drop",
+      "cap opening",
+      "pour to cup",
+      "cold detail with droplets or mist",
+      "clean CTA end frame"
+    ],
+    "avoid": [
+      "keyboard",
+      "laptop",
+      "touchpad",
+      "rocket",
+      "hardware",
+      "MacBook or Apple visual identity",
+      "unverified price or medical claims"
+    ]
+  },
+  "aigcGenerationBrief": {
+    "providerHint": "seedance",
+    "prompt": "Prompt brief only, not rendered output. Create a vertical 9:16 beverage-native kinetic assembly reveal for 康师傅冰红茶. Use ice cubes, lemon slices, tea droplets, and cold mist as a chaos-to-order ingredient cascade. Show cap opening or pour to cup as the interaction activation moment. Add a cold splash or mist spectacle burst, then finish on a clean CTA lock-up. Keep claims limited to: 冰爽解腻. CTA intent: 马上来一瓶.",
+    "negativePrompt": "no keyboard, no laptop, no touchpad, no rocket, no hardware, no MacBook, no Apple visual identity, no copied source layout, no watermark, no celebrity, no medical claims, do not alter the product packaging or label",
+    "referenceAssetIds": [
+      "plain_001_table_product_pan"
+    ],
+    "expectedDurationSec": 5,
+    "aspectRatio": "9:16",
+    "safetyNotes": [
+      "This is a motif-aware Asset Manager handoff brief only.",
+      "It transfers motion grammar, not source objects or source product identity.",
+      "No external generation call is made by Asset Manager."
+    ]
+  },
+  "hyperframesBrief": {
+    "title": "Kinetic beverage benefit card drop",
+    "cardType": "benefit_card",
+    "copyIntent": "Use a HyperFrames benefit card drop to preserve assembly/activation energy around 冰爽解腻, ending with 马上来一瓶.",
+    "visualElements": [
+      "康师傅冰红茶",
+      "ice cubes",
+      "lemon slices",
+      "tea droplets",
+      "cold mist",
+      "benefit card drop",
+      "CTA lock-up"
+    ],
+    "animationHints": [
+      "ingredient cascade enters frame",
+      "benefit card drops on impact beat",
+      "cold mist burst behind product",
+      "final clean CTA hold"
+    ],
+    "durationSec": 4,
+    "inputAssets": [
+      "plain_001_table_product_pan"
+    ]
+  },
+  "channelEligibility": [
+    {
+      "channel": "manual_shoot",
+      "eligible": true,
+      "confidence": "high",
+      "reason": "Human reshoot can directly capture ice drop, pour activation, cold detail, and CTA lock-up.",
+      "requiredInputs": [
+        "product",
+        "phone camera",
+        "ice",
+        "cup"
+      ],
+      "providedInputs": [
+        "plain_001_table_product_pan"
+      ],
+      "missingInputs": [],
+      "ownership": "human_shooting"
+    },
+    {
+      "channel": "aigc_video_prompt",
+      "eligible": true,
+      "confidence": "medium",
+      "reason": "A downstream adapter may use the prompt brief to generate missing motif footage.",
+      "requiredInputs": [
+        "prompt brief",
+        "safe product reference"
+      ],
+      "providedInputs": [
+        "plain_001_table_product_pan"
+      ],
+      "missingInputs": [],
+      "ownership": "external_generation_adapter"
+    },
+    {
+      "channel": "hyperframes_card_animation",
+      "eligible": true,
+      "confidence": "high",
+      "reason": "A benefit card drop can preserve the assembly/activation beat when real footage is missing.",
+      "requiredInputs": [
+        "copy intent",
+        "visual elements"
+      ],
+      "providedInputs": [
+        "plain_001_table_product_pan"
+      ],
+      "missingInputs": [],
+      "ownership": "hyperframes_renderer"
+    }
+  ],
+  "motifContext": {
+    "motifAnnotationId": "motif_slot_block_004_asset_001_kinetic_assembly_reveal",
+    "motifType": "kinetic_assembly_reveal",
+    "motionTokens": [
+      "component_cascade",
+      "chaos_to_order",
+      "assembly_completion",
+      "interaction_activation",
+      "spectacle_burst",
+      "cta_reveal"
+    ],
+    "missingMotionTokens": [
+      "component_cascade",
+      "chaos_to_order",
+      "assembly_completion",
+      "interaction_activation",
+      "spectacle_burst",
+      "cta_reveal"
+    ],
+    "sanitizedIntent": "Transfer component cascade, chaos to order, dynamic assembly, interaction activation, spectacle burst and CTA reveal into category-native motion grammar.",
+    "targetMotifHints": [
+      "ice cubes",
+      "lemon slices",
+      "tea droplets",
+      "cold mist",
+      "cap opening",
+      "pour to cup",
+      "CTA lock-up"
+    ],
+    "confidence": 1,
+    "evidence": [
+      "Detected component_cascade from rule-based source text scan.",
+      "Detected chaos_to_order from rule-based source text scan.",
+      "Detected assembly_completion from rule-based source text scan.",
+      "Detected interaction_activation from rule-based source text scan.",
+      "Detected spectacle_burst from rule-based source text scan.",
+      "Detected cta_reveal from rule-based source text scan.",
+      "Rule confidence 1.00 from 6 motion token(s)."
+    ]
+  },
+  "ownership": "asset_manager_handoff_brief_only"
+}

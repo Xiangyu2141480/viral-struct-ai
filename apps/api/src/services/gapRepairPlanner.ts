@@ -10,7 +10,7 @@ export function planGapRepairs(
 ): GapRepair[] {
   return gaps.map((gap) => {
     const repair = buildBaseRepair(gap, newContent);
-    return annotateBoundary(repair, gap, boundaries);
+    return annotateBoundary(annotateMotif(repair, gap), gap, boundaries);
   });
 }
 
@@ -116,6 +116,21 @@ function annotateBoundary(
   return {
     ...repair,
     explanation: `[boundary:${touching.transitionType}/${touching.intensity}] 该缺口位于源片强转场边界，补全策略需保持原片节奏；${repair.explanation}`
+  };
+}
+
+function annotateMotif(repair: GapRepair, gap: MaterialGap): GapRepair {
+  const context = gap.motifContext;
+  if (!context) return repair;
+
+  const motionTokens = context.missingMotionTokens.length
+    ? context.missingMotionTokens.join('/')
+    : context.motionTokens.join('/');
+  const targetHints = context.targetMotifHints.slice(0, 4).join('/');
+
+  return {
+    ...repair,
+    explanation: `[motif:${context.motifType}] 缺口来自源片动势语法，需保留 ${motionTokens || 'motion grammar'}；目标语境可参考 ${targetHints || 'category-native visual cues'}。${repair.explanation}`
   };
 }
 

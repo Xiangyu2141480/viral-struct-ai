@@ -50,6 +50,31 @@ test('planGapRepairs does not annotate for weak boundaries', () => {
   assert.ok(!repair.explanation.startsWith('[boundary:'));
 });
 
+test('planGapRepairs reads motif context as evidence without changing final strategy', () => {
+  const motifGap = {
+    ...gap,
+    slotId: 'slot_block_004_asset_001',
+    role: 'usage_demo',
+    type: 'missing_usage_demo',
+    motifContext: {
+      motifType: 'kinetic_assembly_reveal',
+      motionTokens: ['component_cascade', 'chaos_to_order', 'assembly_completion', 'interaction_activation'],
+      missingMotionTokens: ['chaos_to_order', 'assembly_completion'],
+      sanitizedIntent: 'dynamic assembly, interaction activation, spectacle burst, CTA reveal',
+      targetMotifHints: ['ice cubes', 'cold mist', 'CTA lock-up'],
+      confidence: 0.82,
+      evidence: ['Rule confidence 0.82 from motion token(s).']
+    }
+  } as MaterialGap;
+
+  const [repair] = planGapRepairs([motifGap], [], brief);
+
+  assert.equal(repair.strategy, 'crop_zoom');
+  assert.match(repair.explanation, /\[motif:kinetic_assembly_reveal\]/);
+  assert.match(repair.explanation, /chaos_to_order/);
+  assert.match(repair.explanation, /ice cubes/);
+});
+
 // ---------------------------------------------------------------------------
 // LLM gap-spec tests
 // ---------------------------------------------------------------------------

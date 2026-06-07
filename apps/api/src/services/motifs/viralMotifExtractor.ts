@@ -1,4 +1,4 @@
-import type { MotifTransferVariable, MotionToken, ShotSlotNode, ViralMotifAnnotation } from '@viral-struct/shared';
+import type { MotifContext, MotifTransferVariable, MotionToken, ShotSlotNode, ViralMotifAnnotation } from '@viral-struct/shared';
 import { mapTargetCategoryMotif } from './targetCategoryMotifMapper';
 import { containsSourceSpecificTerm, sanitizeMotionGrammarText } from './motionGrammarSanitizer';
 
@@ -45,6 +45,19 @@ export function extractViralMotifAnnotation(input: ViralMotifExtractorInput): Vi
       `Rule confidence ${kineticScore.toFixed(2)} from ${sanitized.motionTokens.length} motion token(s).`
     ],
     confidence: kineticScore
+  };
+}
+
+export function buildMotifContext(annotation: ViralMotifAnnotation): MotifContext {
+  return {
+    motifAnnotationId: annotation.id,
+    motifType: annotation.motifType,
+    motionTokens: annotation.motionTokens,
+    missingMotionTokens: annotation.motionTokens,
+    sanitizedIntent: annotation.sanitizedIntent,
+    targetMotifHints: annotation.targetCategoryMapping.preferredEquivalents,
+    confidence: annotation.confidence,
+    evidence: annotation.evidence
   };
 }
 

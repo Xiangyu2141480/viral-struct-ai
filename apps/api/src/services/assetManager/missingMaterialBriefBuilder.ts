@@ -10,14 +10,20 @@ import type {
   ManualShootBrief,
   MaterialScenarioProfile,
   MissingIngredient,
-  MissingMaterialBrief
+  MissingMaterialBrief,
+  ShotSlotNode,
+  ViralMotifAnnotation,
+  ViralStructureGraph
 } from '@viral-struct/shared';
+import { buildMotifAwareBriefs } from '../motifs/motifAwareBriefBuilder';
+import { buildMotifContext, extractViralMotifAnnotation } from '../motifs/viralMotifExtractor';
 
 export interface BuildMissingMaterialBriefsInput {
   contextualCoverage?: ContextualAssetCoverageReport;
   assetCards: AssetCard[];
   contentBrief?: ContentBrief;
   materialScenario: MaterialScenarioProfile;
+  structureGraph?: ViralStructureGraph;
 }
 
 const SAFE_NEGATIVE_PROMPT = [
@@ -35,18 +41,28 @@ export function buildMissingMaterialBriefs(input: BuildMissingMaterialBriefsInpu
   const coverages = input.contextualCoverage?.slotCoverages ?? [];
   return coverages
     .filter((coverage) => coverage.coverageStatus !== 'covered')
-    .map((coverage, index) => buildBrief(coverage, input, index));
+    .map((coverage, index) => buildBrief(coverage, input, index, findSlot(input.structureGraph, coverage.slotId)));
 }
 
 function buildBrief(
   coverage: ContextualSlotCoverage,
   input: BuildMissingMaterialBriefsInput,
-  index: number
+  index: number,
+  slot?: ShotSlotNode
 ): MissingMaterialBrief {
   const slotRole = coverage.slotRole;
   const normalizedRole = normalizeRole(slotRole);
   const referenceAssetIds = selectReferenceAssetIds(input.assetCards, coverage);
   const missingIngredients = mergeMissingIngredients(coverage);
+  const motif = findMotifAnnotation(slot, input.contentBrief);
+  const motifBriefs = motif
+    ? buildMotifAwareBriefs({
+        motif,
+        contentBrief: input.contentBrief,
+        referenceAssetIds
+      })
+    : undefined;
+  const motifContext = motif ? buildMotifContext(motif) : coverage.motifContext;
 
   return {
     id: `missing_material_brief_${String(index + 1).padStart(3, '0')}_${safeId(coverage.slotId)}`,
@@ -62,12 +78,48 @@ function buildBrief(
           severity: 'medium' as const
         })).slice(0, 2)
       : findImpacts(input.contextualCoverage, coverage.slotId),
-    manualShootBrief: buildManualShootBrief(normalizedRole, input.contentBrief, coverage),
-    aigcGenerationBrief: buildAigcBrief(normalizedRole, input.contentBrief, coverage, referenceAssetIds, input.materialScenario),
-    hyperframesBrief: buildHyperframesBrief(normalizedRole, input.contentBrief, coverage, referenceAssetIds),
+    manualShootBrief: motifBriefs?.manualShootBrief ?? buildManualShootBrief(normalizedRole, input.contentBrief, coverage),
+    aigcGenerationBrief: motifBriefs?.aigcGenerationBrief ?? buildAigcBrief(normalizedRole, input.contentBrief, coverage, referenceAssetIds, input.materialScenario),
+    hyperframesBrief: motifBriefs?.hyperframesBrief ?? buildHyperframesBrief(normalizedRole, input.contentBrief, coverage, referenceAssetIds),
     channelEligibility: buildChannelEligibility(normalizedRole, coverage, input.assetCards, input.materialScenario, referenceAssetIds),
+    motifContext,
     ownership: 'asset_manager_handoff_brief_only'
   };
+}
+
+function findSlot(structureGraph: ViralStructureGraph | undefined, slotId: string): ShotSlotNode | undefined {
+  return structureGraph?.shotSlots.find((slot) => slot.id === slotId);
+}
+
+function findMotifAnnotation(slot: ShotSlotNode | undefined, brief: ContentBrief | undefined): ViralMotifAnnotation | undefined {
+  if (!slot) {
+    return undefined;
+  }
+
+  const existing = slot.motifAnnotations?.find((annotation) => annotation.motifType === 'kinetic_assembly_reveal');
+  if (existing) {
+    return existing;
+  }
+
+  return extractViralMotifAnnotation({
+    slot,
+    targetCategory: inferTargetCategory(brief)
+  });
+}
+
+function inferTargetCategory(brief: ContentBrief | undefined): string {
+  const text = [
+    brief?.productName,
+    brief?.scenario,
+    brief?.stylePreference,
+    ...(brief?.sellingPoints ?? [])
+  ].filter(Boolean).join(' ').toLowerCase();
+
+  if (/beverage|drink|tea|iced|红茶|饮料|冰/.test(text)) {
+    return 'beverage';
+  }
+
+  return 'unknown';
 }
 
 function buildManualShootBrief(role: NormalizedBriefRole, brief: ContentBrief | undefined, coverage: ContextualSlotCoverage): ManualShootBrief {

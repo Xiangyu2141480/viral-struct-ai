@@ -9,6 +9,7 @@ import type {
   CoverageImpact,
   MaterialCoverageObservation,
   MissingIngredient,
+  MotifContext,
   NormalizedAssetCard,
   RequiredIngredient,
   ShotSlotNode,
@@ -19,6 +20,7 @@ import type {
   ViralStructureGraph
 } from '@viral-struct/shared';
 import { AssetSupplyContextSchema } from '@viral-struct/shared';
+import { buildMotifContext, extractViralMotifAnnotation } from '../motifs/viralMotifExtractor';
 import { analyzeAssetCoverage } from './assetCoverageAnalyzer';
 import { buildMissingMaterialBriefs } from './missingMaterialBriefBuilder';
 import { classifyMaterialScenario, type MaterialScenarioClassifierOptions } from './materialScenarioClassifier';
@@ -57,7 +59,8 @@ export function buildAssetSupplyContext(input: BuildAssetSupplyContextInput): As
     contextualCoverage,
     assetCards: coverage.assetCards,
     contentBrief: input.contentBrief,
-    materialScenario: preliminaryScenario
+    materialScenario: preliminaryScenario,
+    structureGraph: input.structureGraph
   });
   const materialScenario = classifyMaterialScenario({
     assets: coverage.assetCards,
@@ -100,7 +103,7 @@ export interface BuildContextualCoverageInput {
 export function buildContextualAssetCoverageReport(input: BuildContextualCoverageInput): ContextualAssetCoverageReport {
   const assetById = new Map(input.assetCards.map((asset) => [asset.id, asset]));
   const slotById = new Map((input.structureGraph?.shotSlots ?? []).map((slot) => [slot.id, slot]));
-  const slotCoverages = input.slotRows.map((row) => buildSlotCoverage(row, slotById.get(row.slotId), assetById));
+  const slotCoverages = input.slotRows.map((row) => buildSlotCoverage(row, slotById.get(row.slotId), assetById, input.contentBrief));
   const observations = slotCoverages
     .filter((coverage) => coverage.coverageStatus !== 'covered')
     .map((coverage, index) => buildObservation(coverage, index));
@@ -132,7 +135,8 @@ export function buildContextualAssetCoverageReport(input: BuildContextualCoverag
 function buildSlotCoverage(
   row: SlotCoverageRow,
   slot: ShotSlotNode | undefined,
-  assetById: Map<string, AssetCard>
+  assetById: Map<string, AssetCard>,
+  contentBrief: ContentBrief | undefined
 ): ContextualSlotCoverage {
   const requiredIngredients = buildRequiredIngredients(row, slot);
   const candidateAssets = row.candidates
@@ -144,6 +148,7 @@ function buildSlotCoverage(
   const availableIngredients = buildAvailableIngredients(requiredIngredients, row, coverageStatus, bestCandidate);
   const missingIngredients = buildMissingIngredients(requiredIngredients, row, coverageStatus, 'missing');
   const weakIngredients = buildMissingIngredients(requiredIngredients, row, coverageStatus, 'weak');
+  const motifContext = buildSlotMotifContext(slot, contentBrief, coverageStatus);
 
   return {
     slotId: row.slotId,
@@ -159,8 +164,9 @@ function buildSlotCoverage(
     candidateAssets,
     coverageStatus,
     confidence: confidenceFromScore(row.bestScore),
-    evidence: buildCoverageEvidence(row, bestCandidate),
-    limitations: buildLimitations(row, bestCandidate)
+    evidence: buildCoverageEvidence(row, bestCandidate, motifContext),
+    limitations: buildLimitations(row, bestCandidate),
+    motifContext
   };
 }
 
@@ -393,7 +399,11 @@ function buildObservation(coverage: ContextualSlotCoverage, index: number): Mate
     potentialImpact: buildPotentialImpact(coverage, severity),
     severityEstimate: severity,
     confidence: coverage.confidence,
-    evidence: coverage.evidence,
+    evidence: buildObservationEvidence(coverage),
+    motifContext: coverage.motifContext,
+    motifType: coverage.motifContext?.motifType,
+    missingMotionTokens: coverage.motifContext?.missingMotionTokens,
+    targetMotifHints: coverage.motifContext?.targetMotifHints,
     ownership: 'asset_manager_observation_only'
   };
 }
@@ -476,13 +486,76 @@ function firstAcceptanceCriterion(slot?: ShotSlotNode): string | undefined {
   return buildAcceptanceCriteria(slot)?.[0];
 }
 
-function buildCoverageEvidence(row: SlotCoverageRow, candidate?: SlotAssetCandidate): string[] {
+function buildCoverageEvidence(row: SlotCoverageRow, candidate?: SlotAssetCandidate, motifContext?: MotifContext): string[] {
   return [
     `coverageStatus=${row.status === 'missing' ? 'insufficient' : row.status}`,
     `bestScore=${row.bestScore}`,
     row.gapReason,
-    candidate ? `bestCandidate=${candidate.assetId}` : undefined
+    candidate ? `bestCandidate=${candidate.assetId}` : undefined,
+    motifContext ? `motif=${motifContext.motifType}` : undefined,
+    motifContext?.missingMotionTokens.length ? `missingMotionTokens=${motifContext.missingMotionTokens.join('/')}` : undefined,
+    motifContext?.targetMotifHints.length ? `targetMotifHints=${motifContext.targetMotifHints.slice(0, 4).join('/')}` : undefined
   ].filter((value): value is string => Boolean(value));
+}
+
+function buildObservationEvidence(coverage: ContextualSlotCoverage): string[] {
+  if (!coverage.motifContext) {
+    return coverage.evidence;
+  }
+
+  return [
+    ...coverage.evidence,
+    `motifContext=${coverage.motifContext.motifType}`,
+    `motifIntent=${coverage.motifContext.sanitizedIntent}`
+  ];
+}
+
+function buildSlotMotifContext(
+  slot: ShotSlotNode | undefined,
+  contentBrief: ContentBrief | undefined,
+  coverageStatus: ContextualSlotCoverage['coverageStatus']
+): MotifContext | undefined {
+  const annotation = findSlotMotifAnnotation(slot, contentBrief);
+  if (!annotation) {
+    return undefined;
+  }
+
+  const context = buildMotifContext(annotation);
+  return {
+    ...context,
+    missingMotionTokens: coverageStatus === 'covered' ? [] : context.motionTokens
+  };
+}
+
+function findSlotMotifAnnotation(slot: ShotSlotNode | undefined, contentBrief: ContentBrief | undefined) {
+  if (!slot) {
+    return undefined;
+  }
+
+  const existing = slot.motifAnnotations?.find((annotation) => annotation.motifType !== undefined);
+  if (existing) {
+    return existing;
+  }
+
+  return extractViralMotifAnnotation({
+    slot,
+    targetCategory: inferTargetCategory(contentBrief)
+  });
+}
+
+function inferTargetCategory(brief: ContentBrief | undefined): string {
+  const text = [
+    brief?.productName,
+    brief?.scenario,
+    brief?.stylePreference,
+    ...(brief?.sellingPoints ?? [])
+  ].filter(Boolean).join(' ').toLowerCase();
+
+  if (/beverage|drink|tea|iced|红茶|饮料|冰/.test(text)) {
+    return 'beverage';
+  }
+
+  return 'unknown';
 }
 
 function buildLimitations(row: SlotCoverageRow, candidate?: SlotAssetCandidate): string[] {

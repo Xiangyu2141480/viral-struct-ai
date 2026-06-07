@@ -541,6 +541,17 @@ export const ViralMotifAnnotationSchema = z.object({
   confidence: z.number().min(0).max(1)
 }).strict();
 
+export const MotifContextSchema = z.object({
+  motifAnnotationId: z.string(),
+  motifType: MotifTypeSchema,
+  motionTokens: z.array(MotionTokenSchema),
+  missingMotionTokens: z.array(MotionTokenSchema),
+  sanitizedIntent: z.string(),
+  targetMotifHints: z.array(z.string()),
+  confidence: z.number().min(0).max(1),
+  evidence: z.array(z.string())
+}).strict();
+
 const MotifAwareBriefBaseSchema = z.object({
   id: z.string(),
   motifAnnotationId: z.string(),
@@ -803,7 +814,8 @@ export const ContextualSlotCoverageSchema = z.object({
   coverageStatus: z.enum(['covered', 'weak', 'insufficient']),
   confidence: z.enum(['high', 'medium', 'low']),
   evidence: z.array(z.string()),
-  limitations: z.array(z.string())
+  limitations: z.array(z.string()),
+  motifContext: MotifContextSchema.optional()
 });
 
 export const MaterialCoverageObservationSchema = z.object({
@@ -833,6 +845,10 @@ export const MaterialCoverageObservationSchema = z.object({
   severityEstimate: z.enum(['low', 'medium', 'high']),
   confidence: z.enum(['high', 'medium', 'low']),
   evidence: z.array(z.string()),
+  motifContext: MotifContextSchema.optional(),
+  motifType: MotifTypeSchema.optional(),
+  missingMotionTokens: z.array(MotionTokenSchema).optional(),
+  targetMotifHints: z.array(z.string()).optional(),
   ownership: z.literal('asset_manager_observation_only')
 });
 
@@ -927,6 +943,7 @@ export const MissingMaterialBriefSchema = z.object({
   aigcGenerationBrief: AigcGenerationBriefSchema.optional(),
   hyperframesBrief: HyperframesFallbackBriefSchema.optional(),
   channelEligibility: z.array(CompletionChannelEligibilitySchema),
+  motifContext: MotifContextSchema.optional(),
   ownership: z.literal('asset_manager_handoff_brief_only')
 });
 
