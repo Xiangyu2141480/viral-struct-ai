@@ -23,7 +23,7 @@ A. intent 是「可迁移的意图」(KEEP)：绝对不能出现产品名、品�
    - 正例：「1.5s 内制造高强度视觉冲击建立注意力锚点」「主体对称入画并完成形态切换」
 B. sourceInstance 是「源片实例」(SWAP)：必须包含源片专属细节，明确告知下游"哪些是要替换的"。
    - 正例：productInSource = "MacBook 银色机身"，specificAction = "双手左右托举旋转"
-C. acceptanceCriteria.anyOf 是「多套替代方案」：列出 2-4 套不同的视觉/动作/构图模式，任一组合达成即满足该块意图。
+C. acceptanceCriteria.anyOf 是「多套替代方案」：列出恰好 2 套不同的视觉/动作/构图模式，任一组合达成即满足该块意图。两套要有区分度（不同的 motionType 或 compositionType），不要把同一套换词重写。
    - examples 写通用形容（如「液体飞溅」），不写成「可口可乐喷出」。
    - 用于让下游 LLM 在素材匹配时，能判断「这张图能不能演这一块」。
 D. rejectIf 列出明显不接受的素材类型，≤2 条，不写废话（如不要写「低质量素材」）。
@@ -157,7 +157,7 @@ D. rejectIf 列出明显不接受的素材类型，≤2 条，不写废话（如
 - inspectionAnswers 数量必须等于上方 fineScanFocusQuestions 数量；每个回答用相对位置（'开头'/'中段'/'结尾'）而非具体时间。
 - migrationContract.intent.purpose 绝对不能包含产品名/品牌/源片专属颜色名。如果你写了产品名或专属颜色，结果会被视为不合格。
 - migrationContract.sourceInstance.productInSource 必须包含源片产品实际文本（这是 SWAP 标记，下游靠它替换）。
-- migrationContract.acceptanceCriteria.anyOf 长度必须在 2 到 4 之间。
+- migrationContract.acceptanceCriteria.anyOf 长度必须恰好为 2（两套有区分度的替代方案）。
 - 描述字段统一用中文；命名字段（motionPattern / compositionPrincipal / colorSignature / motionType / compositionType / soundDesignHint）统一用英文蛇形（snake_case）。
 ```
 
@@ -211,11 +211,6 @@ fineScanFocusQuestions=["这段变色动画的具体节奏卡点细节是否和�
           "motionType": "object_kinetic_entry",
           "compositionType": "left_right_symmetry",
           "examples": ["双手对称托举产品入画", "产品从画外快速进入并停留中央"]
-        },
-        {
-          "motionType": "particle_assembly",
-          "compositionType": "centripetal_focus",
-          "examples": ["碎片飞向中心组装成产品", "粒子聚拢呈现产品轮廓"]
         }
       ],
       "rejectIf": [

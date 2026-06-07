@@ -41,6 +41,18 @@ class DoubaoFineScanTests(unittest.TestCase):
         self.assertEqual(args.base_url, "")
         self.assertEqual(args.model, "")
 
+    def test_parser_perf_flags_have_expected_defaults(self):
+        """PR perf-2 (A/B/C): separate upload lane, poll backoff, pool on."""
+        args = self.module.build_parser().parse_args([])
+        self.assertEqual(args.max_concurrent_upload, 20)
+        self.assertEqual(args.poll_backoff, 1.5)
+        self.assertEqual(args.poll_max_interval, 4.0)
+        self.assertTrue(args.http_pool)
+
+    def test_no_http_pool_flag_disables_pool(self):
+        args = self.module.build_parser().parse_args(["--no-http-pool"])
+        self.assertFalse(args.http_pool)
+
     def test_block_prompt_variables_use_content_block_contract(self):
         block = {
             "id": "block_001",
@@ -467,6 +479,20 @@ class DoubaoFineScanTests(unittest.TestCase):
         self.assertNotIn("keyVisualAction", prompt)
         self.assertNotIn("emotionMicroStructure", prompt)
         self.assertNotIn("additionalFindings", prompt)
+
+    def test_v1_prompt_requires_exactly_two_acceptance_alternatives(self):
+        """E: anyOf tightened from 2-4 to exactly 2 — keeps migrationContract
+        (and its downstream slot fields) while halving the slowest-to-decode
+        generative chunk on the block-scan critical path."""
+        prompt = (ROOT / "prompts" / "video_understanding" / "fine_structure_scan_v1.md").read_text(
+            encoding="utf-8"
+        )
+        # Still v1 — migration contract intact.
+        self.assertIn("migrationContract", prompt)
+        self.assertIn("acceptanceCriteria", prompt)
+        # New constraint present, old 2-4 range gone.
+        self.assertIn("恰好为 2", prompt)
+        self.assertNotIn("2 到 4 之间", prompt)
 
     def test_peak_micro_prompt_has_no_timing_fields(self):
         prompt = (ROOT / "prompts" / "video_understanding" / "peak_micro_scan_v0.md").read_text(
