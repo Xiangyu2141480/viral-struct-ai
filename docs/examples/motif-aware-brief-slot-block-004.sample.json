@@ -166,5 +166,45 @@
       "ownership": "hyperframes_renderer"
     }
   ],
+  "motifContext": {
+    "motifAnnotationId": "motif_slot_block_004_asset_001_kinetic_assembly_reveal",
+    "motifType": "kinetic_assembly_reveal",
+    "motionTokens": [
+      "component_cascade",
+      "chaos_to_order",
+      "assembly_completion",
+      "interaction_activation",
+      "spectacle_burst",
+      "cta_reveal"
+    ],
+    "missingMotionTokens": [
+      "component_cascade",
+      "chaos_to_order",
+      "assembly_completion",
+      "interaction_activation",
+      "spectacle_burst",
+      "cta_reveal"
+    ],
+    "sanitizedIntent": "Transfer component cascade, chaos to order, dynamic assembly, interaction activation, spectacle burst and CTA reveal into category-native motion grammar.",
+    "targetMotifHints": [
+      "ice cubes",
+      "lemon slices",
+      "tea droplets",
+      "cold mist",
+      "cap opening",
+      "pour to cup",
+      "CTA lock-up"
+    ],
+    "confidence": 1,
+    "evidence": [
+      "Detected component_cascade from rule-based source text scan.",
+      "Detected chaos_to_order from rule-based source text scan.",
+      "Detected assembly_completion from rule-based source text scan.",
+      "Detected interaction_activation from rule-based source text scan.",
+      "Detected spectacle_burst from rule-based source text scan.",
+      "Detected cta_reveal from rule-based source text scan.",
+      "Rule confidence 1.00 from 6 motion token(s)."
+    ]
+  },
   "ownership": "asset_manager_handoff_brief_only"
 }

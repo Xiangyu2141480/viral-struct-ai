@@ -16,7 +16,7 @@ import type {
   ViralStructureGraph
 } from '@viral-struct/shared';
 import { buildMotifAwareBriefs } from '../motifs/motifAwareBriefBuilder';
-import { extractViralMotifAnnotation } from '../motifs/viralMotifExtractor';
+import { buildMotifContext, extractViralMotifAnnotation } from '../motifs/viralMotifExtractor';
 
 export interface BuildMissingMaterialBriefsInput {
   contextualCoverage?: ContextualAssetCoverageReport;
@@ -62,6 +62,7 @@ function buildBrief(
         referenceAssetIds
       })
     : undefined;
+  const motifContext = motif ? buildMotifContext(motif) : coverage.motifContext;
 
   return {
     id: `missing_material_brief_${String(index + 1).padStart(3, '0')}_${safeId(coverage.slotId)}`,
@@ -81,6 +82,7 @@ function buildBrief(
     aigcGenerationBrief: motifBriefs?.aigcGenerationBrief ?? buildAigcBrief(normalizedRole, input.contentBrief, coverage, referenceAssetIds, input.materialScenario),
     hyperframesBrief: motifBriefs?.hyperframesBrief ?? buildHyperframesBrief(normalizedRole, input.contentBrief, coverage, referenceAssetIds),
     channelEligibility: buildChannelEligibility(normalizedRole, coverage, input.assetCards, input.materialScenario, referenceAssetIds),
+    motifContext,
     ownership: 'asset_manager_handoff_brief_only'
   };
 }

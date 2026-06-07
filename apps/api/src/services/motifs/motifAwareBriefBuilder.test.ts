@@ -139,6 +139,7 @@ test('motif-aware sample JSON validates as MissingMaterialBrief and remains hand
 
   assert.equal(parsed.ownership, 'asset_manager_handoff_brief_only');
   assert.equal(parsed.affectedSlotId, 'slot_block_004_asset_001');
+  assert.equal(parsed.motifContext?.motifType, 'kinetic_assembly_reveal');
   assert.match(parsed.aigcGenerationBrief?.prompt ?? '', /chaos-to-order ingredient cascade/i);
   assert.equal(JSON.stringify(parsed).includes('fallbackCards'), false);
   assert.equal(JSON.stringify(parsed).includes('suggestedRepair'), false);

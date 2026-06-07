@@ -663,6 +663,17 @@ export interface ViralMotifAnnotation {
   confidence: number;
 }
 
+export interface MotifContext {
+  motifAnnotationId: string;
+  motifType: MotifType;
+  motionTokens: MotionToken[];
+  missingMotionTokens: MotionToken[];
+  sanitizedIntent: string;
+  targetMotifHints: string[];
+  confidence: number;
+  evidence: string[];
+}
+
 export interface MotifAwareManualShootBrief {
   id: string;
   motifAnnotationId: string;
@@ -880,6 +891,7 @@ export interface MissingMaterialBrief {
   aigcGenerationBrief?: AigcGenerationBrief;
   hyperframesBrief?: HyperframesFallbackBrief;
   channelEligibility: CompletionChannelEligibility[];
+  motifContext?: MotifContext;
   ownership: 'asset_manager_handoff_brief_only';
 }
 
@@ -927,6 +939,7 @@ export interface ContextualSlotCoverage {
   confidence: 'high' | 'medium' | 'low';
   evidence: string[];
   limitations: string[];
+  motifContext?: MotifContext;
 }
 
 export interface MaterialCoverageObservation {
@@ -955,6 +968,10 @@ export interface MaterialCoverageObservation {
   severityEstimate: 'low' | 'medium' | 'high';
   confidence: 'high' | 'medium' | 'low';
   evidence: string[];
+  motifContext?: MotifContext;
+  motifType?: MotifType;
+  missingMotionTokens?: MotionToken[];
+  targetMotifHints?: string[];
   ownership: 'asset_manager_observation_only';
 }
 
@@ -1122,6 +1139,7 @@ export interface MaterialGap {
   missingIngredients?: CreativeIngredientType[];
   gapSpec?: GapShootSpec;
   gapSpecSource?: GapSpecSource;
+  motifContext?: MotifContext;
 }
 
 export interface GapRepair {
