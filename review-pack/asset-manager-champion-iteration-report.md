@@ -114,7 +114,7 @@ Key new files:
 - `pnpm test`: passed
 - `pnpm build`: passed
 - `python scripts/validate_structure_graph.py seed_assets/analysis/macbook_neo/structure_graph.json`: passed
-- `rg --hidden -n "ark-[A-Za-z0-9-]+" .`: no ark-style API keys found
+- `rg --hidden -n "ark-[A-Za-z0-9-]+" .`: no Volcengine API keys found
 
 Note: test logs may include a simulated fine-scan failure path. The command exits successfully and the failure text is part of coverage for fallback behavior.
 
