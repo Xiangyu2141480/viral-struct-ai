@@ -637,5 +637,70 @@ class PromptVersionResolutionTests(unittest.TestCase):
             self.module.build_parser().parse_args(["--prompt-version", "v2"])
 
 
+class ResolveConcurrencyTests(unittest.TestCase):
+    """Auto-scaling of block_workers + http cap (A/B-derived, PR-perf).
+
+    Auto mode (arg is None): parallelize all blocks up to AUTO_BLOCK_WORKERS_MAX,
+    and scale the http cap WITH the realized block parallelism (coupled levers)
+    between AUTO_HTTP_FLOOR (40, the +30% sweet spot) and AUTO_HTTP_CEILING (80,
+    the measured-safe max / W2-B guardrail). Explicit args always win.
+    """
+
+    def setUp(self):
+        self.module = load_module()
+
+    def test_auto_eleven_blocks_parallelizes_all_and_lifts_cap_to_ceiling(self):
+        # 11 blocks: bw=min(11,12)=11; demand=11*10=110 -> cap clamped to 80.
+        self.assertEqual(
+            self.module.resolve_concurrency(11, 10, None, None), (11, 80)
+        )
+
+    def test_auto_many_blocks_bounded_by_block_workers_max(self):
+        # 30 blocks: bw bounded to AUTO_BLOCK_WORKERS_MAX (12); cap at ceiling.
+        self.assertEqual(
+            self.module.resolve_concurrency(30, 10, None, None), (12, 80)
+        )
+
+    def test_auto_few_blocks_keeps_cap_at_floor(self):
+        # 4 blocks: bw=4; demand=40 -> cap=max(40,40)=40 (floor).
+        self.assertEqual(
+            self.module.resolve_concurrency(4, 10, None, None), (4, 40)
+        )
+
+    def test_auto_mid_blocks_scales_cap_between_floor_and_ceiling(self):
+        # 6 blocks: bw=6; demand=60 -> cap=60.
+        self.assertEqual(
+            self.module.resolve_concurrency(6, 10, None, None), (6, 60)
+        )
+
+    def test_auto_single_block_uses_floor_cap(self):
+        self.assertEqual(
+            self.module.resolve_concurrency(1, 10, None, None), (1, 40)
+        )
+
+    def test_explicit_block_workers_overrides_auto(self):
+        # Explicit bw=8 honored (not auto 11); cap still auto.
+        self.assertEqual(
+            self.module.resolve_concurrency(11, 10, 8, None), (8, 80)
+        )
+
+    def test_explicit_block_workers_clamped_to_block_count(self):
+        # Asking for more workers than blocks clamps to block count.
+        self.assertEqual(
+            self.module.resolve_concurrency(11, 10, 25, None), (11, 80)
+        )
+
+    def test_explicit_cap_overrides_auto(self):
+        # Explicit --max-concurrent-http 25 honored even with auto block_workers.
+        self.assertEqual(
+            self.module.resolve_concurrency(11, 10, None, 25), (11, 25)
+        )
+
+    def test_explicit_both_are_honored(self):
+        self.assertEqual(
+            self.module.resolve_concurrency(11, 10, 8, 25), (8, 25)
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
