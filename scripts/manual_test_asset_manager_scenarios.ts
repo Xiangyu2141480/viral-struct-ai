@@ -112,7 +112,7 @@ function buildAigcReadyCards(productImage?: AssetCard): AssetCard[] {
     }),
     id: 'planned_aigc_product_reference',
     url: undefined,
-    analysisSource: 'planned_generation',
+    analysisSource: 'manual_text_brief',
     spatialDescription: 'Planned generation descriptor for a product reference; not real rendered output.',
     temporalDescription: 'Prompt-ready descriptor only. No external image or video generation has run.'
   };
