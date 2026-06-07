@@ -326,7 +326,16 @@ export const AssetVlmAnalysisProfileSchema = z.object({
   risks: z.array(z.string())
 });
 
-export const AssetAnalysisSourceSchema = z.enum(['static_library', 'mock_filename_rules', 'llm_multimodal', 'manual_text_brief', 'deterministic']);
+export const AssetAnalysisSourceSchema = z.enum([
+  'static_library',
+  'mock_filename_rules',
+  'llm_multimodal',
+  'manual_text_brief',
+  'deterministic',
+  'generated_external',
+  'planned_generation',
+  'aigc'
+]);
 
 export const AssetAnalysisProfileSchema = z.object({
   profileVersion: z.literal('asset_analysis_v1'),
@@ -458,6 +467,37 @@ export const NormalizedAssetCardSchema = AssetCardSchema.extend({
 });
 
 export const AssetLibraryProfileSchema = AssetLibraryReportSchema;
+
+export const MaterialScenarioTypeSchema = z.enum([
+  'empty_assets',
+  'single_image_only',
+  'partial_real_footage',
+  'aigc_ready',
+  'mixed_real_and_aigc'
+]);
+
+export const MaterialScenarioProfileSchema = z.object({
+  scenarioType: MaterialScenarioTypeSchema,
+  assetCount: z.number().int().min(0),
+  imageCount: z.number().int().min(0),
+  videoCount: z.number().int().min(0),
+  textCount: z.number().int().min(0),
+  generatedAssetCount: z.number().int().min(0),
+  realFootageCount: z.number().int().min(0),
+  evidenceCoverageScore: z.number().min(0).max(100),
+  completionFeasibilityScore: z.number().min(0).max(100),
+  summary: z.string(),
+  strengths: z.array(z.string()),
+  weaknesses: z.array(z.string()),
+  recommendedDownstreamMode: z.enum([
+    'structure_cards_only',
+    'single_image_motion_reuse',
+    'real_footage_editing',
+    'aigc_missing_material_generation',
+    'mixed_repair_workflow'
+  ]),
+  warnings: z.array(z.string())
+});
 
 export const RequiredIngredientKindSchema = z.enum([
   'visual_subject',
@@ -622,6 +662,84 @@ export const ContextualAssetCoverageReportSchema = z.object({
   warnings: z.array(z.string())
 });
 
+export const CompletionChannelEligibilitySchema = z.object({
+  channel: z.enum([
+    'manual_shoot',
+    'aigc_video_prompt',
+    'aigc_image_prompt',
+    'hyperframes_card_animation',
+    'reuse_crop_zoom',
+    'copy_packaging_card',
+    'video_agent_fallback_rendering'
+  ]),
+  eligible: z.boolean(),
+  confidence: z.enum(['high', 'medium', 'low']),
+  reason: z.string(),
+  requiredInputs: z.array(z.string()),
+  providedInputs: z.array(z.string()),
+  missingInputs: z.array(z.string()),
+  ownership: z.enum([
+    'gap_repair_planner',
+    'video_agent',
+    'hyperframes_renderer',
+    'external_generation_adapter',
+    'human_shooting'
+  ])
+});
+
+export const ManualShootBriefSchema = z.object({
+  title: z.string(),
+  objective: z.string(),
+  shotDescription: z.string(),
+  durationSec: z.number().positive(),
+  framing: z.string(),
+  requiredProps: z.array(z.string()),
+  mustCapture: z.array(z.string()),
+  avoid: z.array(z.string())
+});
+
+export const AigcGenerationBriefSchema = z.object({
+  providerHint: z.enum(['gemini', 'seedance', 'generic']),
+  prompt: z.string(),
+  negativePrompt: z.string(),
+  referenceAssetIds: z.array(z.string()),
+  expectedDurationSec: z.number().positive(),
+  aspectRatio: z.enum(['9:16', '16:9', '1:1']),
+  safetyNotes: z.array(z.string())
+});
+
+export const HyperframesFallbackBriefSchema = z.object({
+  title: z.string(),
+  cardType: z.enum([
+    'hook_card',
+    'benefit_card',
+    'usage_placeholder_card',
+    'comparison_card',
+    'cta_card',
+    'timeline_bridge_card'
+  ]),
+  copyIntent: z.string(),
+  visualElements: z.array(z.string()),
+  animationHints: z.array(z.string()),
+  durationSec: z.number().positive(),
+  inputAssets: z.array(z.string())
+});
+
+export const MissingMaterialBriefSchema = z.object({
+  id: z.string(),
+  affectedSegmentId: z.string().optional(),
+  affectedSlotId: z.string(),
+  slotRole: AssetRoleSchema,
+  slotIntent: z.string(),
+  missingIngredients: z.array(MissingIngredientSchema),
+  potentialImpact: z.array(CoverageImpactSchema),
+  manualShootBrief: ManualShootBriefSchema.optional(),
+  aigcGenerationBrief: AigcGenerationBriefSchema.optional(),
+  hyperframesBrief: HyperframesFallbackBriefSchema.optional(),
+  channelEligibility: z.array(CompletionChannelEligibilitySchema),
+  ownership: z.literal('asset_manager_handoff_brief_only')
+});
+
 export const AssetSupplyContextSchema = z.object({
   protocolVersion: z.literal('asset-supply-v1'),
   libraryId: z.string(),
@@ -629,6 +747,8 @@ export const AssetSupplyContextSchema = z.object({
   assets: z.array(NormalizedAssetCardSchema),
   libraryProfile: AssetLibraryProfileSchema,
   contextualCoverage: ContextualAssetCoverageReportSchema.optional(),
+  materialScenario: MaterialScenarioProfileSchema.optional(),
+  missingMaterialBriefs: z.array(MissingMaterialBriefSchema).optional(),
   warnings: z.array(z.string())
 });
 

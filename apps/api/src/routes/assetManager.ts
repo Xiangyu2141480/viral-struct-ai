@@ -24,7 +24,10 @@ const CoverageRequestSchema = z.object({
   structureGraph: ViralStructureGraphSchema.optional(),
   assetCards: z.array(AssetCardSchema).default([]),
   contentBrief: ContentBriefSchema.optional(),
-  libraryId: z.string().optional()
+  libraryId: z.string().optional(),
+  options: z.object({
+    userCanGenerate: z.boolean().optional()
+  }).optional()
 });
 
 const AssetSupplyContextRequestSchema = CoverageRequestSchema.passthrough();
@@ -67,7 +70,8 @@ assetManagerRouter.post('/coverage', (req, res) => {
       structureGraph: body.structureGraph,
       assetCards: body.assetCards,
       contentBrief: body.contentBrief,
-      libraryId: body.libraryId
+      libraryId: body.libraryId,
+      options: body.options
     });
     res.json({
       ...result,
@@ -89,7 +93,8 @@ assetManagerRouter.post('/asset-supply-context', (req, res) => {
       structureGraph: body.structureGraph,
       assetCards: body.assetCards,
       contentBrief: body.contentBrief,
-      libraryId: body.libraryId
+      libraryId: body.libraryId,
+      options: body.options
     });
     res.json({
       assetSupplyContext,
@@ -109,7 +114,8 @@ assetManagerRouter.post('/video-agent-bundle', (req, res) => {
       structureGraph: body.structureGraph,
       assetCards: body.assetCards,
       contentBrief: body.contentBrief,
-      libraryId: body.libraryId
+      libraryId: body.libraryId,
+      options: body.options
     });
     res.json({
       assetSupplyContext,

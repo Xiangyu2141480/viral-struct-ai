@@ -369,6 +369,9 @@ function buildGapReason(
   if (slot.role === 'comparison' && bestAsset && !hasComparisonEvidence(bestAsset)) {
     return `${slot.role} requires lineup, before/after, or comparison evidence; current best asset ${bestAsset.id} does not show comparison.`;
   }
+  if (slot.role === 'usage_demo' && bestAsset && hasSpecificUsageActionRequirement(slot) && !hasUsageActionFamilyMatch(slot, bestAsset)) {
+    return `${slot.role} source slot requires a specific usage action family; current best asset ${bestAsset.id} only provides generic or different usage motion.`;
+  }
   if (slot.role === 'usage_demo' && bestAsset && !hasStrongUsageEvidence(slot, bestAsset)) {
     return `${slot.role} needs drink, pour, open-cap, or stronger use evidence; current best asset ${bestAsset.id} is only partial usage evidence.`;
   }
@@ -478,6 +481,7 @@ function hasBasicUsageEvidence(asset: AssetCard): boolean {
 }
 
 function hasStrongUsageEvidence(_slot: ShotSlotNode, asset: AssetCard): boolean {
+  if (hasSpecificUsageActionRequirement(_slot) && !hasUsageActionFamilyMatch(_slot, asset)) return false;
   const text = buildAssetText(asset);
   const hasDrinkLikeCue = hasAnyPositiveCue(text, [
     'drink',
@@ -494,6 +498,44 @@ function hasStrongUsageEvidence(_slot: ShotSlotNode, asset: AssetCard): boolean 
     '杯'
   ]);
   return hasDrinkLikeCue;
+}
+
+function hasSpecificUsageActionRequirement(slot: ShotSlotNode): boolean {
+  return detectUsageActionFamilies(buildSlotRequirementText(slot)).length > 0;
+}
+
+function hasUsageActionFamilyMatch(slot: ShotSlotNode, asset: AssetCard): boolean {
+  const requiredFamilies = detectUsageActionFamilies(buildSlotRequirementText(slot));
+  if (!requiredFamilies.length) return true;
+  const assetFamilies = detectUsageActionFamilies(buildAssetText(asset));
+  const transferCompatibleFamilies = new Set(['beverage_drink', 'beverage_pour', 'cap_open', 'pickup_holding']);
+  const complexRequiredFamilies = requiredFamilies.filter((family) => !transferCompatibleFamilies.has(family));
+  if (complexRequiredFamilies.length) {
+    return complexRequiredFamilies.some((family) => assetFamilies.includes(family));
+  }
+  return requiredFamilies.some((family) => {
+    if (assetFamilies.includes(family)) return true;
+    if (!transferCompatibleFamilies.has(family)) return false;
+    return assetFamilies.some((assetFamily) => transferCompatibleFamilies.has(assetFamily));
+  });
+}
+
+function detectUsageActionFamilies(text: string): string[] {
+  const families: Array<{ family: string; keywords: string[] }> = [
+    { family: 'beverage_drink', keywords: ['drink', 'drinking', '饮用', '喝'] },
+    { family: 'beverage_pour', keywords: ['pour', '倒', 'cup', '杯'] },
+    { family: 'cap_open', keywords: ['open_cap', 'open cap', 'cap opening', '开盖'] },
+    { family: 'pickup_holding', keywords: ['pickup', 'pick up', 'hand pickup', 'holding_product', '拿起', '手持'] },
+    { family: 'assembly', keywords: ['manual_part_assembly', 'particle_floating_and_assembly', 'assemble', 'assembly', 'install', 'part assembly', 'component', '组装', '安装', '嵌入', '拼接', '归位', '碎片'] },
+    { family: 'ui_interaction', keywords: ['smooth_ui_transition', 'ui transition', 'interface', 'application', 'window', 'dock', 'touchpad', 'keyboard', 'button', 'press', 'slide', '界面', '应用', '窗口', '图标', '触控板', '键盘', '按键', '按压', '滑动'] },
+    { family: 'color_swap', keywords: ['color_swap', 'color swap', 'color', '配色', '颜色', '渐变切换'] },
+    { family: 'device_transfer', keywords: ['device transfer', 'cross-device', 'phone', 'airdrop', 'handoff', '手机', '跨设备', '投送', '接力', '协同'] },
+    { family: 'interface_uncover', keywords: ['sequential_interface_uncover', 'port', 'interface uncover', '接口', '侧边', '露出'] },
+    { family: 'flip_unfold', keywords: ['flip', 'unfold', 'fold', '翻转', '展开', '开合'] }
+  ];
+  return families
+    .filter(({ keywords }) => keywords.some((keyword) => hasPositiveCue(text, keyword)))
+    .map(({ family }) => family);
 }
 
 function needsSpecificActionEvidence(slot: ShotSlotNode): boolean {
@@ -552,7 +594,6 @@ function buildSlotRequirementText(slot: ShotSlotNode): string {
     slot.intent?.motionPattern,
     slot.sourceInstance?.specificAction,
     slot.acceptanceCriteria?.anyOf.flatMap((criterion) => [criterion.motionType, criterion.compositionType, ...criterion.examples]).join(' '),
-    slot.acceptanceCriteria?.rejectIf?.join(' ')
   ].filter(Boolean).join(' ').toLowerCase();
 }
 
@@ -629,7 +670,7 @@ function hasPositiveCue(text: string, keyword: string): boolean {
   let index = normalizedText.indexOf(normalizedKeyword);
   while (index >= 0) {
     const before = normalizedText.slice(Math.max(0, index - 16), index);
-    if (!/(^|[\s_\-;,.])(?:no|not|without|missing|lacks?)\s*$/.test(before)) return true;
+    if (!/(^|[\s_\-;,.])(?:no|not|without|missing|lacks?)(?:\s+[a-z0-9_/-]+){0,3}\s*$/.test(before)) return true;
     index = normalizedText.indexOf(normalizedKeyword, index + normalizedKeyword.length);
   }
   return false;

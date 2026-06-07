@@ -170,6 +170,11 @@ test('POST /api/assets/manager/asset-supply-context returns contextual coverage 
   assert.ok(parsed.contextualCoverage?.slotCoverages.some((row) => row.coverageStatus === 'covered'));
   assert.ok(parsed.contextualCoverage?.slotCoverages.some((row) => row.coverageStatus === 'insufficient'));
   assert.ok(parsed.contextualCoverage?.observations.some((observation) => observation.ownership === 'asset_manager_observation_only'));
+  assert.ok(parsed.materialScenario);
+  assert.equal(parsed.materialScenario?.evidenceCoverageScore, parsed.contextualCoverage?.coverageSummary.coverageScore);
+  assert.ok((parsed.missingMaterialBriefs?.length ?? 0) > 0);
+  assert.ok(parsed.missingMaterialBriefs?.every((briefItem) => briefItem.ownership === 'asset_manager_handoff_brief_only'));
+  assert.ok(parsed.missingMaterialBriefs?.some((briefItem) => briefItem.aigcGenerationBrief?.negativePrompt.includes('no watermark')));
   assert.equal(Object.prototype.hasOwnProperty.call(parsed, 'fallbackCards'), false);
   assert.equal(JSON.stringify(parsed).includes('suggestedRepair'), false);
 });
