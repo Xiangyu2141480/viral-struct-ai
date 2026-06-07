@@ -1053,6 +1053,15 @@ export type GenerationProvider = 'mock' | 'seedance_2_0';
 export type MissingMaterialGenerationMode = 'image_to_video' | 'text_to_video';
 export type MissingMaterialGenerationStatus = 'planned' | 'ready' | 'blocked';
 
+export interface MissingMaterialPromptMetadata {
+  source: 'prompt_compactor';
+  originalPositivePromptLength: number;
+  compactPositivePromptLength: number;
+  targetMaxCharacters: number;
+  shotSpecPreserved: boolean;
+  warnings: string[];
+}
+
 export interface MissingMaterialGenerationRequest {
   materialGaps: MaterialGap[];
   repairs?: GapRepair[];
@@ -1081,6 +1090,7 @@ export interface MissingMaterialGenerationJob {
   gapSeverity: MaterialGap['severity'];
   repairStrategy?: GapRepairStrategy;
   storyboardFrameId?: string;
+  promptMetadata?: MissingMaterialPromptMetadata;
   safetyStatus: SafetyStatus;
   blockedReason?: string;
   disclaimer: string;
