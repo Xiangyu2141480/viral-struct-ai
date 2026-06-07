@@ -143,3 +143,38 @@ test('authorTimeline falls back to the mock author when the LLM returns garbage'
   assert.equal(result.source, 'mock');
   assert.equal(AuthoredTimelineSchema.safeParse(result.timeline).success, true);
 });
+
+// --- canonicalizer hardening, locked against the REAL Doubao output shape observed in the P1 spike ---
+
+test('canonicalizer accepts the model "segments" key, ignores graph-shaped meta, snaps hard_cut, splits "/" captions', () => {
+  const raw = JSON.stringify({
+    schemaVersion: '1.0',
+    meta: { duration: 30, aspectRatio: '9:16', videoType: 'ecommerce', style: 'fast_pace' }, // graph-shaped meta → must be ignored
+    segments: [
+      { segmentRole: 'hook', startSeconds: 0, endSeconds: 6, mediaLayers: [{ media: { assetId: 'a1', type: 'image' }, motion: { kind: 'pop_scale' } }], textElements: [{ content: '一 / 二 / 三' }], transitionOut: { kind: 'hard_cut' } }
+    ]
+  });
+  const { timeline } = canonicalizeAuthoredTimeline(raw, makeContext());
+  assert.equal(AuthoredTimelineSchema.safeParse(timeline).success, true);
+  assert.equal(timeline.beats.length, 1);
+  const beat = timeline.beats[0]!;
+  assert.equal(beat.transitionOut?.kind, 'cut');
+  assert.deepEqual(beat.textElements[0]!.content, ['一', '二', '三']);
+  assert.equal(beat.mediaLayers[0]!.media.resolvedPath, '/tmp/a1.png');
+});
+
+test('a beat with real media is NOT a substitute even if the LLM cautiously set unresolvedReason', () => {
+  const raw = { segments: [{ segmentRole: 'hook', startSeconds: 0, endSeconds: 6, unresolvedReason: 'wish I had more shots', mediaLayers: [{ media: { assetId: 'a1', type: 'image' }, evidence: { tier: 'real' } }], textElements: [{ type: 'headline', content: ['hi'] }] }] };
+  const { timeline } = canonicalizeAuthoredTimeline(raw, makeContext());
+  const beat = timeline.beats[0]!;
+  assert.equal(beat.mediaLayers.length, 1);
+  assert.equal(beatIsUnresolved(beat), false);
+});
+
+test('canonicalizer drops empty-assetId layers (blank slots) leaving a legitimate text card', () => {
+  const raw = { segments: [{ segmentRole: 'cta', startSeconds: 0, endSeconds: 4, mediaLayers: [{ media: { assetId: '', type: 'image' } }], textElements: [{ type: 'headline', content: ['buy'] }] }] };
+  const { timeline } = canonicalizeAuthoredTimeline(raw, makeContext());
+  const beat = timeline.beats[0]!;
+  assert.equal(beat.mediaLayers.length, 0);
+  assert.equal(beatIsUnresolved(beat), false);
+});
