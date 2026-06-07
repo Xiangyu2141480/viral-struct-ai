@@ -84,7 +84,7 @@ function enrichAssetsWithAffordance(assetCards: AssetCard[], contentBrief?: Cont
         caveat: 'Deterministic slot affordance scoring.'
       };
     });
-    const suitableSlots = uniqueRoles([...normalized.suitableSlots, ...primaryRoles]);
+    const suitableSlots = uniqueRoles(normalized.suitableSlots);
     const enriched: AssetCard = {
       ...normalized,
       suitableSlots,
@@ -154,7 +154,8 @@ function buildSlotCoverageRow(
     .sort((a, b) => b.score - a.score);
   const best = candidates[0];
   const bestScore = best?.score ?? 0;
-  const status = coverageStatusFromScore(bestScore);
+  const bestAsset = best ? assets.find((asset) => asset.id === best.assetId) : undefined;
+  const status = slotCoverageStatusFromCandidate(slot, bestScore, bestAsset);
   return {
     slotId: slot.id,
     segmentId: slot.segmentId,
@@ -165,7 +166,7 @@ function buildSlotCoverageRow(
     bestAssetId: status === 'missing' ? undefined : best?.assetId,
     bestScore,
     candidates,
-    gapReason: buildGapReason(slot, status, roleScores[mappedRole]?.[0])
+    gapReason: buildGapReason(slot, status, roleScores[mappedRole]?.[0], bestAsset)
   };
 }
 
@@ -324,10 +325,18 @@ function scoreAcceptanceCriteriaMatch(slot: ShotSlotNode, asset: AssetCard): num
 
 function applyHardRequirementPenalty(score: number, slot: ShotSlotNode, asset: AssetCard): number {
   if (asset.analysis?.safety.status === 'blocked') return 0;
+  if (isLowQuality(asset)) return Math.min(score, 49);
   if (slot.humanRequirement?.required && !asset.humanPresence?.hasHuman) return Math.min(score, 49);
   if (slot.humanRequirement?.action && slot.humanRequirement.action !== 'none' && !asset.humanPresence?.actions?.includes(slot.humanRequirement.action)) {
     return Math.min(score, 49);
   }
+  if (slot.role === 'usage_demo' && !hasStrongUsageEvidence(slot, asset)) return Math.min(score, hasBasicUsageEvidence(asset) ? 69 : 49);
+  if (slot.role === 'product_closeup' && needsSpecificActionEvidence(slot) && !hasSpecificActionEvidence(slot, asset)) return Math.min(score, 69);
+  if (slot.role === 'comparison' && !hasComparisonEvidence(asset)) return Math.min(score, 49);
+  if (slot.role === 'benefit_visual' && !hasBenefitEvidence(asset)) return Math.min(score, 64);
+  if (slot.role === 'opening_attention' && !hasOpeningEvidence(asset)) return Math.min(score, 69);
+  if (slot.role === 'cta_visual' && slot.requiredAsset.motion === 'hand_operation' && !hasCtaEvidence(asset)) return Math.min(score, 49);
+  if (slot.role === 'cta_visual' && !hasCtaEvidence(asset)) return Math.min(score, 69);
   if (slot.requiredAsset.type === 'video' && asset.type !== 'video' && slot.requiredAsset.motion === 'hand_operation') {
     return Math.min(score, 48);
   }
@@ -350,9 +359,34 @@ function buildCandidateRationale(
 function buildGapReason(
   slot: ShotSlotNode,
   status: SlotCoverageRow['status'],
-  bestRoleCandidate?: SlotCandidateAsset
+  bestRoleCandidate?: SlotCandidateAsset,
+  bestAsset?: AssetCard
 ): string | undefined {
   if (status === 'covered') return undefined;
+  if (bestAsset && isLowQuality(bestAsset)) {
+    return `${slot.role} candidate ${bestAsset.id} is low quality or warning-heavy; keep it as weak evidence only.`;
+  }
+  if (slot.role === 'comparison' && bestAsset && !hasComparisonEvidence(bestAsset)) {
+    return `${slot.role} requires lineup, before/after, or comparison evidence; current best asset ${bestAsset.id} does not show comparison.`;
+  }
+  if (slot.role === 'usage_demo' && bestAsset && hasSpecificUsageActionRequirement(slot) && !hasUsageActionFamilyMatch(slot, bestAsset)) {
+    return `${slot.role} source slot requires a specific usage action family; current best asset ${bestAsset.id} only provides generic or different usage motion.`;
+  }
+  if (slot.role === 'usage_demo' && bestAsset && !hasStrongUsageEvidence(slot, bestAsset)) {
+    return `${slot.role} needs drink, pour, open-cap, or stronger use evidence; current best asset ${bestAsset.id} is only partial usage evidence.`;
+  }
+  if (slot.role === 'product_closeup' && bestAsset && needsSpecificActionEvidence(slot) && !hasSpecificActionEvidence(slot, bestAsset)) {
+    return `${slot.role} source slot requires a specific product action; current best asset ${bestAsset.id} is only generic product evidence.`;
+  }
+  if (slot.role === 'benefit_visual' && bestAsset && !hasBenefitEvidence(bestAsset)) {
+    return `${slot.role} needs cold, pour, drink, splash, or other benefit proof evidence; current best asset ${bestAsset.id} is weak.`;
+  }
+  if (slot.role === 'cta_visual' && bestAsset && !hasCtaEvidence(bestAsset)) {
+    return `${slot.role} needs a clean CTA surface or copy-ready end frame; current best asset ${bestAsset.id} is weak.`;
+  }
+  if (slot.role === 'opening_attention' && bestAsset && !hasOpeningEvidence(bestAsset)) {
+    return `${slot.role} needs high-attention motion, cold cue, or strong hook evidence; current best asset ${bestAsset.id} is weak.`;
+  }
   if (slot.humanRequirement?.required) {
     return `${slot.role} requires human/hand action coverage; current best asset ${bestRoleCandidate?.assetId ?? 'none'} is insufficient.`;
   }
@@ -409,6 +443,237 @@ function buildAssetText(asset: AssetCard): string {
     asset.analysis?.search.embeddingText,
     asset.analysis?.search.tags.join(' ')
   ].filter(Boolean).join(' ').toLowerCase();
+}
+
+function slotCoverageStatusFromCandidate(
+  slot: ShotSlotNode,
+  bestScore: number,
+  bestAsset?: AssetCard
+): SlotCoverageRow['status'] {
+  if (!bestAsset || bestScore < 50) return 'missing';
+  if (isLowQuality(bestAsset)) return 'weak';
+  if (slot.role === 'usage_demo' && !hasStrongUsageEvidence(slot, bestAsset)) return 'weak';
+  if (slot.role === 'product_closeup' && needsSpecificActionEvidence(slot) && !hasSpecificActionEvidence(slot, bestAsset)) return 'weak';
+  if (slot.role === 'comparison' && !hasComparisonEvidence(bestAsset)) return 'missing';
+  if (slot.role === 'benefit_visual' && !hasBenefitEvidence(bestAsset)) return 'weak';
+  if (slot.role === 'opening_attention' && !hasOpeningEvidence(bestAsset)) return 'weak';
+  if (slot.role === 'cta_visual' && slot.requiredAsset.motion === 'hand_operation' && !hasCtaEvidence(bestAsset)) return 'missing';
+  if (slot.role === 'cta_visual' && !hasCtaEvidence(bestAsset)) return 'weak';
+  return coverageStatusFromScore(bestScore);
+}
+
+function isLowQuality(asset: AssetCard): boolean {
+  return (asset.analysis?.quality.overallScore ?? asset.qualityScore) < 0.5
+    || (asset.analysis?.warnings.length ?? 0) >= 2
+    || (asset.analysis?.quality.issues.length ?? 0) > 0;
+}
+
+function hasBasicUsageEvidence(asset: AssetCard): boolean {
+  const text = buildAssetText(asset);
+  return asset.type === 'video'
+    && (
+      asset.humanPresence?.hasHuman
+      || asset.humanPresence?.actions?.some((action) => ['holding_product', 'applying_product', 'swatching'].includes(action))
+      || asset.detectedIngredients?.includes('hand_demo')
+      || text.includes('hand')
+      || text.includes('手')
+    );
+}
+
+function hasStrongUsageEvidence(_slot: ShotSlotNode, asset: AssetCard): boolean {
+  if (hasSpecificUsageActionRequirement(_slot) && !hasUsageActionFamilyMatch(_slot, asset)) return false;
+  const text = buildAssetText(asset);
+  const hasDrinkLikeCue = hasAnyPositiveCue(text, [
+    'drink',
+    'drinking',
+    'pour',
+    'open_cap',
+    'open cap',
+    'cap opening',
+    'cup',
+    '饮用',
+    '喝',
+    '倒',
+    '开盖',
+    '杯'
+  ]);
+  return hasDrinkLikeCue;
+}
+
+function hasSpecificUsageActionRequirement(slot: ShotSlotNode): boolean {
+  return detectUsageActionFamilies(buildSlotRequirementText(slot)).length > 0;
+}
+
+function hasUsageActionFamilyMatch(slot: ShotSlotNode, asset: AssetCard): boolean {
+  const requiredFamilies = detectUsageActionFamilies(buildSlotRequirementText(slot));
+  if (!requiredFamilies.length) return true;
+  const assetFamilies = detectUsageActionFamilies(buildAssetText(asset));
+  const transferCompatibleFamilies = new Set(['beverage_drink', 'beverage_pour', 'cap_open', 'pickup_holding']);
+  const complexRequiredFamilies = requiredFamilies.filter((family) => !transferCompatibleFamilies.has(family));
+  if (complexRequiredFamilies.length) {
+    return complexRequiredFamilies.some((family) => assetFamilies.includes(family));
+  }
+  return requiredFamilies.some((family) => {
+    if (assetFamilies.includes(family)) return true;
+    if (!transferCompatibleFamilies.has(family)) return false;
+    return assetFamilies.some((assetFamily) => transferCompatibleFamilies.has(assetFamily));
+  });
+}
+
+function detectUsageActionFamilies(text: string): string[] {
+  const families: Array<{ family: string; keywords: string[] }> = [
+    { family: 'beverage_drink', keywords: ['drink', 'drinking', '饮用', '喝'] },
+    { family: 'beverage_pour', keywords: ['pour', '倒', 'cup', '杯'] },
+    { family: 'cap_open', keywords: ['open_cap', 'open cap', 'cap opening', '开盖'] },
+    { family: 'pickup_holding', keywords: ['pickup', 'pick up', 'hand pickup', 'holding_product', '拿起', '手持'] },
+    { family: 'assembly', keywords: ['manual_part_assembly', 'particle_floating_and_assembly', 'assemble', 'assembly', 'install', 'part assembly', 'component', '组装', '安装', '嵌入', '拼接', '归位', '碎片'] },
+    { family: 'ui_interaction', keywords: ['smooth_ui_transition', 'ui transition', 'interface', 'application', 'window', 'dock', 'touchpad', 'keyboard', 'button', 'press', 'slide', '界面', '应用', '窗口', '图标', '触控板', '键盘', '按键', '按压', '滑动'] },
+    { family: 'color_swap', keywords: ['color_swap', 'color swap', 'color', '配色', '颜色', '渐变切换'] },
+    { family: 'device_transfer', keywords: ['device transfer', 'cross-device', 'phone', 'airdrop', 'handoff', '手机', '跨设备', '投送', '接力', '协同'] },
+    { family: 'interface_uncover', keywords: ['sequential_interface_uncover', 'port', 'interface uncover', '接口', '侧边', '露出'] },
+    { family: 'flip_unfold', keywords: ['flip', 'unfold', 'fold', '翻转', '展开', '开合'] }
+  ];
+  return families
+    .filter(({ keywords }) => keywords.some((keyword) => hasPositiveCue(text, keyword)))
+    .map(({ family }) => family);
+}
+
+function needsSpecificActionEvidence(slot: ShotSlotNode): boolean {
+  const slotText = buildSlotRequirementText(slot);
+  return [
+    'hand_operation',
+    '翻转',
+    '打开',
+    '开合',
+    '展开',
+    '组装',
+    '安装',
+    '按压',
+    '滑动',
+    '取出',
+    '飞入',
+    '切换',
+    '拼接',
+    '弹出',
+    '操作',
+    '按键',
+    'assemble',
+    'install',
+    'press',
+    'slide',
+    'flip',
+    'open',
+    'unfold',
+    'keyboard',
+    'touchpad',
+    'camera'
+  ].some((keyword) => slotText.includes(keyword));
+}
+
+function hasSpecificActionEvidence(slot: ShotSlotNode, asset: AssetCard): boolean {
+  const slotText = buildSlotRequirementText(slot);
+  const assetText = buildAssetText(asset);
+  const actionFamilies: Array<{ slot: string[]; asset: string[] }> = [
+    { slot: ['drink', 'drinking', '饮用', '喝'], asset: ['drink', 'drinking', '饮用', '喝'] },
+    { slot: ['pour', '倒', '杯'], asset: ['pour', '倒', 'cup', '杯'] },
+    { slot: ['open cap', 'open_cap', 'cap opening', '开盖'], asset: ['open cap', 'open_cap', 'cap opening', '开盖'] },
+    { slot: ['pickup', 'pick up', '拿起', '手持'], asset: ['pickup', 'pick up', 'hand pickup', 'holding_product', '拿起', '手持'] },
+    { slot: ['flip', '翻转'], asset: ['flip', '翻转'] },
+    { slot: ['assemble', 'install', '组装', '安装'], asset: ['assemble', 'install', '组装', '安装'] },
+    { slot: ['press', 'touchpad', 'button', '按压', '滑动', '按键'], asset: ['press', 'touchpad', 'button', '按压', '滑动', '按键'] },
+    { slot: ['lineup', 'series', 'color', '配色', '陈列'], asset: ['lineup', 'series', '多瓶', '多规格', '配色', '陈列'] }
+  ];
+  return actionFamilies.some((family) => family.slot.some((keyword) => slotText.includes(keyword)) && family.asset.some((keyword) => assetText.includes(keyword)));
+}
+
+function buildSlotRequirementText(slot: ShotSlotNode): string {
+  return [
+    slot.requiredAsset.subject,
+    slot.requiredAsset.motion,
+    slot.intent?.purpose,
+    slot.intent?.motionPattern,
+    slot.sourceInstance?.specificAction,
+    slot.acceptanceCriteria?.anyOf.flatMap((criterion) => [criterion.motionType, criterion.compositionType, ...criterion.examples]).join(' '),
+  ].filter(Boolean).join(' ').toLowerCase();
+}
+
+function hasComparisonEvidence(asset: AssetCard): boolean {
+  const text = buildAssetText(asset);
+  return hasAnyPositiveCue(text, [
+    'compare',
+    'comparison',
+    'lineup',
+    'series',
+    'multiple products',
+    'before after',
+    'multi-pack',
+    '对比',
+    '陈列',
+    '系列',
+    '多瓶',
+    '多规格'
+  ]);
+}
+
+function hasBenefitEvidence(asset: AssetCard): boolean {
+  const text = buildAssetText(asset);
+  return hasAnyPositiveCue(text, [
+    'ice cubes',
+    'cold drink',
+    'splash',
+    'lemon',
+    'refresh',
+    'condensation',
+    'pour',
+    'drink',
+    '冰块',
+    '冰爽',
+    '飞溅',
+    '柠檬',
+    '解腻',
+    '倒',
+    '喝'
+  ]);
+}
+
+function hasOpeningEvidence(asset: AssetCard): boolean {
+  return hasBenefitEvidence(asset)
+    || Boolean(asset.detectedIngredients?.includes('lifestyle_context'))
+    || Boolean(asset.visualStyleTags?.includes('premium_visual'));
+}
+
+function hasCtaEvidence(asset: AssetCard): boolean {
+  const text = buildAssetText(asset);
+  const textSafeArea = asset.analysis?.quality.textSafeArea ?? 0;
+  return asset.type === 'text'
+    || text.includes('cta_copy')
+    || text.includes('clean_end')
+    || text.includes('end frame')
+    || text.includes('negative space')
+    || text.includes('购买')
+    || text.includes('立即')
+    || (Boolean(asset.visualStyleTags?.includes('clean_background')) && hasProductCue(asset) && textSafeArea >= 0.72 && !asset.humanPresence?.hasHuman);
+}
+
+function hasProductCue(asset: AssetCard): boolean {
+  const text = buildAssetText(asset);
+  return ['product', 'bottle', 'label', '商品', '产品', '瓶身', '康师傅', '冰红茶'].some((keyword) => text.includes(keyword));
+}
+
+function hasAnyPositiveCue(text: string, keywords: string[]): boolean {
+  return keywords.some((keyword) => hasPositiveCue(text, keyword));
+}
+
+function hasPositiveCue(text: string, keyword: string): boolean {
+  const normalizedText = text.toLowerCase();
+  const normalizedKeyword = keyword.toLowerCase();
+  let index = normalizedText.indexOf(normalizedKeyword);
+  while (index >= 0) {
+    const before = normalizedText.slice(Math.max(0, index - 16), index);
+    if (!/(^|[\s_\-;,.])(?:no|not|without|missing|lacks?)(?:\s+[a-z0-9_/-]+){0,3}\s*$/.test(before)) return true;
+    index = normalizedText.indexOf(normalizedKeyword, index + normalizedKeyword.length);
+  }
+  return false;
 }
 
 function uniqueRoles(roles: ShotSlotRole[]): ShotSlotRole[] {

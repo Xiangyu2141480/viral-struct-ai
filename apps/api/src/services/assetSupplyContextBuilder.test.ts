@@ -150,6 +150,144 @@ const lowSafeAreaText: AssetCard = {
   }
 };
 
+const plainProductPanVideo: AssetCard = {
+  id: 'plain_product_pan',
+  type: 'video',
+  url: 'seed_assets/user_test/kangshifu_plain_uploads/plain_001_table_product_pan.mp4',
+  spatialDescription: 'Plain user-shot Kangshifu iced tea product on table with a slow pan.',
+  temporalDescription: '10s vertical product pan; no hand action, no drinking, no pouring.',
+  detectedObjects: ['beverage bottle', 'product'],
+  suitableSlots: ['product_closeup', 'cta_visual'],
+  qualityScore: 0.74,
+  detectedIngredients: ['product_closeup_trait'],
+  humanPresence: { hasHuman: false },
+  visualStyleTags: ['clean_background'],
+  motionPotential: {
+    isStill: false,
+    implicitMotion: 'medium',
+    canSimulateMotion: ['trim_to_highlight', 'crop_to_vertical'],
+    canSimulateDurationMs: [1200, 4200]
+  }
+};
+
+const plainHandPickupVideo: AssetCard = {
+  id: 'plain_hand_pickup',
+  type: 'video',
+  url: 'seed_assets/user_test/kangshifu_plain_uploads/plain_002_hand_pickup.mp4',
+  spatialDescription: 'Plain user-shot Kangshifu iced tea hand pickup clip.',
+  temporalDescription: '10s vertical hand pickup; no open cap, no drinking, no pouring.',
+  detectedObjects: ['beverage bottle', 'product', 'hand', 'usage scene'],
+  suitableSlots: ['usage_demo', 'product_closeup', 'cta_visual'],
+  qualityScore: 0.74,
+  detectedIngredients: ['product_closeup_trait', 'hand_demo', 'human_presence'],
+  humanPresence: { hasHuman: true, actions: ['holding_product'] },
+  visualStyleTags: ['clean_background'],
+  motionPotential: {
+    isStill: false,
+    implicitMotion: 'high',
+    canSimulateMotion: ['trim_to_highlight', 'crop_to_vertical'],
+    canSimulateDurationMs: [1200, 4200]
+  }
+};
+
+const plainOpenCapVideo: AssetCard = {
+  id: 'plain_open_cap',
+  type: 'video',
+  url: 'seed_assets/user_test/kangshifu_plain_uploads/plain_003_open_cap.mp4',
+  spatialDescription: 'Plain user-shot Kangshifu iced tea bottle cap opening clip.',
+  temporalDescription: '10s vertical open cap product operation; no UI assembly, no keyboard, no multi-device transfer.',
+  detectedObjects: ['beverage bottle', 'product', 'hand'],
+  suitableSlots: ['usage_demo', 'product_closeup'],
+  qualityScore: 0.74,
+  detectedIngredients: ['product_closeup_trait', 'hand_demo', 'human_presence'],
+  humanPresence: { hasHuman: true, actions: ['holding_product'] },
+  visualStyleTags: ['clean_background'],
+  motionPotential: {
+    isStill: false,
+    implicitMotion: 'high',
+    canSimulateMotion: ['trim_to_highlight', 'crop_to_vertical'],
+    canSimulateDurationMs: [1200, 4200]
+  }
+};
+
+const plainDrinkVideo: AssetCard = {
+  id: 'plain_drink_neck_down',
+  type: 'video',
+  url: 'seed_assets/user_test/kangshifu_plain_uploads/plain_004_drink_neck_down.mp4',
+  spatialDescription: 'Plain user-shot neck-down drinking clip with Kangshifu iced tea bottle.',
+  temporalDescription: '10s vertical drinking usage clip; no product assembly, no UI transition, no comparison lineup.',
+  detectedObjects: ['beverage bottle', 'product', 'hand', 'usage scene'],
+  suitableSlots: ['usage_demo', 'benefit_visual', 'product_closeup'],
+  qualityScore: 0.74,
+  detectedIngredients: ['product_closeup_trait', 'hand_demo', 'human_presence', 'lifestyle_context'],
+  humanPresence: { hasHuman: true, actions: ['holding_product'] },
+  visualStyleTags: ['clean_background', 'lifestyle_context'],
+  motionPotential: {
+    isStill: false,
+    implicitMotion: 'high',
+    canSimulateMotion: ['trim_to_highlight', 'crop_to_vertical'],
+    canSimulateDurationMs: [1200, 4200]
+  }
+};
+
+const badDarkShakyVideo: AssetCard = {
+  ...plainProductPanVideo,
+  id: 'plain_bad_dark_shaky',
+  spatialDescription: 'Bad dark shaky product clip with visible bottle.',
+  temporalDescription: '10s dark shaky vertical clip.',
+  qualityScore: 0.38,
+  analysis: {
+    profileVersion: 'asset_analysis_v1',
+    analyzedAt: '1970-01-01T00:00:00.000Z',
+    fallbackUsed: false,
+    warnings: ['Filename indicates a bad/dark/shaky test clip.'],
+    media: {
+      kind: 'video',
+      sourceUrl: 'seed_assets/user_test/kangshifu_plain_uploads/plain_009_bad_dark_shaky.mp4',
+      fileSizeBytes: 2000000,
+      format: 'mp4',
+      durationSec: 10,
+      fps: 24,
+      width: 720,
+      height: 1280,
+      aspectRatio: '9:16',
+      hasAudio: true,
+      keyframes: []
+    },
+    semantic: {
+      summary: 'Bad dark shaky product clip with visible bottle.',
+      detectedObjects: ['beverage bottle', 'product'],
+      detectedIngredients: ['product_closeup_trait'],
+      visualStyleTags: [],
+      humanPresence: { hasHuman: false },
+      motionPotential: { isStill: false, implicitMotion: 'medium' }
+    },
+    quality: {
+      overallScore: 0.38,
+      resolution: 0.38,
+      sharpness: 0.35,
+      brightness: 0.32,
+      contrast: 0.38,
+      clarity: 0.36,
+      composition: 0.38,
+      lighting: 0.3,
+      subjectProminence: 0.38,
+      productFocus: 0.45,
+      textSafeArea: 0.4,
+      issues: [{ type: 'low_quality', severity: 'medium', message: 'Dark or shaky footage should remain weak evidence.' }]
+    },
+    slotAffordance: {
+      suitableSlots: ['product_closeup'],
+      primaryRoles: [{ role: 'product_closeup', confidence: 0.45 }],
+      missingRoles: ['opening_attention', 'usage_demo', 'benefit_visual', 'comparison', 'testimonial', 'cta_visual'],
+      rationale: 'Low quality clip should not strongly cover slots.'
+    },
+    editability: { canCropZoom: true, canUseAsBackground: false, canLoop: true, canExtendWithCards: false, suggestedEdits: ['trim_to_highlight'] },
+    safety: { status: 'passed', brandRisk: 'low', ipRisk: 'low', claimRisk: 'low', reasons: [] },
+    search: { tags: ['video', 'product_closeup'], keywords: ['bad dark shaky product'], embeddingText: 'bad dark shaky product' }
+  }
+};
+
 test('buildAssetSupplyContext emits deterministic legacy analysis warnings and stable output', () => {
   const first = buildAssetSupplyContext({
     structureGraph: graph,
@@ -220,4 +358,202 @@ test('buildAssetSupplyContext distinguishes weak/insufficient coverage and candi
   assert.ok(context.contextualCoverage?.observations.some((observation) => observation.affectedSlotId === 'slot_usage' && observation.observationType === 'missing_usage_evidence'));
 
   assert.ok(cta?.candidateAssets.some((candidate) => candidate.constraints.textSafeAreaRisk));
+});
+
+test('plain product pan video does not over-cover usage or comparison slots', () => {
+  const context = buildAssetSupplyContext({
+    structureGraph: graph,
+    assetCards: [plainProductPanVideo],
+    contentBrief: brief,
+    libraryId: 'plain_product_pan_only'
+  });
+  const rows = context.contextualCoverage?.slotCoverages ?? [];
+  const product = rows.find((row) => row.slotId === 'slot_product');
+  const usage = rows.find((row) => row.slotId === 'slot_usage');
+  const comparison = rows.find((row) => row.slotId === 'slot_compare');
+
+  assert.equal(product?.coverageStatus, 'covered');
+  assert.notEqual(usage?.coverageStatus, 'covered');
+  assert.equal(comparison?.coverageStatus, 'insufficient');
+  assert.ok((context.contextualCoverage?.observations.length ?? 0) > 0);
+  assert.ok(context.contextualCoverage?.observations.some((observation) => observation.observationType === 'missing_comparison_evidence'));
+  assert.ok(JSON.stringify(context).includes('fallbackCards') === false);
+  assert.ok(JSON.stringify(context).includes('suggestedRepair') === false);
+});
+
+test('plain product pan plus hand pickup is partial material supply, not full coverage', () => {
+  const context = buildAssetSupplyContext({
+    structureGraph: graph,
+    assetCards: [plainProductPanVideo, plainHandPickupVideo],
+    contentBrief: brief,
+    libraryId: 'plain_two_video_test'
+  });
+  const summary = context.contextualCoverage?.coverageSummary;
+  const rows = context.contextualCoverage?.slotCoverages ?? [];
+  const product = rows.find((row) => row.slotId === 'slot_product');
+  const usage = rows.find((row) => row.slotId === 'slot_usage');
+  const comparison = rows.find((row) => row.slotId === 'slot_compare');
+
+  assert.equal(product?.coverageStatus, 'covered');
+  assert.notEqual(usage?.coverageStatus, 'covered');
+  assert.equal(comparison?.coverageStatus, 'insufficient');
+  assert.ok((summary?.coverageScore ?? 100) < 100);
+  assert.ok((summary?.insufficientSlots ?? 0) > 0);
+  assert.ok((context.contextualCoverage?.observations.length ?? 0) > 0);
+  assert.ok(context.contextualCoverage?.observations.some((observation) => observation.observationType === 'missing_usage_evidence'));
+  assert.ok(context.contextualCoverage?.observations.some((observation) => observation.observationType === 'missing_comparison_evidence'));
+});
+
+test('hand pickup alone supports usage only weakly and does not cover CTA', () => {
+  const context = buildAssetSupplyContext({
+    structureGraph: graph,
+    assetCards: [plainHandPickupVideo],
+    contentBrief: brief,
+    libraryId: 'plain_hand_pickup_only'
+  });
+  const rows = context.contextualCoverage?.slotCoverages ?? [];
+  const usage = rows.find((row) => row.slotId === 'slot_usage');
+  const cta = rows.find((row) => row.slotId === 'slot_cta');
+
+  assert.equal(usage?.coverageStatus, 'weak');
+  assert.notEqual(cta?.coverageStatus, 'covered');
+  assert.ok((context.contextualCoverage?.observations.length ?? 0) > 0);
+});
+
+test('bad dark shaky product footage remains weak evidence', () => {
+  const context = buildAssetSupplyContext({
+    structureGraph: graph,
+    assetCards: [badDarkShakyVideo],
+    contentBrief: brief,
+    libraryId: 'plain_bad_dark_shaky'
+  });
+  const product = context.contextualCoverage?.slotCoverages.find((row) => row.slotId === 'slot_product');
+
+  assert.notEqual(product?.coverageStatus, 'covered');
+  assert.ok(product?.candidateAssets.some((candidate) => candidate.fitStatus === 'weak' || candidate.evidence.warnings.length > 0));
+  assert.ok((context.contextualCoverage?.observations.length ?? 0) > 0);
+});
+
+test('open cap and drinking clips do not cover unrelated assembly or UI usage slots', () => {
+  const actionGraph: ViralStructureGraph = {
+    ...graph,
+    shotSlots: [
+      ...graph.shotSlots,
+      {
+        id: 'slot_usage_assembly',
+        segmentId: 'seg_usage',
+        role: 'usage_demo',
+        requiredAsset: { type: 'video', subject: '功能部件组装和按键操作', camera: 'medium', motion: 'hand_operation', minDuration: 2 },
+        humanRequirement: { required: true, framing: 'hands', action: 'holding_product' },
+        fallbackStrategies: ['ask_user_for_human_demo'],
+        importance: 4,
+        intent: {
+          purpose: '通过配件组装、按键操作和 UI 切换展示复杂功能流程',
+          energyLevel: 'medium',
+          motionPattern: 'manual_part_assembly and smooth_ui_transition',
+          compositionPrincipal: '产品和操作手同时可见',
+          durationMs: [1500, 3000]
+        },
+        acceptanceCriteria: {
+          anyOf: [
+            {
+              motionType: 'manual_part_assembly',
+              compositionType: 'centered_product_clean_background',
+              examples: ['配件对准卡槽嵌入机身', '手指按压按键', '多应用界面平滑轮播']
+            }
+          ],
+          rejectIf: ['只有开盖、饮用或普通拿起动作']
+        }
+      }
+    ]
+  };
+  const context = buildAssetSupplyContext({
+    structureGraph: actionGraph,
+    assetCards: [plainProductPanVideo, plainHandPickupVideo, plainOpenCapVideo, plainDrinkVideo],
+    contentBrief: brief,
+    libraryId: 'plain_four_video_test'
+  });
+  const rows = context.contextualCoverage?.slotCoverages ?? [];
+  const drinkUsage = rows.find((row) => row.slotId === 'slot_usage');
+  const assemblyUsage = rows.find((row) => row.slotId === 'slot_usage_assembly');
+
+  assert.equal(drinkUsage?.coverageStatus, 'covered');
+  assert.notEqual(assemblyUsage?.coverageStatus, 'covered');
+  assert.ok(assemblyUsage?.limitations.some((limitation) => /specific|action|usage/i.test(limitation)));
+  assert.ok(context.contextualCoverage?.observations.some((observation) => observation.affectedSlotId === 'slot_usage_assembly'));
+});
+
+test('single image only scenario produces completion briefs without owning repair strategy', () => {
+  const context = buildAssetSupplyContext({
+    structureGraph: graph,
+    assetCards: [oldProductAsset],
+    contentBrief: brief,
+    libraryId: 'single_image_only'
+  });
+  const scenario = context.materialScenario;
+  const usage = context.contextualCoverage?.slotCoverages.find((row) => row.slotId === 'slot_usage');
+  const usageBrief = context.missingMaterialBriefs?.find((item) => item.affectedSlotId === 'slot_usage');
+
+  assert.equal(scenario?.scenarioType, 'single_image_only');
+  assert.ok((scenario?.completionFeasibilityScore ?? 0) > (scenario?.evidenceCoverageScore ?? 100));
+  assert.equal(scenario?.recommendedDownstreamMode, 'single_image_motion_reuse');
+  assert.equal(usage?.coverageStatus, 'insufficient');
+  assert.ok(usageBrief);
+  assert.equal(usageBrief?.ownership, 'asset_manager_handoff_brief_only');
+  assert.ok(usageBrief?.manualShootBrief?.mustCapture.some((item) => /喝|开盖|倒|drink|pour|cap/i.test(item)));
+  assert.ok(usageBrief?.aigcGenerationBrief?.prompt.includes('9:16'));
+  assert.ok(usageBrief?.aigcGenerationBrief?.negativePrompt.includes('no text overlays'));
+  assert.ok(usageBrief?.hyperframesBrief?.cardType === 'usage_placeholder_card');
+  assert.equal(JSON.stringify(context).includes('fallbackCards'), false);
+  assert.equal(JSON.stringify(context).includes('suggestedRepair'), false);
+});
+
+test('partial real footage scenario keeps weak usage evidence and missing material briefs', () => {
+  const context = buildAssetSupplyContext({
+    structureGraph: graph,
+    assetCards: [plainProductPanVideo, plainHandPickupVideo],
+    contentBrief: brief,
+    libraryId: 'partial_real_footage'
+  });
+  const scenario = context.materialScenario;
+  const usage = context.contextualCoverage?.slotCoverages.find((row) => row.slotId === 'slot_usage');
+
+  assert.equal(scenario?.scenarioType, 'partial_real_footage');
+  assert.equal(scenario?.realFootageCount, 2);
+  assert.ok(['real_footage_editing', 'mixed_repair_workflow'].includes(scenario?.recommendedDownstreamMode ?? ''));
+  assert.notEqual(usage?.coverageStatus, 'covered');
+  assert.ok((context.missingMaterialBriefs?.length ?? 0) > 0);
+  assert.ok(context.missingMaterialBriefs?.some((briefItem) => briefItem.slotRole === 'usage_demo'));
+});
+
+test('aigc ready scenario emits safe prompt briefs but no rendered-media claim', () => {
+  const plannedAigcAsset: AssetCard = {
+    ...oldProductAsset,
+    id: 'planned_aigc_product_reference',
+    type: 'image',
+    url: undefined,
+    spatialDescription: 'Planned generation descriptor for a product reference, not rendered output.',
+    analysisSource: 'planned_generation',
+    detectedObjects: ['beverage bottle', 'planned generation reference'],
+    suitableSlots: ['product_closeup']
+  };
+  const context = buildAssetSupplyContext({
+    structureGraph: graph,
+    assetCards: [plannedAigcAsset],
+    contentBrief: brief,
+    libraryId: 'aigc_ready',
+    options: { userCanGenerate: true }
+  });
+  const scenario = context.materialScenario;
+  const promptBriefs = context.missingMaterialBriefs?.filter((item) => item.aigcGenerationBrief) ?? [];
+
+  assert.equal(scenario?.scenarioType, 'aigc_ready');
+  assert.ok((scenario?.generatedAssetCount ?? 0) > 0);
+  assert.equal(scenario?.recommendedDownstreamMode, 'aigc_missing_material_generation');
+  assert.ok(promptBriefs.length > 0);
+  assert.ok(promptBriefs.every((item) => item.aigcGenerationBrief?.negativePrompt.includes('no watermark')));
+  assert.ok(promptBriefs.every((item) => item.aigcGenerationBrief?.safetyNotes.some((note) => /brief|prompt|not rendered/i.test(note))));
+  assert.equal(JSON.stringify(context).includes('real rendered output'), false);
+  assert.equal(JSON.stringify(context).includes('fallbackCards'), false);
+  assert.equal(JSON.stringify(context).includes('suggestedRepair'), false);
 });

@@ -20,12 +20,15 @@ import type {
 } from '@viral-struct/shared';
 import { AssetSupplyContextSchema } from '@viral-struct/shared';
 import { analyzeAssetCoverage } from './assetCoverageAnalyzer';
+import { buildMissingMaterialBriefs } from './missingMaterialBriefBuilder';
+import { classifyMaterialScenario, type MaterialScenarioClassifierOptions } from './materialScenarioClassifier';
 
 export interface BuildAssetSupplyContextInput {
   structureGraph?: ViralStructureGraph;
   assetCards: AssetCard[];
   contentBrief?: ContentBrief;
   libraryId?: string;
+  options?: MaterialScenarioClassifierOptions;
 }
 
 export function buildAssetSupplyContext(input: BuildAssetSupplyContextInput): AssetSupplyContext {
@@ -44,10 +47,30 @@ export function buildAssetSupplyContext(input: BuildAssetSupplyContextInput): As
     libraryId,
     warnings: coverage.warnings
   });
+  const preliminaryScenario = classifyMaterialScenario({
+    assets: coverage.assetCards,
+    contextualCoverage,
+    contentBrief: input.contentBrief,
+    options: input.options
+  });
+  const missingMaterialBriefs = buildMissingMaterialBriefs({
+    contextualCoverage,
+    assetCards: coverage.assetCards,
+    contentBrief: input.contentBrief,
+    materialScenario: preliminaryScenario
+  });
+  const materialScenario = classifyMaterialScenario({
+    assets: coverage.assetCards,
+    contextualCoverage,
+    contentBrief: input.contentBrief,
+    missingMaterialBriefs,
+    options: input.options
+  });
   const warnings = Array.from(new Set([
     ...coverage.warnings,
     ...coverage.assetCards.flatMap((asset) => asset.analysis?.warnings ?? []),
-    ...contextualCoverage.warnings
+    ...contextualCoverage.warnings,
+    ...materialScenario.warnings
   ]));
 
   const context: AssetSupplyContext = {
@@ -57,6 +80,8 @@ export function buildAssetSupplyContext(input: BuildAssetSupplyContextInput): As
     assets: coverage.assetCards as NormalizedAssetCard[],
     libraryProfile: coverage.report,
     contextualCoverage,
+    materialScenario,
+    missingMaterialBriefs,
     warnings
   };
 
@@ -114,11 +139,11 @@ function buildSlotCoverage(
     .map((candidate) => buildCandidate(candidate, row, assetById.get(candidate.assetId)))
     .sort((a, b) => b.score - a.score)
     .slice(0, 3);
-  const coverageStatus = row.status === 'missing' ? 'insufficient' : row.status;
   const bestCandidate = candidateAssets[0];
-  const availableIngredients = buildAvailableIngredients(requiredIngredients, row, bestCandidate);
-  const missingIngredients = buildMissingIngredients(requiredIngredients, row, 'missing');
-  const weakIngredients = buildMissingIngredients(requiredIngredients, row, 'weak');
+  const coverageStatus = finalizeCoverageStatus(row, bestCandidate);
+  const availableIngredients = buildAvailableIngredients(requiredIngredients, row, coverageStatus, bestCandidate);
+  const missingIngredients = buildMissingIngredients(requiredIngredients, row, coverageStatus, 'missing');
+  const weakIngredients = buildMissingIngredients(requiredIngredients, row, coverageStatus, 'weak');
 
   return {
     slotId: row.slotId,
@@ -234,15 +259,16 @@ function addIngredient(
 function buildAvailableIngredients(
   ingredients: RequiredIngredient[],
   row: SlotCoverageRow,
+  coverageStatus: ContextualSlotCoverage['coverageStatus'],
   candidate?: SlotAssetCandidate
 ): AvailableIngredient[] {
-  if (!candidate || row.status === 'missing') return [];
+  if (!candidate || coverageStatus === 'insufficient') return [];
   return ingredients
-    .filter((ingredient) => row.status === 'covered' || ['visual_subject', 'shot_type', 'product_evidence', 'cta_surface'].includes(ingredient.kind))
+    .filter((ingredient) => coverageStatus === 'covered' || ['visual_subject', 'shot_type', 'product_evidence', 'cta_surface'].includes(ingredient.kind))
     .map((ingredient) => ({
       requiredIngredientId: ingredient.id,
       assetId: candidate.assetId,
-      score: row.status === 'covered' ? candidate.score : Math.min(candidate.score, 64),
+      score: coverageStatus === 'covered' ? candidate.score : Math.min(candidate.score, 64),
       evidence: candidate.evidence.reasons.slice(0, 2)
     }));
 }
@@ -250,23 +276,36 @@ function buildAvailableIngredients(
 function buildMissingIngredients(
   ingredients: RequiredIngredient[],
   row: SlotCoverageRow,
+  coverageStatus: ContextualSlotCoverage['coverageStatus'],
   mode: 'missing' | 'weak'
 ): MissingIngredient[] {
-  if (row.status === 'covered') return [];
-  if (mode === 'weak' && row.status !== 'weak') return [];
-  if (mode === 'missing' && row.status !== 'missing') return [];
-  const selected = row.status === 'weak'
+  if (coverageStatus === 'covered') return [];
+  if (mode === 'weak' && coverageStatus !== 'weak') return [];
+  if (mode === 'missing' && coverageStatus !== 'insufficient') return [];
+  const selected = coverageStatus === 'weak'
     ? ingredients.filter((ingredient) => ['motion', 'usage_evidence', 'comparison_evidence', 'duration', 'text_safe_area'].includes(ingredient.kind))
     : ingredients;
   return selected.map((ingredient) => ({
     requiredIngredientId: ingredient.id,
     label: ingredient.label,
-    reason: row.gapReason ?? `${row.mappedRole} is ${row.status}; available assets do not fully satisfy ${ingredient.kind}.`,
+    reason: row.gapReason ?? `${row.mappedRole} is ${coverageStatus}; available assets do not fully satisfy ${ingredient.kind}.`,
     evidence: [
       `bestScore=${row.bestScore}`,
-      `coverageStatus=${row.status === 'missing' ? 'insufficient' : row.status}`
+      `coverageStatus=${coverageStatus}`
     ]
   }));
+}
+
+function finalizeCoverageStatus(row: SlotCoverageRow, candidate?: SlotAssetCandidate): ContextualSlotCoverage['coverageStatus'] {
+  const baseStatus: ContextualSlotCoverage['coverageStatus'] = row.status === 'missing' ? 'insufficient' : row.status;
+  if (!candidate || candidate.score < 50) return 'insufficient';
+  if (baseStatus === 'insufficient') return 'insufficient';
+  if (candidate.score < 75) return 'weak';
+  if (!candidate.mediaReadiness.hasUsableUrl) return 'weak';
+  if ((row.slotRole ?? row.mappedRole) === 'cta_visual' && candidate.constraints.textSafeAreaRisk) return 'weak';
+  if (candidate.constraints.notEnoughForStandaloneShot && baseStatus === 'covered') return 'weak';
+  if (candidate.evidence.warnings.length >= 2 && baseStatus === 'covered') return 'weak';
+  return baseStatus;
 }
 
 function buildCandidate(candidate: SlotCandidateAsset, row: SlotCoverageRow, asset?: AssetCard): SlotAssetCandidate {
@@ -278,14 +317,14 @@ function buildCandidate(candidate: SlotCandidateAsset, row: SlotCoverageRow, ass
     : asset?.analysis?.safety.status === 'needs_review'
       ? 55
       : 100;
-  const score = roundScore(
+  const score = Math.min(candidate.score, roundScore(
     0.30 * candidate.roleAffordance
     + 0.20 * candidate.assetQuality
     + 0.15 * mediaReadinessScore
     + 0.15 * candidate.intentSemanticMatch
     + 0.10 * candidate.editabilityFit
     + 0.10 * safetyScore
-  );
+  ));
   return {
     assetId: candidate.assetId,
     score,
@@ -363,11 +402,14 @@ function observationTypeForCoverage(coverage: ContextualSlotCoverage): MaterialC
   if (coverage.slotRole === 'usage_demo' || coverage.missingIngredients.some((ingredient) => ingredient.requiredIngredientId.includes('usage'))) {
     return 'missing_usage_evidence';
   }
+  if (coverage.slotRole === 'comparison' || coverage.missingIngredients.some((ingredient) => ingredient.requiredIngredientId.includes('comparison'))) {
+    return 'missing_comparison_evidence';
+  }
   if (coverage.missingIngredients.some((ingredient) => ingredient.requiredIngredientId.includes('motion'))) return 'missing_motion_evidence';
   if (coverage.slotRole === 'product_closeup' || coverage.missingIngredients.some((ingredient) => ingredient.requiredIngredientId.includes('product'))) {
     return 'missing_product_evidence';
   }
-  if (coverage.slotRole === 'cta') return 'missing_cta_surface';
+  if (coverage.slotRole === 'cta' || coverage.slotRole === 'cta_visual') return 'missing_cta_surface';
   if (coverage.coverageStatus === 'weak' && coverage.candidateAssets.some((candidate) => candidate.evidence.qualityScore < 60)) {
     return 'weak_candidate_quality';
   }

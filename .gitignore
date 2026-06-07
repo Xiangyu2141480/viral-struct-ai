@@ -17,6 +17,7 @@ uploads
 renders
 frames
 covers
+tmp/
 .cache
 *.mp4
 *.mov

@@ -1,0 +1,12 @@
+*.mp4
+*.mov
+*.webm
+*.m4v
+*.avi
+*.mkv
+!plain_001_table_product_pan.mp4
+!plain_002_hand_pickup.mp4
+!plain_003_open_cap.mp4
+!plain_004_drink_neck_down.mp4
+!.gitignore
+!README.md

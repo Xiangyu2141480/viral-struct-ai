@@ -1,0 +1,117 @@
+{
+  "scenario": "partial_real_footage",
+  "source": "asset_manager_handoff_sample",
+  "inputSummary": {
+    "assetCards": [
+      {
+        "id": "plain_001_table_product_pan",
+        "type": "video",
+        "role": "product pan / closeup evidence",
+        "path": "seed_assets/user_test/kangshifu_plain_uploads/plain_001_table_product_pan.mp4"
+      },
+      {
+        "id": "plain_002_hand_pickup",
+        "type": "video",
+        "role": "partial hand-action evidence",
+        "path": "seed_assets/user_test/kangshifu_plain_uploads/plain_002_hand_pickup.mp4"
+      },
+      {
+        "id": "plain_003_open_cap",
+        "type": "video",
+        "role": "partial usage evidence",
+        "path": "seed_assets/user_test/kangshifu_plain_uploads/plain_003_open_cap.mp4"
+      },
+      {
+        "id": "plain_004_drink_neck_down",
+        "type": "video",
+        "role": "partial usage / benefit evidence",
+        "path": "seed_assets/user_test/kangshifu_plain_uploads/plain_004_drink_neck_down.mp4"
+      }
+    ]
+  },
+  "materialScenario": {
+    "scenarioType": "partial_real_footage",
+    "assetCount": 4,
+    "imageCount": 0,
+    "videoCount": 4,
+    "textCount": 0,
+    "generatedAssetCount": 0,
+    "realFootageCount": 4,
+    "evidenceCoverageScore": 55.6,
+    "completionFeasibilityScore": 96.2,
+    "summary": "partial real footage: real clips provide useful evidence, but weak/insufficient slots still require downstream handling.",
+    "strengths": [
+      "Real footage can support concrete visual evidence.",
+      "Product reference is available.",
+      "Missing-material handoff briefs are available for downstream planning."
+    ],
+    "weaknesses": [
+      "Some usage slots remain weak because source requirements may need different actions.",
+      "Material coverage observations remain and should be reviewed by GapRepairPlanner or Video Agent."
+    ],
+    "recommendedDownstreamMode": "mixed_repair_workflow",
+    "warnings": []
+  },
+  "coverageExcerpt": {
+    "product_closeup": "weak",
+    "usage_demo": "weak",
+    "cta_visual": "weak",
+    "comparison": "not present in macbook_neo graph"
+  },
+  "missingMaterialBriefs": [
+    {
+      "id": "missing_material_brief_001_usage_like_slot",
+      "affectedSlotId": "slot_block_usage_like",
+      "slotRole": "usage_demo",
+      "slotIntent": "Show a specific source usage action; current beverage clips are useful but not always action-equivalent.",
+      "missingIngredients": [
+        {
+          "requiredIngredientId": "slot_usage_motion",
+          "label": "source-specific action match",
+          "reason": "Current clips contain beverage pickup/open/drink cues but may not satisfy unrelated source actions.",
+          "evidence": [
+            "candidate constraints keep this as weak evidence"
+          ]
+        }
+      ],
+      "manualShootBrief": {
+        "title": "补拍使用过程",
+        "objective": "补齐当前样例结构要求的具体动作。",
+        "shotDescription": "Shoot the exact missing action in vertical framing, keeping product and hand operation visible.",
+        "durationSec": 4,
+        "framing": "vertical hand/neck-down shot",
+        "requiredProps": [
+          "康师傅冰红茶",
+          "phone camera"
+        ],
+        "mustCapture": [
+          "specific missing action",
+          "product visible",
+          "stable motion"
+        ],
+        "avoid": [
+          "other visible brands",
+          "unverified claims"
+        ]
+      },
+      "channelEligibility": [
+        {
+          "channel": "reuse_crop_zoom",
+          "eligible": true,
+          "confidence": "medium",
+          "reason": "Existing real footage can be reused as partial evidence.",
+          "requiredInputs": [
+            "candidate asset"
+          ],
+          "providedInputs": [
+            "plain_002_hand_pickup",
+            "plain_003_open_cap"
+          ],
+          "missingInputs": [],
+          "ownership": "video_agent"
+        }
+      ],
+      "ownership": "asset_manager_handoff_brief_only"
+    }
+  ]
+}

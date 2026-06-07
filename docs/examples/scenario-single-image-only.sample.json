@@ -1,0 +1,115 @@
+{
+  "scenario": "single_image_only",
+  "source": "asset_manager_handoff_sample",
+  "inputSummary": {
+    "assetCards": [
+      {
+        "id": "asset_001_product_shot",
+        "type": "image",
+        "role": "product reference",
+        "note": "One clean product image only; no real usage footage."
+      }
+    ]
+  },
+  "materialScenario": {
+    "scenarioType": "single_image_only",
+    "assetCount": 1,
+    "imageCount": 1,
+    "videoCount": 0,
+    "textCount": 0,
+    "generatedAssetCount": 0,
+    "realFootageCount": 0,
+    "evidenceCoverageScore": 11.1,
+    "completionFeasibilityScore": 54.4,
+    "summary": "single image only: evidence coverage is low, but completion remains feasible through crop/zoom, packaging cards, and prompt briefs.",
+    "strengths": [
+      "Product reference is available.",
+      "Image assets can support crop/zoom, cover, or packaging-card inputs."
+    ],
+    "weaknesses": [
+      "No real video footage is available for motion-heavy slots.",
+      "Usage and comparison slots require downstream handling."
+    ],
+    "recommendedDownstreamMode": "single_image_motion_reuse",
+    "warnings": []
+  },
+  "coverageExcerpt": {
+    "product_closeup": "weak",
+    "usage_demo": "insufficient",
+    "cta_visual": "weak"
+  },
+  "missingMaterialBriefs": [
+    {
+      "id": "missing_material_brief_001_slot_usage",
+      "affectedSlotId": "slot_usage",
+      "slotRole": "usage_demo",
+      "slotIntent": "Use real usage action to prove the product moment.",
+      "missingIngredients": [
+        {
+          "requiredIngredientId": "slot_usage_usage_evidence",
+          "label": "real use or hand-operation evidence",
+          "reason": "No real usage footage exists.",
+          "evidence": [
+            "coverageStatus=insufficient"
+          ]
+        }
+      ],
+      "manualShootBrief": {
+        "title": "补拍使用过程",
+        "objective": "补足真实使用动作，避免只靠静态产品图。",
+        "shotDescription": "Shoot opening the cap, drinking one sip, or pouring 康师傅冰红茶 into a cup, preferably neck-down or hand-only.",
+        "durationSec": 4,
+        "framing": "vertical hand/neck-down shot, product and action visible",
+        "requiredProps": [
+          "康师傅冰红茶",
+          "phone camera",
+          "clean vertical background",
+          "cup or bottle"
+        ],
+        "mustCapture": [
+          "open cap",
+          "drink one sip",
+          "pour into cup or clear use action"
+        ],
+        "avoid": [
+          "other visible brands",
+          "celebrity or public-person likeness",
+          "unverified price or promotion claims"
+        ]
+      },
+      "aigcGenerationBrief": {
+        "providerHint": "seedance",
+        "prompt": "Prompt brief only, not rendered output. Create a 9:16 ordinary smartphone-style short-video shot for 康师傅冰红茶. Show hand-only or neck-down opening cap, drinking, or pouring. Keep it realistic and casual.",
+        "negativePrompt": "no text overlays, no watermark, no celebrity, no other brands, no price promotion, no medical claims, do not alter the product packaging or label",
+        "referenceAssetIds": [
+          "asset_001_product_shot"
+        ],
+        "expectedDurationSec": 4,
+        "aspectRatio": "9:16",
+        "safetyNotes": [
+          "This is an Asset Manager prompt brief for a downstream adapter, not rendered media.",
+          "No external generation call is made by Asset Manager."
+        ]
+      },
+      "hyperframesBrief": {
+        "title": "Usage placeholder input",
+        "cardType": "usage_placeholder_card",
+        "copyIntent": "Use a step card to explain the missing usage action without pretending it is real footage.",
+        "visualElements": [
+          "康师傅冰红茶",
+          "reference asset asset_001_product_shot"
+        ],
+        "animationHints": [
+          "step 1/2/3 card",
+          "small product image",
+          "simple arrow motion"
+        ],
+        "durationSec": 4,
+        "inputAssets": [
+          "asset_001_product_shot"
+        ]
+      },
+      "ownership": "asset_manager_handoff_brief_only"
+    }
+  ]
+}
