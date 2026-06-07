@@ -196,7 +196,7 @@ Hook -> 痛点 -> 卖点 -> 证明 -> CTA
 - 新脚本
 - 分镜
 - 时间线
-- Remotion 预览
+- HyperFrames-first 视频预览
 - 样例结构和新结果对比
 
 ### Step 9：人工调整

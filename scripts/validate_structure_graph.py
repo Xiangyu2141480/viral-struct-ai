@@ -17,9 +17,11 @@ from typing import Any
 ASPECT = {"9:16", "16:9", "1:1", "unknown"}
 VIDEO_TYPE = {"ecommerce", "local_service", "course", "brand", "unknown"}
 STYLE = {"high_click", "high_conversion", "premium", "fast_pace", "unknown"}
-SEG_ROLE = {"hook", "pain_point", "selling_point", "proof", "usage", "comparison", "cta"}
+SEG_ROLE = {"hook", "pain_point", "selling_point", "proof", "usage", "comparison", "cta",
+            "explanation", "demonstration", "technique_step", "context"}
 SLOT_ROLE = {"opening_attention", "product_closeup", "usage_demo", "benefit_visual",
-             "comparison", "testimonial", "cta_visual"}
+             "comparison", "testimonial", "cta_visual",
+             "instruction_card", "example_clip", "technique_demo"}
 ASSET_TYPE = {"image", "video", "text", "generated"}
 CAMERA = {"closeup", "medium", "wide", "macro", "unknown"}
 MOTION = {"static", "push_in", "pan", "fast_cut", "hand_operation", "unknown"}

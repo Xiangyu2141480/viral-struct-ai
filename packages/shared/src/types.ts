@@ -5,7 +5,12 @@ export type SegmentRole =
   | 'proof'
   | 'usage'
   | 'comparison'
-  | 'cta';
+  | 'cta'
+  // instructional roles (course/tutorial genre)
+  | 'explanation'
+  | 'demonstration'
+  | 'technique_step'
+  | 'context';
 
 export type ShotSlotRole =
   | 'opening_attention'
@@ -14,7 +19,11 @@ export type ShotSlotRole =
   | 'benefit_visual'
   | 'comparison'
   | 'testimonial'
-  | 'cta_visual';
+  | 'cta_visual'
+  // instructional slot roles (course/tutorial genre)
+  | 'instruction_card'
+  | 'example_clip'
+  | 'technique_demo';
 
 export type GapRepairStrategy =
   | 'structure_reorder'

@@ -25,7 +25,7 @@ Viral Struct AI / 爆构引擎要做的是：
 | Web 前端 | `apps/web` | Next.js 页面骨架，已有 `/analyze`、`/graph`、`/adapt`、`/gaps`、`/result` |
 | API 后端 | `apps/api` | Express API 骨架，已有 videos/assets/structure/slots/gaps/timeline/quality 路由 |
 | 共享协议 | `packages/shared` | TypeScript 类型 + Zod schema，定义结构图谱、素材卡、缺口、时间线等协议 |
-| Remotion | `packages/remotion-video` | 可播放 demo 的视频渲染包骨架，目前 build 是 placeholder |
+| 视频渲染 | 待建 render adapter | 旧视频渲染包已移除，后续优先落地 HyperFrames + FFmpeg-backed render path |
 | Seed 素材 | `seed_assets/raw_videos` | 已有多条原始样例视频，可用于后续真实解析和 demo case |
 | 文档体系 | `docs` | 已有需求、评分、交接、安全、demo、工具协议等文档 |
 
@@ -49,7 +49,7 @@ Viral Struct AI / 爆构引擎要做的是：
 - 真实关键帧抽取、镜头切分、ASR。
 - seed video 到结构图谱的真实自动分析。
 - 前端真实调用 API 串联完整流程。
-- Remotion preview/MP4 真实渲染。
+- HyperFrames-first preview / MP4 真实渲染。
 - 多版本生成、人工可调、自然语言改片的真实交互。
 
 ## 3. 拿奖逻辑
@@ -91,7 +91,7 @@ Viral Struct AI / 爆构引擎要做的是：
 | `SlotMatch` | 结构槽位和用户素材的匹配结果 |
 | `MaterialGap` | 缺少哪些素材或创作要素 |
 | `GapRepair` | 如何补全缺口 |
-| `TimelineItem` | 可被 Remotion/FFmpeg 消费的时间线草案 |
+| `TimelineItem` | 可被 HyperFrames/FFmpeg render adapter 消费的时间线草案 |
 | `QualityReport` | 结构匹配、槽位覆盖、事实性、可读性等质量评价 |
 
 ### Creative Ingredients 边界
@@ -197,15 +197,15 @@ beauty_score
 - 至少输出脚本 + 分镜 + 时间线草案。
 - 每个补全策略都能追溯到某个缺口。
 
-### M5：Web demo 和 Remotion preview
+### M5：Web demo 和视频渲染 adapter
 
 目标：让评委看到可播放 demo 或准视频时间线。
 
-负责人建议：前端 + Remotion 同学。
+负责人建议：前端 + 视频渲染同学。
 
 范围：
 
-- 将 `TimelineItem[]` 映射到 Remotion 组件。
+- 将 `TimelineItem[]` 映射到 HyperFrames-first render adapter。
 - 先做标题卡、卖点卡、对比卡、CTA 卡、图片裁切和字幕。
 - 后续再考虑导出 MP4。
 
@@ -233,7 +233,7 @@ beauty_score
 | 前端 | 页面流程和可视化 | `apps/web/app/*`、`apps/web/components/*` |
 | 后端 | API 串联和视频处理 | `apps/api/src/routes/*`、`apps/api/src/services/*` |
 | 协议/AI | shared schema、LLM prompt、结构抽取 | `packages/shared/src/*`、`docs/PROMPTS.md`、`apps/api/src/services/llmProvider.ts` |
-| 视频渲染 | Remotion preview / MP4 | `packages/remotion-video/src/*` |
+| 视频渲染 | HyperFrames-first preview / MP4 | render adapter 待建 |
 | 测试/集成 | typecheck/build、demo 稳定性、素材管理 | `package.json`、`turbo.json`、`.github/workflows/*`、`seed_assets/raw_videos` |
 
 ## 7. Demo 主案例建议
@@ -280,7 +280,7 @@ YVES SAINT LAURENT .mp4
 2. 接 ffprobe/FFmpeg，替换 `analyzeVideoMock` 的元信息和关键帧。
 3. 把 `/analyze -> /graph -> /adapt -> /gaps -> /result` 串成一个真实前端流程。
 4. 用一个固定 demo case 跑通完整链路。
-5. 加 Remotion preview。
+5. 加 HyperFrames-first video render preview。
 6. 加多版本与人工调整。
 
 不要现在优先做：
@@ -309,7 +309,7 @@ pnpm build
 - 素材缺口和要素缺口。
 - 补全策略。
 - 脚本、分镜、时间线。
-- Web demo 或 Remotion preview。
+- Web demo 或可播放视频 preview。
 - 安全边界和 AI 工具使用说明。
 
 ## 11. 相关文档

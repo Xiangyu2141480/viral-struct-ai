@@ -137,12 +137,21 @@ function buildPerRole(caption: CaptionStyleId, motion: MotionPresetId, transitio
     proof: { ...base, card: 'before_after_card' },
     usage: { ...base, card: 'product_layout' },
     comparison: { ...base, card: 'comparison_card' },
-    cta: { ...base, card: 'cta_card', motion: 'pop_scale' }
+    cta: { ...base, card: 'cta_card', motion: 'pop_scale' },
+    // instructional roles (course/tutorial genre) reuse nearest ad packaging
+    explanation: { ...base, card: 'title_card' },
+    demonstration: { ...base },
+    technique_step: { ...base, card: 'title_card' },
+    context: { ...base }
   };
 }
 
 function palette(hook: string, pain: string, selling: string, proof: string, usage: string, comparison: string, cta: string): Record<SegmentRole, string> {
-  return { hook, pain_point: pain, selling_point: selling, proof, usage, comparison, cta };
+  return {
+    hook, pain_point: pain, selling_point: selling, proof, usage, comparison, cta,
+    // instructional roles reuse the semantically-nearest ad-role background
+    explanation: selling, demonstration: usage, technique_step: proof, context: pain
+  };
 }
 
 export const THEME_REGISTRY: Record<ThemeId, ThemeSpec> = {

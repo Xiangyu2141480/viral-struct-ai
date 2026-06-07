@@ -133,7 +133,7 @@ class NormalizeResponseTests(unittest.TestCase):
         out = self._build(raw)
 
         self.assertEqual(out["schemaVersion"], "speech_transcript_v1")
-        self.assertEqual(out["producedBy"], "volcengine-doubao-asr-flash")
+        self.assertEqual(out["producedBy"], "volcengine-asr-flash")
         self.assertTrue(out["hasSpeech"])
         self.assertEqual(len(out["segments"]), 2)
         self.assertEqual(out["segments"][0]["id"], "seg_001")

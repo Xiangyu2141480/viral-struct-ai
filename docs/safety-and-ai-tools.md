@@ -11,7 +11,7 @@
 | 火山方舟 Doubao | real mode LLM provider，优先用于结构抽取和生成 | API key 只在本地 `.env`，不得入库 |
 | Whisper / ASR | 字幕或语音转写 | ASR 失败时必须支持手动字幕 fallback |
 | FFmpeg / ffprobe / OpenCV | 视频元信息、关键帧、镜头基础分析 | 只处理用户授权或项目自有素材 |
-| Remotion | 时间线 preview / demo 视频 | 用于可验证展示，不伪装成真实剪辑软件完整能力 |
+| HyperFrames / FFmpeg-backed renderer | 时间线 preview / demo 视频 | 用于可验证展示，不伪装成真实剪辑软件完整能力 |
 | 即梦 / CapCut / 剪映 / Runway | 竞品参考或素材实验 | 不直接把现成产品结果冒充为自主系统输出 |
 
 ## 2. 自主设计部分

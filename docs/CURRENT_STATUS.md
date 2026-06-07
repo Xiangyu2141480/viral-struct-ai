@@ -6,7 +6,8 @@
 - GitHub 远程仓库绑定
 - pnpm workspace 配置
 - Turborepo 配置
-- 前端、后端、共享协议、Remotion 包目录拆分
+- 前端、后端、共享协议包目录拆分
+- 旧视频渲染包已移除，视频最后一公里改为独立 render adapter 选型
 - CI pnpm 版本冲突修复
 - CI workspace 依赖构建顺序修复
 - 本地 `pnpm typecheck` 通过
@@ -15,7 +16,7 @@
 
 ## 当前最近的工程结论
 
-`@viral-struct/shared` 必须在 API、Web、Remotion typecheck 之前 build，否则这些包无法解析共享类型。
+`@viral-struct/shared` 必须在 API、Web typecheck 之前 build，否则这些包无法解析共享类型。
 
 因此：
 

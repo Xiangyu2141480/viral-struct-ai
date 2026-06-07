@@ -6,14 +6,14 @@
     "dev": "next dev -p 3000",
     "build": "next build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "next lint || true"
+    "lint": "next lint || true",
+    "mock:struct": "node mock/struct-mock-server.mjs"
   },
   "dependencies": {
     "@viral-struct/shared": "workspace:*",
     "next": "^15.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "reactflow": "^11.11.0",
     "zustand": "^4.5.0"
   },
   "devDependencies": {

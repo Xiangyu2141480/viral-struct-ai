@@ -758,7 +758,14 @@ function inferSegmentRole(
     proof: scoreByKeywords(normalized, PROOF_KEYWORDS) + (position > 0.45 && position < 0.9 ? 2 : 0),
     usage: scoreByKeywords(normalized, USAGE_KEYWORDS) + (source.shots.length ? 0.5 : 0),
     comparison: /对比|前后|before|after/i.test(text) ? 4 : 0,
-    cta: scoreByKeywords(normalized, CTA_KEYWORDS) + (position >= 0.8 ? 2 : 0)
+    cta: scoreByKeywords(normalized, CTA_KEYWORDS) + (position >= 0.8 ? 2 : 0),
+    // instructional roles: scored 0 here — this rule-based extractor stays
+    // ad-only; instructional roles are produced by the genre-aware Python
+    // extractor (scripts/extract_structure_graph.py).
+    explanation: 0,
+    demonstration: 0,
+    technique_step: 0,
+    context: 0
   };
 
   const role = (Object.entries(scores) as Array<[SegmentRole, number]>)
@@ -795,6 +802,18 @@ function slotRoleForSegment(role: SegmentRole, index: number, total: number): Sh
   }
   if (role === 'proof' || role === 'comparison') {
     return 'comparison';
+  }
+  // instructional roles (kept consistent with the Python extractor's
+  // _SEGMENT_ROLE_TO_SLOT_ROLE) so they don't silently fall through to cta_visual
+  // if this extractor ever starts emitting them.
+  if (role === 'explanation') {
+    return 'instruction_card';
+  }
+  if (role === 'demonstration' || role === 'context') {
+    return 'example_clip';
+  }
+  if (role === 'technique_step') {
+    return 'technique_demo';
   }
   return 'cta_visual';
 }
@@ -1004,7 +1023,11 @@ function purposeForRole(role: SegmentRole): string {
     proof: '用证明信息增强可信度',
     usage: '展示使用动作或操作场景',
     comparison: '通过对比强化差异',
-    cta: '用行动召唤完成收束'
+    cta: '用行动召唤完成收束',
+    explanation: '讲解一个核心知识点或原则',
+    demonstration: '用示例片段演示该知识点的实际效果',
+    technique_step: '拆解一个具体技巧/步骤',
+    context: '铺垫或过渡，维持注意力与连贯性'
   };
   return map[role];
 }
@@ -1017,7 +1040,11 @@ function transferRuleForRole(role: SegmentRole): string {
     proof: '替换为实测、评价、数据卡或可信解释。',
     usage: '用用户素材中的真实操作、手部演示或使用场景承接。',
     comparison: '迁移为前后对比、竞品对比或效果对照卡。',
-    cta: '替换为新商品的场景化购买、咨询或关注提示。'
+    cta: '替换为新商品的场景化购买、咨询或关注提示。',
+    explanation: '保留讲解结构与节奏，替换为新主题对应的知识点/原则。',
+    demonstration: '保留演示结构，替换为新主题的示例片段。',
+    technique_step: '保留技巧拆解节奏，替换为新主题的具体步骤。',
+    context: '保留铺垫/过渡作用，替换为新主题的衔接画面。'
   };
   return map[role];
 }
@@ -1074,7 +1101,10 @@ function fallbackStrategiesForSlot(role: ShotSlotRole): GapRepairStrategy[] {
     benefit_visual: ['selling_point_card', 'text_card', 'reuse_asset'],
     comparison: ['comparison_card', 'before_after_card', 'trust_card'],
     testimonial: ['trust_card', 'caption_rewrite'],
-    cta_visual: ['cta_card', 'trust_card']
+    cta_visual: ['cta_card', 'trust_card'],
+    instruction_card: ['text_card', 'caption_rewrite'],
+    example_clip: ['reuse_asset', 'caption_rewrite'],
+    technique_demo: ['text_card', 'style_filter_suggestion']
   };
   return map[role];
 }
@@ -1110,7 +1140,10 @@ function slotLabel(role: ShotSlotRole): string {
     benefit_visual: '利益点视觉',
     comparison: '证明或对比镜头',
     testimonial: '评价证言镜头',
-    cta_visual: '行动召唤视觉'
+    cta_visual: '行动召唤视觉',
+    instruction_card: '讲解字卡镜头',
+    example_clip: '示例片段镜头',
+    technique_demo: '技巧演示镜头'
   };
   return map[role];
 }
@@ -1183,7 +1216,11 @@ function roleName(role: SegmentRole): string {
     proof: '证明',
     usage: '使用',
     comparison: '对比',
-    cta: 'CTA'
+    cta: 'CTA',
+    explanation: '讲解',
+    demonstration: '演示',
+    technique_step: '技巧',
+    context: '铺垫'
   };
   return map[role];
 }

@@ -45,8 +45,8 @@ Timeline Generator
   - 时间线协议
   ↓
 Renderer
-  - Remotion preview
-  - FFmpeg / Remotion export
+  - HyperFrames-first render adapter
+  - FFmpeg preprocessing / verification / export fallback
   ↓
 Visualization & Quality Report
 ```

@@ -2,7 +2,7 @@
 """Analyze a directory of user-uploaded clips/images into AssetCard[] JSON.
 
 Step 2 of the migration pipeline: given a folder of raw media uploaded for
-a new product, classify each file via Doubao/ModelArk into the AssetCard
+a new product, classify each file via the configured LLM/VLM provider into the AssetCard
 schema consumed by slotMatcher (apps/api/src/services/slotMatcher.ts).
 
 Schema source of truth: packages/shared/src/schemas.ts → AssetCardSchema.
@@ -36,7 +36,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from doubao_rough_scan import (  # noqa: E402
+from llm_client import (  # noqa: E402
     api_url,
     build_multipart_body,
     configure_http_semaphore,
@@ -121,7 +121,7 @@ def build_responses_payload_for_asset(
     instructions: str | None,
     temperature: float = 0.0,
 ) -> dict[str, Any]:
-    """Same shape as doubao_rough_scan.build_responses_payload but switches
+    """Same shape as rough_scan.build_responses_payload but switches
     input content block between input_video and input_image so the model
     receives the right modality marker."""
     content_block_type = "input_video" if media_type == "video" else "input_image"
@@ -269,8 +269,11 @@ def process_clip(
     )
     file_id = uploaded["id"]
 
-    ready = gated_call(
-        wait_for_file,
+    # PR #44: wait_for_file now gates each status poll internally, so wrapping
+    # the whole wait loop in gated_call is redundant — and harmful, since it would
+    # hold a semaphore slot across the entire wait (and could self-deadlock at low
+    # caps while the inner poll waits for a slot). Call it directly.
+    ready = wait_for_file(
         base_url=base_url,
         api_key=api_key,
         file_id=file_id,

@@ -53,7 +53,7 @@ ARTIFACTS: tuple[ArtifactSpec, ...] = (
     ArtifactSpec(
         key="rough",
         relative_path="stage1_rough/rough_structure_scan.json",
-        description="Doubao 5fps rough content-block segmentation.",
+        description="LLM 5fps rough content-block segmentation.",
     ),
     ArtifactSpec(
         key="media",
@@ -68,7 +68,7 @@ ARTIFACTS: tuple[ArtifactSpec, ...] = (
     ArtifactSpec(
         key="speech",
         relative_path="stage1_media/speech_transcript.json",
-        description="Volcengine Doubao ASR transcript (hasSpeech=false for BGM-only videos).",
+        description="Volcengine ASR transcript (hasSpeech=false for BGM-only videos).",
     ),
     ArtifactSpec(
         key="timeline",

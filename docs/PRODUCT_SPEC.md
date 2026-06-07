@@ -33,7 +33,7 @@ AssetCardGrid
 GapBoard
 RepairPlannerPanel
 TimelineView
-RemotionPreview
+VideoRenderPreview
 QualityReport
 VersionSwitcher
 EditInstructionBox

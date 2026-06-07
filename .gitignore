@@ -41,6 +41,7 @@ seed_assets/analysis/**
 !seed_assets/analysis/macbook_neo/structure_graph.json
 
 # Build and cache artifacts
+.tmp/
 .turbo/
 **/.turbo/
 *.tsbuildinfo
@@ -53,3 +54,7 @@ personal_workspace/
 # Claude Code session-local config + personal plans
 .claude*
 docs/superpowers/
+
+# Requirement/spec docs may embed live API keys — treat as secrets, never commit.
+GOAL.pdf
+*.pdf
