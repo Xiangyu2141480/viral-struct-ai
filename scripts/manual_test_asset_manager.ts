@@ -128,6 +128,9 @@ async function scanPlainUploadVideos(): Promise<AssetCard[]> {
     const absolutePath = path.join(absoluteUploadDir, filename);
     const repoPath = toRepoPath(absolutePath);
     const probe = await probeVideo(absolutePath, { originalName: filename });
+    if (probe.media.aspectRatio === '16:9' || probe.media.aspectRatio === '1:1') {
+      continue;
+    }
     const hints = inferPlainVideoHints(filename, probe.media.durationSec ?? 0);
     const qualityScore = inferQualityScore(filename, probe.fallbackUsed, probe.media.width, probe.media.height);
     const fileStat = statSync(absolutePath);
@@ -229,7 +232,6 @@ function runLibrary(input: {
 
 function summarize(run: LibraryRun): LibrarySummary {
   const coverage = run.context.contextualCoverage?.coverageSummary;
-  const roles = run.context.libraryProfile.roleCoverage;
 
   return {
     label: run.label,
@@ -239,11 +241,19 @@ function summarize(run: LibraryRun): LibrarySummary {
     coveredSlots: coverage?.coveredSlots ?? 0,
     weakSlots: coverage?.weakSlots ?? 0,
     insufficientSlots: coverage?.insufficientSlots ?? 0,
-    usageDemoStatus: roles.usage_demo?.status ?? 'missing',
-    productCloseupStatus: roles.product_closeup?.status ?? 'missing',
-    ctaStatus: roles.cta?.status ?? 'missing',
+    usageDemoStatus: aggregateContextualStatus(run, ['usage_demo']),
+    productCloseupStatus: aggregateContextualStatus(run, ['product_closeup']),
+    ctaStatus: aggregateContextualStatus(run, ['cta_visual']),
     observationCount: run.context.contextualCoverage?.observations.length ?? 0
   };
+}
+
+function aggregateContextualStatus(run: LibraryRun, roles: ShotSlotRole[]): string {
+  const rows = run.context.contextualCoverage?.slotCoverages.filter((coverage) => roles.includes(coverage.slotRole as ShotSlotRole)) ?? [];
+  if (!rows.length) return 'not_present';
+  if (rows.every((row) => row.coverageStatus === 'covered')) return 'covered';
+  if (rows.some((row) => row.coverageStatus === 'covered' || row.coverageStatus === 'weak')) return 'weak';
+  return 'missing';
 }
 
 function buildMarkdownReport(original: LibraryRun, plain: LibraryRun): string {
@@ -401,6 +411,7 @@ function inferPlainVideoHints(filename: string, durationSec: number): {
   const lower = filename.toLowerCase();
   const hasHandAction = /hand|pickup|pick_up|open|cap|drink|pour|cup|use|usage/.test(lower);
   const hasPourOrDrink = /drink|pour|cup/.test(lower);
+  const hasComparison = /compare|comparison|lineup|before|after|multi|series|pack/.test(lower);
   const hasCleanEnd = /clean|end|frame|cta/.test(lower);
   const hasPanOrProduct = /table|product|pan|bottle|pack|label/.test(lower);
   const isBadClip = /bad|dark|shaky|blur|low/.test(lower);
@@ -408,6 +419,7 @@ function inferPlainVideoHints(filename: string, durationSec: number): {
   const suitableSlots: ShotSlotRole[] = uniqueRoles([
     ...(hasHandAction ? ['usage_demo' as const] : []),
     ...(hasPourOrDrink ? ['benefit_visual' as const] : []),
+    ...(hasComparison ? ['comparison' as const] : []),
     ...(supportsCtaSurface ? ['cta_visual' as const] : []),
     ...(hasPanOrProduct ? ['product_closeup' as const] : []),
     'product_closeup'
@@ -416,6 +428,7 @@ function inferPlainVideoHints(filename: string, durationSec: number): {
     'product_closeup_trait',
     ...(hasHandAction ? ['hand_demo' as const, 'human_presence' as const] : []),
     ...(hasPourOrDrink ? ['lifestyle_context' as const] : []),
+    ...(hasComparison ? ['lifestyle_context' as const] : []),
     ...(hasCleanEnd ? ['clean_background' as const] : []),
     ...(isBadClip ? ['unknown' as const] : [])
   ]);
@@ -424,6 +437,7 @@ function inferPlainVideoHints(filename: string, durationSec: number): {
     'product',
     ...(hasHandAction ? ['hand', 'usage scene'] : []),
     ...(hasPourOrDrink ? ['cup', 'liquid'] : []),
+    ...(hasComparison ? ['product lineup'] : []),
     ...(hasCleanEnd ? ['clean end frame'] : [])
   ]);
 

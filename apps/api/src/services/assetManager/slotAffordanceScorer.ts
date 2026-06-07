@@ -429,7 +429,7 @@ function hasPositiveCue(text: string, keyword: string): boolean {
   let index = normalizedText.indexOf(normalizedKeyword);
   while (index >= 0) {
     const before = normalizedText.slice(Math.max(0, index - 16), index);
-    if (!/(^|[\s_\-;,.])(?:no|not|without|missing|lacks?)\s*$/.test(before)) return true;
+    if (!/(^|[\s_\-;,.])(?:no|not|without|missing|lacks?)(?:\s+[a-z0-9_/-]+){0,3}\s*$/.test(before)) return true;
     index = normalizedText.indexOf(normalizedKeyword, index + normalizedKeyword.length);
   }
   return false;

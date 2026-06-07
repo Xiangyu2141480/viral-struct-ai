@@ -456,7 +456,10 @@ export type AssetAnalysisSource =
   | 'mock_filename_rules'
   | 'llm_multimodal'
   | 'manual_text_brief'
-  | 'deterministic';
+  | 'deterministic'
+  | 'generated_external'
+  | 'planned_generation'
+  | 'aigc';
 
 export interface AssetAnalysisProfile {
   profileVersion: 'asset_analysis_v1';
@@ -575,6 +578,110 @@ export type NormalizedAssetCard = AssetCard & { analysis: AssetAnalysisProfile }
 
 export type AssetLibraryProfile = AssetLibraryReport;
 
+export type MaterialScenarioType =
+  | 'empty_assets'
+  | 'single_image_only'
+  | 'partial_real_footage'
+  | 'aigc_ready'
+  | 'mixed_real_and_aigc';
+
+export interface MaterialScenarioProfile {
+  scenarioType: MaterialScenarioType;
+  assetCount: number;
+  imageCount: number;
+  videoCount: number;
+  textCount: number;
+  generatedAssetCount: number;
+  realFootageCount: number;
+  evidenceCoverageScore: number;
+  completionFeasibilityScore: number;
+  summary: string;
+  strengths: string[];
+  weaknesses: string[];
+  recommendedDownstreamMode:
+    | 'structure_cards_only'
+    | 'single_image_motion_reuse'
+    | 'real_footage_editing'
+    | 'aigc_missing_material_generation'
+    | 'mixed_repair_workflow';
+  warnings: string[];
+}
+
+export interface CompletionChannelEligibility {
+  channel:
+    | 'manual_shoot'
+    | 'aigc_video_prompt'
+    | 'aigc_image_prompt'
+    | 'hyperframes_card_animation'
+    | 'reuse_crop_zoom'
+    | 'copy_packaging_card'
+    | 'video_agent_fallback_rendering';
+  eligible: boolean;
+  confidence: 'high' | 'medium' | 'low';
+  reason: string;
+  requiredInputs: string[];
+  providedInputs: string[];
+  missingInputs: string[];
+  ownership:
+    | 'gap_repair_planner'
+    | 'video_agent'
+    | 'hyperframes_renderer'
+    | 'external_generation_adapter'
+    | 'human_shooting';
+}
+
+export interface ManualShootBrief {
+  title: string;
+  objective: string;
+  shotDescription: string;
+  durationSec: number;
+  framing: string;
+  requiredProps: string[];
+  mustCapture: string[];
+  avoid: string[];
+}
+
+export interface AigcGenerationBrief {
+  providerHint: 'gemini' | 'seedance' | 'generic';
+  prompt: string;
+  negativePrompt: string;
+  referenceAssetIds: string[];
+  expectedDurationSec: number;
+  aspectRatio: '9:16' | '16:9' | '1:1';
+  safetyNotes: string[];
+}
+
+export interface HyperframesFallbackBrief {
+  title: string;
+  cardType:
+    | 'hook_card'
+    | 'benefit_card'
+    | 'usage_placeholder_card'
+    | 'comparison_card'
+    | 'cta_card'
+    | 'timeline_bridge_card';
+  copyIntent: string;
+  visualElements: string[];
+  animationHints: string[];
+  durationSec: number;
+  inputAssets: string[];
+}
+
+export interface MissingMaterialBrief {
+  id: string;
+  affectedSegmentId?: string;
+  affectedSlotId: string;
+  slotRole: AssetRole;
+  slotIntent: string;
+  missingIngredients: MissingIngredient[];
+  potentialImpact: CoverageImpact[];
+  manualShootBrief?: ManualShootBrief;
+  aigcGenerationBrief?: AigcGenerationBrief;
+  hyperframesBrief?: HyperframesFallbackBrief;
+  channelEligibility: CompletionChannelEligibility[];
+  ownership: 'asset_manager_handoff_brief_only';
+}
+
 export interface AssetSupplyContext {
   protocolVersion: 'asset-supply-v1';
   libraryId: string;
@@ -582,6 +689,8 @@ export interface AssetSupplyContext {
   assets: NormalizedAssetCard[];
   libraryProfile: AssetLibraryProfile;
   contextualCoverage?: ContextualAssetCoverageReport;
+  materialScenario?: MaterialScenarioProfile;
+  missingMaterialBriefs?: MissingMaterialBrief[];
   warnings: string[];
 }
 

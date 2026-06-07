@@ -55,6 +55,9 @@ Response:
 Sample:
 
 - `docs/examples/asset-supply-context.sample.json`
+- `docs/examples/scenario-single-image-only.sample.json`
+- `docs/examples/scenario-partial-real-footage.sample.json`
+- `docs/examples/scenario-aigc-ready.sample.json`
 
 ## Responsibility Boundary
 
@@ -69,6 +72,11 @@ Asset Manager provides:
 - missing ingredients
 - potential impact evidence
 - material coverage observations
+- material scenario profile
+- missing material handoff briefs
+- manual shoot input briefs
+- AIGC prompt briefs
+- HyperFrames renderer input briefs
 
 Asset Manager does not provide:
 
@@ -79,6 +87,47 @@ Asset Manager does not provide:
 - title/benefit/CTA card composition
 - timeline composition
 - MP4 rendering
+- real Gemini, Seedance, or HyperFrames calls
+
+## Scenario-Aware Handoff
+
+`AssetSupplyContext` may include:
+
+- `materialScenario: MaterialScenarioProfile`
+- `missingMaterialBriefs: MissingMaterialBrief[]`
+
+Supported judge-facing scenarios:
+
+| Scenario | Meaning | Expected downstream mode |
+|---|---|---|
+| `single_image_only` | User has one product image and no footage. | Crop/zoom reuse, cards, manual shoot request, prompt brief. |
+| `partial_real_footage` | User has some real clips, but coverage is still weak or insufficient. | Real-footage editing plus targeted repair planning. |
+| `aigc_ready` | User can provide generated material or wants prompt-ready external generation inputs. | External generation adapter may consume AIGC briefs. |
+| `mixed_real_and_aigc` | Real footage and generated/proposed assets are both present. | Mixed repair workflow. |
+| `empty_assets` | No user assets. | Structure cards or prompt-first planning. |
+
+`evidenceCoverageScore` is direct asset coverage. `completionFeasibilityScore` is not the same score: it estimates whether downstream actions can complete the structure using reshoot, crop/zoom reuse, prompt briefs, or card animation inputs.
+
+## MissingMaterialBrief Consumption
+
+For each weak or insufficient contextual slot, Asset Manager can provide a `MissingMaterialBrief`.
+
+Video Agent may consume:
+
+- `manualShootBrief`: user-facing reshoot input.
+- `aigcGenerationBrief`: prompt-ready input for a separate external generation adapter.
+- `hyperframesBrief`: input for a renderer/card-animation module.
+- `channelEligibility`: routing hints for downstream owners.
+
+Video Agent must not treat these as:
+
+- final `GapRepair`
+- fallback card output
+- rendered HyperFrames output
+- generated Seedance/Gemini media
+- final timeline item
+
+The `ownership` field is always `asset_manager_handoff_brief_only` to make that boundary explicit.
 
 ## How Video Agent Should Consume It
 
@@ -127,6 +176,13 @@ For each `MaterialCoverageObservation`:
 - Treat it as `asset_manager_observation_only`.
 - Use `missingIngredients` and `potentialImpact` to help SlotMatcher/GapRepairPlanner decide what the actual gap and repair should be.
 - Do not treat it as the final gap object.
+
+For each `MissingMaterialBrief`:
+
+- Treat it as structured input for downstream planning.
+- Preserve the distinction between manual shoot, prompt brief, and renderer input.
+- Show `aigcGenerationBrief.safetyNotes` when exposing prompts.
+- Do not say a prompt brief means generated media exists.
 
 ## Legacy Route
 
@@ -194,6 +250,8 @@ English:
 
 - [ ] Response uses `protocolVersion: "asset-supply-v1"`.
 - [ ] Weak/insufficient coverage is represented by `ContextualSlotCoverage` and `MaterialCoverageObservation`.
+- [ ] `MaterialScenarioProfile` is treated as scenario evidence, not product analytics.
+- [ ] `MissingMaterialBrief` is treated as handoff input only.
 - [ ] No canonical Asset Manager response contains `fallbackCards`.
 - [ ] No canonical Asset Manager response contains Asset Manager-owned `suggestedRepair`.
 - [ ] Old `AssetCard` without `analysis` still works.

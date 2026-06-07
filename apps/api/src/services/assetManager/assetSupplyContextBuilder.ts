@@ -20,12 +20,15 @@ import type {
 } from '@viral-struct/shared';
 import { AssetSupplyContextSchema } from '@viral-struct/shared';
 import { analyzeAssetCoverage } from './assetCoverageAnalyzer';
+import { buildMissingMaterialBriefs } from './missingMaterialBriefBuilder';
+import { classifyMaterialScenario, type MaterialScenarioClassifierOptions } from './materialScenarioClassifier';
 
 export interface BuildAssetSupplyContextInput {
   structureGraph?: ViralStructureGraph;
   assetCards: AssetCard[];
   contentBrief?: ContentBrief;
   libraryId?: string;
+  options?: MaterialScenarioClassifierOptions;
 }
 
 export function buildAssetSupplyContext(input: BuildAssetSupplyContextInput): AssetSupplyContext {
@@ -44,10 +47,30 @@ export function buildAssetSupplyContext(input: BuildAssetSupplyContextInput): As
     libraryId,
     warnings: coverage.warnings
   });
+  const preliminaryScenario = classifyMaterialScenario({
+    assets: coverage.assetCards,
+    contextualCoverage,
+    contentBrief: input.contentBrief,
+    options: input.options
+  });
+  const missingMaterialBriefs = buildMissingMaterialBriefs({
+    contextualCoverage,
+    assetCards: coverage.assetCards,
+    contentBrief: input.contentBrief,
+    materialScenario: preliminaryScenario
+  });
+  const materialScenario = classifyMaterialScenario({
+    assets: coverage.assetCards,
+    contextualCoverage,
+    contentBrief: input.contentBrief,
+    missingMaterialBriefs,
+    options: input.options
+  });
   const warnings = Array.from(new Set([
     ...coverage.warnings,
     ...coverage.assetCards.flatMap((asset) => asset.analysis?.warnings ?? []),
-    ...contextualCoverage.warnings
+    ...contextualCoverage.warnings,
+    ...materialScenario.warnings
   ]));
 
   const context: AssetSupplyContext = {
@@ -57,6 +80,8 @@ export function buildAssetSupplyContext(input: BuildAssetSupplyContextInput): As
     assets: coverage.assetCards as NormalizedAssetCard[],
     libraryProfile: coverage.report,
     contextualCoverage,
+    materialScenario,
+    missingMaterialBriefs,
     warnings
   };
 
