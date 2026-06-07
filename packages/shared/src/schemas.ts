@@ -7,7 +7,12 @@ export const SegmentRoleSchema = z.enum([
   'proof',
   'usage',
   'comparison',
-  'cta'
+  'cta',
+  // instructional roles (course/tutorial genre)
+  'explanation',
+  'demonstration',
+  'technique_step',
+  'context'
 ]);
 
 export const ShotSlotRoleSchema = z.enum([
@@ -17,7 +22,11 @@ export const ShotSlotRoleSchema = z.enum([
   'benefit_visual',
   'comparison',
   'testimonial',
-  'cta_visual'
+  'cta_visual',
+  // instructional slot roles (course/tutorial genre)
+  'instruction_card',
+  'example_clip',
+  'technique_demo'
 ]);
 
 export const GapRepairStrategySchema = z.enum([

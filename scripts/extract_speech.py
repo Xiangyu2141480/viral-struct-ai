@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Extract speech transcript via Volcengine Doubao ASR (flash / recognize API).
+"""Extract speech transcript via the Volcengine ASR (flash / recognize API).
 
 Synchronous "录音文件极速版" endpoint with base64-inlined audio data —
 avoids the need to upload to any object storage. Suitable for audio
@@ -37,7 +37,7 @@ DEFAULT_ENDPOINT_PATH = "/api/v3/auc/bigmodel/recognize/flash"
 DEFAULT_RESOURCE_ID = "volc.bigasr.auc_turbo"
 DEFAULT_MODEL = "bigmodel"
 DEFAULT_USER_ID = "viral-struct-ai"
-PRODUCED_BY = "volcengine-doubao-asr-flash"
+PRODUCED_BY = "volcengine-asr-flash"
 
 # Volcengine response codes (subset).
 CODE_SUCCESS = "20000000"
@@ -82,9 +82,9 @@ def detect_language(text: str) -> str:
         return "mixed"
     return "zh" if cjk_ratio > 0.5 else "en"
 
-# Reuse the simple dotenv loader from the rough-scan script (no new deps).
+# Reuse the simple dotenv loader from the shared LLM client (no new deps).
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from doubao_rough_scan import load_dotenv, env_value  # noqa: E402
+from llm_client import load_dotenv, env_value  # noqa: E402
 from path_layout import DEFAULT_VIDEO_ID, analysis_paths  # noqa: E402
 
 _DEFAULT_PATHS = analysis_paths(DEFAULT_VIDEO_ID)
@@ -331,7 +331,7 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Extract speech transcript via Volcengine Doubao ASR (flash)."
+        description="Extract speech transcript via the Volcengine ASR (flash)."
     )
     parser.add_argument(
         "--audio",

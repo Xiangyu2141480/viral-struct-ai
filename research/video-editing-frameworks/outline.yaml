@@ -1,0 +1,125 @@
+topic: video_editing_frameworks_for_viral_struct_ai
+created_at: "2026-06-05"
+language: zh-CN
+project_context:
+  project_name: viral-struct-ai
+  goal: >
+    Build a backend-first AI video structure migration engine: analyze a sample
+    viral video, extract script/rhythm/packaging structures, map those structures
+    onto a new product/topic and user assets, detect material gaps, repair them,
+    generate storyboard/timeline/packaging/render outputs, and support explainable
+    local edits.
+  current_codebase:
+    - Node/TypeScript API service modules already model analysis, structure extraction,
+      asset cards, slot matching, gap repair, timeline generation, and quality checks.
+    - packages/shared defines project-level domain types such as ViralStructureGraph,
+      AssetCard, SlotMatch, MaterialGap, GapRepair, TimelineItem, and QualityReport.
+    - packages/remotion-video exists but current demo is hardcoded and should not drive
+      the architecture.
+  user_direction:
+    - Abandon the old demo path and avoid using mock/fallback behavior as product logic.
+    - Backend chain and data contracts matter now; UI will be redesigned separately.
+    - Mock data should be explicit and late-stage, only to stabilize uncontrollable
+      demo variables after the real chain is wired.
+primary_questions:
+  - id: q_framework_choice
+    question: >
+      For this product, should the video editing Agent use HyperFrames, Remotion,
+      a lower-level FFmpeg/MLT/MoviePy stack, or a layered combination?
+  - id: q_agent_timeline
+    question: >
+      What timeline representation should the Agent manipulate so edits are
+      explainable, patchable, deterministic, and renderer-independent?
+  - id: q_render_preview_split
+    question: >
+      What should happen in backend render jobs versus browser preview, especially
+      while the UI is still being redesigned?
+  - id: q_material_gap_repair
+    question: >
+      Which framework best supports gap repair actions such as crop/zoom/reorder,
+      product closeups, subtitles, packaging cards, stickers, transitions, BGM beats,
+      voiceover, and AIGC inserts?
+  - id: q_open_source_reference
+    question: >
+      Which open-source projects are useful architectural references for a video
+      editing Agent, even if they are not direct dependencies?
+candidate_items:
+  - id: remotion
+    name: Remotion
+    category: programmatic_video_renderer
+    why_research: >
+      Existing package already uses it. It may be strong for React/TypeScript
+      composition, preview, dynamic templates, and production rendering, but its
+      authoring model and license constraints must be checked.
+  - id: hyperframes
+    name: HyperFrames
+    category: agent_native_video_renderer
+    why_research: >
+      Explicitly designed around agent-generated HTML/CSS videos and deterministic
+      rendering. It may fit an Agent workflow, but maturity, ecosystem, media editing
+      depth, and production readiness need verification.
+  - id: ffmpeg
+    name: FFmpeg
+    category: low_level_media_engine
+    why_research: >
+      Likely unavoidable for metadata, trimming, concatenation, transcoding, audio,
+      subtitles, filters, thumbnails, and deterministic backend jobs.
+  - id: opentimelineio
+    name: OpenTimelineIO
+    category: timeline_interchange
+    why_research: >
+      Could influence the internal timeline DSL or become an export/interchange
+      format for edit decisions, even if not used as the primary renderer.
+  - id: moviepy
+    name: MoviePy
+    category: python_programmatic_editing
+    why_research: >
+      Useful as a readable programmatic editing reference and rapid prototype tool,
+      but must be evaluated against Node/TS integration and production performance.
+  - id: editly
+    name: editly
+    category: declarative_ffmpeg_editor
+    why_research: >
+      Declarative JSON-based FFmpeg editing may be close to an Agent-friendly timeline
+      concept, though project freshness and limits must be checked.
+  - id: mlt
+    name: MLT Framework
+    category: nle_media_framework
+    why_research: >
+      Mature NLE-style framework used by editors such as Shotcut/Kdenlive; possible
+      fit for deeper timeline semantics, but Node integration and complexity may be high.
+  - id: browser_preview_stack
+    name: WebCodecs / ffmpeg.wasm / browser preview stack
+    category: browser_preview_auxiliary
+    why_research: >
+      May matter after UI redesign for low-latency preview, but likely should not be
+      the backend production renderer.
+  - id: open_source_video_agents
+    name: Open-source video Agent / AI editor references
+    category: reference_projects
+    why_research: >
+      Need examples of Agent-readable timeline patching, natural-language editing,
+      media analysis, verification loops, and explainable edit plans.
+hypotheses_to_test:
+  - id: h_layered_architecture
+    hypothesis: >
+      The best product architecture is likely not "Remotion vs HyperFrames" as a
+      single winner, but a layered backend: domain Timeline DSL + FFmpeg media
+      primitives + one or more render adapters.
+  - id: h_remotion_default_adapter
+    hypothesis: >
+      Remotion may be the safest first production render adapter because it matches
+      the existing TypeScript stack and supports preview/render workflows.
+  - id: h_hyperframes_agent_exploration
+    hypothesis: >
+      HyperFrames may be valuable for Agent-native motion/packaging experiments,
+      especially when the Agent needs to generate visual compositions directly.
+  - id: h_otio_as_reference
+    hypothesis: >
+      OpenTimelineIO may be more useful as a design reference/export format than as
+      the core execution engine.
+outputs_expected:
+  - A framework comparison grounded in official/current sources.
+  - A recommended architecture for the video editing Agent.
+  - A list of required Agent capabilities and backend contracts.
+  - A short list of open-source projects worth reading or borrowing ideas from.

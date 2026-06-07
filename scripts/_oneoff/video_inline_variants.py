@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Try multiple type-name variants for inline video in Doubao Responses API."""
+"""Try multiple type-name variants for inline video in the LLM Responses API."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from doubao_rough_scan import (  # noqa: E402
+from llm_client import (  # noqa: E402
     create_response,
     env_value,
     extract_response_text,

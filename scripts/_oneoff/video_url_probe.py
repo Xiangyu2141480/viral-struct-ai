@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""One-off probe: does Doubao Responses API accept inline video_url (base64)?
+"""One-off probe: does the LLM Responses API accept inline video_url (base64)?
 
 If yes, we can drop the Files API upload + wait_for_file polling, killing
 2 of 3 HTTP round trips per peak call (~14-25 min saved per video).
@@ -24,7 +24,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from doubao_rough_scan import (  # noqa: E402
+from llm_client import (  # noqa: E402
     create_response,
     env_value,
     extract_response_text,

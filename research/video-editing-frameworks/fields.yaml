@@ -1,0 +1,148 @@
+topic: video_editing_frameworks_for_viral_struct_ai
+created_at: "2026-06-05"
+language: zh-CN
+fields:
+  - id: positioning
+    name: Product positioning
+    type: text
+    description: >
+      What the project/framework is fundamentally built for: renderer, editor,
+      media engine, timeline interchange, browser preview, or Agent workflow.
+  - id: source_links
+    name: Source links
+    type: list
+    description: >
+      Official documentation, repository links, release/license pages, or other
+      primary sources used to verify the facts.
+  - id: authoring_model
+    name: Authoring model
+    type: text
+    description: >
+      How users or programs describe a video: React components, HTML/CSS, JSON,
+      Python objects, command lines, node graphs, XML, or timeline tracks.
+  - id: timeline_model
+    name: Timeline model
+    type: text
+    description: >
+      Whether the framework has first-class tracks, clips, layers, keyframes,
+      transitions, markers, edit decisions, and patchable ranges.
+  - id: agent_patchability
+    name: Agent patchability
+    type: score_with_notes
+    scale: 1-5
+    description: >
+      How easy it is for an LLM/Agent to make small explainable edits without
+      rewriting an entire composition.
+  - id: media_primitives
+    name: Media primitives
+    type: list
+    description: >
+      Support for trim, crop, zoom, concatenate, overlay, mask, color adjustment,
+      speed ramp, transition, filter, audio mix, subtitle burn-in, export, and
+      metadata inspection.
+  - id: packaging_motion
+    name: Packaging and motion capability
+    type: score_with_notes
+    scale: 1-5
+    description: >
+      Fit for viral-video packaging: caption styles, cards, stickers, product callouts,
+      animated emphasis, rhythm sync, cover frames, and reusable visual templates.
+  - id: audio_subtitle
+    name: Audio and subtitle capability
+    type: score_with_notes
+    scale: 1-5
+    description: >
+      Fit for voiceover, BGM beat alignment, captions, subtitle styles, audio mixing,
+      transcript alignment, and export.
+  - id: preview_fit
+    name: Preview fit
+    type: score_with_notes
+    scale: 1-5
+    description: >
+      Suitability for interactive preview after UI redesign: latency, browser support,
+      player component availability, seekability, and partial render support.
+  - id: render_fit
+    name: Backend render fit
+    type: score_with_notes
+    scale: 1-5
+    description: >
+      Suitability for deterministic backend render jobs: headless operation,
+      reproducibility, job isolation, failure handling, and output quality.
+  - id: node_ts_integration
+    name: Node/TypeScript integration
+    type: score_with_notes
+    scale: 1-5
+    description: >
+      Fit with the existing Node/TypeScript backend, shared package, and future API
+      contracts.
+  - id: python_or_native_integration
+    name: Python/native integration cost
+    type: score_with_notes
+    scale: 1-5
+    description: >
+      Integration cost if the framework is Python-native, C/C++ native, CLI-first,
+      or requires a separate worker runtime.
+  - id: determinism_and_validation
+    name: Determinism and validation
+    type: score_with_notes
+    scale: 1-5
+    description: >
+      Whether outputs can be reproduced, tested, diffed, validated, and explained
+      against the structure migration plan.
+  - id: performance_scaling
+    name: Performance and scaling
+    type: text
+    description: >
+      Rendering speed, concurrency model, hardware/browser dependencies, cloud
+      rendering options, and expected bottlenecks.
+  - id: maturity_ecosystem
+    name: Maturity and ecosystem
+    type: text
+    description: >
+      Community health, documentation, releases, examples, dependency stability,
+      and whether the project appears production-friendly.
+  - id: license_commercial
+    name: License and commercial constraints
+    type: text
+    description: >
+      License terms, commercial limits, attribution requirements, SaaS restrictions,
+      or paid features that could affect this project.
+  - id: fit_for_goal_pdf
+    name: Fit for GOAL.pdf
+    type: score_with_notes
+    scale: 1-5
+    description: >
+      Direct fit for the hackathon/product goals: sample structure extraction,
+      structure migration, gap repair, process visualization, multi-version output,
+      human adjustment, and natural-language editing.
+  - id: fit_for_current_codebase
+    name: Fit for current codebase
+    type: score_with_notes
+    scale: 1-5
+    description: >
+      How naturally the framework connects to existing shared types, API services,
+      timeline generator, and future render endpoints after discarding the old demo.
+  - id: risks
+    name: Risks
+    type: list
+    description: >
+      Technical, product, maintainability, licensing, UX, and demo risks.
+  - id: recommended_role
+    name: Recommended role
+    type: enum
+    options:
+      - primary_renderer
+      - secondary_renderer
+      - media_primitive_engine
+      - timeline_reference
+      - preview_only
+      - prototype_only
+      - reference_only
+      - avoid
+    description: >
+      Recommended role in the architecture, if any.
+  - id: decision_summary
+    name: Decision summary
+    type: text
+    description: >
+      Short bottom-line recommendation for this candidate.

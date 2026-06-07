@@ -37,7 +37,11 @@ const SLOT_TO_ROLE: Record<ShotSlotRole, AssetManagerRole> = {
   benefit_visual: 'benefit_proof',
   comparison: 'comparison',
   testimonial: 'benefit_proof',
-  cta_visual: 'cta'
+  cta_visual: 'cta',
+  // instructional slot roles (course/tutorial genre) -> nearest asset-manager role
+  instruction_card: 'packaging_card',
+  example_clip: 'usage_demo',
+  technique_demo: 'usage_demo'
 };
 
 const ROLE_KEYWORDS: Record<AssetManagerRole, string[]> = {

@@ -6,7 +6,8 @@
 
 - GitHub 仓库已创建：`viral-struct-ai`
 - monorepo 骨架已完成
-- 前端、后端、共享协议、Remotion 包已经拆好
+- 前端、后端、共享协议已经拆好
+- 旧视频渲染包已移除；视频最后一公里将重新选型，优先考虑 HyperFrames + FFmpeg-backed render adapter
 - 本地 `pnpm install`、`pnpm typecheck`、`pnpm build` 已通过
 - CI 已修复 pnpm 版本冲突和 workspace 依赖构建顺序问题
 - 已建立项目文档体系
@@ -157,7 +158,7 @@ matched / partial / missing
 - 分镜
 - 时间线草案
 - 包装方案
-- Remotion 可播放 demo
+- 可播放视频 demo（render adapter 待落地）
 
 ## 5. 当前最重要的开发顺序
 
@@ -174,7 +175,7 @@ matched / partial / missing
 6. Gap detection
 7. Gap repair
 8. Timeline generation
-9. Remotion preview
+9. HyperFrames-first video render preview
 10. 多版本和人工可调
 ```
 

@@ -268,6 +268,117 @@ class BuildStructureGraphTests(unittest.TestCase):
         self.assertEqual(slot["visualIngredientRequirements"], [])
 
 
+class GenreAwareCourseTests(unittest.TestCase):
+    """A tutorial/course video must NOT be force-fit into the ad ontology.
+
+    RCA finding (DS-02): the extractor computed ``videoType`` last and never
+    branched on it, so a course video got ``selling_point``/``product_closeup``
+    roles, product-substitution ``transferRule``s, and a fabricated
+    ``product_closeup_trait`` ingredient carrying the literally-false evidence
+    "全片以产品本体为核心呈现". These tests pin genre-aware dispatch.
+    """
+
+    def setUp(self):
+        self.module = load_module()
+
+    def _course_rough_doc(self) -> dict:
+        return {
+            "roughSummary": {
+                "likelyVideoType": "tutorial",
+                "detectedCategory": "course",
+                "oneSentenceStructure": "讲解如何把打斗剪辑做得更燃更有节奏。",
+            },
+            "contentBlocks": [
+                {"id": "block_001", "timeRange": {"start": 0, "end": 10},
+                 "coarseRoleGuess": "attention_grab",
+                 "observableSummary": "炫酷打斗开场并抛出教学主题",
+                 "visualSignals": ["黑底文字", "特效"]},
+                {"id": "block_002", "timeRange": {"start": 10, "end": 20},
+                 "coarseRoleGuess": "feature_or_claim",
+                 "observableSummary": "讲解镜头切换与卡点要点",
+                 "visualSignals": ["黑底标题"]},
+                {"id": "block_003", "timeRange": {"start": 20, "end": 30},
+                 "coarseRoleGuess": "demo_or_usage",
+                 "observableSummary": "示范打斗片段如何卡点",
+                 "visualSignals": ["打斗示例片段"]},
+                {"id": "block_004", "timeRange": {"start": 30, "end": 40},
+                 "coarseRoleGuess": "closing_or_cta",
+                 "observableSummary": "鼓励多练习并关注作者",
+                 "visualSignals": ["关注引导"]},
+            ],
+        }
+
+    def test_course_video_type_detected(self):
+        graph = self.module.build_structure_graph(self._course_rough_doc(), None)
+        self.assertEqual(graph["meta"]["videoType"], "course")
+
+    def test_course_detected_from_category_when_likely_type_blank(self):
+        """Regression guard: genre must survive a blank likelyVideoType as long
+        as detectedCategory identifies the course — otherwise the whole genre
+        dispatch silently degrades back to the ad ontology."""
+        doc = self._course_rough_doc()
+        doc["roughSummary"]["likelyVideoType"] = ""
+        doc["roughSummary"]["detectedCategory"] = "course"
+        graph = self.module.build_structure_graph(doc, None)
+        self.assertEqual(graph["meta"]["videoType"], "course")
+        self.assertNotIn("selling_point", [s["role"] for s in graph["segments"]])
+
+    def test_course_segments_use_instructional_roles_not_ad_roles(self):
+        graph = self.module.build_structure_graph(self._course_rough_doc(), None)
+        roles = [s["role"] for s in graph["segments"]]
+        self.assertEqual(roles[0], "hook")
+        self.assertEqual(roles[-1], "cta")
+        self.assertEqual(roles[1], "explanation")
+        self.assertEqual(roles[2], "demonstration")
+        self.assertNotIn("selling_point", roles)
+        self.assertNotIn("usage", roles)
+
+    def test_course_slots_are_not_product_closeup(self):
+        graph = self.module.build_structure_graph(self._course_rough_doc(), None)
+        slot_roles = [s["role"] for s in graph["shotSlots"]]
+        self.assertNotIn("product_closeup", slot_roles)
+        self.assertIn("instruction_card", slot_roles)
+
+    def test_course_transfer_rule_is_technique_reuse_not_product_swap(self):
+        graph = self.module.build_structure_graph(self._course_rough_doc(), None)
+        explanation = next(s for s in graph["segments"] if s["role"] == "explanation")
+        self.assertNotIn("商品", explanation["transferRule"])
+        self.assertNotIn("产品", explanation["transferRule"])
+
+    def test_course_does_not_fabricate_product_ingredient(self):
+        graph = self.module.build_structure_graph(self._course_rough_doc(), None)
+        types = [ing["type"] for ing in graph["creativeIngredients"]]
+        self.assertNotIn("product_closeup_trait", types)
+        for ing in graph["creativeIngredients"]:
+            for ev in ing.get("evidence", []):
+                self.assertNotEqual(ev.get("value"), "全片以产品本体为核心呈现")
+
+    def test_course_cover_style_is_not_product_centered(self):
+        graph = self.module.build_structure_graph(self._course_rough_doc(), None)
+        self.assertNotEqual(
+            graph["packaging"]["coverStyle"], "product_centered_clean_background"
+        )
+
+    def test_ecommerce_default_is_unchanged(self):
+        """Regression guard: an ad video still maps to the ad ontology."""
+        rough_doc = {
+            "roughSummary": {"likelyVideoType": "product ad",
+                             "oneSentenceStructure": "产品亮相并演示卖点。"},
+            "contentBlocks": [
+                {"id": "block_001", "timeRange": {"start": 0, "end": 5},
+                 "coarseRoleGuess": "feature_or_claim",
+                 "observableSummary": "产品近景展示卖点",
+                 "visualSignals": ["产品近景"]},
+            ],
+        }
+        graph = self.module.build_structure_graph(rough_doc, None)
+        self.assertEqual(graph["meta"]["videoType"], "ecommerce")
+        self.assertEqual(graph["segments"][0]["role"], "hook")
+        self.assertEqual(
+            graph["packaging"]["coverStyle"], "product_centered_clean_background"
+        )
+
+
 class BuildBoundariesTests(unittest.TestCase):
     def setUp(self):
         self.module = load_module()

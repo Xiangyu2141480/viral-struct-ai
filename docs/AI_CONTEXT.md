@@ -36,9 +36,9 @@ Viral Struct AI / 爆构引擎
 - 前端在 `apps/web`。
 - 后端在 `apps/api`。
 - 共享协议在 `packages/shared`。
-- Remotion demo 在 `packages/remotion-video`。
+- 旧视频渲染包已移除；视频最后一公里不再绑定旧 renderer，后续优先评估 HyperFrames + FFmpeg-backed render adapter。
 - 当前本地 typecheck 和 build 已通过。
-- CI 中需要先 build `@viral-struct/shared`，否则 API 包无法解析共享类型。
+- CI 中需要先 build `@viral-struct/shared`，否则 API / Web 包无法解析共享类型。
 
 ## 3. 核心中间层
 
