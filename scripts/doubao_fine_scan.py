@@ -377,19 +377,23 @@ def run_fine_scan(args: argparse.Namespace) -> int:
     # than being silently ignored (PR #24 review H1).
     configure_http_semaphore(int(args.max_concurrent_http))
 
-    # PR #24 review H2: --max-concurrent-http is the *binding* concurrency
-    # cap; --block-workers and --candidate-workers only set the upper bound
-    # on threads. When the upper bound far exceeds the cap, extra threads
-    # just block on the semaphore — HTTP correctness is fine but memory is
-    # wasted. Print a runtime WARN so ops sees the relationship at startup.
+    # PR #24 review H2: --max-concurrent-http is the *binding* concurrency cap;
+    # --block-workers and --candidate-workers only set the upper bound on threads.
+    # By design (perf/fine-scan-speedups), block_workers defaults high so every
+    # block's candidates interleave into the shared HTTP pipe instead of running
+    # in serial waves — the semaphore still enforces the real API cap, so the
+    # extra threads simply park on it. That's intentional and only costs a little
+    # memory. We only emit an INFO when the thread bound is *far* above the cap
+    # (>4×), where the idle-thread memory starts to matter and you may want to
+    # trim --candidate-workers.
     outer_upper = int(args.block_workers) * (int(args.candidate_workers) + 1)
-    if outer_upper > 2 * int(args.max_concurrent_http):
+    if outer_upper > 4 * int(args.max_concurrent_http):
         print(
-            f"[WARN] outer-thread upper bound = {outer_upper}"
+            f"[INFO] outer-thread upper bound = {outer_upper}"
             f" (block_workers={args.block_workers} × (candidate_workers={args.candidate_workers} + 1))"
-            f" is > 2× http cap ({args.max_concurrent_http})."
-            f" Extra threads will block on the semaphore — consider lowering"
-            f" --block-workers or --candidate-workers to save memory."
+            f" is > 4× http cap ({args.max_concurrent_http})."
+            f" Threads beyond the cap park on the semaphore (API cap still honored);"
+            f" lower --candidate-workers if idle-thread memory is a concern."
         )
 
     rough_scan_path = Path(args.rough_scan)
@@ -607,11 +611,14 @@ def _process_block_metadata(
     )
     block_instructions, block_prompt_text = load_prompt_sections(args.prompt, block_variables)
 
-    logger.log(f"   [{block_id}] uploading block clip for fine_structure_scan...")
+    # fps=0 is the escape hatch back to the provider default (None); any positive
+    # value is forwarded as an explicit low-fps hint to shrink the slowest upload.
+    block_upload_fps = args.block_upload_fps if args.block_upload_fps and args.block_upload_fps > 0 else None
+    logger.log(f"   [{block_id}] uploading block clip for fine_structure_scan (fps={block_upload_fps})...")
     try:
         block_file_info = gated_call(
             upload_file,
-            base_url=base_url, api_key=api_key, video_path=clip_path, fps=None,
+            base_url=base_url, api_key=api_key, video_path=clip_path, fps=block_upload_fps,
         )
         wait_for_file(
             base_url=base_url, api_key=api_key, file_id=block_file_info["id"],
@@ -892,8 +899,14 @@ def build_parser() -> argparse.ArgumentParser:
     # Concurrency controls (W1.3 + W1.4)
     parser.add_argument("--candidate-workers", type=int, default=10,
                         help="Concurrent peak_micro_scan calls per block. Default 10.")
-    parser.add_argument("--block-workers", type=int, default=3,
-                        help="Concurrent blocks processed simultaneously. Default 3.")
+    parser.add_argument("--block-workers", type=int, default=8,
+                        help="Concurrent blocks processed simultaneously. Default 8 "
+                             "(auto-capped to block count at runtime). The global "
+                             "--max-concurrent-http semaphore remains the binding API "
+                             "cap, so a higher block_workers just flattens the wave "
+                             "structure — for an N-block video, N blocks interleave "
+                             "their candidates into the shared HTTP pipe instead of "
+                             "processing in ceil(N/3) serial waves.")
     parser.add_argument("--max-concurrent-http", type=int, default=25,
                         help="Global semaphore cap on simultaneous Doubao API calls "
                              "(upload + responses combined). Default 25 (sweet spot "
@@ -903,12 +916,24 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--base-url", default="")
     parser.add_argument("--api-key", default="")
     parser.add_argument("--model", default="")
-    parser.add_argument("--poll-interval", type=float, default=2.0,
-                        help="Seconds between file-status polls (default 2.0; was 5.0)")
+    parser.add_argument("--poll-interval", type=float, default=0.5,
+                        help="Seconds between file-status polls (default 0.5; was 2.0). "
+                             "Each upload waits at least one poll for preprocessing; "
+                             "with ~128 chains for a 3-min video, a smaller interval "
+                             "trims pure idle wait time. Lower bound is provider "
+                             "preprocessing latency, not this value.")
     parser.add_argument("--max-wait-seconds", type=float, default=300)
     parser.add_argument("--peak-upload-fps", type=float, default=2.0,
                         help="fps hint sent to Doubao Files API for peak windows (fewer "
                              "extracted frames = cheaper + faster inference). Default 2.0.")
+    parser.add_argument("--block-upload-fps", type=float, default=1.0,
+                        help="fps hint sent to Doubao Files API for the block-level "
+                             "fine_structure_scan upload. The v0.3 block scan is "
+                             "semantic-only (role / migrationContract), so 1 fps is "
+                             "ample and cuts the slowest call's upload size, "
+                             "preprocessing time, and inference frames. Default 1.0 "
+                             "(was provider-default/None). Set 0 to fall back to the "
+                             "provider default.")
     parser.add_argument("--response-timeout", type=int, default=600)
     parser.add_argument("--dry-run", action="store_true")
     return parser

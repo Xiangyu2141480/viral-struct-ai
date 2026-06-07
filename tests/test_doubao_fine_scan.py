@@ -586,7 +586,11 @@ class DoubaoFineScanTests(unittest.TestCase):
             failures = json.loads(failure_path.read_text(encoding="utf-8"))
             self.assertEqual(failures["failedBlockCount"], 1)
             self.assertEqual(failures["failures"][0]["blockId"], "block_001")
-            self.assertEqual(upload_calls[0]["fps"], None)
+            # Block-level fine_structure_scan upload now sends an explicit low-fps
+            # hint (default --block-upload-fps=1.0) instead of the provider default,
+            # shrinking the slowest call. (Block is 1.0s < min_block_seconds, so no
+            # candidate uploads precede it — upload_calls[0] is the block upload.)
+            self.assertEqual(upload_calls[0]["fps"], 1.0)
 
 
 class PromptVersionResolutionTests(unittest.TestCase):

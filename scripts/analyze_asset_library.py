@@ -269,8 +269,7 @@ def process_clip(
     )
     file_id = uploaded["id"]
 
-    ready = gated_call(
-        wait_for_file,
+    ready = wait_for_file(
         base_url=base_url,
         api_key=api_key,
         file_id=file_id,

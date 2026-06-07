@@ -401,7 +401,10 @@ def wait_for_file(
     deadline = time.time() + max_wait_seconds
     last: dict[str, Any] = {}
     while time.time() < deadline:
-        last = retrieve_file(base_url=base_url, api_key=api_key, file_id=file_id)
+        # File-status polling is HTTP traffic too. Gate each retrieve call, but
+        # do not gate the whole wait loop, otherwise callers would hold a slot
+        # while sleeping between polls.
+        last = gated_call(retrieve_file, base_url=base_url, api_key=api_key, file_id=file_id)
         status = str(last.get("status", "")).lower()
         if status in DONE_FILE_STATUSES:
             return last
