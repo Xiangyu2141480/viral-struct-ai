@@ -1,0 +1,100 @@
+{
+  "scenario": "aigc_ready",
+  "source": "asset_manager_handoff_sample",
+  "inputSummary": {
+    "assetCards": [
+      {
+        "id": "planned_aigc_product_reference",
+        "type": "image",
+        "analysisSource": "planned_generation",
+        "note": "Prompt-ready descriptor only. Not real rendered output."
+      }
+    ],
+    "options": {
+      "userCanGenerate": true
+    }
+  },
+  "materialScenario": {
+    "scenarioType": "aigc_ready",
+    "assetCount": 1,
+    "imageCount": 1,
+    "videoCount": 0,
+    "textCount": 0,
+    "generatedAssetCount": 1,
+    "realFootageCount": 0,
+    "evidenceCoverageScore": 11.1,
+    "completionFeasibilityScore": 72.4,
+    "summary": "aigc ready: evidence coverage is limited, but downstream AIGC prompt briefs can be prepared.",
+    "strengths": [
+      "AIGC prompt briefs can be prepared for missing material.",
+      "Generated/planned assets are marked as proposed external material."
+    ],
+    "weaknesses": [
+      "Generated/planned assets are prompts or references unless an external adapter renders them.",
+      "No real video footage is available for motion-heavy slots."
+    ],
+    "recommendedDownstreamMode": "aigc_missing_material_generation",
+    "warnings": [
+      "AIGC-ready means prompt planning only; no external image or video generation is performed by Asset Manager."
+    ]
+  },
+  "missingMaterialBriefs": [
+    {
+      "id": "missing_material_brief_001_slot_usage",
+      "affectedSlotId": "slot_usage",
+      "slotRole": "usage_demo",
+      "slotIntent": "Prepare missing usage material for downstream external generation.",
+      "aigcGenerationBrief": {
+        "providerHint": "seedance",
+        "prompt": "Prompt brief only, not rendered output. Create a 9:16 ordinary smartphone-style short-video shot for 康师傅冰红茶. Show hand-only or neck-down opening cap, drinking, or pouring. Keep product packaging unchanged.",
+        "negativePrompt": "no text overlays, no watermark, no celebrity, no other brands, no price promotion, no medical claims, do not alter the product packaging or label",
+        "referenceAssetIds": [
+          "planned_aigc_product_reference"
+        ],
+        "expectedDurationSec": 4,
+        "aspectRatio": "9:16",
+        "safetyNotes": [
+          "This is an Asset Manager prompt brief for a downstream adapter, not rendered media.",
+          "Keep product claims limited to the supplied content brief.",
+          "No external generation call is made by Asset Manager."
+        ]
+      },
+      "hyperframesBrief": {
+        "title": "Usage placeholder input",
+        "cardType": "usage_placeholder_card",
+        "copyIntent": "Use a step card to explain the missing usage action without pretending it is real footage.",
+        "visualElements": [
+          "康师傅冰红茶",
+          "reference asset planned_aigc_product_reference"
+        ],
+        "animationHints": [
+          "step 1/2/3 card",
+          "small product image",
+          "simple arrow motion"
+        ],
+        "durationSec": 4,
+        "inputAssets": [
+          "planned_aigc_product_reference"
+        ]
+      },
+      "channelEligibility": [
+        {
+          "channel": "aigc_video_prompt",
+          "eligible": true,
+          "confidence": "medium",
+          "reason": "A prompt brief can be handed to an external video generation adapter.",
+          "requiredInputs": [
+            "prompt brief",
+            "product reference"
+          ],
+          "providedInputs": [
+            "planned_aigc_product_reference"
+          ],
+          "missingInputs": [],
+          "ownership": "external_generation_adapter"
+        }
+      ],
+      "ownership": "asset_manager_handoff_brief_only"
+    }
+  ]
+}

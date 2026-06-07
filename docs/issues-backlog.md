@@ -113,7 +113,7 @@ Labels: `score/p0-visualization`, `type/frontend`
 
 Labels: `score/p0-visualization`, `type/frontend`
 
-### Issue 11: 实现 Remotion preview demo
+### Issue 11: 实现 HyperFrames-first video render preview
 
 Labels: `score/p0-core`, `type/video`, `risk/demo-critical`
 

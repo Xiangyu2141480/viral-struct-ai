@@ -1,0 +1,1063 @@
+[
+  {
+    "id": "plain_001_table_product_pan",
+    "type": "video",
+    "url": "seed_assets/user_test/kangshifu_plain_uploads/plain_001_table_product_pan.mp4",
+    "spatialDescription": "Plain user-shot Kangshifu iced tea video (plain_001_table_product_pan.mp4); 10s duration.",
+    "temporalDescription": "Local plain user test video: plain_001_table_product_pan.mp4; 10s; 24fps; 720x1280; audio present",
+    "detectedObjects": [
+      "beverage bottle",
+      "product"
+    ],
+    "suitableSlots": [
+      "cta_visual",
+      "product_closeup"
+    ],
+    "qualityScore": 0.74,
+    "detectedIngredients": [
+      "product_closeup_trait"
+    ],
+    "humanPresence": {
+      "hasHuman": false
+    },
+    "visualStyleTags": [
+      "clean_background"
+    ],
+    "motionPotential": {
+      "isStill": false,
+      "implicitMotion": "medium",
+      "canSimulateMotion": [
+        "trim_to_highlight",
+        "crop_to_vertical",
+        "stabilize_if_needed"
+      ],
+      "canSimulateDurationMs": [
+        1200,
+        4200
+      ]
+    },
+    "analysisSource": "deterministic",
+    "analysis": {
+      "profileVersion": "asset_analysis_v1",
+      "analyzedAt": "1970-01-01T00:00:00.000Z",
+      "source": "deterministic",
+      "fallbackUsed": false,
+      "warnings": [],
+      "media": {
+        "kind": "video",
+        "sourceUrl": "seed_assets/user_test/kangshifu_plain_uploads/plain_001_table_product_pan.mp4",
+        "fileSizeBytes": 2030501,
+        "format": "mp4",
+        "durationSec": 10,
+        "fps": 24,
+        "width": 720,
+        "height": 1280,
+        "aspectRatio": "9:16",
+        "keyframes": [],
+        "hasAudio": true,
+        "fileExtension": "mp4"
+      },
+      "semantic": {
+        "summary": "Plain user-shot Kangshifu iced tea video (plain_001_table_product_pan.mp4); 10s duration.",
+        "detectedObjects": [
+          "beverage bottle",
+          "product"
+        ],
+        "detectedIngredients": [
+          "product_closeup_trait"
+        ],
+        "visualStyleTags": [
+          "clean_background"
+        ],
+        "humanPresence": {
+          "hasHuman": false
+        },
+        "motionPotential": {
+          "isStill": false,
+          "implicitMotion": "medium",
+          "canSimulateMotion": [
+            "trim_to_highlight",
+            "crop_to_vertical",
+            "stabilize_if_needed"
+          ]
+        }
+      },
+      "quality": {
+        "overallScore": 0.74,
+        "resolution": 0.74,
+        "sharpness": 0.74,
+        "brightness": 0.74,
+        "contrast": 0.74,
+        "clarity": 0.74,
+        "composition": 0.74,
+        "lighting": 0.74,
+        "subjectProminence": 0.74,
+        "productFocus": 0.74,
+        "textSafeArea": 0.72,
+        "formatFit": 0.92,
+        "issues": []
+      },
+      "slotAffordance": {
+        "suitableSlots": [
+          "cta_visual",
+          "product_closeup"
+        ],
+        "primaryRoles": [
+          {
+            "role": "cta_visual",
+            "confidence": 0.718
+          },
+          {
+            "role": "product_closeup",
+            "confidence": 0.718
+          }
+        ],
+        "missingRoles": [
+          "opening_attention",
+          "usage_demo",
+          "benefit_visual",
+          "comparison",
+          "testimonial"
+        ],
+        "rationale": "Derived from existing suitableSlots and qualityScore=0.74."
+      },
+      "editability": {
+        "canCropZoom": true,
+        "canUseAsBackground": true,
+        "canLoop": true,
+        "canExtendWithCards": true,
+        "suggestedEdits": [
+          "crop_zoom",
+          "trim_to_highlight",
+          "loop_short_clip",
+          "add_cta_overlay"
+        ]
+      },
+      "safety": {
+        "status": "passed",
+        "brandRisk": "low",
+        "ipRisk": "low",
+        "claimRisk": "low",
+        "reasons": []
+      },
+      "search": {
+        "tags": [
+          "video",
+          "beverage bottle",
+          "product",
+          "product_closeup_trait",
+          "clean_background",
+          "cta_visual",
+          "product_closeup"
+        ],
+        "keywords": [
+          "beverage bottle",
+          "product",
+          "Plain user-shot Kangshifu iced tea video (plain_001_table_product_pan.mp4); 10s duration.",
+          "Local plain user test video: plain_001_table_product_pan.mp4; 10s; 24fps; 720x1280; audio present"
+        ],
+        "embeddingText": "Plain user-shot Kangshifu iced tea video (plain_001_table_product_pan.mp4); 10s duration. | Local plain user test video: plain_001_table_product_pan.mp4; 10s; 24fps; 720x1280; audio present | beverage bottle product | cta_visual product_closeup"
+      }
+    }
+  },
+  {
+    "id": "plain_002_hand_pickup",
+    "type": "video",
+    "url": "seed_assets/user_test/kangshifu_plain_uploads/plain_002_hand_pickup.mp4",
+    "spatialDescription": "Plain user-shot Kangshifu iced tea video (plain_002_hand_pickup.mp4); contains hand or usage-action cues; 10s duration.",
+    "temporalDescription": "Local plain user test video: plain_002_hand_pickup.mp4; 10s; 24fps; 720x1280; audio present",
+    "detectedObjects": [
+      "beverage bottle",
+      "product",
+      "hand",
+      "usage scene"
+    ],
+    "suitableSlots": [
+      "usage_demo",
+      "product_closeup"
+    ],
+    "qualityScore": 0.74,
+    "detectedIngredients": [
+      "product_closeup_trait",
+      "hand_demo",
+      "human_presence"
+    ],
+    "humanPresence": {
+      "hasHuman": true,
+      "actions": [
+        "holding_product"
+      ]
+    },
+    "visualStyleTags": [
+      "clean_background"
+    ],
+    "motionPotential": {
+      "isStill": false,
+      "implicitMotion": "high",
+      "canSimulateMotion": [
+        "trim_to_highlight",
+        "crop_to_vertical",
+        "stabilize_if_needed"
+      ],
+      "canSimulateDurationMs": [
+        1200,
+        4200
+      ]
+    },
+    "analysisSource": "deterministic",
+    "analysis": {
+      "profileVersion": "asset_analysis_v1",
+      "analyzedAt": "1970-01-01T00:00:00.000Z",
+      "source": "deterministic",
+      "fallbackUsed": false,
+      "warnings": [],
+      "media": {
+        "kind": "video",
+        "sourceUrl": "seed_assets/user_test/kangshifu_plain_uploads/plain_002_hand_pickup.mp4",
+        "fileSizeBytes": 3018191,
+        "format": "mp4",
+        "durationSec": 10,
+        "fps": 24,
+        "width": 720,
+        "height": 1280,
+        "aspectRatio": "9:16",
+        "keyframes": [],
+        "hasAudio": true,
+        "fileExtension": "mp4"
+      },
+      "semantic": {
+        "summary": "Plain user-shot Kangshifu iced tea video (plain_002_hand_pickup.mp4); contains hand or usage-action cues; 10s duration.",
+        "detectedObjects": [
+          "beverage bottle",
+          "product",
+          "hand",
+          "usage scene"
+        ],
+        "detectedIngredients": [
+          "product_closeup_trait",
+          "hand_demo",
+          "human_presence"
+        ],
+        "visualStyleTags": [
+          "clean_background"
+        ],
+        "humanPresence": {
+          "hasHuman": true,
+          "actions": [
+            "holding_product"
+          ]
+        },
+        "motionPotential": {
+          "isStill": false,
+          "implicitMotion": "high",
+          "canSimulateMotion": [
+            "trim_to_highlight",
+            "crop_to_vertical",
+            "stabilize_if_needed"
+          ]
+        }
+      },
+      "quality": {
+        "overallScore": 0.74,
+        "resolution": 0.74,
+        "sharpness": 0.74,
+        "brightness": 0.74,
+        "contrast": 0.74,
+        "clarity": 0.74,
+        "composition": 0.74,
+        "lighting": 0.74,
+        "subjectProminence": 0.74,
+        "productFocus": 0.74,
+        "textSafeArea": 0.58,
+        "formatFit": 0.92,
+        "issues": []
+      },
+      "slotAffordance": {
+        "suitableSlots": [
+          "usage_demo",
+          "product_closeup"
+        ],
+        "primaryRoles": [
+          {
+            "role": "usage_demo",
+            "confidence": 0.718
+          },
+          {
+            "role": "product_closeup",
+            "confidence": 0.718
+          }
+        ],
+        "missingRoles": [
+          "opening_attention",
+          "benefit_visual",
+          "comparison",
+          "testimonial",
+          "cta_visual"
+        ],
+        "rationale": "Derived from existing suitableSlots and qualityScore=0.74."
+      },
+      "editability": {
+        "canCropZoom": true,
+        "canUseAsBackground": true,
+        "canLoop": true,
+        "canExtendWithCards": true,
+        "suggestedEdits": [
+          "crop_zoom",
+          "trim_to_highlight",
+          "loop_short_clip"
+        ]
+      },
+      "safety": {
+        "status": "passed",
+        "brandRisk": "low",
+        "ipRisk": "low",
+        "claimRisk": "low",
+        "reasons": []
+      },
+      "search": {
+        "tags": [
+          "video",
+          "beverage bottle",
+          "product",
+          "hand",
+          "usage scene",
+          "product_closeup_trait",
+          "hand_demo",
+          "human_presence",
+          "clean_background",
+          "usage_demo",
+          "product_closeup"
+        ],
+        "keywords": [
+          "beverage bottle",
+          "product",
+          "hand",
+          "usage scene",
+          "Plain user-shot Kangshifu iced tea video (plain_002_hand_pickup.mp4); contains hand or usage-action cues; 10s duration.",
+          "Local plain user test video: plain_002_hand_pickup.mp4; 10s; 24fps; 720x1280; audio present"
+        ],
+        "embeddingText": "Plain user-shot Kangshifu iced tea video (plain_002_hand_pickup.mp4); contains hand or usage-action cues; 10s duration. | Local plain user test video: plain_002_hand_pickup.mp4; 10s; 24fps; 720x1280; audio present | beverage bottle product hand usage scene | usage_demo product_closeup"
+      }
+    }
+  },
+  {
+    "id": "plain_003_open_cap",
+    "type": "video",
+    "url": "seed_assets/user_test/kangshifu_plain_uploads/plain_003_open_cap.mp4",
+    "spatialDescription": "Plain user-shot Kangshifu iced tea video (plain_003_open_cap.mp4); contains hand or usage-action cues; 10.03s duration.",
+    "temporalDescription": "Local plain user test video: plain_003_open_cap.mp4; 10.027s; 24fps; 720x1280; audio present",
+    "detectedObjects": [
+      "beverage bottle",
+      "product",
+      "hand",
+      "usage scene"
+    ],
+    "suitableSlots": [
+      "usage_demo",
+      "product_closeup"
+    ],
+    "qualityScore": 0.74,
+    "detectedIngredients": [
+      "product_closeup_trait",
+      "hand_demo",
+      "human_presence"
+    ],
+    "humanPresence": {
+      "hasHuman": true,
+      "actions": [
+        "holding_product"
+      ]
+    },
+    "visualStyleTags": [
+      "clean_background"
+    ],
+    "motionPotential": {
+      "isStill": false,
+      "implicitMotion": "high",
+      "canSimulateMotion": [
+        "trim_to_highlight",
+        "crop_to_vertical",
+        "stabilize_if_needed"
+      ],
+      "canSimulateDurationMs": [
+        1200,
+        4200
+      ]
+    },
+    "analysisSource": "deterministic",
+    "analysis": {
+      "profileVersion": "asset_analysis_v1",
+      "analyzedAt": "1970-01-01T00:00:00.000Z",
+      "source": "deterministic",
+      "fallbackUsed": false,
+      "warnings": [],
+      "media": {
+        "kind": "video",
+        "sourceUrl": "seed_assets/user_test/kangshifu_plain_uploads/plain_003_open_cap.mp4",
+        "fileSizeBytes": 2052772,
+        "format": "mp4",
+        "durationSec": 10.027,
+        "fps": 24,
+        "width": 720,
+        "height": 1280,
+        "aspectRatio": "9:16",
+        "keyframes": [],
+        "hasAudio": true,
+        "fileExtension": "mp4"
+      },
+      "semantic": {
+        "summary": "Plain user-shot Kangshifu iced tea video (plain_003_open_cap.mp4); contains hand or usage-action cues; 10.03s duration.",
+        "detectedObjects": [
+          "beverage bottle",
+          "product",
+          "hand",
+          "usage scene"
+        ],
+        "detectedIngredients": [
+          "product_closeup_trait",
+          "hand_demo",
+          "human_presence"
+        ],
+        "visualStyleTags": [
+          "clean_background"
+        ],
+        "humanPresence": {
+          "hasHuman": true,
+          "actions": [
+            "holding_product"
+          ]
+        },
+        "motionPotential": {
+          "isStill": false,
+          "implicitMotion": "high",
+          "canSimulateMotion": [
+            "trim_to_highlight",
+            "crop_to_vertical",
+            "stabilize_if_needed"
+          ]
+        }
+      },
+      "quality": {
+        "overallScore": 0.74,
+        "resolution": 0.74,
+        "sharpness": 0.74,
+        "brightness": 0.74,
+        "contrast": 0.74,
+        "clarity": 0.74,
+        "composition": 0.74,
+        "lighting": 0.74,
+        "subjectProminence": 0.74,
+        "productFocus": 0.74,
+        "textSafeArea": 0.58,
+        "formatFit": 0.92,
+        "issues": []
+      },
+      "slotAffordance": {
+        "suitableSlots": [
+          "usage_demo",
+          "product_closeup"
+        ],
+        "primaryRoles": [
+          {
+            "role": "usage_demo",
+            "confidence": 0.718
+          },
+          {
+            "role": "product_closeup",
+            "confidence": 0.718
+          }
+        ],
+        "missingRoles": [
+          "opening_attention",
+          "benefit_visual",
+          "comparison",
+          "testimonial",
+          "cta_visual"
+        ],
+        "rationale": "Derived from existing suitableSlots and qualityScore=0.74."
+      },
+      "editability": {
+        "canCropZoom": true,
+        "canUseAsBackground": true,
+        "canLoop": true,
+        "canExtendWithCards": true,
+        "suggestedEdits": [
+          "crop_zoom",
+          "trim_to_highlight",
+          "loop_short_clip"
+        ]
+      },
+      "safety": {
+        "status": "passed",
+        "brandRisk": "low",
+        "ipRisk": "low",
+        "claimRisk": "low",
+        "reasons": []
+      },
+      "search": {
+        "tags": [
+          "video",
+          "beverage bottle",
+          "product",
+          "hand",
+          "usage scene",
+          "product_closeup_trait",
+          "hand_demo",
+          "human_presence",
+          "clean_background",
+          "usage_demo",
+          "product_closeup"
+        ],
+        "keywords": [
+          "beverage bottle",
+          "product",
+          "hand",
+          "usage scene",
+          "Plain user-shot Kangshifu iced tea video (plain_003_open_cap.mp4); contains hand or usage-action cues; 10.03s duration.",
+          "Local plain user test video: plain_003_open_cap.mp4; 10.027s; 24fps; 720x1280; audio present"
+        ],
+        "embeddingText": "Plain user-shot Kangshifu iced tea video (plain_003_open_cap.mp4); contains hand or usage-action cues; 10.03s duration. | Local plain user test video: plain_003_open_cap.mp4; 10.027s; 24fps; 720x1280; audio present | beverage bottle product hand usage scene | usage_demo product_closeup"
+      }
+    }
+  },
+  {
+    "id": "plain_004_drink_neck_down",
+    "type": "video",
+    "url": "seed_assets/user_test/kangshifu_plain_uploads/plain_004_drink_neck_down.mp4",
+    "spatialDescription": "Plain user-shot Kangshifu iced tea video (plain_004_drink_neck_down.mp4); contains hand or usage-action cues; contains drink/pour/cup cues; 10.03s duration.",
+    "temporalDescription": "Local plain user test video: plain_004_drink_neck_down.mp4; 10.027s; 24fps; 720x1280; audio present",
+    "detectedObjects": [
+      "beverage bottle",
+      "product",
+      "hand",
+      "usage scene",
+      "cup",
+      "liquid"
+    ],
+    "suitableSlots": [
+      "usage_demo",
+      "benefit_visual",
+      "product_closeup"
+    ],
+    "qualityScore": 0.74,
+    "detectedIngredients": [
+      "product_closeup_trait",
+      "hand_demo",
+      "human_presence",
+      "lifestyle_context"
+    ],
+    "humanPresence": {
+      "hasHuman": true,
+      "actions": [
+        "holding_product"
+      ]
+    },
+    "visualStyleTags": [
+      "lifestyle_context",
+      "clean_background"
+    ],
+    "motionPotential": {
+      "isStill": false,
+      "implicitMotion": "high",
+      "canSimulateMotion": [
+        "trim_to_highlight",
+        "crop_to_vertical",
+        "stabilize_if_needed"
+      ],
+      "canSimulateDurationMs": [
+        1200,
+        4200
+      ]
+    },
+    "analysisSource": "deterministic",
+    "analysis": {
+      "profileVersion": "asset_analysis_v1",
+      "analyzedAt": "1970-01-01T00:00:00.000Z",
+      "source": "deterministic",
+      "fallbackUsed": false,
+      "warnings": [],
+      "media": {
+        "kind": "video",
+        "sourceUrl": "seed_assets/user_test/kangshifu_plain_uploads/plain_004_drink_neck_down.mp4",
+        "fileSizeBytes": 2069427,
+        "format": "mp4",
+        "durationSec": 10.027,
+        "fps": 24,
+        "width": 720,
+        "height": 1280,
+        "aspectRatio": "9:16",
+        "keyframes": [],
+        "hasAudio": true,
+        "fileExtension": "mp4"
+      },
+      "semantic": {
+        "summary": "Plain user-shot Kangshifu iced tea video (plain_004_drink_neck_down.mp4); contains hand or usage-action cues; contains drink/pour/cup cues; 10.03s duration.",
+        "detectedObjects": [
+          "beverage bottle",
+          "product",
+          "hand",
+          "usage scene",
+          "cup",
+          "liquid"
+        ],
+        "detectedIngredients": [
+          "product_closeup_trait",
+          "hand_demo",
+          "human_presence",
+          "lifestyle_context"
+        ],
+        "visualStyleTags": [
+          "lifestyle_context",
+          "clean_background"
+        ],
+        "humanPresence": {
+          "hasHuman": true,
+          "actions": [
+            "holding_product"
+          ]
+        },
+        "motionPotential": {
+          "isStill": false,
+          "implicitMotion": "high",
+          "canSimulateMotion": [
+            "trim_to_highlight",
+            "crop_to_vertical",
+            "stabilize_if_needed"
+          ]
+        }
+      },
+      "quality": {
+        "overallScore": 0.74,
+        "resolution": 0.74,
+        "sharpness": 0.74,
+        "brightness": 0.74,
+        "contrast": 0.74,
+        "clarity": 0.74,
+        "composition": 0.74,
+        "lighting": 0.74,
+        "subjectProminence": 0.74,
+        "productFocus": 0.74,
+        "textSafeArea": 0.58,
+        "formatFit": 0.92,
+        "issues": []
+      },
+      "slotAffordance": {
+        "suitableSlots": [
+          "usage_demo",
+          "benefit_visual",
+          "product_closeup"
+        ],
+        "primaryRoles": [
+          {
+            "role": "usage_demo",
+            "confidence": 0.718
+          },
+          {
+            "role": "benefit_visual",
+            "confidence": 0.718
+          },
+          {
+            "role": "product_closeup",
+            "confidence": 0.718
+          }
+        ],
+        "missingRoles": [
+          "opening_attention",
+          "comparison",
+          "testimonial",
+          "cta_visual"
+        ],
+        "rationale": "Derived from existing suitableSlots and qualityScore=0.74."
+      },
+      "editability": {
+        "canCropZoom": true,
+        "canUseAsBackground": true,
+        "canLoop": true,
+        "canExtendWithCards": true,
+        "suggestedEdits": [
+          "crop_zoom",
+          "trim_to_highlight",
+          "loop_short_clip"
+        ]
+      },
+      "safety": {
+        "status": "passed",
+        "brandRisk": "low",
+        "ipRisk": "low",
+        "claimRisk": "low",
+        "reasons": []
+      },
+      "search": {
+        "tags": [
+          "video",
+          "beverage bottle",
+          "product",
+          "hand",
+          "usage scene",
+          "cup",
+          "liquid",
+          "product_closeup_trait",
+          "hand_demo",
+          "human_presence",
+          "lifestyle_context",
+          "clean_background",
+          "usage_demo",
+          "benefit_visual",
+          "product_closeup"
+        ],
+        "keywords": [
+          "beverage bottle",
+          "product",
+          "hand",
+          "usage scene",
+          "cup",
+          "liquid",
+          "Plain user-shot Kangshifu iced tea video (plain_004_drink_neck_down.mp4); contains hand or usage-action cues; contains drink/pour/cup cues; 10.03s duration.",
+          "Local plain user test video: plain_004_drink_neck_down.mp4; 10.027s; 24fps; 720x1280; audio present"
+        ],
+        "embeddingText": "Plain user-shot Kangshifu iced tea video (plain_004_drink_neck_down.mp4); contains hand or usage-action cues; contains drink/pour/cup cues; 10.03s duration. | Local plain user test video: plain_004_drink_neck_down.mp4; 10.027s; 24fps; 720x1280; audio present | beverage bottle product hand usage scene cup liquid | usage_demo benefit_visual product_closeup"
+      }
+    }
+  },
+  {
+    "id": "plain_005_product_label_closeup",
+    "type": "video",
+    "url": "seed_assets/user_test/kangshifu_plain_uploads/plain_005_product_label_closeup.mp4",
+    "spatialDescription": "Plain user-shot Kangshifu iced tea video (plain_005_product_label_closeup.mp4); 5.11s duration.",
+    "temporalDescription": "Local plain user test video: plain_005_product_label_closeup.mp4; 5.109s; 24fps; 720x1280; audio present",
+    "detectedObjects": [
+      "beverage bottle",
+      "product"
+    ],
+    "suitableSlots": [
+      "cta_visual",
+      "product_closeup"
+    ],
+    "qualityScore": 0.74,
+    "detectedIngredients": [
+      "product_closeup_trait"
+    ],
+    "humanPresence": {
+      "hasHuman": false
+    },
+    "visualStyleTags": [
+      "clean_background"
+    ],
+    "motionPotential": {
+      "isStill": false,
+      "implicitMotion": "medium",
+      "canSimulateMotion": [
+        "trim_to_highlight",
+        "crop_to_vertical",
+        "stabilize_if_needed"
+      ],
+      "canSimulateDurationMs": [
+        1200,
+        4200
+      ]
+    },
+    "analysisSource": "deterministic",
+    "analysis": {
+      "profileVersion": "asset_analysis_v1",
+      "analyzedAt": "1970-01-01T00:00:00.000Z",
+      "source": "deterministic",
+      "fallbackUsed": false,
+      "warnings": [],
+      "media": {
+        "kind": "video",
+        "sourceUrl": "seed_assets/user_test/kangshifu_plain_uploads/plain_005_product_label_closeup.mp4",
+        "fileSizeBytes": 1009634,
+        "format": "mp4",
+        "durationSec": 5.109,
+        "fps": 24,
+        "width": 720,
+        "height": 1280,
+        "aspectRatio": "9:16",
+        "keyframes": [],
+        "hasAudio": true,
+        "fileExtension": "mp4"
+      },
+      "semantic": {
+        "summary": "Plain user-shot Kangshifu iced tea video (plain_005_product_label_closeup.mp4); 5.11s duration.",
+        "detectedObjects": [
+          "beverage bottle",
+          "product"
+        ],
+        "detectedIngredients": [
+          "product_closeup_trait"
+        ],
+        "visualStyleTags": [
+          "clean_background"
+        ],
+        "humanPresence": {
+          "hasHuman": false
+        },
+        "motionPotential": {
+          "isStill": false,
+          "implicitMotion": "medium",
+          "canSimulateMotion": [
+            "trim_to_highlight",
+            "crop_to_vertical",
+            "stabilize_if_needed"
+          ]
+        }
+      },
+      "quality": {
+        "overallScore": 0.74,
+        "resolution": 0.74,
+        "sharpness": 0.74,
+        "brightness": 0.74,
+        "contrast": 0.74,
+        "clarity": 0.74,
+        "composition": 0.74,
+        "lighting": 0.74,
+        "subjectProminence": 0.74,
+        "productFocus": 0.74,
+        "textSafeArea": 0.72,
+        "formatFit": 0.92,
+        "issues": []
+      },
+      "slotAffordance": {
+        "suitableSlots": [
+          "cta_visual",
+          "product_closeup"
+        ],
+        "primaryRoles": [
+          {
+            "role": "cta_visual",
+            "confidence": 0.718
+          },
+          {
+            "role": "product_closeup",
+            "confidence": 0.718
+          }
+        ],
+        "missingRoles": [
+          "opening_attention",
+          "usage_demo",
+          "benefit_visual",
+          "comparison",
+          "testimonial"
+        ],
+        "rationale": "Derived from existing suitableSlots and qualityScore=0.74."
+      },
+      "editability": {
+        "canCropZoom": true,
+        "canUseAsBackground": true,
+        "canLoop": true,
+        "canExtendWithCards": true,
+        "suggestedEdits": [
+          "crop_zoom",
+          "trim_to_highlight",
+          "loop_short_clip",
+          "add_cta_overlay"
+        ]
+      },
+      "safety": {
+        "status": "passed",
+        "brandRisk": "low",
+        "ipRisk": "low",
+        "claimRisk": "low",
+        "reasons": []
+      },
+      "search": {
+        "tags": [
+          "video",
+          "beverage bottle",
+          "product",
+          "product_closeup_trait",
+          "clean_background",
+          "cta_visual",
+          "product_closeup"
+        ],
+        "keywords": [
+          "beverage bottle",
+          "product",
+          "Plain user-shot Kangshifu iced tea video (plain_005_product_label_closeup.mp4); 5.11s duration.",
+          "Local plain user test video: plain_005_product_label_closeup.mp4; 5.109s; 24fps; 720x1280; audio present"
+        ],
+        "embeddingText": "Plain user-shot Kangshifu iced tea video (plain_005_product_label_closeup.mp4); 5.11s duration. | Local plain user test video: plain_005_product_label_closeup.mp4; 5.109s; 24fps; 720x1280; audio present | beverage bottle product | cta_visual product_closeup"
+      }
+    }
+  },
+  {
+    "id": "plain_006_open_cap_hands",
+    "type": "video",
+    "url": "seed_assets/user_test/kangshifu_plain_uploads/plain_006_open_cap_hands.mp4",
+    "spatialDescription": "Plain user-shot Kangshifu iced tea video (plain_006_open_cap_hands.mp4); contains hand or usage-action cues; 7.11s duration.",
+    "temporalDescription": "Local plain user test video: plain_006_open_cap_hands.mp4; 7.106s; 24fps; 720x1280; audio present",
+    "detectedObjects": [
+      "beverage bottle",
+      "product",
+      "hand",
+      "usage scene"
+    ],
+    "suitableSlots": [
+      "usage_demo",
+      "product_closeup"
+    ],
+    "qualityScore": 0.74,
+    "detectedIngredients": [
+      "product_closeup_trait",
+      "hand_demo",
+      "human_presence"
+    ],
+    "humanPresence": {
+      "hasHuman": true,
+      "actions": [
+        "holding_product"
+      ]
+    },
+    "visualStyleTags": [
+      "clean_background"
+    ],
+    "motionPotential": {
+      "isStill": false,
+      "implicitMotion": "high",
+      "canSimulateMotion": [
+        "trim_to_highlight",
+        "crop_to_vertical",
+        "stabilize_if_needed"
+      ],
+      "canSimulateDurationMs": [
+        1200,
+        4200
+      ]
+    },
+    "analysisSource": "deterministic",
+    "analysis": {
+      "profileVersion": "asset_analysis_v1",
+      "analyzedAt": "1970-01-01T00:00:00.000Z",
+      "source": "deterministic",
+      "fallbackUsed": false,
+      "warnings": [],
+      "media": {
+        "kind": "video",
+        "sourceUrl": "seed_assets/user_test/kangshifu_plain_uploads/plain_006_open_cap_hands.mp4",
+        "fileSizeBytes": 1459542,
+        "format": "mp4",
+        "durationSec": 7.106,
+        "fps": 24,
+        "width": 720,
+        "height": 1280,
+        "aspectRatio": "9:16",
+        "keyframes": [],
+        "hasAudio": true,
+        "fileExtension": "mp4"
+      },
+      "semantic": {
+        "summary": "Plain user-shot Kangshifu iced tea video (plain_006_open_cap_hands.mp4); contains hand or usage-action cues; 7.11s duration.",
+        "detectedObjects": [
+          "beverage bottle",
+          "product",
+          "hand",
+          "usage scene"
+        ],
+        "detectedIngredients": [
+          "product_closeup_trait",
+          "hand_demo",
+          "human_presence"
+        ],
+        "visualStyleTags": [
+          "clean_background"
+        ],
+        "humanPresence": {
+          "hasHuman": true,
+          "actions": [
+            "holding_product"
+          ]
+        },
+        "motionPotential": {
+          "isStill": false,
+          "implicitMotion": "high",
+          "canSimulateMotion": [
+            "trim_to_highlight",
+            "crop_to_vertical",
+            "stabilize_if_needed"
+          ]
+        }
+      },
+      "quality": {
+        "overallScore": 0.74,
+        "resolution": 0.74,
+        "sharpness": 0.74,
+        "brightness": 0.74,
+        "contrast": 0.74,
+        "clarity": 0.74,
+        "composition": 0.74,
+        "lighting": 0.74,
+        "subjectProminence": 0.74,
+        "productFocus": 0.74,
+        "textSafeArea": 0.58,
+        "formatFit": 0.92,
+        "issues": []
+      },
+      "slotAffordance": {
+        "suitableSlots": [
+          "usage_demo",
+          "product_closeup"
+        ],
+        "primaryRoles": [
+          {
+            "role": "usage_demo",
+            "confidence": 0.718
+          },
+          {
+            "role": "product_closeup",
+            "confidence": 0.718
+          }
+        ],
+        "missingRoles": [
+          "opening_attention",
+          "benefit_visual",
+          "comparison",
+          "testimonial",
+          "cta_visual"
+        ],
+        "rationale": "Derived from existing suitableSlots and qualityScore=0.74."
+      },
+      "editability": {
+        "canCropZoom": true,
+        "canUseAsBackground": true,
+        "canLoop": true,
+        "canExtendWithCards": true,
+        "suggestedEdits": [
+          "crop_zoom",
+          "trim_to_highlight",
+          "loop_short_clip"
+        ]
+      },
+      "safety": {
+        "status": "passed",
+        "brandRisk": "low",
+        "ipRisk": "low",
+        "claimRisk": "low",
+        "reasons": []
+      },
+      "search": {
+        "tags": [
+          "video",
+          "beverage bottle",
+          "product",
+          "hand",
+          "usage scene",
+          "product_closeup_trait",
+          "hand_demo",
+          "human_presence",
+          "clean_background",
+          "usage_demo",
+          "product_closeup"
+        ],
+        "keywords": [
+          "beverage bottle",
+          "product",
+          "hand",
+          "usage scene",
+          "Plain user-shot Kangshifu iced tea video (plain_006_open_cap_hands.mp4); contains hand or usage-action cues; 7.11s duration.",
+          "Local plain user test video: plain_006_open_cap_hands.mp4; 7.106s; 24fps; 720x1280; audio present"
+        ],
+        "embeddingText": "Plain user-shot Kangshifu iced tea video (plain_006_open_cap_hands.mp4); contains hand or usage-action cues; 7.11s duration. | Local plain user test video: plain_006_open_cap_hands.mp4; 7.106s; 24fps; 720x1280; audio present | beverage bottle product hand usage scene | usage_demo product_closeup"
+      }
+    }
+  }
+]

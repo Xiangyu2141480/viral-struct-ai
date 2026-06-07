@@ -10,6 +10,7 @@
     "lint": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@viral-struct/render-executor": "workspace:*",
     "@viral-struct/shared": "workspace:*",
     "cors": "^2.8.5",
     "dotenv": "^16.4.0",

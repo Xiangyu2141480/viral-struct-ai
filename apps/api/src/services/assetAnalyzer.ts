@@ -156,7 +156,7 @@ interface AnalyzeOpts {
 
 /**
  * Multimodal classification of user-uploaded assets via the configured
- * OpenAI-compatible endpoint (Doubao). Images go through base64 data URLs.
+ * OpenAI-compatible LLM/VLM endpoint. Images go through base64 data URLs.
  * Video files are not yet supported by this path — callers should fall back
  * to {@link analyzeAssetsMock} when a video must be handled.
  *

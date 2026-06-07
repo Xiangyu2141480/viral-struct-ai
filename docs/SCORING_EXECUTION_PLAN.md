@@ -107,7 +107,7 @@
 
 - 分镜表
 - 时间线可视化
-- Remotion Player
+- HyperFrames-first video render preview
 - MP4 demo 或可播放 demo
 - 样例结构与新结果对比
 

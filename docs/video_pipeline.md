@@ -39,7 +39,7 @@
                            ▼
                   ┌──────────────────┐
                   │  合成器 (Composer)│
-                  │  FFmpeg/Remotion │
+                  │  HyperFrames/FFmpeg │
                   └──────────────────┘
                            │
                            ▼

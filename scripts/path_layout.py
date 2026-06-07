@@ -131,7 +131,7 @@ def analysis_paths(
     Notes:
         - ``preview_video`` assumes the rough_scan default transcode
           profile (5 fps, 720 px wide). If you reprofile, pass
-          ``--video`` to ``doubao_rough_scan.py`` explicitly.
+          ``--video`` to ``rough_scan.py`` explicitly.
         - ``raw_video`` assumes ``.mp4``. For ``.mov`` etc., override
           ``--video`` at the call site rather than parameterizing here.
     """

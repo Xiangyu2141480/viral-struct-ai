@@ -22,7 +22,7 @@
 | 评分项 | 分值 | 目标分 | 产品证据 | 代码/文档证据 |
 |---|---:|---:|---|---|
 | 迁移过程可视化 | 10 | 9-10 | StructureGraph + MappingTable + GapBoard + RepairBoard + TimelineView | `apps/web/components`；T07 |
-| 最终效果展示 | 10 | 9-10 | 分镜、时间线、样例结构与新结果对比、Remotion preview/MP4 demo | `packages/remotion-video`；T08 |
+| 最终效果展示 | 10 | 9-10 | 分镜、时间线、样例结构与新结果对比、HyperFrames-first preview/MP4 demo | render adapter；T08 |
 
 ## 4. 进阶能力，20 分
 

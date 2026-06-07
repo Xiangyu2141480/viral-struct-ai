@@ -20,7 +20,9 @@ This file maps the competition scoring criteria to concrete code, pages and demo
 | 结果可验证 | Web visual preview, timeline list, quality report | `/result`, `/demo` | preview + timeline + quality metrics | Complete as Web preview; no MP4 claim |
 | 画面包装能力 | subtitle style, title/selling/CTA cards, transitions, motions | `/result` | Timeline packaging and Variant Diff | Complete |
 | 多版本生成 | high_click, high_conversion, premium | `/result` | Variant Diff and changed timeline/script/packaging | Complete |
-| 真实素材适配 | Asset Manager backend contract: deterministic analysis, keyframes, quality scoring, slot affordance, contextual coverage, Asset Evidence | `/adapt`, `/gaps`, `/result` data layer | `AssetAnalysisProfile`, `AssetLibraryReport`, `SlotCoverageMatrix`, `AssetSupplyContext`, `SlotMatch.assetEvidence` | Backend/data complete; UI handoff pending |
+| 真实素材适配 | Asset Manager backend contract: deterministic analysis, keyframes, quality scoring, slot affordance, contextual coverage, Asset Evidence, and scenario-aware material supply | `/adapt`, `/gaps`, `/result` data layer | `AssetAnalysisProfile`, `AssetLibraryReport`, `SlotCoverageMatrix`, `AssetSupplyContext`, `SlotMatch.assetEvidence`, `MaterialScenarioProfile` | Backend/data complete; UI handoff pending |
+| 素材极少时的补全路径 | Single-image-only scenario keeps evidence coverage honest while producing manual shoot, AIGC prompt, and HyperFrames input briefs | API/docs/manual script | `MissingMaterialBrief`, `ManualShootBrief`, `AigcGenerationBrief`, `HyperframesFallbackBrief` | Backend/data complete; no external generation claim |
+| AIGC 补全可扩展性 | AIGC-ready scenario marks generated/planned assets as proposed and provides prompt-ready briefs | API/docs/manual script | `materialScenario.scenarioType=aigc_ready`, `aigcGenerationBrief.safetyNotes` | Proposal/input layer complete; no real Gemini/Seedance call |
 | 人工可调 | natural-language edit patch | `/result` | `/api/timeline/apply-edit`, Edit Summary | Complete as rule-based patch |
 | 自然语言编辑加分 | five supported edit intents | `/result` | changed items before/after | Partial add-on, rule-based |
 | 创意与产品完成度 | cohesive product flow and explainable UI | all pages | standard workflow + `/demo` | Complete for prototype |
@@ -36,6 +38,7 @@ Show these in the recording:
 5. `/result`: Natural-language edit patch with Edit Summary and changed items.
 6. `/gaps`: slot matching and repair source badges.
 7. API/docs: Asset Manager coverage matrix and Asset Evidence show why assets cover or miss source slots.
+8. API/docs/manual script: Asset Manager scenario comparison shows single image only, partial real footage, and AIGC-ready handoff briefs.
 
 ## 3. Recommended Scoring Narrative
 
@@ -57,6 +60,7 @@ sample pattern -> transferable intent -> new product mapping -> asset coverage -
 | Advanced vision stack | SAM2/GroundingDINO/SigLIP2/VideoRAG are not integrated | Mention as future enhancement only |
 | Long-video temporal grounding | Full temporal grounding is not completed | Use checked-in structure artifacts and deterministic/keyframe evidence |
 | AIGC video generation | Not a main capability | Present packaging/text/material repair instead |
+| AIGC-ready Asset Manager briefs | Prompt/input layer only | Say these are handoff briefs for external adapters, not generated media |
 
 ## 5. Demo Case
 

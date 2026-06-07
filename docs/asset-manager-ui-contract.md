@@ -14,6 +14,13 @@ It does not own final matching, final gap creation, repair strategy, fallback ca
 | `/gaps` | `ContextualSlotCoverage`, `MaterialCoverageObservation`, `SlotAssetCandidate` | Explain why material supply is covered, weak, or insufficient before final gap repair. |
 | `/result` | `SlotMatch.assetEvidence`, optional `ContextualSlotCoverage` join | Enrich migration evidence with quality, keyframes, affordance, and weak/missing reasons. |
 
+Asset Manager now also exposes scenario-level handoff fields that these pages may display when useful:
+
+- `assetSupplyContext.materialScenario`
+- `assetSupplyContext.missingMaterialBriefs`
+
+These fields support judge-facing scenarios such as single product image only, partial real footage, and AIGC-ready prompt planning. They are handoff inputs only, not final repair decisions.
+
 ## 3. API Endpoints
 
 ### POST `/api/assets/manager/analyze-batch`
@@ -103,6 +110,12 @@ Response:
 
 Sample: `docs/examples/asset-supply-context.sample.json`
 
+Scenario samples:
+
+- `docs/examples/scenario-single-image-only.sample.json`
+- `docs/examples/scenario-partial-real-footage.sample.json`
+- `docs/examples/scenario-aigc-ready.sample.json`
+
 ### POST `/api/assets/manager/video-agent-bundle`
 
 Legacy alias only. New UI should not depend on this name.
@@ -136,6 +149,10 @@ Not implemented. UI should filter returned `assetCards` client-side for now.
 | keyframes | `asset.analysis.media.keyframes` |
 | warnings | `asset.analysis.warnings`, `libraryProfile.warnings`, response `warnings` |
 | optional VLM caption | `asset.analysis.vlm.shortCaption` when present |
+| material scenario | `assetSupplyContext.materialScenario.scenarioType` |
+| evidence coverage | `materialScenario.evidenceCoverageScore` |
+| completion feasibility | `materialScenario.completionFeasibilityScore` |
+| recommended downstream mode | `materialScenario.recommendedDownstreamMode` |
 
 ## 5. Field Mapping for `/gaps`
 
@@ -150,6 +167,10 @@ Not implemented. UI should filter returned `assetCards` client-side for now.
 | weak ingredients | `slotCoverages[].weakIngredients`, `observations[].availableButWeakIngredients` |
 | potential impact | `observations[].potentialImpact` |
 | asset evidence | `candidateAssets[].evidence` |
+| missing material brief | `assetSupplyContext.missingMaterialBriefs[]` joined by `affectedSlotId` |
+| manual shoot input | `missingMaterialBriefs[].manualShootBrief` |
+| AIGC prompt input | `missingMaterialBriefs[].aigcGenerationBrief` |
+| HyperFrames input | `missingMaterialBriefs[].hyperframesBrief` |
 
 Use `/api/slots/match` and `/api/gaps/repair` as the final sources of `SlotMatch`, `MaterialGap`, and `GapRepair`. Asset Manager rows are supporting material-supply evidence.
 
@@ -173,8 +194,29 @@ These helpers are pure functions and return evidence only. UI should not present
 | match reason | `SlotMatch.assetEvidence.reasons`, fallback to `SlotMatch.reason` |
 | weak/missing reason | `MaterialGap.reason`, or matching `MaterialCoverageObservation.evidence` |
 | repair explanation | `GapRepair.explanation` and `GapRepair.gapSpec`, not Asset Manager |
+| completion input brief | `assetSupplyContext.missingMaterialBriefs[]` joined by `affectedSlotId` |
+| channel eligibility | `missingMaterialBriefs[].channelEligibility[]` |
 
 Sample: `docs/examples/asset-evidence-sample.json`
+
+## 6.1 Scenario Handoff Fields
+
+`MaterialScenarioProfile` explains what kind of material-supply situation the user is in:
+
+- `empty_assets`
+- `single_image_only`
+- `partial_real_footage`
+- `aigc_ready`
+- `mixed_real_and_aigc`
+
+`evidenceCoverageScore` means how much the current assets directly cover the source structure. `completionFeasibilityScore` means how feasible completion is after downstream actions such as crop/zoom reuse, manual reshoot, prompt-based external generation, or HyperFrames-style card animation.
+
+`MissingMaterialBrief` is not a repair strategy. It gives downstream modules structured input:
+
+- `manualShootBrief`: what a normal user should reshoot.
+- `aigcGenerationBrief`: prompt brief for an external adapter such as Gemini/Seedance-like generation, without calling that adapter.
+- `hyperframesBrief`: card-animation input for a renderer, without rendering.
+- `channelEligibility`: which downstream owner could consume the brief.
 
 ## 7. Recommended UI Copy
 
@@ -188,6 +230,10 @@ Sample: `docs/examples/asset-evidence-sample.json`
 | 适配度 | “角色适配度 / Role fit” |
 | fallback | “Fallback safe：缺少模型或 ffmpeg 时仍返回可解释结果” |
 | optional VLM | “可选视觉模型增强：非主 demo 依赖，失败会回退到本地确定性分析” |
+| scenario | “素材场景：单图 / 部分实拍 / AIGC-ready” |
+| evidence coverage | “直接素材覆盖率：当前素材能直接支撑多少样例槽位” |
+| completion feasibility | “补全可行性：结合补拍、AIGC prompt 和卡片动画后的可完成程度” |
+| missing material brief | “补全输入简报：给补拍、外部生成或渲染模块的输入，不是最终补全策略” |
 
 ## 8. Do Not Overclaim
 
@@ -200,6 +246,9 @@ Sample: `docs/examples/asset-evidence-sample.json`
 - Do not claim real user data or real CTR.
 - Do not claim all missing assets are generated.
 - Asset Manager does not render fallback cards or choose repair strategy.
+- `MissingMaterialBrief` is a handoff input, not a final `GapRepair`.
+- `AigcGenerationBrief` is prompt-ready only; it does not mean Gemini, Seedance, or another model generated media.
+- `HyperframesFallbackBrief` is renderer input only; Asset Manager does not render HyperFrames output.
 
 Defense wording:
 
@@ -221,3 +270,7 @@ Defense wording:
 - [ ] Join asset evidence by `assetId`.
 - [ ] Keep `/api/slots/match` and `/api/gaps/repair` as final gap pipeline.
 - [ ] Do not hide weak or insufficient status.
+- [ ] Scenario fields displayed with honest labels: “handoff brief”, “prompt-ready”, “not rendered output”.
+- [ ] Single-image-only scenario shows low evidence coverage but higher completion feasibility.
+- [ ] Partial-real-footage scenario keeps weak/insufficient observations visible.
+- [ ] AIGC-ready scenario never claims generated media exists unless an external adapter supplies it.

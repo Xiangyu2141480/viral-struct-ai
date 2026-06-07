@@ -53,6 +53,61 @@ _ROUGH_ROLE_MAP = {
     "closing_or_cta": "cta",
 }
 
+# Genre-aware role ontology. The default (ecommerce) keeps the ad funnel above;
+# instructional genres (course/tutorial) map the same coarse/fine roles to
+# teaching roles so a tutorial is not force-fit into selling_point/usage/cta.
+# See docs RCA DS-01/DS-02: videoType was computed but never dispatched on.
+_INSTRUCTIONAL_SEGMENT_ROLES = ("explanation", "demonstration", "technique_step", "context")
+
+_COURSE_FINE_ROLE_MAP = {
+    # The ad-ontology source keys below (product_reveal/selling_point/usage_scene
+    # etc.) are intentional, not copy-paste duplication: an ad-biased fine-scan
+    # LLM can emit them even for a course video, so we defensively re-map them to
+    # instructional targets instead of silently defaulting to selling_point.
+    "hook": "hook",
+    "brand_opening": "hook",
+    "attention_grab": "hook",
+    "product_reveal": "explanation",
+    "selling_point": "explanation",
+    "feature_or_claim": "explanation",
+    "product_or_brand_intro": "explanation",
+    "usage_scene": "demonstration",
+    "demo_or_usage": "demonstration",
+    "proof": "demonstration",
+    "comparison": "demonstration",
+    "cta": "cta",
+    "closing_or_cta": "cta",
+}
+
+_COURSE_ROUGH_ROLE_MAP = {
+    "attention_grab": "hook",
+    "product_or_brand_intro": "explanation",
+    "feature_or_claim": "explanation",
+    "tutorial_step": "technique_step",
+    "demo_or_usage": "demonstration",
+    "evidence_or_comparison": "demonstration",
+    "testimonial": "context",
+    "atmosphere_or_context": "context",
+    "closing_or_cta": "cta",
+}
+
+# genre -> role map. `course` is the only genre with a dedicated instructional
+# ontology so far; `brand` and `local_service` are detected (and reflected in
+# meta.videoType + coverStyle) but intentionally fall back to the ecommerce role
+# maps until dedicated maps are authored — their segment/slot roles remain
+# ad-biased for now. See RCA DS-02 (this is the same class as the original bug,
+# scoped to course first).
+_FINE_ROLE_MAP_BY_GENRE = {"course": _COURSE_FINE_ROLE_MAP}
+_ROUGH_ROLE_MAP_BY_GENRE = {"course": _COURSE_ROUGH_ROLE_MAP}
+
+# genre -> packaging cover style (free-form string field). Default product-centered.
+_GENRE_COVER_STYLE = {
+    "ecommerce": "product_centered_clean_background",
+    "course": "instructional_title_card",
+    "brand": "brand_centered",
+    "local_service": "scene_centered",
+}
+
 _SHOT_SCALE_TO_CAMERA = {
     "close_up": "closeup",
     "medium_close": "closeup",
@@ -75,6 +130,11 @@ _SEGMENT_ROLE_TO_SLOT_ROLE = {
     "proof": "comparison",
     "comparison": "comparison",
     "cta": "cta_visual",
+    # instructional roles
+    "explanation": "instruction_card",
+    "demonstration": "example_clip",
+    "technique_step": "technique_demo",
+    "context": "example_clip",
 }
 
 _ROLE_FALLBACK_STRATEGIES = {
@@ -85,6 +145,11 @@ _ROLE_FALLBACK_STRATEGIES = {
     "comparison": ["before_after_card", "comparison_card", "trust_card"],
     "cta": ["cta_card", "selling_point_card", "trust_card"],
     "pain_point": ["text_card", "caption_rewrite", "selling_point_card"],
+    # instructional roles (GapRepairStrategy-valid only)
+    "explanation": ["text_card", "caption_rewrite", "structure_reorder"],
+    "demonstration": ["reuse_asset", "aigc_background", "caption_rewrite"],
+    "technique_step": ["text_card", "aigc_background", "style_filter_suggestion"],
+    "context": ["reuse_asset", "style_filter_suggestion", "caption_rewrite"],
 }
 
 _ROLE_PURPOSE = {
@@ -95,6 +160,11 @@ _ROLE_PURPOSE = {
     "usage": "演示真实使用场景，降低使用门槛",
     "comparison": "通过对比强化卖点感知",
     "cta": "明确行动号召并收束",
+    # instructional roles
+    "explanation": "讲解一个核心知识点或原则，建立理解",
+    "demonstration": "用示例片段演示该知识点的实际效果",
+    "technique_step": "拆解一个具体技巧/步骤，便于模仿练习",
+    "context": "铺垫或过渡，维持注意力与连贯性",
 }
 
 _ROLE_TRANSFER_RULE = {
@@ -105,6 +175,11 @@ _ROLE_TRANSFER_RULE = {
     "usage": "替换为新商品的真实使用场景，保留手部演示节奏",
     "comparison": "保留对比结构，替换为新商品的对比维度",
     "cta": "用新商品场景化 CTA 收束（价格、限时、优惠）",
+    # instructional roles: reuse the teaching STRUCTURE, swap the subject matter
+    "explanation": "保留讲解结构与节奏，替换为新主题对应的知识点/原则",
+    "demonstration": "保留演示结构，替换为新主题的示例片段",
+    "technique_step": "保留技巧拆解节奏，替换为新主题的具体步骤",
+    "context": "保留铺垫/过渡作用，替换为新主题的衔接画面",
 }
 
 _ROLE_IMPORTANCE = {
@@ -115,6 +190,11 @@ _ROLE_IMPORTANCE = {
     "usage": 4,
     "comparison": 4,
     "cta": 4,
+    # instructional roles
+    "explanation": 4,
+    "demonstration": 4,
+    "technique_step": 4,
+    "context": 3,
 }
 
 
@@ -277,22 +357,29 @@ def _fine_role(fine_block: dict) -> str:
     return str(role_info.get("role") or role_info.get("confirmedRole") or "")
 
 
-def _resolve_segment_role(rough_block: dict, fine_block: dict | None, index: int) -> str:
+def _resolve_segment_role(
+    rough_block: dict, fine_block: dict | None, index: int, genre: str = "ecommerce"
+) -> str:
+    fine_map = _FINE_ROLE_MAP_BY_GENRE.get(genre, _FINE_ROLE_MAP)
+    rough_map = _ROUGH_ROLE_MAP_BY_GENRE.get(genre, _ROUGH_ROLE_MAP)
+
     if fine_block:
         confirmed = _fine_role(fine_block)
         if confirmed == "product_reveal" and index == 0:
             return "hook"
-        if confirmed in _FINE_ROLE_MAP:
-            return _FINE_ROLE_MAP[confirmed]
+        if confirmed in fine_map:
+            return fine_map[confirmed]
 
     rough_role = rough_block.get("coarseRoleGuess", "")
-    if rough_role in _ROUGH_ROLE_MAP:
-        mapped = _ROUGH_ROLE_MAP[rough_role]
+    if rough_role in rough_map:
+        mapped = rough_map[rough_role]
         if index == 0 and mapped != "cta":
             return "hook"
         return mapped
 
-    return "hook" if index == 0 else "selling_point"
+    if index == 0:
+        return "hook"
+    return "explanation" if genre == "course" else "selling_point"
 
 
 def _aspect_ratio(value: str | None) -> str:
@@ -397,20 +484,23 @@ def _slot_role(segment_role: str, index_in_block: int, total_in_block: int) -> s
     return base
 
 
-def _shot_ingredients(shot: dict, additional_findings: list[str]) -> list[str]:
+def _shot_ingredients(shot: dict, additional_findings: list[str], genre: str = "ecommerce") -> list[str]:
+    is_ecommerce = genre == "ecommerce"
     text = (shot.get("visualKeyAction", "") or "") + " " + " ".join(additional_findings or [])
     ingredients: list[str] = []
     if "纯白" in text or "干净" in text or "极简" in text:
         ingredients.append("clean_background")
     if "手" in text or shot.get("subjectFocus") == "human_with_product":
         ingredients.append("hand_demo")
-    if "近景" in text or "特写" in text or shot.get("shotScale") in ("close_up", "macro"):
+    if is_ecommerce and ("近景" in text or "特写" in text or shot.get("shotScale") in ("close_up", "macro")):
         ingredients.append("product_closeup_trait")
     if "光" in text or "亮" in text:
         ingredients.append("soft_light")
     if "特效" in text or "变色" in text or "形变" in text or "动画" in text or "高级" in text:
         ingredients.append("premium_visual")
-    return ingredients or ["product_closeup_trait"]
+    if ingredients:
+        return ingredients
+    return ["product_closeup_trait"] if is_ecommerce else []
 
 
 def _human_requirement(shot: dict) -> dict | None:
@@ -436,6 +526,10 @@ def _asset_type_to_required_asset_type(asset_type: str) -> str:
 
 
 def _slot_role_from_required_asset(asset_type: str, purpose: str, segment_role: str) -> str:
+    # Instructional segments keep a consistent instructional slot role regardless
+    # of the (often ad-biased) requiredAssetType the upstream fine scan emitted.
+    if segment_role in _INSTRUCTIONAL_SEGMENT_ROLES:
+        return _SEGMENT_ROLE_TO_SLOT_ROLE[segment_role]
     if purpose in {"hook_visual", "product_reveal"} and segment_role == "hook":
         return "opening_attention"
     if asset_type in {"product_still", "product_video"}:
@@ -455,7 +549,9 @@ def _ingredients_from_required_asset(
     asset_type: str,
     fine_block: dict | None,
     rough_block: dict,
+    genre: str = "ecommerce",
 ) -> list[str]:
+    is_ecommerce = genre == "ecommerce"
     if asset_type in {"text_card", "voiceover_line"}:
         return []
 
@@ -472,7 +568,7 @@ def _ingredients_from_required_asset(
     ingredients: list[str] = []
     if asset_type == "hand_demo" or "手" in text:
         ingredients.extend(["human_presence", "hand_demo"])
-    if asset_type in {"product_still", "product_video"} or "产品" in text or "近景" in text:
+    if is_ecommerce and (asset_type in {"product_still", "product_video"} or "产品" in text or "近景" in text):
         ingredients.append("product_closeup_trait")
     if asset_type == "comparison_chart" or "对比" in text:
         ingredients.append("before_after_comparison")
@@ -489,7 +585,9 @@ def _ingredients_from_required_asset(
     for ingredient in ingredients:
         if ingredient not in deduped:
             deduped.append(ingredient)
-    return deduped or ["product_closeup_trait"]
+    if deduped:
+        return deduped
+    return ["product_closeup_trait"] if is_ecommerce else []
 
 
 def _human_requirement_from_required_asset(asset_type: str) -> dict:
@@ -542,6 +640,15 @@ def _fallback_asset_requirements(role: str) -> list[dict[str, str]]:
         return [{"assetType": "comparison_chart", "purpose": "comparison", "criticality": "must"}]
     if role == "cta":
         return [{"assetType": "text_card", "purpose": "cta", "criticality": "must"}]
+    # instructional roles: subject-agnostic assets (no product still)
+    if role == "explanation":
+        return [{"assetType": "text_card", "purpose": "explanation", "criticality": "must"}]
+    if role == "demonstration":
+        return [{"assetType": "lifestyle_shot", "purpose": "example", "criticality": "should"}]
+    if role == "technique_step":
+        return [{"assetType": "lifestyle_shot", "purpose": "technique", "criticality": "should"}]
+    if role == "context":
+        return [{"assetType": "lifestyle_shot", "purpose": "context", "criticality": "optional"}]
     return [{"assetType": "product_still", "purpose": "product_reveal", "criticality": "must"}]
 
 
@@ -653,6 +760,7 @@ def _build_slot_from_required_asset(
     index_in_block: int,
     segment_duration: float,
     importance: int,
+    genre: str = "ecommerce",
 ) -> dict:
     asset_type = str(asset_req.get("assetType", "") or "product_video")
     purpose = str(asset_req.get("purpose", "") or "")
@@ -669,7 +777,7 @@ def _build_slot_from_required_asset(
             "motion": _motion_from_required_asset(asset_type),
             "minDuration": max(round(min_duration, 2), 0.5),
         },
-        "visualIngredientRequirements": _ingredients_from_required_asset(asset_type, fine_block, rough_block),
+        "visualIngredientRequirements": _ingredients_from_required_asset(asset_type, fine_block, rough_block, genre),
         "humanRequirement": _human_requirement_from_required_asset(asset_type),
         "fallbackStrategies": _ROLE_FALLBACK_STRATEGIES[segment_role],
         "importance": importance,
@@ -689,6 +797,7 @@ def _build_shot_slot(
     additional_findings: list[str],
     importance: int,
     fine_block: dict | None = None,
+    genre: str = "ecommerce",
 ) -> dict:
     duration = float(shot.get("duration", 0))
     shot_id = shot.get("id", f"shot_{index_in_block + 1:03d}")
@@ -703,7 +812,7 @@ def _build_shot_slot(
             "motion": _CAMERA_MOVEMENT_TO_MOTION.get(shot.get("cameraMovement", ""), "unknown"),
             "minDuration": max(round(duration, 2), 0.5),
         },
-        "visualIngredientRequirements": _shot_ingredients(shot, additional_findings),
+        "visualIngredientRequirements": _shot_ingredients(shot, additional_findings, genre),
         "humanRequirement": _human_requirement(shot),
         "fallbackStrategies": _ROLE_FALLBACK_STRATEGIES[segment_role],
         "importance": importance,
@@ -717,7 +826,9 @@ def _build_creative_ingredients(
     fine_blocks: dict[str, dict],
     segments: list[dict],
     shot_slots: list[dict],
+    genre: str = "ecommerce",
 ) -> list[dict]:
+    is_ecommerce = genre == "ecommerce"
     signal_buckets: dict[str, dict[str, Any]] = {}
 
     def _add(ing_type: str, evidence: str, seg_id: str, slot_ids: list[str]) -> None:
@@ -748,7 +859,7 @@ def _build_creative_ingredients(
                 if asset_type == "hand_demo":
                     _add("human_presence", evidence, seg_id, slots_in_seg)
                     _add("hand_demo", evidence, seg_id, slots_in_seg)
-                elif asset_type in {"product_still", "product_video"}:
+                elif asset_type in {"product_still", "product_video"} and is_ecommerce:
                     _add("product_closeup_trait", evidence, seg_id, slots_in_seg)
                 elif asset_type == "comparison_chart":
                     _add("before_after_comparison", evidence, seg_id, slots_in_seg)
@@ -785,19 +896,23 @@ def _build_creative_ingredients(
         if "特效" in text or "变色" in text or "形变" in text or "动画" in text or "高级" in text:
             _add("premium_visual", f"{block_id}: {_truncate(text, 80)}", seg_id, slots_in_seg)
 
-    # Always include product_closeup_trait as a baseline ingredient
-    all_seg_ids = {s["id"] for s in segments}
-    closeup_slot_ids = [
-        s["id"] for s in shot_slots if s["role"] in ("product_closeup", "opening_attention")
-    ]
-    signal_buckets.setdefault(
-        "product_closeup_trait",
-        {
-            "evidence": ["全片以产品本体为核心呈现"],
-            "segmentIds": all_seg_ids,
-            "slotIds": set(closeup_slot_ids),
-        },
-    )
+    # Ecommerce-only: include product_closeup_trait as a baseline ingredient.
+    # For non-product genres (course/tutorial) this baseline fabricated false
+    # evidence ("全片以产品本体为核心呈现") for a video with no product (RCA DS-03),
+    # so it is suppressed.
+    if is_ecommerce:
+        all_seg_ids = {s["id"] for s in segments}
+        closeup_slot_ids = [
+            s["id"] for s in shot_slots if s["role"] in ("product_closeup", "opening_attention")
+        ]
+        signal_buckets.setdefault(
+            "product_closeup_trait",
+            {
+                "evidence": ["全片以产品本体为核心呈现"],
+                "segmentIds": all_seg_ids,
+                "slotIds": set(closeup_slot_ids),
+            },
+        )
 
     spec = {
         "clean_background": (
@@ -936,7 +1051,7 @@ def _build_rhythm(rough_blocks: list[dict], fine_blocks: dict[str, dict]) -> dic
     return result
 
 
-def _build_packaging(fine_blocks: dict[str, dict]) -> dict:
+def _build_packaging(fine_blocks: dict[str, dict], genre: str = "ecommerce") -> dict:
     has_text = False
     transitions: set[str] = set()
     for fine in fine_blocks.values():
@@ -952,21 +1067,34 @@ def _build_packaging(fine_blocks: dict[str, dict]) -> dict:
         "captionDensity": "medium" if has_text else "low",
         "captionPosition": "mixed",
         "titleStyle": "balanced_text" if has_text else "minimal_clean",
-        "cardTypes": ["selling_point_card"] if has_text else [],
+        "cardTypes": (
+            ["instruction_card"] if has_text and genre == "course"
+            else (["selling_point_card"] if has_text else [])
+        ),
         "transitions": sorted(transitions) if transitions else ["hard_cut"],
-        "coverStyle": "product_centered_clean_background",
+        "coverStyle": _GENRE_COVER_STYLE.get(genre, "product_centered_clean_background"),
     }
 
 
 def _infer_video_type(rough_doc: dict) -> str:
-    likely = (rough_doc.get("roughSummary", {}).get("likelyVideoType") or "").lower()
-    if any(k in likely for k in ("product", "ecommerce", "ad")):
+    summary = rough_doc.get("roughSummary", {}) or {}
+    likely = (summary.get("likelyVideoType") or "").lower()
+    category = (summary.get("detectedCategory") or "").lower()
+    # likelyVideoType is the primary signal; fall back to detectedCategory only
+    # when likelyVideoType is blank. Keeping `likely or category` (not a merge)
+    # means any non-empty likelyVideoType behaves exactly as before — the
+    # ecommerce path is a byte-for-byte no-op — while a course video that filled
+    # only detectedCategory no longer silently regresses to the ad ontology.
+    signal = likely or category
+    # Priority is intentional: an explicit product/ad signal wins over course,
+    # so a mixed "product course" label resolves to the ad ontology.
+    if any(k in signal for k in ("product", "ecommerce", "ad")):
         return "ecommerce"
-    if any(k in likely for k in ("course", "tutorial")):
+    if any(k in signal for k in ("course", "tutorial")):
         return "course"
-    if "brand" in likely:
+    if "brand" in signal:
         return "brand"
-    if any(k in likely for k in ("local", "service")):
+    if any(k in signal for k in ("local", "service")):
         return "local_service"
     return "ecommerce"
 
@@ -1013,13 +1141,18 @@ def build_structure_graph(
     rough_blocks = rough_doc.get("contentBlocks", []) or []
     fine_blocks = _index_fine_blocks(fine_doc) if fine_doc else {}
 
+    # Genre is determined FIRST and dispatched into every builder (RCA DS-02:
+    # previously videoType was computed last and never read, so non-ad genres
+    # were force-mapped through the ad ontology).
+    genre = _infer_video_type(rough_doc)
+
     segments: list[dict] = []
     shot_slots: list[dict] = []
 
     for idx, rough in enumerate(rough_blocks):
         block_id = rough.get("id", f"block_{idx + 1:03d}")
         fine = fine_blocks.get(block_id)
-        role = _resolve_segment_role(rough, fine, idx)
+        role = _resolve_segment_role(rough, fine, idx, genre)
         seg_id = f"seg_{block_id}"
 
         segment = _build_segment(rough, fine, role, seg_id)
@@ -1039,6 +1172,7 @@ def build_structure_graph(
                     additional_findings=additional,
                     importance=segment["importance"],
                     fine_block=fine,
+                    genre=genre,
                 ))
         else:
             asset_requirements = _required_asset_types(fine, role)
@@ -1053,12 +1187,13 @@ def build_structure_graph(
                     index_in_block=a_idx,
                     segment_duration=segment["duration"],
                     importance=segment["importance"],
+                    genre=genre,
                 ))
 
     rhythm = _build_rhythm(rough_blocks, fine_blocks)
-    packaging = _build_packaging(fine_blocks)
+    packaging = _build_packaging(fine_blocks, genre)
     creative_ingredients = _build_creative_ingredients(
-        rough_blocks, fine_blocks, segments, shot_slots
+        rough_blocks, fine_blocks, segments, shot_slots, genre
     )
     edges = _build_edges(segments, shot_slots, creative_ingredients)
     boundaries = _build_boundaries(rough_blocks, boundary_doc)
@@ -1077,7 +1212,7 @@ def build_structure_graph(
         "meta": {
             "duration": duration,
             "aspectRatio": _aspect_ratio(aspect_ratio),
-            "videoType": _infer_video_type(rough_doc),
+            "videoType": genre,
             "style": _infer_style(rough_doc, rhythm["avgShotDuration"]),
         },
         "structureSummary": (

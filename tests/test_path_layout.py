@@ -93,7 +93,7 @@ class AnalysisPathsContractTests(unittest.TestCase):
             Path("seed_assets/analysis/macbook_neo/fine_scan"),
         )
         # clips/ must be a direct child of fine_scan/, not a sibling —
-        # doubao_fine_scan.py and tests depend on this nesting.
+        # fine_scan.py and tests depend on this nesting.
         self.assertEqual(
             self.paths.fine_scan_clips_dir,
             self.paths.fine_scan_dir / "clips",

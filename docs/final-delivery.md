@@ -68,6 +68,8 @@ Use this route to show the product form:
 | Quality metrics | Complete | `/api/quality/evaluate`, `/demo` |
 | Asset Manager data contract | Complete for backend/data handoff | `AssetAnalysisProfile`, `AssetLibraryReport`, `SlotCoverageMatrix`, `AssetSupplyContext` |
 | Asset supply context | Complete for contract/API handoff | `/api/assets/manager/asset-supply-context`, `docs/examples/asset-supply-context.sample.json`; legacy `/video-agent-bundle` returns the same `asset-supply-v1` response |
+| Asset Manager scenario support | Complete for backend/data handoff | `MaterialScenarioProfile`, `MissingMaterialBrief`, scenario sample JSON, manual scenario script |
+| Missing material input briefs | Complete as handoff inputs | manual shoot brief, AIGC prompt brief, HyperFrames brief; no real external generation |
 | Asset Evidence integration | Complete in data layer | `SlotMatch.assetEvidence`, `apps/web/lib/migrationEvidence.ts` |
 | Optional VLM asset analyzer | Available but disabled by default | deterministic fallback, `ASSET_VLM_ENABLED=false` |
 | LLM fallback | Complete | source fields and warnings |
@@ -112,6 +114,8 @@ Expected:
 - Real MP4 export is not the focus of this checkpoint.
 - Video material understanding is lightweight and protocol-oriented.
 - Asset Manager UI panels are a handoff target for frontend teammates; this checkpoint completes the backend/data contract and examples.
+- Asset Manager `MissingMaterialBrief` is a handoff input for downstream repair/generation/render modules, not the final repair strategy.
+- AIGC-ready means prompt-ready planning only; Gemini, Seedance, and HyperFrames are not called by Asset Manager.
 - Deterministic asset analysis is the main path; optional VLM enrichment is disabled by default and must not be required for the demo.
 - SAM2, GroundingDINO, SigLIP2, VideoRAG, and complete long-video temporal grounding are not implemented.
 - Natural-language editing is deterministic rule-based patching.

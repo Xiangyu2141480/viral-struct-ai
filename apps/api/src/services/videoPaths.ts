@@ -37,6 +37,10 @@ export function getAnalysisDir(): string {
   return resolveRepoPath(process.env.ANALYSIS_DIR, './seed_assets/analysis');
 }
 
+export function getRenderDir(): string {
+  return resolveRepoPath(process.env.RENDER_DIR, './renders');
+}
+
 export function getSeedVideoDir(): string {
   return resolveRepoPath(process.env.SEED_VIDEO_DIR, './seed_assets/raw_videos');
 }
