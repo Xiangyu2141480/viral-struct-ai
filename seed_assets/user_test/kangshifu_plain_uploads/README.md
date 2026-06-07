@@ -8,10 +8,11 @@ Recommended filenames:
 - `plain_002_hand_pickup.mp4`
 - `plain_003_open_cap.mp4`
 - `plain_004_drink_neck_down.mp4`
-- `plain_005_pour_to_cup.mp4`
+- `plain_005_product_label_closeup.mp4`
+- `plain_006_open_cap_hands.mp4`
 - `plain_009_bad_dark_shaky.mp4`
 
-Most local video files in this folder are intentionally ignored by Git to avoid committing large media by accident. The allowlisted `plain_001`, `plain_002`, `plain_003`, and `plain_004` samples are intentionally tracked so the plain-user Asset Manager test has reproducible real vertical-video inputs. Later 16:9 uploads should stay local and are not part of this PR.
+Most local video files in this folder are intentionally ignored by Git to avoid committing large media by accident. The allowlisted `plain_001` through `plain_006` samples are intentionally tracked so the plain-user Asset Manager test has reproducible real vertical-video inputs. Later 16:9 uploads should stay local and are not part of this PR.
 
 After adding or replacing local files, rerun the Asset Manager plain-material audit from the repository root:
 
