@@ -388,6 +388,187 @@ export const AssetCardSchema = z.object({
   analysis: AssetAnalysisProfileSchema.optional()
 });
 
+export const TransitionGrammarIdSchema = z.enum([
+  'dynamic_entry',
+  'impact_beat',
+  'assembly_reveal',
+  'activation_moment',
+  'lockup_transition'
+]);
+
+export const TargetTransitionEquivalentSchema = z.enum([
+  'ice_cube_drop',
+  'open_cap',
+  'pour_to_cup',
+  'drink_neck_down',
+  'bottle_rotation',
+  'lineup_sweep',
+  'clean_cta_end_frame',
+  'hyperframes_benefit_card_drop'
+]);
+
+export const TransitionIngredientSchema = z.object({
+  id: z.string(),
+  grammarId: TransitionGrammarIdSchema,
+  label: z.string(),
+  sourcePattern: z.string(),
+  targetEquivalent: TargetTransitionEquivalentSchema,
+  requiredEvidence: z.array(z.string()),
+  acceptableAssetRoles: z.array(AssetManagerRoleSchema),
+  avoidCopyingSource: z.array(z.string())
+});
+
+export const TransitionNeedSchema = z.object({
+  id: z.string(),
+  grammarId: TransitionGrammarIdSchema,
+  sourceMotif: z.string(),
+  transferableIntent: z.string(),
+  targetEquivalent: TargetTransitionEquivalentSchema,
+  targetSlots: z.array(z.string()),
+  importance: z.enum(['low', 'medium', 'high']),
+  ingredients: z.array(TransitionIngredientSchema)
+});
+
+export const AssetTransitionAffordanceSchema = z.object({
+  assetId: z.string(),
+  supportsGrammar: z.array(TransitionGrammarIdSchema),
+  supportedIngredients: z.array(z.string()),
+  confidence: z.number().min(0).max(1),
+  evidence: z.array(z.string()),
+  limitations: z.array(z.string())
+});
+
+export const TransitionCoverageObservationSchema = z.object({
+  id: z.string(),
+  transitionNeedId: z.string(),
+  grammarId: TransitionGrammarIdSchema,
+  coverageStatus: z.enum(['covered', 'weak', 'insufficient']),
+  candidateAssetIds: z.array(z.string()),
+  missingIngredientIds: z.array(z.string()),
+  potentialImpact: z.array(z.string()),
+  confidence: z.enum(['low', 'medium', 'high']),
+  ownership: z.literal('asset_manager_transition_observation_only')
+});
+
+export const TransitionHandoffBriefSchema = z.object({
+  id: z.string(),
+  owner: z.enum(['video_agent', 'gap_repair', 'hyperframes', 'aigc', 'manual_shoot']),
+  transitionNeedIds: z.array(z.string()),
+  brief: z.string(),
+  prompt: z.string().optional(),
+  negativePrompt: z.string().optional(),
+  safetyNotes: z.array(z.string()),
+  notRenderedOutput: z.boolean()
+});
+
+export const TransitionMotionGrammarHandoffSchema = z.object({
+  protocolVersion: z.literal('transition-handoff-v1'),
+  patternId: z.literal('kinetic_assembly'),
+  sourceExample: z.string(),
+  targetProduct: z.string(),
+  designLanguage: z.string(),
+  boundary: z.array(z.string()),
+  transitionNeeds: z.array(TransitionNeedSchema),
+  assetAffordances: z.array(AssetTransitionAffordanceSchema),
+  coverageObservations: z.array(TransitionCoverageObservationSchema),
+  downstreamHandoff: z.array(TransitionHandoffBriefSchema),
+  warnings: z.array(z.string())
+});
+
+export const MotifTypeSchema = z.enum([
+  'surreal_assembly',
+  'kinetic_assembly_reveal',
+  'kinetic_product_reveal',
+  'dynamic_entry',
+  'impact_activation',
+  'ingredient_transformation',
+  'lineup_lockup',
+  'benefit_card_motion',
+  'category_usage_moment'
+]);
+
+export const MotionTokenSchema = z.enum([
+  'dynamic_entry',
+  'component_cascade',
+  'chaos_to_order',
+  'assembly_completion',
+  'interaction_activation',
+  'spectacle_burst',
+  'cta_reveal',
+  'falling_object',
+  'impact_beat',
+  'snap_open',
+  'assembly_reveal',
+  'activation_moment',
+  'pour_flow',
+  'drink_action',
+  'bottle_rotation',
+  'lineup_sweep',
+  'card_drop',
+  'clean_hold',
+  'quick_cut',
+  'push_in',
+  'match_cut',
+  'morph'
+]);
+
+export const TargetCategoryMotifMappingSchema = z.object({
+  targetCategory: z.string(),
+  preferredEquivalents: z.array(z.string()),
+  rejectedEquivalents: z.array(z.string()),
+  rationale: z.string()
+}).strict();
+
+export const MotifTransferVariableSchema = z.object({
+  name: z.string(),
+  sourceValue: z.string(),
+  targetValue: z.string(),
+  allowedTargetValues: z.array(z.string()),
+  notes: z.string().optional()
+}).strict();
+
+export const ViralMotifAnnotationSchema = z.object({
+  id: z.string(),
+  slotId: z.string().optional(),
+  segmentId: z.string().optional(),
+  motifType: MotifTypeSchema,
+  motionTokens: z.array(MotionTokenSchema),
+  sanitizedIntent: z.string(),
+  transferVariables: z.array(MotifTransferVariableSchema),
+  bannedSourceTerms: z.array(z.string()),
+  targetCategoryMapping: TargetCategoryMotifMappingSchema,
+  evidence: z.array(z.string()),
+  confidence: z.number().min(0).max(1)
+}).strict();
+
+const MotifAwareBriefBaseSchema = z.object({
+  id: z.string(),
+  motifAnnotationId: z.string(),
+  targetCategoryMapping: TargetCategoryMotifMappingSchema,
+  sanitizedIntent: z.string(),
+  bannedSourceTerms: z.array(z.string()),
+  motionTokens: z.array(MotionTokenSchema),
+  safetyNotes: z.array(z.string()),
+  notRenderedOutput: z.boolean()
+});
+
+export const MotifAwareManualShootBriefSchema = MotifAwareBriefBaseSchema.extend({
+  shotObjective: z.string(),
+  requiredActions: z.array(z.string()),
+  compositionNotes: z.array(z.string())
+}).strict();
+
+export const MotifAwareAigcPromptBriefSchema = MotifAwareBriefBaseSchema.extend({
+  prompt: z.string(),
+  negativePrompt: z.string()
+}).strict();
+
+export const MotifAwareHyperframesBriefSchema = MotifAwareBriefBaseSchema.extend({
+  cardType: z.enum(['hook_card', 'benefit_card', 'comparison_card', 'cta_card', 'transition_card']),
+  cardMotion: z.enum(['card_drop', 'slide_in', 'snap_cut', 'lineup_sweep', 'clean_hold']),
+  copyIntent: z.string()
+}).strict();
+
 export const RoleCoverageSummarySchema = z.object({
   role: AssetManagerRoleSchema,
   status: z.enum(['covered', 'weak', 'missing']),
@@ -848,7 +1029,8 @@ export const ViralStructureGraphSchema = z.object({
     importance: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]).optional(),
     intent: ShotSlotIntentSchema.optional(),
     sourceInstance: ShotSlotSourceInstanceSchema.optional(),
-    acceptanceCriteria: ShotSlotAcceptanceCriteriaSchema.optional()
+    acceptanceCriteria: ShotSlotAcceptanceCriteriaSchema.optional(),
+    motifAnnotations: z.array(ViralMotifAnnotationSchema).optional()
   })),
   rhythm: z.object({
     avgShotDuration: z.number(),
@@ -871,7 +1053,8 @@ export const ViralStructureGraphSchema = z.object({
     type: z.enum(['sequence', 'requires', 'maps_to', 'fallback']),
     explanation: z.string().optional()
   })),
-  boundaries: z.array(BoundarySchema).optional()
+  boundaries: z.array(BoundarySchema).optional(),
+  motifAnnotations: z.array(ViralMotifAnnotationSchema).optional()
 });
 
 export const SafetyStatusSchema = z.object({

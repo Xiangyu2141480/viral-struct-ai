@@ -223,6 +223,7 @@ export interface ShotSlotNode {
   intent?: ShotSlotIntent;
   sourceInstance?: ShotSlotSourceInstance;
   acceptanceCriteria?: ShotSlotAcceptanceCriteria;
+  motifAnnotations?: ViralMotifAnnotation[];
 }
 
 export interface RhythmStructure {
@@ -282,6 +283,7 @@ export interface ViralStructureGraph {
   creativeIngredients: CreativeIngredient[];
   edges: GraphEdge[];
   boundaries?: Boundary[];
+  motifAnnotations?: ViralMotifAnnotation[];
 }
 
 export interface ContentBrief {
@@ -510,6 +512,196 @@ export interface AssetCard {
   candidateSlotRoles?: AssetCandidateSlotRole[];
   analysisSource?: AssetAnalysisSource;
   analysis?: AssetAnalysisProfile;
+}
+
+export type TransitionGrammarId =
+  | 'dynamic_entry'
+  | 'impact_beat'
+  | 'assembly_reveal'
+  | 'activation_moment'
+  | 'lockup_transition';
+
+export type TargetTransitionEquivalent =
+  | 'ice_cube_drop'
+  | 'open_cap'
+  | 'pour_to_cup'
+  | 'drink_neck_down'
+  | 'bottle_rotation'
+  | 'lineup_sweep'
+  | 'clean_cta_end_frame'
+  | 'hyperframes_benefit_card_drop';
+
+export interface TransitionIngredient {
+  id: string;
+  grammarId: TransitionGrammarId;
+  label: string;
+  sourcePattern: string;
+  targetEquivalent: TargetTransitionEquivalent;
+  requiredEvidence: string[];
+  acceptableAssetRoles: AssetManagerRole[];
+  avoidCopyingSource: string[];
+}
+
+export interface TransitionNeed {
+  id: string;
+  grammarId: TransitionGrammarId;
+  sourceMotif: string;
+  transferableIntent: string;
+  targetEquivalent: TargetTransitionEquivalent;
+  targetSlots: string[];
+  importance: 'low' | 'medium' | 'high';
+  ingredients: TransitionIngredient[];
+}
+
+export interface AssetTransitionAffordance {
+  assetId: string;
+  supportsGrammar: TransitionGrammarId[];
+  supportedIngredients: string[];
+  confidence: number;
+  evidence: string[];
+  limitations: string[];
+}
+
+export interface TransitionCoverageObservation {
+  id: string;
+  transitionNeedId: string;
+  grammarId: TransitionGrammarId;
+  coverageStatus: 'covered' | 'weak' | 'insufficient';
+  candidateAssetIds: string[];
+  missingIngredientIds: string[];
+  potentialImpact: string[];
+  confidence: 'low' | 'medium' | 'high';
+  ownership: 'asset_manager_transition_observation_only';
+}
+
+export interface TransitionHandoffBrief {
+  id: string;
+  owner: 'video_agent' | 'gap_repair' | 'hyperframes' | 'aigc' | 'manual_shoot';
+  transitionNeedIds: string[];
+  brief: string;
+  prompt?: string;
+  negativePrompt?: string;
+  safetyNotes: string[];
+  notRenderedOutput: boolean;
+}
+
+export interface TransitionMotionGrammarHandoff {
+  protocolVersion: 'transition-handoff-v1';
+  patternId: 'kinetic_assembly';
+  sourceExample: string;
+  targetProduct: string;
+  designLanguage: string;
+  boundary: string[];
+  transitionNeeds: TransitionNeed[];
+  assetAffordances: AssetTransitionAffordance[];
+  coverageObservations: TransitionCoverageObservation[];
+  downstreamHandoff: TransitionHandoffBrief[];
+  warnings: string[];
+}
+
+export type MotifType =
+  | 'surreal_assembly'
+  | 'kinetic_assembly_reveal'
+  | 'kinetic_product_reveal'
+  | 'dynamic_entry'
+  | 'impact_activation'
+  | 'ingredient_transformation'
+  | 'lineup_lockup'
+  | 'benefit_card_motion'
+  | 'category_usage_moment';
+
+export type MotionToken =
+  | 'dynamic_entry'
+  | 'component_cascade'
+  | 'chaos_to_order'
+  | 'assembly_completion'
+  | 'interaction_activation'
+  | 'spectacle_burst'
+  | 'cta_reveal'
+  | 'falling_object'
+  | 'impact_beat'
+  | 'snap_open'
+  | 'assembly_reveal'
+  | 'activation_moment'
+  | 'pour_flow'
+  | 'drink_action'
+  | 'bottle_rotation'
+  | 'lineup_sweep'
+  | 'card_drop'
+  | 'clean_hold'
+  | 'quick_cut'
+  | 'push_in'
+  | 'match_cut'
+  | 'morph';
+
+export interface TargetCategoryMotifMapping {
+  targetCategory: string;
+  preferredEquivalents: string[];
+  rejectedEquivalents: string[];
+  rationale: string;
+}
+
+export interface MotifTransferVariable {
+  name: string;
+  sourceValue: string;
+  targetValue: string;
+  allowedTargetValues: string[];
+  notes?: string;
+}
+
+export interface ViralMotifAnnotation {
+  id: string;
+  slotId?: string;
+  segmentId?: string;
+  motifType: MotifType;
+  motionTokens: MotionToken[];
+  sanitizedIntent: string;
+  transferVariables: MotifTransferVariable[];
+  bannedSourceTerms: string[];
+  targetCategoryMapping: TargetCategoryMotifMapping;
+  evidence: string[];
+  confidence: number;
+}
+
+export interface MotifAwareManualShootBrief {
+  id: string;
+  motifAnnotationId: string;
+  targetCategoryMapping: TargetCategoryMotifMapping;
+  shotObjective: string;
+  requiredActions: string[];
+  compositionNotes: string[];
+  sanitizedIntent: string;
+  bannedSourceTerms: string[];
+  motionTokens: MotionToken[];
+  safetyNotes: string[];
+  notRenderedOutput: boolean;
+}
+
+export interface MotifAwareAigcPromptBrief {
+  id: string;
+  motifAnnotationId: string;
+  targetCategoryMapping: TargetCategoryMotifMapping;
+  prompt: string;
+  negativePrompt: string;
+  sanitizedIntent: string;
+  bannedSourceTerms: string[];
+  motionTokens: MotionToken[];
+  safetyNotes: string[];
+  notRenderedOutput: boolean;
+}
+
+export interface MotifAwareHyperframesBrief {
+  id: string;
+  motifAnnotationId: string;
+  targetCategoryMapping: TargetCategoryMotifMapping;
+  cardType: 'hook_card' | 'benefit_card' | 'comparison_card' | 'cta_card' | 'transition_card';
+  cardMotion: 'card_drop' | 'slide_in' | 'snap_cut' | 'lineup_sweep' | 'clean_hold';
+  copyIntent: string;
+  sanitizedIntent: string;
+  bannedSourceTerms: string[];
+  motionTokens: MotionToken[];
+  safetyNotes: string[];
+  notRenderedOutput: boolean;
 }
 
 export interface RoleCoverageSummary {

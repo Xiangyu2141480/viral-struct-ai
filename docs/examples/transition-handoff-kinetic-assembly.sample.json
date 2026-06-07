@@ -1,0 +1,380 @@
+{
+  "protocolVersion": "transition-handoff-v1",
+  "patternId": "kinetic_assembly",
+  "sourceExample": "macbook_neo",
+  "targetProduct": "康师傅冰红茶",
+  "designLanguage": "Kinetic assembly motion grammar: entry, impact, reveal, activation, and clean lockup. The target must use beverage-native actions instead of source product imagery.",
+  "boundary": [
+    "Planning contract only; no video, image, or MP4 is generated here.",
+    "Transfer motion grammar, not literal source visuals or product identity.",
+    "Do not recreate computer, keycap, or component imagery for the Kangshifu demo.",
+    "Use ordinary beverage actions, packaging cards, or prompt-ready external generation briefs."
+  ],
+  "transitionNeeds": [
+    {
+      "id": "transition_need_dynamic_entry",
+      "grammarId": "dynamic_entry",
+      "sourceMotif": "A product-related object enters frame with strong direction and viewer attention.",
+      "transferableIntent": "Start the sequence with a physical entry cue that feels cold, fast, and tactile.",
+      "targetEquivalent": "ice_cube_drop",
+      "targetSlots": [
+        "slot_block_001_asset_001",
+        "slot_block_001_asset_002"
+      ],
+      "importance": "high",
+      "ingredients": [
+        {
+          "id": "ingredient_ice_drop_entry",
+          "grammarId": "dynamic_entry",
+          "label": "ice cube or cold-object entry",
+          "sourcePattern": "falling-entry beat abstracted from the source opening",
+          "targetEquivalent": "ice_cube_drop",
+          "requiredEvidence": [
+            "visible ice cube or cold splash entering frame",
+            "vertical or diagonal motion",
+            "9:16 safe area for hook copy"
+          ],
+          "acceptableAssetRoles": [
+            "opening_hook",
+            "usage_demo",
+            "background"
+          ],
+          "avoidCopyingSource": [
+            "computer object",
+            "keyboard component",
+            "source brand styling"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "transition_need_impact_beat",
+      "grammarId": "impact_beat",
+      "sourceMotif": "Entry lands on a rhythmic visual beat.",
+      "transferableIntent": "Make the first cold impact readable even without BGM analysis.",
+      "targetEquivalent": "open_cap",
+      "targetSlots": [
+        "slot_block_002_asset_002",
+        "slot_block_004_asset_001"
+      ],
+      "importance": "high",
+      "ingredients": [
+        {
+          "id": "ingredient_cap_impact",
+          "grammarId": "impact_beat",
+          "label": "cap-open tactile beat",
+          "sourcePattern": "impact landing beat abstracted from product reveal",
+          "targetEquivalent": "open_cap",
+          "requiredEvidence": [
+            "hand opens bottle cap",
+            "cap or hand action peaks near the cut",
+            "product label remains visible or quickly returns to frame"
+          ],
+          "acceptableAssetRoles": [
+            "usage_demo",
+            "product_closeup"
+          ],
+          "avoidCopyingSource": [
+            "typing key",
+            "device switch",
+            "metal part assembly"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "transition_need_assembly_reveal",
+      "grammarId": "assembly_reveal",
+      "sourceMotif": "Separate parts visually assemble into product understanding.",
+      "transferableIntent": "Reveal ingredients, coldness, and drink state through a staged beverage action.",
+      "targetEquivalent": "pour_to_cup",
+      "targetSlots": [
+        "slot_block_004_asset_002",
+        "slot_block_005_asset_001"
+      ],
+      "importance": "medium",
+      "ingredients": [
+        {
+          "id": "ingredient_pour_reveal",
+          "grammarId": "assembly_reveal",
+          "label": "pour-to-cup reveal",
+          "sourcePattern": "component assembly abstracted into fluid reveal",
+          "targetEquivalent": "pour_to_cup",
+          "requiredEvidence": [
+            "bottle or cup visible",
+            "tea liquid motion",
+            "ice, lemon, or coldness cue"
+          ],
+          "acceptableAssetRoles": [
+            "usage_demo",
+            "benefit_proof",
+            "lifestyle_scene"
+          ],
+          "avoidCopyingSource": [
+            "component grid",
+            "computer hardware join",
+            "source product silhouette"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "transition_need_activation_moment",
+      "grammarId": "activation_moment",
+      "sourceMotif": "Product changes from inactive to active or desirable.",
+      "transferableIntent": "Show the beverage being consumed or activated as a refreshing payoff.",
+      "targetEquivalent": "drink_neck_down",
+      "targetSlots": [
+        "slot_block_006_asset_001",
+        "slot_block_007_asset_001"
+      ],
+      "importance": "high",
+      "ingredients": [
+        {
+          "id": "ingredient_drink_activation",
+          "grammarId": "activation_moment",
+          "label": "neck-down drinking activation",
+          "sourcePattern": "activation moment abstracted into product-use payoff",
+          "targetEquivalent": "drink_neck_down",
+          "requiredEvidence": [
+            "neck-down or hand-only drinking action",
+            "no face-dependent claim",
+            "bottle remains identifiable before or after action"
+          ],
+          "acceptableAssetRoles": [
+            "usage_demo",
+            "benefit_proof",
+            "lifestyle_scene"
+          ],
+          "avoidCopyingSource": [
+            "screen activation",
+            "device UI",
+            "source product behavior"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "transition_need_lockup_transition",
+      "grammarId": "lockup_transition",
+      "sourceMotif": "Sequence resolves into a clean product lockup.",
+      "transferableIntent": "End with readable packaging, lineup, and CTA without overloading the final frame.",
+      "targetEquivalent": "clean_cta_end_frame",
+      "targetSlots": [
+        "slot_block_010_asset_001",
+        "slot_block_011_asset_001"
+      ],
+      "importance": "high",
+      "ingredients": [
+        {
+          "id": "ingredient_clean_cta_lockup",
+          "grammarId": "lockup_transition",
+          "label": "clean CTA end frame",
+          "sourcePattern": "final lockup abstracted into beverage product + action guidance",
+          "targetEquivalent": "clean_cta_end_frame",
+          "requiredEvidence": [
+            "product or lineup visible",
+            "safe area for CTA copy",
+            "stable final hold"
+          ],
+          "acceptableAssetRoles": [
+            "cta",
+            "cover",
+            "product_closeup",
+            "packaging_card"
+          ],
+          "avoidCopyingSource": [
+            "source end card layout",
+            "computer product lockup",
+            "source typography"
+          ]
+        }
+      ]
+    }
+  ],
+  "assetAffordances": [
+    {
+      "assetId": "plain_001_table_product_pan",
+      "supportsGrammar": [
+        "lockup_transition"
+      ],
+      "supportedIngredients": [
+        "ingredient_clean_cta_lockup"
+      ],
+      "confidence": 0.74,
+      "evidence": [
+        "Bottle and label remain visible.",
+        "Slow pan can resolve into a stable product end frame."
+      ],
+      "limitations": [
+        "Does not show opening, drinking, pouring, or cold impact."
+      ]
+    },
+    {
+      "assetId": "plain_003_open_cap",
+      "supportsGrammar": [
+        "impact_beat",
+        "activation_moment"
+      ],
+      "supportedIngredients": [
+        "ingredient_cap_impact"
+      ],
+      "confidence": 0.68,
+      "evidence": [
+        "Hand operation provides a real tactile action.",
+        "Cap motion can align to a cut or beat."
+      ],
+      "limitations": [
+        "Does not prove drinking payoff.",
+        "Needs crop if label drifts out of frame."
+      ]
+    },
+    {
+      "assetId": "planned_hyperframes_benefit_card",
+      "supportsGrammar": [
+        "assembly_reveal",
+        "lockup_transition"
+      ],
+      "supportedIngredients": [
+        "ingredient_pour_reveal",
+        "ingredient_clean_cta_lockup"
+      ],
+      "confidence": 0.55,
+      "evidence": [
+        "Prompt-ready card can drop in benefit copy when real pour footage is missing."
+      ],
+      "limitations": [
+        "Not real footage.",
+        "Should be labeled as HyperFrames card animation handoff."
+      ]
+    }
+  ],
+  "coverageObservations": [
+    {
+      "id": "transition_observation_dynamic_entry_001",
+      "transitionNeedId": "transition_need_dynamic_entry",
+      "grammarId": "dynamic_entry",
+      "coverageStatus": "insufficient",
+      "candidateAssetIds": [],
+      "missingIngredientIds": [
+        "ingredient_ice_drop_entry"
+      ],
+      "potentialImpact": [
+        "Opening may feel static unless Video Agent, AIGC, or manual shooting supplies a cold entry cue."
+      ],
+      "confidence": "high",
+      "ownership": "asset_manager_transition_observation_only"
+    },
+    {
+      "id": "transition_observation_impact_beat_001",
+      "transitionNeedId": "transition_need_impact_beat",
+      "grammarId": "impact_beat",
+      "coverageStatus": "weak",
+      "candidateAssetIds": [
+        "plain_003_open_cap"
+      ],
+      "missingIngredientIds": [],
+      "potentialImpact": [
+        "Cap-open footage can support a tactile beat, but editor should verify label visibility and cut timing."
+      ],
+      "confidence": "medium",
+      "ownership": "asset_manager_transition_observation_only"
+    },
+    {
+      "id": "transition_observation_lockup_001",
+      "transitionNeedId": "transition_need_lockup_transition",
+      "grammarId": "lockup_transition",
+      "coverageStatus": "covered",
+      "candidateAssetIds": [
+        "plain_001_table_product_pan"
+      ],
+      "missingIngredientIds": [],
+      "potentialImpact": [
+        "Existing product pan can support a clean CTA end frame with overlay copy."
+      ],
+      "confidence": "high",
+      "ownership": "asset_manager_transition_observation_only"
+    }
+  ],
+  "downstreamHandoff": [
+    {
+      "id": "handoff_video_agent_kinetic_sequence",
+      "owner": "video_agent",
+      "transitionNeedIds": [
+        "transition_need_dynamic_entry",
+        "transition_need_impact_beat",
+        "transition_need_lockup_transition"
+      ],
+      "brief": "Compile the migrated motion grammar as beverage-native actions: ice entry, cap-open beat, product pan, and clean CTA lockup. Preserve structure, not source imagery.",
+      "safetyNotes": [
+        "Do not claim this is rendered output.",
+        "Avoid source product visuals and source typography."
+      ],
+      "notRenderedOutput": true
+    },
+    {
+      "id": "handoff_gap_repair_missing_entry",
+      "owner": "gap_repair",
+      "transitionNeedIds": [
+        "transition_need_dynamic_entry",
+        "transition_need_assembly_reveal"
+      ],
+      "brief": "If real ice drop or pour footage is missing, request manual footage or convert to prompt-ready generation/card handoff. Keep final repair decision outside Asset Manager.",
+      "safetyNotes": [
+        "Asset Manager reports transition coverage only.",
+        "GapRepair decides final repair strategy."
+      ],
+      "notRenderedOutput": true
+    },
+    {
+      "id": "handoff_hyperframes_benefit_card_drop",
+      "owner": "hyperframes",
+      "transitionNeedIds": [
+        "transition_need_assembly_reveal",
+        "transition_need_lockup_transition"
+      ],
+      "brief": "Use a benefit-card drop for ice-cold refreshment when pour footage is unavailable.",
+      "prompt": "9:16 benefit card animation: clean yellow-red beverage palette, iced tea bottle reference, card drops in with '冰爽解腻' benefit copy, no source device imagery.",
+      "negativePrompt": "no computer hardware, no keyboard, no source product layout, no watermark, no unreadable text",
+      "safetyNotes": [
+        "Prompt-ready handoff only; no external generation call is made here.",
+        "Keep claims as taste/refreshment positioning, not guaranteed effects."
+      ],
+      "notRenderedOutput": true
+    },
+    {
+      "id": "handoff_aigc_ice_entry",
+      "owner": "aigc",
+      "transitionNeedIds": [
+        "transition_need_dynamic_entry"
+      ],
+      "brief": "Generate or storyboard an ice-cube entry shot only if external generation is enabled by downstream tools.",
+      "prompt": "Vertical 9:16 close-up shot, ice cube drops into amber iced tea with lemon and splash, energetic cold impact, readable space for hook caption, consumer beverage ad style.",
+      "negativePrompt": "no computer, no keyboard, no phone UI, no celebrity, no medical claim, no watermark, no copied source composition",
+      "safetyNotes": [
+        "External generation plan only.",
+        "No API call or rendered media is produced by this contract."
+      ],
+      "notRenderedOutput": true
+    },
+    {
+      "id": "handoff_manual_shoot_usage",
+      "owner": "manual_shoot",
+      "transitionNeedIds": [
+        "transition_need_impact_beat",
+        "transition_need_activation_moment"
+      ],
+      "brief": "Shoot two ordinary phone clips: opening cap with visible bottle label, and neck-down drinking action with bottle visible before or after the action.",
+      "safetyNotes": [
+        "No face-dependent footage required.",
+        "Keep the product label visible and avoid unsafe claims."
+      ],
+      "notRenderedOutput": true
+    }
+  ],
+  "warnings": [
+    "This is a transition/motion grammar handoff, not a generated asset.",
+    "The source example is used only to describe motion structure.",
+    "No external model is called by Asset Manager."
+  ]
+}
