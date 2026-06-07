@@ -63,3 +63,8 @@ GOAL.pdf
 demo-output*.json
 fine_scan_compare/
 scripts/_dump_demo.py
+
+# Debug screenshots dropped at repo root (UI/devtools captures, not product assets).
+# Root-anchored: seed/product images under seed_assets/ are unaffected.
+/*.png
+.playwright-mcp/
