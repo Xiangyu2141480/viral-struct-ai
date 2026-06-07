@@ -475,6 +475,93 @@ export const TransitionMotionGrammarHandoffSchema = z.object({
   warnings: z.array(z.string())
 });
 
+export const MotifTypeSchema = z.enum([
+  'surreal_assembly',
+  'kinetic_product_reveal',
+  'dynamic_entry',
+  'impact_activation',
+  'ingredient_transformation',
+  'lineup_lockup',
+  'benefit_card_motion',
+  'category_usage_moment'
+]);
+
+export const MotionTokenSchema = z.enum([
+  'dynamic_entry',
+  'falling_object',
+  'impact_beat',
+  'snap_open',
+  'assembly_reveal',
+  'activation_moment',
+  'pour_flow',
+  'drink_action',
+  'bottle_rotation',
+  'lineup_sweep',
+  'card_drop',
+  'clean_hold',
+  'quick_cut',
+  'push_in',
+  'match_cut',
+  'morph'
+]);
+
+export const TargetCategoryMotifMappingSchema = z.object({
+  targetCategory: z.string(),
+  preferredEquivalents: z.array(z.string()),
+  rejectedEquivalents: z.array(z.string()),
+  rationale: z.string()
+}).strict();
+
+export const MotifTransferVariableSchema = z.object({
+  name: z.string(),
+  sourceValue: z.string(),
+  targetValue: z.string(),
+  allowedTargetValues: z.array(z.string()),
+  notes: z.string().optional()
+}).strict();
+
+export const ViralMotifAnnotationSchema = z.object({
+  id: z.string(),
+  slotId: z.string().optional(),
+  segmentId: z.string().optional(),
+  motifType: MotifTypeSchema,
+  motionTokens: z.array(MotionTokenSchema),
+  sanitizedIntent: z.string(),
+  transferVariables: z.array(MotifTransferVariableSchema),
+  bannedSourceTerms: z.array(z.string()),
+  targetCategoryMapping: TargetCategoryMotifMappingSchema,
+  evidence: z.array(z.string()),
+  confidence: z.number().min(0).max(1)
+}).strict();
+
+const MotifAwareBriefBaseSchema = z.object({
+  id: z.string(),
+  motifAnnotationId: z.string(),
+  targetCategoryMapping: TargetCategoryMotifMappingSchema,
+  sanitizedIntent: z.string(),
+  bannedSourceTerms: z.array(z.string()),
+  motionTokens: z.array(MotionTokenSchema),
+  safetyNotes: z.array(z.string()),
+  notRenderedOutput: z.boolean()
+});
+
+export const MotifAwareManualShootBriefSchema = MotifAwareBriefBaseSchema.extend({
+  shotObjective: z.string(),
+  requiredActions: z.array(z.string()),
+  compositionNotes: z.array(z.string())
+}).strict();
+
+export const MotifAwareAigcPromptBriefSchema = MotifAwareBriefBaseSchema.extend({
+  prompt: z.string(),
+  negativePrompt: z.string()
+}).strict();
+
+export const MotifAwareHyperframesBriefSchema = MotifAwareBriefBaseSchema.extend({
+  cardType: z.enum(['hook_card', 'benefit_card', 'comparison_card', 'cta_card', 'transition_card']),
+  cardMotion: z.enum(['card_drop', 'slide_in', 'snap_cut', 'lineup_sweep', 'clean_hold']),
+  copyIntent: z.string()
+}).strict();
+
 export const RoleCoverageSummarySchema = z.object({
   role: AssetManagerRoleSchema,
   status: z.enum(['covered', 'weak', 'missing']),
@@ -935,7 +1022,8 @@ export const ViralStructureGraphSchema = z.object({
     importance: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]).optional(),
     intent: ShotSlotIntentSchema.optional(),
     sourceInstance: ShotSlotSourceInstanceSchema.optional(),
-    acceptanceCriteria: ShotSlotAcceptanceCriteriaSchema.optional()
+    acceptanceCriteria: ShotSlotAcceptanceCriteriaSchema.optional(),
+    motifAnnotations: z.array(ViralMotifAnnotationSchema).optional()
   })),
   rhythm: z.object({
     avgShotDuration: z.number(),
@@ -958,7 +1046,8 @@ export const ViralStructureGraphSchema = z.object({
     type: z.enum(['sequence', 'requires', 'maps_to', 'fallback']),
     explanation: z.string().optional()
   })),
-  boundaries: z.array(BoundarySchema).optional()
+  boundaries: z.array(BoundarySchema).optional(),
+  motifAnnotations: z.array(ViralMotifAnnotationSchema).optional()
 });
 
 export const SafetyStatusSchema = z.object({

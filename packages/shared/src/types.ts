@@ -223,6 +223,7 @@ export interface ShotSlotNode {
   intent?: ShotSlotIntent;
   sourceInstance?: ShotSlotSourceInstance;
   acceptanceCriteria?: ShotSlotAcceptanceCriteria;
+  motifAnnotations?: ViralMotifAnnotation[];
 }
 
 export interface RhythmStructure {
@@ -282,6 +283,7 @@ export interface ViralStructureGraph {
   creativeIngredients: CreativeIngredient[];
   edges: GraphEdge[];
   boundaries?: Boundary[];
+  motifAnnotations?: ViralMotifAnnotation[];
 }
 
 export interface ContentBrief {
@@ -595,6 +597,104 @@ export interface TransitionMotionGrammarHandoff {
   coverageObservations: TransitionCoverageObservation[];
   downstreamHandoff: TransitionHandoffBrief[];
   warnings: string[];
+}
+
+export type MotifType =
+  | 'surreal_assembly'
+  | 'kinetic_product_reveal'
+  | 'dynamic_entry'
+  | 'impact_activation'
+  | 'ingredient_transformation'
+  | 'lineup_lockup'
+  | 'benefit_card_motion'
+  | 'category_usage_moment';
+
+export type MotionToken =
+  | 'dynamic_entry'
+  | 'falling_object'
+  | 'impact_beat'
+  | 'snap_open'
+  | 'assembly_reveal'
+  | 'activation_moment'
+  | 'pour_flow'
+  | 'drink_action'
+  | 'bottle_rotation'
+  | 'lineup_sweep'
+  | 'card_drop'
+  | 'clean_hold'
+  | 'quick_cut'
+  | 'push_in'
+  | 'match_cut'
+  | 'morph';
+
+export interface TargetCategoryMotifMapping {
+  targetCategory: string;
+  preferredEquivalents: string[];
+  rejectedEquivalents: string[];
+  rationale: string;
+}
+
+export interface MotifTransferVariable {
+  name: string;
+  sourceValue: string;
+  targetValue: string;
+  allowedTargetValues: string[];
+  notes?: string;
+}
+
+export interface ViralMotifAnnotation {
+  id: string;
+  slotId?: string;
+  segmentId?: string;
+  motifType: MotifType;
+  motionTokens: MotionToken[];
+  sanitizedIntent: string;
+  transferVariables: MotifTransferVariable[];
+  bannedSourceTerms: string[];
+  targetCategoryMapping: TargetCategoryMotifMapping;
+  evidence: string[];
+  confidence: number;
+}
+
+export interface MotifAwareManualShootBrief {
+  id: string;
+  motifAnnotationId: string;
+  targetCategoryMapping: TargetCategoryMotifMapping;
+  shotObjective: string;
+  requiredActions: string[];
+  compositionNotes: string[];
+  sanitizedIntent: string;
+  bannedSourceTerms: string[];
+  motionTokens: MotionToken[];
+  safetyNotes: string[];
+  notRenderedOutput: boolean;
+}
+
+export interface MotifAwareAigcPromptBrief {
+  id: string;
+  motifAnnotationId: string;
+  targetCategoryMapping: TargetCategoryMotifMapping;
+  prompt: string;
+  negativePrompt: string;
+  sanitizedIntent: string;
+  bannedSourceTerms: string[];
+  motionTokens: MotionToken[];
+  safetyNotes: string[];
+  notRenderedOutput: boolean;
+}
+
+export interface MotifAwareHyperframesBrief {
+  id: string;
+  motifAnnotationId: string;
+  targetCategoryMapping: TargetCategoryMotifMapping;
+  cardType: 'hook_card' | 'benefit_card' | 'comparison_card' | 'cta_card' | 'transition_card';
+  cardMotion: 'card_drop' | 'slide_in' | 'snap_cut' | 'lineup_sweep' | 'clean_hold';
+  copyIntent: string;
+  sanitizedIntent: string;
+  bannedSourceTerms: string[];
+  motionTokens: MotionToken[];
+  safetyNotes: string[];
+  notRenderedOutput: boolean;
 }
 
 export interface RoleCoverageSummary {
