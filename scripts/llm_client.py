@@ -11,12 +11,14 @@ provider is purely a runtime configuration concern.
 
 from __future__ import annotations
 
+import http.client
 import json
 import mimetypes
 import os
 import random
 import re
 import shutil
+import ssl
 import subprocess
 import threading
 import time
@@ -24,6 +26,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable, TypeVar
 from urllib import error, request
+from urllib.parse import urlsplit
 
 # curl uses the system TLS stack (Schannel on Windows) and reliably handles
 # large multipart uploads to the configured LLM/VLM endpoint, where Python's
@@ -115,6 +118,54 @@ def _reset_http_semaphore_for_testing() -> None:
     with _HTTP_SEMAPHORE_LOCK:
         _HTTP_SEMAPHORE = None
         _HTTP_CAP = None
+
+
+# ---------------------------------------------------------------------------
+# Upload-lane semaphore (C): multipart uploads are the heavy calls (whole-clip
+# bodies; 50-wide caused write timeouts on large block uploads — see
+# --max-concurrent-http note). The numerous *light* calls (file-status polls +
+# JSON /responses) should not have to queue behind them, so uploads get their
+# own narrow lane while the main semaphore stays wide for everything else.
+# ---------------------------------------------------------------------------
+
+_UPLOAD_SEMAPHORE: threading.BoundedSemaphore | None = None
+_UPLOAD_CAP: int | None = None
+_UPLOAD_SEMAPHORE_LOCK = threading.Lock()
+
+
+def configure_upload_semaphore(max_concurrent: int) -> threading.BoundedSemaphore:
+    """One-shot initialiser for the process-global upload (multipart) semaphore.
+
+    Mirrors ``configure_http_semaphore``: idempotent with the same cap, raises
+    on a conflicting cap. Call once at CLI entry.
+    """
+    global _UPLOAD_SEMAPHORE, _UPLOAD_CAP
+    cap = int(max_concurrent)
+    with _UPLOAD_SEMAPHORE_LOCK:
+        if _UPLOAD_SEMAPHORE is None:
+            _UPLOAD_CAP = cap
+            _UPLOAD_SEMAPHORE = threading.BoundedSemaphore(value=cap)
+        elif cap != _UPLOAD_CAP:
+            raise RuntimeError(
+                f"upload semaphore already initialised with cap={_UPLOAD_CAP}; "
+                f"refusing to reconfigure to cap={cap}."
+            )
+        return _UPLOAD_SEMAPHORE
+
+
+def get_upload_semaphore(max_concurrent: int = 8) -> threading.BoundedSemaphore:
+    """Return the process-global upload semaphore, lazy-creating on first use."""
+    with _UPLOAD_SEMAPHORE_LOCK:
+        if _UPLOAD_SEMAPHORE is not None:
+            return _UPLOAD_SEMAPHORE
+    return configure_upload_semaphore(max_concurrent)
+
+
+def _reset_upload_semaphore_for_testing() -> None:
+    global _UPLOAD_SEMAPHORE, _UPLOAD_CAP
+    with _UPLOAD_SEMAPHORE_LOCK:
+        _UPLOAD_SEMAPHORE = None
+        _UPLOAD_CAP = None
 
 
 def _is_retryable_error(message: str) -> bool:
@@ -246,6 +297,147 @@ def build_multipart_body(
     return b"".join(lines), f"multipart/form-data; boundary={boundary}"
 
 
+# ---------------------------------------------------------------------------
+# Connection pool (A): every HTTP call otherwise spawns a fresh curl subprocess
+# (no keepalive) — on a high-latency link the per-call TCP+TLS handshake, paid
+# thousands of times across polls/uploads/responses, dominates wall-clock. We
+# reuse one persistent TLS connection per worker thread for the *light* calls
+# (file-status GET polls + JSON /responses POST). Multipart uploads still go
+# through curl: Python's OpenSSL intermittently EOFs on large multipart bodies
+# (the reason curl exists here), and uploads are few so they gain little from
+# pooling anyway. Any pooled transport failure drops the connection and falls
+# back to curl for that one call; repeated failures trip a circuit breaker that
+# disables pooling for the rest of the run.
+# ---------------------------------------------------------------------------
+
+_POOL_ENABLED = False
+_POOL_LOCAL = threading.local()
+_POOL_FAIL_COUNT = 0          # consecutive failures (drives the circuit breaker)
+_POOL_FALLBACK_TOTAL = 0      # cumulative pooled→curl fallbacks (diagnostic)
+_POOL_SUCCESS_TOTAL = 0       # cumulative pooled calls served (diagnostic)
+_POOL_FAIL_LOCK = threading.Lock()
+_POOL_DISABLE_AFTER = 5  # consecutive transport failures → give up on pooling
+
+
+class _PoolFallback(Exception):
+    """Internal: pooled transport failed; caller should retry via curl."""
+
+
+def enable_connection_pool(enabled: bool) -> None:
+    """Toggle the keepalive connection pool for light (non-multipart) calls."""
+    global _POOL_ENABLED, _POOL_FAIL_COUNT, _POOL_FALLBACK_TOTAL, _POOL_SUCCESS_TOTAL
+    _POOL_ENABLED = bool(enabled)
+    with _POOL_FAIL_LOCK:
+        _POOL_FAIL_COUNT = 0
+        _POOL_FALLBACK_TOTAL = 0
+        _POOL_SUCCESS_TOTAL = 0
+
+
+def connection_pool_stats() -> dict[str, Any]:
+    """Snapshot of pool activity — lets a run confirm pooling actually served
+    traffic (vs. silently falling back to curl / tripping the breaker)."""
+    with _POOL_FAIL_LOCK:
+        return {
+            "enabled": _POOL_ENABLED,
+            "served": _POOL_SUCCESS_TOTAL,
+            "fallbacks": _POOL_FALLBACK_TOTAL,
+            "circuit_open": _POOL_FAIL_COUNT >= _POOL_DISABLE_AFTER,
+        }
+
+
+def _reset_connection_pool_for_testing() -> None:
+    global _POOL_ENABLED, _POOL_FAIL_COUNT, _POOL_FALLBACK_TOTAL, _POOL_SUCCESS_TOTAL
+    _POOL_ENABLED = False
+    with _POOL_FAIL_LOCK:
+        _POOL_FAIL_COUNT = 0
+        _POOL_FALLBACK_TOTAL = 0
+        _POOL_SUCCESS_TOTAL = 0
+    conns = getattr(_POOL_LOCAL, "conns", None)
+    if conns:
+        for conn in conns.values():
+            try:
+                conn.close()
+            except Exception:
+                pass
+        _POOL_LOCAL.conns = {}
+
+
+def _pool_circuit_open() -> bool:
+    with _POOL_FAIL_LOCK:
+        return _POOL_FAIL_COUNT >= _POOL_DISABLE_AFTER
+
+
+def _record_pool_failure() -> None:
+    global _POOL_FAIL_COUNT, _POOL_FALLBACK_TOTAL
+    with _POOL_FAIL_LOCK:
+        _POOL_FAIL_COUNT += 1
+        _POOL_FALLBACK_TOTAL += 1
+
+
+def _record_pool_success() -> None:
+    global _POOL_FAIL_COUNT, _POOL_SUCCESS_TOTAL
+    with _POOL_FAIL_LOCK:
+        _POOL_FAIL_COUNT = 0
+        _POOL_SUCCESS_TOTAL += 1
+
+
+def _get_pooled_connection(netloc: str, timeout: float) -> http.client.HTTPSConnection:
+    conns = getattr(_POOL_LOCAL, "conns", None)
+    if conns is None:
+        conns = {}
+        _POOL_LOCAL.conns = conns
+    conn = conns.get(netloc)
+    if conn is None:
+        conn = http.client.HTTPSConnection(
+            netloc, timeout=timeout, context=ssl.create_default_context()
+        )
+        conns[netloc] = conn
+    return conn
+
+
+def _drop_pooled_connection(netloc: str) -> None:
+    conns = getattr(_POOL_LOCAL, "conns", None)
+    if conns and netloc in conns:
+        try:
+            conns[netloc].close()
+        except Exception:
+            pass
+        del conns[netloc]
+
+
+def _pooled_request_json(
+    *,
+    method: str,
+    url: str,
+    api_key: str,
+    body: bytes | None = None,
+    content_type: str | None = None,
+    timeout: int = 120,
+) -> dict[str, Any]:
+    parts = urlsplit(url)
+    netloc = parts.netloc
+    path = parts.path + (f"?{parts.query}" if parts.query else "")
+    headers = {"Authorization": f"Bearer {api_key}", "Connection": "keep-alive"}
+    if content_type:
+        headers["Content-Type"] = content_type
+    conn = _get_pooled_connection(netloc, float(timeout))
+    try:
+        conn.request(method, path or "/", body=body, headers=headers)
+        resp = conn.getresponse()
+        payload = resp.read().decode("utf-8", errors="replace")
+        status = resp.status
+    except (OSError, http.client.HTTPException, ssl.SSLError) as exc:
+        # Transport-level failure: drop the (possibly half-open) connection and
+        # signal the caller to fall back to curl for this call.
+        _drop_pooled_connection(netloc)
+        raise _PoolFallback(str(exc)) from exc
+    if status >= 400:
+        # Real server response — curl would see the same code. Surface it like
+        # the curl path so gated_call's retry classifier (429/5xx vs 4xx) works.
+        raise RuntimeError(f"HTTP {status}: {payload}")
+    return json.loads(payload) if payload.strip() else {}
+
+
 def request_json(
     *,
     method: str,
@@ -255,6 +447,21 @@ def request_json(
     content_type: str | None = None,
     timeout: int = 120,
 ) -> dict[str, Any]:
+    # Light calls (GET polls / JSON POST) reuse a pooled keepalive connection
+    # when enabled; multipart uploads always take the curl path below. A pooled
+    # transport failure falls through to curl without surfacing to the caller.
+    is_multipart = bool(content_type and content_type.startswith("multipart/"))
+    if _POOL_ENABLED and not is_multipart and not _pool_circuit_open():
+        try:
+            result = _pooled_request_json(
+                method=method, url=url, api_key=api_key,
+                body=body, content_type=content_type, timeout=timeout,
+            )
+            _record_pool_success()
+            return result
+        except _PoolFallback:
+            _record_pool_failure()
+
     headers = {"Authorization": f"Bearer {api_key}"}
     if content_type:
         headers["Content-Type"] = content_type
@@ -354,8 +561,20 @@ def wait_for_file(
     file_id: str,
     poll_interval: float = 5.0,
     max_wait_seconds: float = 300.0,
+    poll_backoff: float = 1.0,
+    poll_max_interval: float | None = None,
 ) -> dict[str, Any]:
+    """Poll file-preprocessing status until ready.
+
+    ``poll_interval`` is the first inter-poll delay. With ``poll_backoff`` > 1.0
+    the delay grows geometrically (capped at ``poll_max_interval``) so a file
+    that takes a while to preprocess costs far fewer poll round-trips — each
+    poll is a real HTTP call, so on a high-latency link cutting their count
+    trims pure overhead. ``poll_backoff`` == 1.0 keeps the legacy fixed cadence.
+    """
     deadline = time.time() + max_wait_seconds
+    cap = poll_max_interval if poll_max_interval and poll_max_interval > 0 else None
+    delay = float(poll_interval)
     last: dict[str, Any] = {}
     while time.time() < deadline:
         # PR #44: file-status polling is HTTP traffic too. Gate each retrieve
@@ -370,7 +589,11 @@ def wait_for_file(
             raise RuntimeError(f"file preprocessing failed: {json.dumps(last, ensure_ascii=False)}")
         if status and status not in WAIT_FILE_STATUSES:
             return last
-        time.sleep(poll_interval)
+        time.sleep(delay)
+        if poll_backoff and poll_backoff > 1.0:
+            delay *= float(poll_backoff)
+            if cap is not None:
+                delay = min(delay, cap)
     raise TimeoutError(f"file {file_id} was not ready after {max_wait_seconds:g}s; last={last}")
 
 

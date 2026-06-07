@@ -788,5 +788,199 @@ class RequestJsonCurlPathTests(unittest.TestCase):
         self.assertEqual(out, {})
 
 
+class UploadSemaphoreTests(unittest.TestCase):
+    """C: heavy multipart uploads get their own narrow lane, separate from the
+    wide light-call (poll + /responses) semaphore."""
+
+    def setUp(self):
+        self.module = load_llm_client()
+        self.module._reset_upload_semaphore_for_testing()
+        self.addCleanup(self.module._reset_upload_semaphore_for_testing)
+
+    def test_configure_upload_semaphore_initialises_with_requested_cap(self):
+        sem = self.module.configure_upload_semaphore(3)
+        for _ in range(3):
+            self.assertTrue(sem.acquire(blocking=False))
+        self.assertFalse(sem.acquire(blocking=False))
+        for _ in range(3):
+            sem.release()
+
+    def test_configure_upload_semaphore_idempotent_with_same_cap(self):
+        a = self.module.configure_upload_semaphore(8)
+        b = self.module.configure_upload_semaphore(8)
+        self.assertIs(a, b)
+
+    def test_configure_upload_semaphore_raises_on_cap_mismatch(self):
+        self.module.configure_upload_semaphore(8)
+        with self.assertRaisesRegex(RuntimeError, "already initialised"):
+            self.module.configure_upload_semaphore(16)
+
+    def test_get_upload_semaphore_is_distinct_from_http_semaphore(self):
+        self.module._reset_http_semaphore_for_testing()
+        http_sem = self.module.configure_http_semaphore(25)
+        upload_sem = self.module.get_upload_semaphore(8)
+        self.assertIsNot(http_sem, upload_sem)
+
+
+class PollBackoffTests(unittest.TestCase):
+    """B: wait_for_file grows the inter-poll delay geometrically (capped) so a
+    slow-to-preprocess file costs fewer poll round-trips."""
+
+    def setUp(self):
+        self.module = load_llm_client()
+        self.module._reset_http_semaphore_for_testing()
+        self.module.configure_http_semaphore(5)
+
+    def _run_wait(self, *, statuses, **wait_kwargs):
+        calls = {"i": 0}
+
+        def fake_retrieve_file(**kw):
+            i = calls["i"]
+            calls["i"] += 1
+            return {"status": statuses[min(i, len(statuses) - 1)], "id": kw["file_id"]}
+
+        sleeps: list[float] = []
+        orig_retrieve = self.module.retrieve_file
+        orig_sleep = self.module.time.sleep
+        self.module.retrieve_file = fake_retrieve_file
+        self.module.time.sleep = lambda s: sleeps.append(s)
+        try:
+            self.module.wait_for_file(
+                base_url="https://x", api_key="k", file_id="f1",
+                max_wait_seconds=100, **wait_kwargs,
+            )
+        finally:
+            self.module.retrieve_file = orig_retrieve
+            self.module.time.sleep = orig_sleep
+        return sleeps
+
+    def test_backoff_grows_geometrically_and_caps(self):
+        sleeps = self._run_wait(
+            statuses=["processing", "processing", "processing", "processed"],
+            poll_interval=0.5, poll_backoff=2.0, poll_max_interval=1.5,
+        )
+        # ready on the 4th poll → 3 inter-poll sleeps: 0.5, *2=1.0, *2=2.0→cap 1.5
+        self.assertEqual(sleeps, [0.5, 1.0, 1.5])
+
+    def test_backoff_one_keeps_legacy_fixed_cadence(self):
+        sleeps = self._run_wait(
+            statuses=["processing", "processing", "processed"],
+            poll_interval=0.3, poll_backoff=1.0,
+        )
+        self.assertEqual(sleeps, [0.3, 0.3])
+
+
+class ConnectionPoolRoutingTests(unittest.TestCase):
+    """A: light calls (poll GET / JSON POST) use the keepalive pool when on;
+    multipart uploads always take curl; pooled transport failures fall back to
+    curl and trip a circuit breaker after repeated failures."""
+
+    def setUp(self):
+        self.module = load_llm_client()
+        self.module._reset_connection_pool_for_testing()
+        self.addCleanup(self.module._reset_connection_pool_for_testing)
+        # Make curl the fallback transport and record its calls.
+        self.curl_calls = []
+        orig_run, orig_curl = self.module.subprocess.run, self.module._CURL_PATH
+
+        def fake_run(cmd, input=None, capture_output=None, timeout=None):
+            self.curl_calls.append(cmd)
+            class _R:
+                stdout = b'{"via":"curl"}\n200'
+                stderr = b""
+                returncode = 0
+            return _R()
+
+        self.module.subprocess.run = fake_run
+        self.module._CURL_PATH = "curl"
+        self.addCleanup(setattr, self.module.subprocess, "run", orig_run)
+        self.addCleanup(setattr, self.module, "_CURL_PATH", orig_curl)
+
+    def _patch_pool(self, fake):
+        orig = self.module._pooled_request_json
+        self.module._pooled_request_json = fake
+        self.addCleanup(setattr, self.module, "_pooled_request_json", orig)
+
+    def test_json_call_uses_pool_when_enabled(self):
+        pool_calls = []
+        self._patch_pool(lambda **kw: pool_calls.append(kw) or {"via": "pool"})
+        self.module.enable_connection_pool(True)
+        out = self.module.request_json(
+            method="POST", url="https://x/responses", api_key="k",
+            body=b"{}", content_type="application/json",
+        )
+        self.assertEqual(out, {"via": "pool"})
+        self.assertEqual(len(pool_calls), 1)
+        self.assertEqual(self.curl_calls, [], "JSON call must not spawn curl when pooled")
+
+    def test_multipart_upload_always_uses_curl(self):
+        pool_calls = []
+        self._patch_pool(lambda **kw: pool_calls.append(kw) or {"via": "pool"})
+        self.module.enable_connection_pool(True)
+        out = self.module.request_json(
+            method="POST", url="https://x/files", api_key="k",
+            body=b"multipart-bytes",
+            content_type="multipart/form-data; boundary=b",
+        )
+        self.assertEqual(out, {"via": "curl"})
+        self.assertEqual(pool_calls, [], "multipart must bypass the pool")
+        self.assertEqual(len(self.curl_calls), 1)
+
+    def test_pool_disabled_routes_json_to_curl(self):
+        pool_calls = []
+        self._patch_pool(lambda **kw: pool_calls.append(kw) or {"via": "pool"})
+        # pool left disabled (default)
+        out = self.module.request_json(
+            method="GET", url="https://x/files/abc", api_key="k",
+        )
+        self.assertEqual(out, {"via": "curl"})
+        self.assertEqual(pool_calls, [])
+        self.assertEqual(len(self.curl_calls), 1)
+
+    def test_pooled_transport_failure_falls_back_to_curl(self):
+        def failing_pool(**kw):
+            raise self.module._PoolFallback("EOF in violation of protocol")
+        self._patch_pool(failing_pool)
+        self.module.enable_connection_pool(True)
+        out = self.module.request_json(
+            method="POST", url="https://x/responses", api_key="k",
+            body=b"{}", content_type="application/json",
+        )
+        # Transport failure must not surface — curl serves the call.
+        self.assertEqual(out, {"via": "curl"})
+        self.assertEqual(len(self.curl_calls), 1)
+
+    def test_circuit_breaker_stops_attempting_pool_after_repeated_failures(self):
+        attempts = {"n": 0}
+
+        def failing_pool(**kw):
+            attempts["n"] += 1
+            raise self.module._PoolFallback("transport down")
+        self._patch_pool(failing_pool)
+        self.module.enable_connection_pool(True)
+        # Drive enough failures to trip the breaker, then one more call.
+        for _ in range(self.module._POOL_DISABLE_AFTER + 3):
+            self.module.request_json(
+                method="GET", url="https://x/files/abc", api_key="k",
+            )
+        # Pool stops being tried once the breaker opens — attempts capped at
+        # the threshold, not the full loop count.
+        self.assertEqual(attempts["n"], self.module._POOL_DISABLE_AFTER)
+
+    def test_pooled_http_error_is_not_swallowed_as_fallback(self):
+        # A real server 4xx/5xx (RuntimeError) must propagate, not fall back to
+        # curl — curl would just see the same code.
+        def erroring_pool(**kw):
+            raise RuntimeError("HTTP 400: bad request")
+        self._patch_pool(erroring_pool)
+        self.module.enable_connection_pool(True)
+        with self.assertRaisesRegex(RuntimeError, "HTTP 400"):
+            self.module.request_json(
+                method="POST", url="https://x/responses", api_key="k",
+                body=b"{}", content_type="application/json",
+            )
+        self.assertEqual(self.curl_calls, [], "server errors must not fall back to curl")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -24,8 +24,12 @@ from llm_client import (  # noqa: E402
     env_value,
     extract_json_object,
     configure_http_semaphore,
+    configure_upload_semaphore,
+    connection_pool_stats,
+    enable_connection_pool,
     extract_response_text,
     gated_call,
+    get_upload_semaphore,
     load_dotenv,
     load_prompt_sections,
     upload_file,
@@ -404,6 +408,11 @@ def run_fine_scan(args: argparse.Namespace) -> int:
     # Explicit configure_* (not lazy get_*) — cap mismatch now raises rather
     # than being silently ignored (PR #24 review H1).
     configure_http_semaphore(int(args.max_concurrent_http))
+    # C: heavy multipart uploads get their own narrow lane so the light poll/
+    # response calls don't queue behind them. A: keepalive connection pool for
+    # the light calls (no-op for the curl-only multipart uploads).
+    configure_upload_semaphore(int(args.max_concurrent_upload))
+    enable_connection_pool(bool(args.http_pool))
 
     # PR #24 review H2 / PR #44 (perf): --max-concurrent-http is the *binding*
     # concurrency cap; --block-workers and --candidate-workers only set the upper
@@ -495,6 +504,16 @@ def run_fine_scan(args: argparse.Namespace) -> int:
             },
         )
         print(f"\nSaved combined scan -> {combined_path}")
+
+    # Diagnostic: confirm the keepalive pool actually served light-call traffic
+    # (vs. silently falling back to curl / tripping the breaker).
+    pool_stats = connection_pool_stats()
+    if pool_stats["enabled"]:
+        print(
+            f"[INFO] connection pool: served={pool_stats['served']} "
+            f"fallbacks={pool_stats['fallbacks']} "
+            f"circuit_open={pool_stats['circuit_open']}"
+        )
 
     if failures:
         failure_path = out_dir / "fine_scan_failures.json"
@@ -597,10 +616,12 @@ def _process_one_candidate(
             upload_file,
             base_url=base_url, api_key=api_key,
             video_path=window_clip, fps=args.peak_upload_fps,
+            semaphore=get_upload_semaphore(),
         )
         wait_for_file(
             base_url=base_url, api_key=api_key, file_id=pf["id"],
             poll_interval=args.poll_interval, max_wait_seconds=args.max_wait_seconds,
+            poll_backoff=args.poll_backoff, poll_max_interval=args.poll_max_interval,
         )
         resp = gated_call(
             create_response,
@@ -654,10 +675,12 @@ def _process_block_metadata(
         block_file_info = gated_call(
             upload_file,
             base_url=base_url, api_key=api_key, video_path=clip_path, fps=block_upload_fps,
+            semaphore=get_upload_semaphore(),
         )
         wait_for_file(
             base_url=base_url, api_key=api_key, file_id=block_file_info["id"],
             poll_interval=args.poll_interval, max_wait_seconds=args.max_wait_seconds,
+            poll_backoff=args.poll_backoff, poll_max_interval=args.poll_max_interval,
         )
         block_response = gated_call(
             create_response,
@@ -845,7 +868,23 @@ def process_block_with_peak_micro(
     block_failure: dict[str, Any] | None = None
 
     # Submit all candidates + the block-level scan to one pool so they overlap.
+    # D: submit the block-level scan FIRST. With v1's migrationContract it is the
+    # long pole of the block (whole-clip upload + the largest, slowest-to-decode
+    # response), so giving it the earliest worker slot maximises overlap with the
+    # many shorter peak calls instead of leaving it queued behind them.
     with ThreadPoolExecutor(max_workers=int(args.candidate_workers)) as pool:
+        block_future = pool.submit(
+            _process_block_metadata,
+            block,
+            clip_path,
+            args=args,
+            base_url=base_url,
+            api_key=api_key,
+            model=model,
+            video_id=video_id,
+            video_duration=video_duration,
+            logger=logger,
+        )
         candidate_futures = {
             pool.submit(
                 _process_one_candidate,
@@ -863,18 +902,6 @@ def process_block_with_peak_micro(
             ): candidate
             for candidate in candidates
         }
-        block_future = pool.submit(
-            _process_block_metadata,
-            block,
-            clip_path,
-            args=args,
-            base_url=base_url,
-            api_key=api_key,
-            model=model,
-            video_id=video_id,
-            video_duration=video_duration,
-            logger=logger,
-        )
 
         for fut in as_completed(candidate_futures):
             vp_record, semantic, failure = fut.result()
@@ -1021,19 +1048,46 @@ def build_parser() -> argparse.ArgumentParser:
                              "interleave candidates into the shared HTTP pipe instead of "
                              "running in ceil(N/3) serial waves.")
     parser.add_argument("--max-concurrent-http", type=int, default=25,
-                        help="Global semaphore cap on simultaneous LLM API calls "
-                             "(upload + responses combined). Default 25 (sweet spot "
-                             "from W2-B: 50 caused write timeouts on large block "
-                             "uploads, 20 was the conservative baseline).")
+                        help="Global semaphore cap on simultaneous light LLM/VLM API "
+                             "calls (file-status polls + /responses). Default 25. "
+                             "Heavy multipart uploads have their own lane "
+                             "(--max-concurrent-upload), so this can run wider than "
+                             "the old combined lane without risking upload write timeouts.")
+    parser.add_argument("--max-concurrent-upload", type=int, default=20,
+                        help="Separate semaphore cap for heavy multipart file uploads "
+                             "(block clips + peak windows). Default 20 — this pipeline "
+                             "is upload-dominated (120+ window/block uploads vs few "
+                             "polls/responses), so the upload lane must stay wide; a "
+                             "narrow cap (8) throttled throughput below baseline in "
+                             "measurement. Kept under the ~50-wide level that caused "
+                             "write timeouts on large block uploads (W2-B). The light "
+                             "lane (--max-concurrent-http) runs separately for polls + "
+                             "responses, which the keepalive pool serves cheaply.")
+    parser.add_argument("--http-pool", dest="http_pool", action="store_true", default=True,
+                        help="Reuse a keepalive TLS connection per worker for light "
+                             "calls (poll GET + JSON /responses) instead of spawning a "
+                             "fresh curl per call. On (default); cuts per-call TCP+TLS "
+                             "handshake overhead. Multipart uploads still use curl.")
+    parser.add_argument("--no-http-pool", dest="http_pool", action="store_false",
+                        help="Disable the keepalive connection pool; every call spawns "
+                             "a fresh curl (legacy behaviour).")
     parser.add_argument("--env", default=".env")
     parser.add_argument("--base-url", default="")
     parser.add_argument("--api-key", default="")
     parser.add_argument("--model", default="")
     parser.add_argument("--poll-interval", type=float, default=0.5,
-                        help="Seconds between file-status polls (default 0.5 per PR #44; was 2.0). "
-                             "Each upload waits at least one poll for preprocessing; a smaller "
-                             "interval trims pure idle wait. Lower bound is provider preprocessing "
-                             "latency, not this value.")
+                        help="First inter-poll delay for file-status polling (default "
+                             "0.5 per PR #44). Each poll is a real HTTP round-trip; see "
+                             "--poll-backoff for how the delay grows after the first.")
+    parser.add_argument("--poll-backoff", type=float, default=1.5,
+                        help="Geometric growth factor applied to the poll delay after "
+                             "each miss (default 1.5; 1.0 = fixed cadence). A file that "
+                             "takes a while to preprocess then costs far fewer poll "
+                             "round-trips, trimming pure per-call overhead on high-"
+                             "latency links.")
+    parser.add_argument("--poll-max-interval", type=float, default=4.0,
+                        help="Upper bound for the backed-off poll delay in seconds "
+                             "(default 4.0). Set 0 for no cap.")
     parser.add_argument("--max-wait-seconds", type=float, default=300)
     parser.add_argument("--peak-upload-fps", type=float, default=2.0,
                         help="fps hint sent to the LLM/VLM Files API for peak windows (fewer "
