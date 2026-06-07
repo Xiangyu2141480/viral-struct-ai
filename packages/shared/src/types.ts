@@ -634,6 +634,7 @@ export interface MaterialCoverageObservation {
     | 'missing_motion_evidence'
     | 'missing_product_evidence'
     | 'missing_usage_evidence'
+    | 'missing_comparison_evidence'
     | 'missing_cta_surface'
     | 'missing_text_safe_area';
   requiredIngredients: RequiredIngredient[];

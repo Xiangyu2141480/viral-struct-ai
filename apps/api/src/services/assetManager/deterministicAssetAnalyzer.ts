@@ -188,31 +188,40 @@ interface SemanticFallback {
 
 function inferSemanticFromNameAndText(value: string): SemanticFallback {
   const lower = value.toLowerCase();
+  const hasProductCue = /product|bottle|pack|label|tea|drink|beverage|商品|产品|瓶|包装|标签|饮料|茶/.test(lower);
+  const hasBenefitCue = /splash|ice|cold|lemon|refresh|condensation|pour|drink|冰|冰爽|冷饮|飞溅|柠檬|解腻|倒|喝/.test(lower);
+  const hasUsageCue = /usage|demo|hand|pickup|pick_up|open|cap|drink|pour|cup|use|手|拿起|开盖|杯|饮用/.test(lower);
+  const hasComparisonCue = /compare|comparison|lineup|series|before_after|before-after|multi[-_ ]?pack|多瓶|多规格|对比|陈列|系列/.test(lower);
+  const hasCtaSurfaceCue = /cta|clean[-_ ]?end|end[-_ ]?frame|negative[-_ ]?space|copy[-_ ]?ready|留白|结尾|收尾|购买|立即/.test(lower);
+  const hasOpeningCue = /hook|opening|splash|ice|cold|motion|action|开头|吸引|冰爽|飞溅|动作/.test(lower);
   const detectedObjects = unique([
-    lower.includes('bottle') || lower.includes('tea') || lower.includes('drink') || lower.includes('product') || lower.includes('kangshifu') ? 'beverage bottle' : 'product',
-    ...(lower.includes('ice') || lower.includes('splash') ? ['ice cubes', 'liquid splash'] : []),
-    ...(lower.includes('lineup') || lower.includes('pack') ? ['product lineup'] : []),
-    ...(lower.includes('hand') || lower.includes('usage') || lower.includes('demo') ? ['hand', 'usage scene'] : [])
+    hasProductCue ? 'beverage bottle' : 'visual asset',
+    ...(hasBenefitCue ? ['benefit cue'] : []),
+    ...(hasComparisonCue ? ['product lineup'] : []),
+    ...(hasUsageCue ? ['hand', 'usage scene'] : []),
+    ...(hasCtaSurfaceCue ? ['copy-ready surface'] : [])
   ]);
   const suitableSlots: ShotSlotRole[] = uniqueRoles([
-    ...(lower.includes('splash') || lower.includes('ice') || lower.includes('hook') ? ['opening_attention' as const, 'benefit_visual' as const] : []),
-    ...(lower.includes('usage') || lower.includes('demo') || lower.includes('hand') ? ['usage_demo' as const] : []),
-    ...(lower.includes('compare') || lower.includes('comparison') || lower.includes('lineup') ? ['comparison' as const] : []),
-    'product_closeup',
-    'cta_visual'
+    ...(hasOpeningCue ? ['opening_attention' as const] : []),
+    ...(hasBenefitCue ? ['benefit_visual' as const] : []),
+    ...(hasUsageCue ? ['usage_demo' as const] : []),
+    ...(hasComparisonCue ? ['comparison' as const] : []),
+    ...(hasProductCue ? ['product_closeup' as const] : []),
+    ...(hasCtaSurfaceCue || (hasProductCue && !hasUsageCue) ? ['cta_visual' as const] : []),
+    ...(!hasProductCue && !hasBenefitCue && !hasUsageCue && !hasComparisonCue && !hasCtaSurfaceCue ? ['product_closeup' as const] : [])
   ]);
   const detectedIngredients: CreativeIngredientType[] = uniqueIngredients([
-    'product_closeup_trait',
-    ...(lower.includes('splash') || lower.includes('ice') ? ['lifestyle_context' as const, 'premium_visual' as const] : ['clean_background' as const]),
-    ...(lower.includes('hand') || lower.includes('usage') ? ['hand_demo' as const] : [])
+    ...(hasProductCue ? ['product_closeup_trait' as const] : []),
+    ...(hasBenefitCue ? ['lifestyle_context' as const, 'premium_visual' as const] : ['clean_background' as const]),
+    ...(hasUsageCue ? ['hand_demo' as const] : [])
   ]);
   const visualStyleTags: VisualStyleTag[] = uniqueStyleTags([
-    ...(lower.includes('splash') || lower.includes('ice') ? ['lifestyle_context' as const, 'premium_visual' as const] : ['clean_background' as const])
+    ...(hasBenefitCue ? ['lifestyle_context' as const, 'premium_visual' as const] : ['clean_background' as const])
   ]);
   const motionPotential: AssetMotionPotential = {
     isStill: true,
-    implicitMotion: lower.includes('splash') || lower.includes('ice') || lower.includes('video') ? 'high' : 'medium',
-    canSimulateMotion: lower.includes('splash') ? ['zoom_in_on_splash', 'quick_push_in'] : ['crop_zoom', 'ken_burns_push_in'],
+    implicitMotion: hasBenefitCue || lower.includes('video') ? 'high' : 'medium',
+    canSimulateMotion: hasBenefitCue ? ['zoom_in_on_splash', 'quick_push_in'] : ['crop_zoom', 'ken_burns_push_in'],
     canSimulateDurationMs: [800, 2400]
   };
   return {
