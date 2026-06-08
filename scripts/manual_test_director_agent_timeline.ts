@@ -29,6 +29,9 @@ import { runDirectorAgent } from '../apps/api/src/services/directorAgent/index';
 import { orchestratedToAuthored } from '../apps/api/src/services/videoAgent/orchestratedToAuthored';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// The script runs with cwd = apps/api, so load the repo-root .env (LLM_MODEL/BASE_URL/API_KEY) ourselves.
+// A tiny inline parser avoids a bare `dotenv` import (root scripts can't resolve bare specifiers).
+loadEnvFile(path.join(repoRoot, '.env'));
 
 const INPUTS = {
   structureGraph: 'seed_assets/analysis/macbook_neo/structure_graph.json',
@@ -76,7 +79,7 @@ async function main(): Promise<void> {
     assetSupplyContext,
     contentBrief: beverageBrief,
     categoryPreset,
-    options: { useLlmMatcher: false }
+    options: { useLlmMatcher: true }
   });
 
   // Handoff: map to the Video Agent's AuthoredTimeline (a TIMELINE — never rendered here).
@@ -264,6 +267,22 @@ function markdownTable(headers: string[], rows: string[][]): string {
     `| ${headers.map(() => '---').join(' | ')} |`,
     ...rows.map((row) => `| ${row.map((c) => c.replace(/\|/g, '/').replace(/\n/g, ' ')).join(' | ')} |`)
   ].join('\n');
+}
+
+function loadEnvFile(envPath: string): void {
+  if (!existsSync(envPath)) return;
+  for (const rawLine of readFileSync(envPath, 'utf8').split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) continue;
+    const eq = line.indexOf('=');
+    if (eq === -1) continue;
+    const key = line.slice(0, eq).trim();
+    let value = line.slice(eq + 1).trim();
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    if (key && process.env[key] === undefined) process.env[key] = value;
+  }
 }
 
 function readJson<T>(relativePath: string): T {

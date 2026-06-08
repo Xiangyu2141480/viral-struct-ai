@@ -108,7 +108,7 @@ test('gap tier recommends aigc, but falls back to hyperframes when aigc is not e
   assert.equal(ineligible.recommendedOptionId, 'hyperframes');
 });
 
-test('reshoot option carries framing and mustCapture in its guidance', () => {
+test('reshoot option is Chinese and carries framing + mustCapture in its guidance', () => {
   const { options } = buildGapResolutionOptions({
     slot: makeSlot(),
     tier: 'gap',
@@ -119,11 +119,14 @@ test('reshoot option carries framing and mustCapture in its guidance', () => {
   const reshoot = options.find((o) => o.id === 'reshoot')!;
   assert.ok(reshoot.id === 'reshoot');
   assert.ok(reshoot.framing.length > 0);
-  assert.deepEqual(reshoot.mustCapture, ['open cap', 'drink one sip']);
-  assert.match(reshoot.guidanceNL, /open cap/);
+  assert.ok(reshoot.mustCapture.length >= 1);
+  // usage role -> Chinese must-capture, surfaced in the guidance
+  assert.match(reshoot.guidanceNL, /补拍/);
+  assert.match(reshoot.guidanceNL, /务必拍到/);
+  assert.match(reshoot.guidanceNL, /开盖/);
 });
 
-test('hyperframes option synthesizes editingGuidanceNL referencing card type and assets', () => {
+test('hyperframes option is Chinese and references card type + assets', () => {
   const { options } = buildGapResolutionOptions({
     slot: makeSlot(),
     tier: 'partial',
@@ -136,7 +139,56 @@ test('hyperframes option synthesizes editingGuidanceNL referencing card type and
   assert.equal(hyper.cardType, 'usage_placeholder_card');
   assert.deepEqual(hyper.referencedAssetIds, ['asset_usage']);
   assert.ok(hyper.editingGuidanceNL.length > 0);
-  assert.match(hyper.editingGuidanceNL, /Keep the original product label visible/);
+  // Chinese guardrail clause must be present
+  assert.match(hyper.editingGuidanceNL, /包装与标签清晰可见/);
+  assert.match(hyper.editingGuidanceNL, /不得加入未授权品牌/);
+});
+
+test('aigc option prompt is Chinese and stays a leak-safe job card', () => {
+  const { options } = buildGapResolutionOptions({
+    slot: makeSlot(),
+    tier: 'gap',
+    missingBrief: makeBrief(),
+    contentBrief: makeContentBrief(),
+    referenceAssetIds: ['asset_usage']
+  });
+  const aigc = options.find((o) => o.id === 'aigc')!;
+  assert.ok(aigc.id === 'aigc');
+  assert.match(aigc.prompt, /仅为生成提示词/);
+  assert.match(aigc.prompt, /康师傅冰红茶/);
+  assert.equal(aigc.ownership, 'external_generation_job_card_only');
+});
+
+test('aigc prompt carries a per-slot Chinese abstract-transfer line from the motion grammar', () => {
+  const { options } = buildGapResolutionOptions({
+    slot: makeSlot(),
+    tier: 'gap',
+    contentBrief: makeContentBrief(),
+    referenceAssetIds: ['asset_usage'],
+    motionTokens: ['chaos_to_order', 'snap_open']
+  });
+  const aigc = options.find((o) => o.id === 'aigc')!;
+  if (aigc.id === 'aigc') {
+    assert.match(aigc.prompt, /保留源片可迁移的动作语法/);
+    assert.match(aigc.prompt, /由乱到序/); // chaos_to_order -> Chinese
+    assert.match(aigc.prompt, /利落开启/); // snap_open -> Chinese
+    assert.ok(!/chaos_to_order|snap_open/.test(aigc.prompt), 'raw tokens must be translated, not leaked');
+  }
+});
+
+test('收敛: options reference only the single chosen asset, not a pool', () => {
+  const { options } = buildGapResolutionOptions({
+    slot: makeSlot(),
+    tier: 'partial',
+    missingBrief: makeBrief(),
+    contentBrief: makeContentBrief(),
+    referenceAssetIds: ['asset_usage', 'asset_other_1', 'asset_other_2'],
+    chosenAssetId: 'asset_usage'
+  });
+  const hyper = options.find((o) => o.id === 'hyperframes')!;
+  const aigc = options.find((o) => o.id === 'aigc')!;
+  if (hyper.id === 'hyperframes') assert.deepEqual(hyper.referencedAssetIds, ['asset_usage']);
+  if (aigc.id === 'aigc') assert.deepEqual(aigc.referenceAssetIds, ['asset_usage']);
 });
 
 test('aigc option is job-card only', () => {

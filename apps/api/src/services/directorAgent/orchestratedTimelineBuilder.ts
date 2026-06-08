@@ -106,6 +106,7 @@ export async function buildOrchestratedTimeline(input: BuildOrchestratedTimeline
       assetSupplyContext,
       contentBrief,
       referenceAssetIds,
+      motionTokens,
       evidence
     });
 
@@ -204,6 +205,7 @@ interface BuildFillArgs {
   assetSupplyContext: AssetSupplyContext;
   contentBrief: ContentBrief;
   referenceAssetIds: string[];
+  motionTokens?: string[];
   evidence: OrchestratedSlotEvidence;
 }
 
@@ -233,7 +235,9 @@ function buildFill(args: BuildFillArgs): SlotFillMatched | SlotFillGap {
       missingBrief: args.brief,
       assetSupplyContext: args.assetSupplyContext,
       contentBrief: args.contentBrief,
-      referenceAssetIds: args.referenceAssetIds
+      referenceAssetIds: args.referenceAssetIds,
+      chosenAssetId: args.slotMatch?.assetId,
+      motionTokens: args.motionTokens
     });
     const missing = args.slotMatch?.missingDescription;
     return {
@@ -260,7 +264,8 @@ function buildFill(args: BuildFillArgs): SlotFillMatched | SlotFillGap {
     missingBrief: args.brief,
     assetSupplyContext: args.assetSupplyContext,
     contentBrief: args.contentBrief,
-    referenceAssetIds: args.referenceAssetIds
+    referenceAssetIds: args.referenceAssetIds,
+    motionTokens: args.motionTokens
   });
   return {
     kind: 'gap',

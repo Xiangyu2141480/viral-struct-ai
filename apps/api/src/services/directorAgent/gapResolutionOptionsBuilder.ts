@@ -1,33 +1,30 @@
 import type {
-  AigcGenerationBrief,
   AigcOption,
   AssetSupplyContext,
   ContentBrief,
   ContextualSlotCoverage,
   GapResolutionOption,
   GapResolutionOptionId,
-  HyperframesFallbackBrief,
   HyperframesOption,
-  ManualShootBrief,
   MissingMaterialBrief,
   ReshootOption,
   ShotSlotNode
 } from '@viral-struct/shared';
-import { DEFAULT_ASPECT_RATIO, SAFE_NEGATIVE_PROMPT } from './constants';
+import { DEFAULT_ASPECT_RATIO, SAFE_NEGATIVE_PROMPT_ZH } from './constants';
 
 /**
  * P2 (§6) — every partial/gap slot gets exactly three resolution options: reshoot / hyperframes / aigc.
  *
- * Reuse: the Asset Manager already produces a per-slot MissingMaterialBrief carrying a manualShootBrief,
- * an aigcGenerationBrief (leak-safe), a hyperframesBrief (card inputs) and channelEligibility. We map
- * those into the three OrchestratedTimeline options and synthesize the one piece ② does not provide —
- * the natural-language `editingGuidanceNL` the Video Agent needs to execute a hyperframes edit. When no
- * brief exists (the rare gate-blocked-but-covered slot), we synthesize compact, leak-safe options.
+ * Output language: **Chinese**. The Asset Manager's per-slot MissingMaterialBrief is English, and §12
+ * forbids rewriting ②, so the Director authors the human-readable prose (guidanceNL / editingGuidanceNL /
+ * prompt / mustCapture / avoid) itself in Chinese from a role template + the content brief, while still
+ * reusing ②'s **structured** signals where they are language-neutral: referenced asset ids, durations,
+ * providerHint, card type and channel eligibility. When no brief exists (the rare gate-blocked-but-covered
+ * slot) the role template alone produces the three options.
  *
- * Recommendation follows the degradation ladder (§6.4, decision: 方案二):
- *   - partial → recommend `hyperframes` (a usable asset already exists; edit it — cheapest + IP-safe);
- *   - gap     → recommend `aigc` (nothing to edit; generate), falling back to `hyperframes` when AIGC is
- *               not eligible (card treatment is always executable). `reshoot` is always offered, never auto.
+ * Recommendation follows the degradation ladder (§6.4, 方案二): partial → `hyperframes` (edit the usable
+ * asset — cheapest + IP-safe); gap → `aigc` (generate), falling back to `hyperframes` when AIGC is not
+ * eligible. `reshoot` is always offered, never auto.
  */
 export interface BuildGapResolutionOptionsArgs {
   slot: ShotSlotNode;
@@ -37,6 +34,10 @@ export interface BuildGapResolutionOptionsArgs {
   assetSupplyContext?: AssetSupplyContext;
   contentBrief: ContentBrief;
   referenceAssetIds: string[];
+  /** The single asset chosen for this slot (the partial/gap match). Options reference only this asset. */
+  chosenAssetId?: string;
+  /** The slot's detected motion-grammar tokens — drive the per-slot abstract-transfer line in the aigc prompt. */
+  motionTokens?: string[];
 }
 
 export interface GapResolutionOptionsResult {
@@ -49,9 +50,12 @@ export function buildGapResolutionOptions(args: BuildGapResolutionOptionsArgs): 
     args.missingBrief
     ?? args.assetSupplyContext?.missingMaterialBriefs?.find((entry) => entry.affectedSlotId === args.slot.id);
 
-  const reshoot = buildReshootOption(args, brief?.manualShootBrief);
-  const hyperframes = buildHyperframesOption(args, brief?.hyperframesBrief);
-  const aigc = buildAigcOption(args, brief?.aigcGenerationBrief);
+  const spec = zhRoleSpec(args.slot.role);
+  const product = args.contentBrief.productName;
+
+  const reshoot = buildReshootOption(spec, product, brief);
+  const hyperframes = buildHyperframesOption(args, spec, product, brief);
+  const aigc = buildAigcOption(args, spec, product, brief);
 
   return {
     options: [reshoot, hyperframes, aigc],
@@ -77,79 +81,61 @@ function isAigcEligible(brief: MissingMaterialBrief | undefined, aigc: AigcOptio
   if (channel) {
     return channel.eligible;
   }
-  // No eligibility signal: AIGC is only meaningful with a product reference to anchor generation.
   return aigc.referenceAssetIds.length > 0;
 }
 
-// --- reshoot ----------------------------------------------------------------
+// --- reshoot (Chinese) ------------------------------------------------------
 
-function buildReshootOption(args: BuildGapResolutionOptionsArgs, manual?: ManualShootBrief): ReshootOption {
-  const productName = args.contentBrief.productName;
-  if (manual) {
-    return {
-      id: 'reshoot',
-      title: manual.title,
-      // Positive guidance only. The `avoid` list (which legitimately names banned source terms as
-      // guardrails) stays in the `avoid` field so it never reads as a positive instruction.
-      guidanceNL: [
-        manual.objective,
-        manual.shotDescription,
-        manual.mustCapture.length ? `Must capture: ${manual.mustCapture.join(', ')}.` : undefined
-      ]
-        .filter(Boolean)
-        .join(' '),
-      framing: manual.framing,
-      durationSec: positive(manual.durationSec, 3),
-      mustCapture: manual.mustCapture,
-      avoid: manual.avoid
-    };
-  }
-
-  const roleLabel = humanRole(args.slot.role);
+function buildReshootOption(spec: ZhRoleSpec, product: string, brief?: MissingMaterialBrief): ReshootOption {
+  const durationSec = positive(brief?.manualShootBrief?.durationSec ?? spec.durationSec, spec.durationSec);
+  const mustCapture = spec.mustCapture;
+  const avoid = AVOID_ZH;
+  const guidanceNL =
+    `补拍一个约 ${durationSec} 秒的竖屏「${spec.label}」镜头：${spec.reshootShot}。`
+    + `务必拍到：${mustCapture.join('、')}。`
+    + `注意避免：${avoid.slice(0, 4).join('、')}。`
+    + `保持 ${product} 的包装与标签清晰可见、背景干净。`;
   return {
     id: 'reshoot',
-    title: `补拍${roleLabel}素材`,
-    guidanceNL:
-      `Shoot a vertical 3-second clip for ${productName} that satisfies the ${roleLabel} intent; `
-      + 'keep the product label readable and the background clean. '
-      + `Must capture: product visible, clear ${roleLabel} action. `
-      + 'Avoid: other visible brands, celebrity likeness, price or medical claims.',
-    framing: 'vertical shot with the product and the slot action both visible',
-    durationSec: 3,
-    mustCapture: ['product visible', `clear ${roleLabel} action`],
-    avoid: ['other visible brands', 'celebrity or public-person likeness', 'unverified price or medical claims']
+    title: `补拍「${spec.label}」素材`,
+    guidanceNL,
+    framing: spec.framing,
+    durationSec,
+    mustCapture,
+    avoid
   };
 }
 
-// --- hyperframes (the one piece ② does not supply: editingGuidanceNL) -------
+// --- hyperframes (Chinese editing guidance) ---------------------------------
 
-function buildHyperframesOption(args: BuildGapResolutionOptionsArgs, hyper?: HyperframesFallbackBrief): HyperframesOption {
-  const productName = args.contentBrief.productName;
-  const roleLabel = humanRole(args.slot.role);
-  const referencedAssetIds = uniqueNonEmpty(hyper?.inputAssets?.length ? hyper.inputAssets : args.referenceAssetIds);
-  const visualElements = (hyper?.visualElements?.length ? hyper.visualElements : [productName]).slice(0, 4);
-  const animationHints = hyper?.animationHints?.length ? hyper.animationHints : ['simple reveal', 'short copy'];
+function buildHyperframesOption(
+  args: BuildGapResolutionOptionsArgs,
+  spec: ZhRoleSpec,
+  product: string,
+  brief?: MissingMaterialBrief
+): HyperframesOption {
+  // 收敛 (Q2): reference only the single asset chosen for this slot.
+  const referencedAssetIds = singleReference(args);
+  const cardType = brief?.hyperframesBrief?.cardType ?? spec.cardType;
+  const durationMs = positive(Math.round((brief?.hyperframesBrief?.durationSec ?? 3) * 1000), 3000);
+  const refLine = referencedAssetIds.length ? `复用现有素材：${referencedAssetIds.join('、')}。` : '';
 
-  const editingGuidanceNL = [
-    `Use ${productName} as the center layer.`,
-    hyper?.copyIntent ?? `Bridge the ${roleLabel} slot with a clear card animation.`,
-    `Animate ${visualElements.join(', ')} with ${animationHints.join(', ')}.`,
-    referencedAssetIds.length ? `Reference existing assets: ${referencedAssetIds.join(', ')}.` : undefined,
-    'Keep the original product label visible. Do not introduce unauthorized brands, price promises, or health claims.'
-  ]
-    .filter(Boolean)
-    .join(' ');
+  const editingGuidanceNL =
+    `以 ${product} 为画面主体，${spec.hyperframesIntent}。`
+    + `用${spec.animationHints.join('、')}等动效承接「${spec.label}」。`
+    + refLine
+    + `保持 ${product} 原始包装与标签清晰可见，不得加入未授权品牌、价格承诺或健康功效宣称。`;
 
   const copy = buildCopy(args);
 
   return {
     id: 'hyperframes',
-    title: hyper?.title ?? `${roleLabel} card`,
+    title: `「${spec.label}」卡片`,
     editingGuidanceNL,
-    cardType: hyper?.cardType ?? 'timeline_bridge_card',
+    cardType,
     ...(copy ? { copy } : {}),
     referencedAssetIds,
-    durationMs: positive(Math.round((hyper?.durationSec ?? 3) * 1000), 3000)
+    durationMs
   };
 }
 
@@ -162,48 +148,231 @@ function buildCopy(args: BuildGapResolutionOptionsArgs): HyperframesOption['copy
   return Object.keys(copy).length > 0 ? copy : undefined;
 }
 
-// --- aigc (leak-safe; job-card only) ----------------------------------------
+// --- aigc (Chinese prompt; job-card only) -----------------------------------
 
-function buildAigcOption(args: BuildGapResolutionOptionsArgs, aigc?: AigcGenerationBrief): AigcOption {
-  if (aigc) {
-    return {
-      id: 'aigc',
-      prompt: aigc.prompt,
-      negativePrompt: aigc.negativePrompt,
-      referenceAssetIds: aigc.referenceAssetIds,
-      aspectRatio: aigc.aspectRatio,
-      expectedDurationSec: positive(aigc.expectedDurationSec, 3),
-      providerHint: aigc.providerHint,
-      ownership: 'external_generation_job_card_only'
-    };
-  }
+function buildAigcOption(
+  args: BuildGapResolutionOptionsArgs,
+  spec: ZhRoleSpec,
+  product: string,
+  brief?: MissingMaterialBrief
+): AigcOption {
+  const referenceAssetIds = singleReference(args);
+  const providerHint = brief?.aigcGenerationBrief?.providerHint ?? inferProvider(args.slot.role);
+  const expectedDurationSec = positive(brief?.aigcGenerationBrief?.expectedDurationSec ?? spec.durationSec, spec.durationSec);
 
-  // No brief: synthesize a leak-safe prompt from product + role only (never the raw source intent).
-  const productName = args.contentBrief.productName;
-  const roleLabel = humanRole(args.slot.role);
+  // Per-slot abstract transfer (Q3): the source motion grammar (motifTokens) is what makes each slot's
+  // prompt distinct and carries the "keep the grammar, swap the objects" intent — rendered in Chinese,
+  // so no two slots with different grammar get the same prompt, and no source object leaks.
+  const grammar = (args.motionTokens ?? []).map((token) => MOTION_TOKEN_ZH[token] ?? token).filter(Boolean);
+  const transferLine = grammar.length
+    ? `保留源片可迁移的动作语法（${grammar.join('、')}），用目标品类的等效动作重新演绎，不照搬源产品或源场景。`
+    : '';
+
+  const sellingPoints = args.contentBrief.sellingPoints ?? [];
+  const sellingLine = sellingPoints.length ? `卖点仅限：${sellingPoints.join('、')}。` : '';
+
+  const prompt =
+    '仅为生成提示词，非成片。'
+    + `为 ${product} 生成一个竖屏 9:16、普通手机拍摄风格的「${spec.label}」镜头：${spec.aigcScene}。`
+    + transferLine
+    + sellingLine
+    + '不得编造价格、促销、医疗功效、明星代言或其它品牌。';
+
   return {
     id: 'aigc',
-    prompt:
-      'Prompt brief only, not rendered output. '
-      + `Create a 9:16 ordinary smartphone-style ${roleLabel} shot for ${productName}. `
-      + 'Do not invent price, promotion, medical benefit, celebrity endorsement, or extra brands.',
-    negativePrompt: SAFE_NEGATIVE_PROMPT,
-    referenceAssetIds: uniqueNonEmpty(args.referenceAssetIds),
+    prompt,
+    negativePrompt: SAFE_NEGATIVE_PROMPT_ZH,
+    referenceAssetIds,
     aspectRatio: DEFAULT_ASPECT_RATIO,
-    expectedDurationSec: 3,
-    providerHint: 'generic',
+    expectedDurationSec,
+    providerHint,
     ownership: 'external_generation_job_card_only'
   };
 }
 
-// --- helpers ----------------------------------------------------------------
-
-function humanRole(role: string): string {
-  return role.replace(/_/g, ' ');
+function inferProvider(role: string): AigcOption['providerHint'] {
+  return role === 'usage_demo' || role === 'opening_attention' ? 'seedance' : 'generic';
 }
+
+// --- Chinese role templates -------------------------------------------------
+
+interface ZhRoleSpec {
+  label: string;
+  reshootShot: string;
+  mustCapture: string[];
+  framing: string;
+  durationSec: number;
+  hyperframesIntent: string;
+  animationHints: string[];
+  aigcScene: string;
+  cardType: string;
+}
+
+const AVOID_ZH = [
+  '其它可见品牌或标识',
+  '明星或公众人物肖像',
+  '未经证实的价格或促销承诺',
+  '医疗或功效保证类宣称',
+  '直接照搬源视频的画面构图'
+];
+
+/** Source motion-grammar tokens → Chinese. These ARE the abstract transfer: keep the grammar, swap objects. */
+const MOTION_TOKEN_ZH: Record<string, string> = {
+  dynamic_entry: '动感入场',
+  component_cascade: '部件级联汇聚',
+  chaos_to_order: '由乱到序',
+  assembly_completion: '组装完成',
+  interaction_activation: '交互激活',
+  spectacle_burst: '奇观爆发',
+  cta_reveal: 'CTA 揭示',
+  falling_object: '物体坠落',
+  impact_beat: '冲击节拍',
+  snap_open: '利落开启',
+  assembly_reveal: '组装揭示',
+  activation_moment: '激活时刻',
+  pour_flow: '倾倒流动',
+  drink_action: '饮用动作',
+  bottle_rotation: '瓶身旋转',
+  lineup_sweep: '阵列扫过',
+  card_drop: '卡片落下',
+  clean_hold: '干净定格',
+  quick_cut: '快速切换',
+  push_in: '镜头推近',
+  match_cut: '匹配剪辑',
+  morph: '形变过渡'
+};
+
+const ZH_ROLE_SPECS: Record<string, ZhRoleSpec> = {
+  opening: {
+    label: '开场吸睛',
+    reshootShot: '快速拿起或亮出产品，营造夏日清爽的强开场',
+    mustCapture: ['产品快速入画', '标签或外形清晰', '有活力的动作'],
+    framing: '竖屏中近景，产品居中，上下留出文字安全区',
+    durationSec: 3,
+    hyperframesIntent: '用强开场动效抓住前 3 秒注意力',
+    animationHints: ['快速推近', '冰感微光', '大标题揭示'],
+    aigcScene: '高能量开场动作，产品清晰可见，带冰爽或夏日氛围',
+    cardType: 'hook_card'
+  },
+  product_closeup: {
+    label: '产品特写',
+    reshootShot: '拍摄产品瓶身、标签与包装细节，背景干净',
+    mustCapture: ['标签清晰可读', '产品外形完整', '画面稳定对焦'],
+    framing: '竖屏特写，标签可读，产品占画面 60%-80%',
+    durationSec: 2.5,
+    hyperframesIntent: '在卖点之前让产品形象清晰可辨',
+    animationHints: ['缓慢推近', '标签高光', '光线扫过'],
+    aigcScene: '干净的竖屏产品特写，保持包装原样且清晰',
+    cardType: 'timeline_bridge_card'
+  },
+  usage: {
+    label: '使用演示',
+    reshootShot: '真实的使用动作：开盖、喝一口或倒入杯中，尽量只露手或颈部以下',
+    mustCapture: ['开盖动作', '喝或倒等清晰使用动作', '产品可见'],
+    framing: '竖屏只露手/颈部以下，产品与动作均可见',
+    durationSec: 4,
+    hyperframesIntent: '用步骤卡承接缺失的真实使用动作',
+    animationHints: ['步骤 1/2/3 卡片', '小幅产品图', '简单箭头动效'],
+    aigcScene: '普通用户风格的真实使用片段：只露手或颈部以下，开盖、喝或倒，真实自然',
+    cardType: 'usage_placeholder_card'
+  },
+  comparison: {
+    label: '对比/陈列',
+    reshootShot: '拍摄并排陈列或前后对比关系，不做未经证实的优劣宣称',
+    mustCapture: ['清晰的对比或陈列关系', '产品清晰可见'],
+    framing: '竖屏中景或全景，左右关系清晰',
+    durationSec: 3,
+    hyperframesIntent: '用对比卡呈现差异',
+    animationHints: ['分屏', '前后标签', '柔和滑动转场'],
+    aigcScene: '竖屏对比或陈列镜头，呈现简单清爽的对比，不做未证实宣称',
+    cardType: 'comparison_card'
+  },
+  benefit: {
+    label: '卖点证明',
+    reshootShot: '拍摄能支撑卖点的画面线索（如冰块、柠檬茶、分享场景）',
+    mustCapture: ['产品可见', '卖点线索可见', '画面稳定可读'],
+    framing: '竖屏中景产品场景，留足文字安全区',
+    durationSec: 3,
+    hyperframesIntent: '把卖点做成简洁的利益点卡',
+    animationHints: ['利益点徽章', '小幅产品抠像', '轻微动效'],
+    aigcScene: '竖屏卖点证明场景，视觉上支撑卖点，不新增任何宣称',
+    cardType: 'benefit_card'
+  },
+  cta: {
+    label: '结尾行动引导',
+    reshootShot: '拍摄干净的结尾画面，为 CTA 文字留出空间',
+    mustCapture: ['产品可见', '留有清晰的文案空白区', '结尾画面稳定'],
+    framing: '竖屏产品镜头，留有干净负空间',
+    durationSec: 2,
+    hyperframesIntent: '收束到干净的 CTA 锁定卡',
+    animationHints: ['CTA 揭示', '产品定格', '轻微弹动'],
+    aigcScene: '干净的竖屏 CTA 底图，产品可见，留出文案空白区，不加文字',
+    cardType: 'cta_card'
+  },
+  instruction: {
+    label: '说明卡',
+    reshootShot: '拍摄清晰的说明或步骤画面',
+    mustCapture: ['信息清晰', '产品或要点可见'],
+    framing: '竖屏，要点清晰可读',
+    durationSec: 3,
+    hyperframesIntent: '用说明卡承接讲解要点',
+    animationHints: ['要点逐条出现', '简洁图示'],
+    aigcScene: '竖屏说明或步骤画面，信息清晰',
+    cardType: 'timeline_bridge_card'
+  },
+  generic: {
+    label: '结构槽位',
+    reshootShot: '拍摄一个满足该结构意图的竖屏镜头',
+    mustCapture: ['产品可见', '该镜头动作可见'],
+    framing: '竖屏，产品与动作均可见',
+    durationSec: 3,
+    hyperframesIntent: '用卡片承接缺失的画面证据',
+    animationHints: ['简单揭示', '简短文案', '产品参考'],
+    aigcScene: '竖屏支撑镜头，符合该结构意图',
+    cardType: 'timeline_bridge_card'
+  }
+};
+
+function zhRoleSpec(role: string): ZhRoleSpec {
+  return ZH_ROLE_SPECS[normalizeRole(role)] ?? ZH_ROLE_SPECS.generic;
+}
+
+function normalizeRole(role: string): keyof typeof ZH_ROLE_SPECS {
+  switch (role) {
+    case 'opening_attention':
+      return 'opening';
+    case 'product_closeup':
+    case 'cover':
+      return 'product_closeup';
+    case 'usage_demo':
+    case 'technique_demo':
+    case 'example_clip':
+      return 'usage';
+    case 'comparison':
+      return 'comparison';
+    case 'benefit_visual':
+    case 'testimonial':
+      return 'benefit';
+    case 'cta_visual':
+      return 'cta';
+    case 'instruction_card':
+      return 'instruction';
+    default:
+      return 'generic';
+  }
+}
+
+// --- helpers ----------------------------------------------------------------
 
 function isCtaRole(role: string): boolean {
   return role === 'cta' || role === 'cta_visual';
+}
+
+/** 收敛: each slot references only its single chosen asset; gap slots fall back to one product reference. */
+function singleReference(args: BuildGapResolutionOptionsArgs): string[] {
+  if (args.chosenAssetId) return [args.chosenAssetId];
+  const first = uniqueNonEmpty(args.referenceAssetIds)[0];
+  return first ? [first] : [];
 }
 
 function positive(value: number, fallback: number): number {

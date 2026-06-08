@@ -4,7 +4,7 @@ import type {
   OrchestratedSlot,
   OrchestratedTransition
 } from '@viral-struct/shared';
-import { SAFE_NEGATIVE_PROMPT, DEFAULT_HYPERFRAMES_TRANSITION_WEIGHT } from './constants';
+import { SAFE_NEGATIVE_PROMPT_ZH, DEFAULT_HYPERFRAMES_TRANSITION_WEIGHT } from './constants';
 
 /**
  * P3 (§7, decision 2) — transition logic migrated into the Director Agent.
@@ -86,8 +86,8 @@ export function buildOrchestratedTransitions(args: BuildOrchestratedTransitionsA
         aigcFrameBridge: {
           fromTailFrameRef: `required: extract tail frame from ${from.slotId}`,
           toHeadFrameRef: `required: extract head frame from ${to.slotId}`,
-          prompt: `Plan-only frame bridge for ${productName}: continue motion from the ${humanRole(from.role)} shot into the ${humanRole(to.role)} shot using target-native elements. Do not add brands, price, or medical claims.`,
-          negativePrompt: SAFE_NEGATIVE_PROMPT,
+          prompt: `仅为生成提示词，非成片。为 ${productName} 生成衔接帧：从「${zhRole(from.role)}」镜头自然承接到「${zhRole(to.role)}」镜头，使用目标品类的元素衔接，不得加入任何品牌、价格或医疗宣称。`,
+          negativePrompt: SAFE_NEGATIVE_PROMPT_ZH,
           durationMs: 500,
           ownership: 'external_generation_job_card_only'
         },
@@ -112,8 +112,8 @@ export function buildOrchestratedTransitions(args: BuildOrchestratedTransitionsA
       reason: `Bridge the ${humanRole(from.role)} shot into the ${humanRole(to.role)} shot with a hyperframes card animation.`,
       hyperframes: {
         editingGuidanceNL:
-          `Carry ${productName} from the ${humanRole(from.role)} shot into the ${humanRole(to.role)} shot with a quick card wipe / push-in; `
-          + 'keep the product label readable and add no unverified claims.',
+          `以 ${productName} 为主体，从「${zhRole(from.role)}」镜头快速卡点过渡到「${zhRole(to.role)}」镜头`
+          + '（卡片擦除/推近衔接）；保持产品标签清晰可见，不加任何未经证实的宣称。',
         durationMs: 400,
         styleTokens: styleTokens(from, to, transitionFunction)
       },
@@ -173,4 +173,21 @@ function isRealMatched(slot: OrchestratedSlot): boolean {
 
 function humanRole(role: string): string {
   return role.replace(/_/g, ' ');
+}
+
+const ZH_ROLE_LABELS: Record<string, string> = {
+  opening_attention: '开场吸睛',
+  product_closeup: '产品特写',
+  usage_demo: '使用演示',
+  benefit_visual: '卖点证明',
+  comparison: '对比/陈列',
+  testimonial: '口碑证言',
+  cta_visual: '结尾行动引导',
+  instruction_card: '说明卡',
+  example_clip: '示例片段',
+  technique_demo: '技巧演示'
+};
+
+function zhRole(role: string): string {
+  return ZH_ROLE_LABELS[role] ?? role.replace(/_/g, ' ');
 }
