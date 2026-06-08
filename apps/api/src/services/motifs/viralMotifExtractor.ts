@@ -1,40 +1,37 @@
-import type { MotifContext, MotifTransferVariable, MotionToken, ShotSlotNode, ViralMotifAnnotation } from '@viral-struct/shared';
+import type { MotifTransferVariable, MotionToken, ShotSlotNode, ViralMotifAnnotation, MotifContext } from '@viral-struct/shared';
 import { mapTargetCategoryMotif } from './targetCategoryMotifMapper';
-import { containsSourceSpecificTerm, sanitizeMotionGrammarText } from './motionGrammarSanitizer';
+import { sanitizeMotionGrammarText } from './motionGrammarSanitizer';
+import { classifyMotif, type MotifClassification } from './motifTaxonomy';
 
 export interface ViralMotifExtractorInput {
   slot: ShotSlotNode;
   targetCategory: string;
 }
 
-const KINETIC_ASSEMBLY_TOKENS: MotionToken[] = [
-  'component_cascade',
-  'chaos_to_order',
-  'assembly_completion',
-  'interaction_activation',
-  'spectacle_burst',
-  'cta_reveal'
-];
-
 export function extractViralMotifAnnotation(input: ViralMotifExtractorInput): ViralMotifAnnotation | undefined {
   const sourceText = collectSlotText(input.slot);
   const sanitized = sanitizeMotionGrammarText(sourceText);
-  const kineticScore = scoreKineticAssemblyReveal(sanitized.motionTokens, sourceText);
+  const classification = classifyMotif(sanitized.motionTokens);
 
-  if (kineticScore < 0.62) {
+  // `category_usage_moment` is the plain baseline (ordinary open/pour/drink).
+  // Per the tested contract, ordinary usage slots carry NO motif annotation and
+  // fall back to the existing plain brief path — so we recognise it but emit
+  // undefined here. Every other classified motif produces an annotation.
+  if (!classification.definition || classification.definition.motifType === 'category_usage_moment') {
     return undefined;
   }
 
+  const { definition, score } = classification;
   const targetCategoryMapping = mapTargetCategoryMotif({
-    motifType: 'kinetic_assembly_reveal',
+    motifType: definition.motifType,
     targetCategory: input.targetCategory
   });
 
   return {
-    id: `motif_${input.slot.id}_kinetic_assembly_reveal`,
+    id: `motif_${input.slot.id}_${definition.motifType}`,
     slotId: input.slot.id,
     segmentId: input.slot.segmentId,
-    motifType: 'kinetic_assembly_reveal',
+    motifType: definition.motifType,
     motionTokens: sanitized.motionTokens,
     sanitizedIntent: sanitized.sanitizedIntent,
     transferVariables: buildTransferVariables(sanitized.motionTokens),
@@ -42,10 +39,21 @@ export function extractViralMotifAnnotation(input: ViralMotifExtractorInput): Vi
     targetCategoryMapping,
     evidence: [
       ...sanitized.evidence,
-      `Rule confidence ${kineticScore.toFixed(2)} from ${sanitized.motionTokens.length} motion token(s).`
+      `Classified as ${definition.motifType} (${definition.summary}).`,
+      `Rule confidence ${score.toFixed(2)} from ${sanitized.motionTokens.length} motion token(s).`
     ],
-    confidence: kineticScore
+    confidence: score
   };
+}
+
+/**
+ * Surface motion-grammar signal for offline taxonomy expansion (decision D1).
+ * When tokens are detected but no defined motif matched, the returned
+ * classification carries `isNovel: true` + a `candidate`, so unseen semantics
+ * can be promoted into a new MOTIF_DEFINITIONS entry instead of being dropped.
+ */
+export function inspectMotifSignal(slot: ShotSlotNode): MotifClassification {
+  return classifyMotif(sanitizeMotionGrammarText(collectSlotText(slot)).motionTokens);
 }
 
 export function buildMotifContext(annotation: ViralMotifAnnotation): MotifContext {
@@ -59,17 +67,6 @@ export function buildMotifContext(annotation: ViralMotifAnnotation): MotifContex
     confidence: annotation.confidence,
     evidence: annotation.evidence
   };
-}
-
-function scoreKineticAssemblyReveal(tokens: MotionToken[], sourceText: string): number {
-  const tokenHitCount = KINETIC_ASSEMBLY_TOKENS.filter((token) => tokens.includes(token)).length;
-  const tokenScore = tokenHitCount / KINETIC_ASSEMBLY_TOKENS.length;
-  const hasSourceSpecificCue = containsSourceSpecificTerm(sourceText);
-  const hasAssemblyPair = tokens.includes('component_cascade') && tokens.includes('assembly_completion');
-  const hasActivationPayoff = tokens.includes('interaction_activation') && (tokens.includes('spectacle_burst') || tokens.includes('cta_reveal'));
-  const structureBonus = [hasSourceSpecificCue, hasAssemblyPair, hasActivationPayoff].filter(Boolean).length * 0.1;
-
-  return clamp01(tokenScore * 0.8 + structureBonus);
 }
 
 function collectSlotText(slot: ShotSlotNode): string {
@@ -141,8 +138,4 @@ function buildTransferVariables(tokens: MotionToken[]): MotifTransferVariable[] 
   }
 
   return variables;
-}
-
-function clamp01(value: number): number {
-  return Math.max(0, Math.min(1, Number(value.toFixed(2))));
 }
