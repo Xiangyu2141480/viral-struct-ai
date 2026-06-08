@@ -542,6 +542,63 @@ test('kinetic assembly slots preserve motif context in coverage, observations an
   assert.equal(plainUsageCoverage?.motifContext, undefined);
 });
 
+test('an injected category preset drives the motif target hints (D2 wiring)', () => {
+  const kineticGraph: ViralStructureGraph = {
+    ...graph,
+    shotSlots: [
+      ...graph.shotSlots,
+      {
+        id: 'slot_block_004_asset_001',
+        segmentId: 'seg_usage',
+        role: 'usage_demo',
+        requiredAsset: { type: 'video', subject: 'surreal product assembly and activation spectacle', camera: 'medium', motion: 'fast_cut', minDuration: 2 },
+        fallbackStrategies: ['ask_user_for_human_demo'],
+        importance: 4,
+        intent: {
+          purpose: '键盘碎片在空中飞舞后落到笔记本上自动组装完成，按圆形按键弹出购买窗口。',
+          energyLevel: 'high',
+          motionPattern: 'component cascade, chaos to order, assembly completion, interaction activation, spectacle burst, CTA reveal',
+          compositionPrincipal: 'surreal kinetic assembly reveal',
+          durationMs: [1600, 4200]
+        }
+      }
+    ]
+  };
+  const preset = {
+    category: 'beverage',
+    objects: ['ice cubes'],
+    actions: ['pour to cup'],
+    sensoryKeywords: ['冰爽'],
+    bannedSourceTerms: [],
+    motifEquivalents: { kinetic_assembly_reveal: ['PRESET_MARKER_ice_rain', 'pour reveal'] },
+    defaultEquivalents: ['pour to cup'],
+    requiredAssets: ['plain_005_pour_to_cup.mp4'],
+    fallbackAssets: ['product still image'],
+    source: 'llm_generated' as const
+  };
+  const withPreset = buildAssetSupplyContext({
+    structureGraph: kineticGraph,
+    assetCards: [plainProductPanVideo],
+    contentBrief: brief,
+    libraryId: 'motif_preset_wiring_test',
+    categoryPreset: preset
+  });
+  const withoutPreset = buildAssetSupplyContext({
+    structureGraph: kineticGraph,
+    assetCards: [plainProductPanVideo],
+    contentBrief: brief,
+    libraryId: 'motif_preset_wiring_test'
+  });
+
+  const hintsWith = withPreset.contextualCoverage?.slotCoverages
+    .find((row) => row.slotId === 'slot_block_004_asset_001')?.motifContext?.targetMotifHints ?? [];
+  const hintsWithout = withoutPreset.contextualCoverage?.slotCoverages
+    .find((row) => row.slotId === 'slot_block_004_asset_001')?.motifContext?.targetMotifHints ?? [];
+
+  assert.ok(hintsWith.includes('PRESET_MARKER_ice_rain'));
+  assert.equal(hintsWithout.includes('PRESET_MARKER_ice_rain'), false);
+});
+
 test('single image only scenario produces completion briefs without owning repair strategy', () => {
   const context = buildAssetSupplyContext({
     structureGraph: graph,
