@@ -103,7 +103,7 @@ function synthVersion(versionId) {
     desc: 'mock-server 合成版本',
     bias: 'mock: 偏向演示，无真实权衡',
     stats: [
-      { k: 'CTR', v: '+18%', up: true },
+      { k: '离线点击潜力', v: '+18%', up: true },
       { k: '完播', v: '+9pt', up: true },
       { k: '加购', v: '+5%', up: true },
     ],

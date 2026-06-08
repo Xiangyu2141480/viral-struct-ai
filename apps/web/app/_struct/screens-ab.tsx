@@ -90,7 +90,7 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
               <dl className="kv">
                 <dt>时长</dt><dd><b>{v.duration}s</b> · 7 段落</dd>
                 <dt>播放</dt><dd><b>{v.views}</b> 播放</dd>
-                <dt>CTR</dt><dd><b>8.1%</b> · 完播 42%</dd>
+                <dt>离线点击潜力</dt><dd><b>8.1</b> · 完播潜力 42</dd>
                 <dt>BGM</dt><dd>{v.rhythm.bgm_bpm} BPM · 钢琴慢板</dd>
               </dl>
             </div>

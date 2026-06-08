@@ -542,6 +542,104 @@ test('kinetic assembly slots preserve motif context in coverage, observations an
   assert.equal(plainUsageCoverage?.motifContext, undefined);
 });
 
+test('an injected category preset drives the motif target hints (D2 wiring)', () => {
+  const kineticGraph: ViralStructureGraph = {
+    ...graph,
+    shotSlots: [
+      ...graph.shotSlots,
+      {
+        id: 'slot_block_004_asset_001',
+        segmentId: 'seg_usage',
+        role: 'usage_demo',
+        requiredAsset: { type: 'video', subject: 'surreal product assembly and activation spectacle', camera: 'medium', motion: 'fast_cut', minDuration: 2 },
+        fallbackStrategies: ['ask_user_for_human_demo'],
+        importance: 4,
+        intent: {
+          purpose: '键盘碎片在空中飞舞后落到笔记本上自动组装完成，按圆形按键弹出购买窗口。',
+          energyLevel: 'high',
+          motionPattern: 'component cascade, chaos to order, assembly completion, interaction activation, spectacle burst, CTA reveal',
+          compositionPrincipal: 'surreal kinetic assembly reveal',
+          durationMs: [1600, 4200]
+        }
+      }
+    ]
+  };
+  const preset = {
+    category: 'beverage',
+    objects: ['ice cubes'],
+    actions: ['pour to cup'],
+    sensoryKeywords: ['冰爽'],
+    bannedSourceTerms: [],
+    motifEquivalents: { kinetic_assembly_reveal: ['PRESET_MARKER_ice_rain', 'pour reveal'] },
+    defaultEquivalents: ['pour to cup'],
+    requiredAssets: ['plain_005_pour_to_cup.mp4'],
+    fallbackAssets: ['product still image'],
+    source: 'llm_generated' as const
+  };
+  const withPreset = buildAssetSupplyContext({
+    structureGraph: kineticGraph,
+    assetCards: [plainProductPanVideo],
+    contentBrief: brief,
+    libraryId: 'motif_preset_wiring_test',
+    categoryPreset: preset
+  });
+  const withoutPreset = buildAssetSupplyContext({
+    structureGraph: kineticGraph,
+    assetCards: [plainProductPanVideo],
+    contentBrief: brief,
+    libraryId: 'motif_preset_wiring_test'
+  });
+
+  const hintsWith = withPreset.contextualCoverage?.slotCoverages
+    .find((row) => row.slotId === 'slot_block_004_asset_001')?.motifContext?.targetMotifHints ?? [];
+  const hintsWithout = withoutPreset.contextualCoverage?.slotCoverages
+    .find((row) => row.slotId === 'slot_block_004_asset_001')?.motifContext?.targetMotifHints ?? [];
+
+  assert.ok(hintsWith.includes('PRESET_MARKER_ice_rain'));
+  assert.equal(hintsWithout.includes('PRESET_MARKER_ice_rain'), false);
+
+  const briefWithPreset = withPreset.missingMaterialBriefs
+    ?.find((item) => item.affectedSlotId === 'slot_block_004_asset_001');
+  const promptWithPreset = briefWithPreset?.aigcGenerationBrief?.prompt ?? '';
+  const visualElementsWithPreset = briefWithPreset?.hyperframesBrief?.visualElements.join(' ') ?? '';
+  assert.equal(briefWithPreset?.motifContext?.motifType, 'kinetic_assembly_reveal');
+  assert.match(promptWithPreset, /PRESET_MARKER_ice_rain/);
+  assert.match(briefWithPreset?.manualShootBrief?.requiredProps.join(' ') ?? '', /plain_005_pour_to_cup\.mp4/);
+  assert.match(visualElementsWithPreset, /PRESET_MARKER_ice_rain/);
+  assert.doesNotMatch(promptWithPreset, /keyboard|laptop|trackpad|rocket|hardware|MacBook|Apple/i);
+
+  const genericPreset = {
+    category: 'generic',
+    objects: ['GENERIC_MARKER_product_orbit', 'neutral prop cluster'],
+    actions: ['GENERIC_MARKER_reveal_action'],
+    sensoryKeywords: ['clean'],
+    bannedSourceTerms: [],
+    motifEquivalents: { kinetic_assembly_reveal: ['GENERIC_MARKER_product_orbit', 'GENERIC_MARKER_clean_lockup'] },
+    defaultEquivalents: ['GENERIC_MARKER_clean_lockup'],
+    requiredAssets: ['generic_reference_plate'],
+    fallbackAssets: ['generic product still'],
+    source: 'deterministic_preset' as const
+  };
+  const genericContext = buildAssetSupplyContext({
+    structureGraph: kineticGraph,
+    assetCards: [plainProductPanVideo],
+    contentBrief: {
+      ...brief,
+      category: 'generic',
+      productName: 'Demo Gadget',
+      scenario: 'generic product demo'
+    },
+    libraryId: 'motif_preset_generic_fallback_test',
+    categoryPreset: genericPreset
+  });
+  const genericBrief = genericContext.missingMaterialBriefs
+    ?.find((item) => item.affectedSlotId === 'slot_block_004_asset_001');
+  const genericPrompt = genericBrief?.aigcGenerationBrief?.prompt ?? '';
+  assert.match(genericPrompt, /GENERIC_MARKER_product_orbit/);
+  assert.match(genericBrief?.hyperframesBrief?.visualElements.join(' ') ?? '', /GENERIC_MARKER_clean_lockup/);
+  assert.doesNotMatch(genericPrompt, /ice cubes|lemon slices|tea droplets|cold mist/i);
+});
+
 test('single image only scenario produces completion briefs without owning repair strategy', () => {
   const context = buildAssetSupplyContext({
     structureGraph: graph,
@@ -615,4 +713,75 @@ test('aigc ready scenario emits safe prompt briefs but no rendered-media claim',
   assert.equal(JSON.stringify(context).includes('real rendered output'), false);
   assert.equal(JSON.stringify(context).includes('fallbackCards'), false);
   assert.equal(JSON.stringify(context).includes('suggestedRepair'), false);
+});
+
+test('plain-baseline AIGC prompt drops a source-specific slot intent instead of leaking it (B+A)', () => {
+  const leakyGraph: ViralStructureGraph = {
+    ...graph,
+    shotSlots: [
+      {
+        id: 'slot_screen_ui',
+        segmentId: 'seg_usage',
+        role: 'usage_demo',
+        requiredAsset: { type: 'video', subject: '屏幕交互演示', camera: 'medium', motion: 'hand_operation', minDuration: 2 },
+        fallbackStrategies: ['ask_user_for_human_demo'],
+        importance: 4,
+        intent: {
+          purpose: '通过虚实结合的创意特效，具象化展示产品屏幕显示与系统交互的流畅特性，制造视觉惊喜',
+          energyLevel: 'high',
+          motionPattern: '屏幕界面流畅切换',
+          compositionPrincipal: '产品居中',
+          durationMs: [1000, 2200]
+        }
+      }
+    ]
+  };
+  const context = buildAssetSupplyContext({
+    structureGraph: leakyGraph,
+    assetCards: [plainProductPanVideo],
+    contentBrief: brief,
+    libraryId: 'plainbaseline_leak_fix'
+  });
+  const prompt = context.missingMaterialBriefs?.find((b) => b.affectedSlotId === 'slot_screen_ui')?.aigcGenerationBrief?.prompt ?? '';
+
+  assert.ok(prompt.length > 0, 'expected a plain-baseline aigc prompt');
+  assert.equal(prompt.includes('屏幕显示'), false);
+  assert.equal(prompt.includes('系统交互'), false);
+  assert.equal(prompt.includes('Source structure intent'), false);
+  // The category-native role instruction is still present.
+  assert.match(prompt, /usage footage|opening cap|drinking|pouring/i);
+});
+
+test('plain-baseline AIGC prompt injects the abstracted motion intent when transferable (B)', () => {
+  const motionGraph: ViralStructureGraph = {
+    ...graph,
+    shotSlots: [
+      {
+        id: 'slot_pour_motion',
+        segmentId: 'seg_usage',
+        role: 'usage_demo',
+        requiredAsset: { type: 'video', subject: '倾倒动作', camera: 'medium', motion: 'hand_operation', minDuration: 2 },
+        fallbackStrategies: ['ask_user_for_human_demo'],
+        importance: 4,
+        intent: {
+          purpose: '把液体缓缓倾倒注入，展示流动质感',
+          energyLevel: 'medium',
+          motionPattern: 'pour',
+          compositionPrincipal: 'centered',
+          durationMs: [1000, 2200]
+        }
+      }
+    ]
+  };
+  const context = buildAssetSupplyContext({
+    structureGraph: motionGraph,
+    assetCards: [plainProductPanVideo],
+    contentBrief: brief,
+    libraryId: 'plainbaseline_motion_intent'
+  });
+  const prompt = context.missingMaterialBriefs?.find((b) => b.affectedSlotId === 'slot_pour_motion')?.aigcGenerationBrief?.prompt ?? '';
+
+  assert.match(prompt, /category-native motion grammar/);
+  // The abstracted phrase is built from canonical tokens, never the raw words.
+  assert.equal(prompt.includes('屏幕'), false);
 });

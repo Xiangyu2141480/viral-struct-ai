@@ -1,0 +1,67 @@
+{
+  "id": "tr_beverage_heat_to_refresh_001",
+  "name": "Heat to refresh ingredient bridge",
+  "sourceMotifId": "motif_kinetic_entry_001",
+  "sourceMotifType": "kinetic_assembly_reveal",
+  "targetCategory": "beverage",
+  "transitionFunction": "heat_to_refresh",
+  "beforeShotId": "slot_opening_heat_problem",
+  "afterShotId": "slot_product_refresh_reveal",
+  "motionGrammar": {
+    "id": "mg_impact_to_cool_reveal",
+    "name": "Impact beat into cool product reveal",
+    "motionTokens": ["dynamic_entry", "impact_beat", "chaos_to_order", "clean_hold"],
+    "objectContinuity": "A category-native object carries the viewer from heat/friction into a clean product reveal.",
+    "cameraContinuity": "Fast close entry, one beat of impact, then a centered product lock-up.",
+    "rhythm": "beat_cut",
+    "emotionalBridge": "Moves from urgency to relief without copying the source object's identity.",
+    "notes": [
+      "Use transferable motion grammar, not source product imagery.",
+      "This is a plan-only recipe for downstream render or generation."
+    ]
+  },
+  "requiredAssets": [
+    {
+      "id": "ing_cold_object_impact",
+      "grammarId": "impact_beat",
+      "targetCategory": "beverage",
+      "ingredientRole": "object_bridge",
+      "label": "Cold object impact",
+      "sourcePattern": "An object enters quickly and creates the transition beat.",
+      "targetEquivalent": "ice_cube_drop",
+      "requiredEvidence": ["vertical close-up", "visible cold cue", "impact moment"],
+      "acceptableMediaTypes": ["video", "generated"],
+      "avoidCopyingSource": ["keyboard", "laptop", "rocket", "source device UI"],
+      "notes": "Ice, splash, lemon, or cap motion can satisfy this in beverage contexts."
+    },
+    {
+      "id": "ing_product_lockup",
+      "grammarId": "lockup_transition",
+      "targetCategory": "beverage",
+      "ingredientRole": "motion_anchor",
+      "label": "Clean product lock-up",
+      "targetEquivalent": "clean_cta_end_frame",
+      "requiredEvidence": ["product visible", "stable end frame", "copy-safe area"],
+      "acceptableMediaTypes": ["image", "video", "generated"],
+      "avoidCopyingSource": ["source logo", "source product silhouette"],
+      "notes": "Used as the after-shot anchor."
+    }
+  ],
+  "missingAssetFallback": {
+    "mode": "storyboard_prompt",
+    "description": "If no impact footage exists, render a storyboard draft or copy card that explains the intended cold-object transition.",
+    "prompt": "9:16 product-safe storyboard frame, cold object impact to clean beverage bottle reveal, no source device objects.",
+    "limitations": [
+      "Prompt-ready only.",
+      "Does not claim rendered external video."
+    ]
+  },
+  "implementationMode": "storyboard_image",
+  "storyboardPrompt": "Storyboard a 9:16 transition where a cold category-native object hits on the beat and resolves into a centered beverage product reveal.",
+  "videoPrompt": "Plan-only video prompt: quick cold-object impact, brief splash or mist, clean product lock-up, safe copy area, no copied source objects.",
+  "ipRiskNotes": [
+    "Do not mention source brand names.",
+    "Do not reproduce source product objects or UI."
+  ],
+  "ownership": "transition_plan_only_not_rendered"
+}

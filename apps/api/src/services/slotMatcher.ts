@@ -13,6 +13,7 @@ import type {
   ViralStructureGraph
 } from '@viral-struct/shared';
 import { createOpenAICompatibleClient } from './llmProvider';
+import { buildMotifContext, extractViralMotifAnnotation } from './motifs/viralMotifExtractor';
 
 export function matchSlots(
   graph: ViralStructureGraph,
@@ -111,11 +112,21 @@ export function matchSlots(
         reason: getGapReason(match.reason, missingIngredients),
         impact: `该缺口会影响 ${slot.segmentId} 段落的画面表达，需要使用 ${slot.fallbackStrategies.join(' / ')} 补足。`,
         affectedSegmentId: slot.segmentId,
-        missingIngredients
+        missingIngredients,
+        motifContext: buildSlotMotifContext(slot)
       };
     });
 
   return { matches, gaps };
+}
+
+function buildSlotMotifContext(slot: ViralStructureGraph['shotSlots'][number]): MaterialGap['motifContext'] {
+  const existing = slot.motifAnnotations?.find((annotation) => annotation.motifType !== undefined);
+  const annotation = existing ?? extractViralMotifAnnotation({
+    slot,
+    targetCategory: 'generic'
+  });
+  return annotation ? buildMotifContext(annotation) : undefined;
 }
 
 const SLOT_ROLE_TO_ASSET_MANAGER_ROLE: Record<ShotSlotRole, AssetManagerRole> = {
@@ -529,7 +540,8 @@ function buildLLMGap(slot: ViralStructureGraph['shotSlots'][number], match: Slot
     severity: match.status === 'missing' ? 'high' : 'medium',
     reason: match.missingDescription || match.reason,
     impact: `该缺口影响 ${slot.segmentId} 段落的画面表达，需要走 ${slot.fallbackStrategies.join(' / ')} 补足。`,
-    affectedSegmentId: slot.segmentId
+    affectedSegmentId: slot.segmentId,
+    motifContext: buildSlotMotifContext(slot)
   };
 }
 

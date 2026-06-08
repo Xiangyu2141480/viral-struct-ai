@@ -21,6 +21,7 @@ import type {
 } from '@viral-struct/shared';
 import { AssetSupplyContextSchema } from '@viral-struct/shared';
 import { buildMotifContext, extractViralMotifAnnotation } from '../motifs/viralMotifExtractor';
+import { normalizeCategory, type CategoryPreset } from '../motifs/categoryPresetProvider';
 import { analyzeAssetCoverage } from './assetCoverageAnalyzer';
 import { buildMissingMaterialBriefs } from './missingMaterialBriefBuilder';
 import { classifyMaterialScenario, type MaterialScenarioClassifierOptions } from './materialScenarioClassifier';
@@ -31,6 +32,13 @@ export interface BuildAssetSupplyContextInput {
   contentBrief?: ContentBrief;
   libraryId?: string;
   options?: MaterialScenarioClassifierOptions;
+  /**
+   * D2 category preset (LLM-generated + asset-grounded), produced once at the
+   * asset-parse stage and threaded into motif target mapping. Optional: when
+   * absent the deterministic built-in mapping is used, so existing callers and
+   * tests are unaffected.
+   */
+  categoryPreset?: CategoryPreset;
 }
 
 export function buildAssetSupplyContext(input: BuildAssetSupplyContextInput): AssetSupplyContext {
@@ -47,7 +55,8 @@ export function buildAssetSupplyContext(input: BuildAssetSupplyContextInput): As
     assetCards: coverage.assetCards,
     slotRows: coverage.matrix.slotRows,
     libraryId,
-    warnings: coverage.warnings
+    warnings: coverage.warnings,
+    categoryPreset: input.categoryPreset
   });
   const preliminaryScenario = classifyMaterialScenario({
     assets: coverage.assetCards,
@@ -60,7 +69,8 @@ export function buildAssetSupplyContext(input: BuildAssetSupplyContextInput): As
     assetCards: coverage.assetCards,
     contentBrief: input.contentBrief,
     materialScenario: preliminaryScenario,
-    structureGraph: input.structureGraph
+    structureGraph: input.structureGraph,
+    categoryPreset: input.categoryPreset
   });
   const materialScenario = classifyMaterialScenario({
     assets: coverage.assetCards,
@@ -98,12 +108,13 @@ export interface BuildContextualCoverageInput {
   slotRows: SlotCoverageRow[];
   libraryId: string;
   warnings?: string[];
+  categoryPreset?: CategoryPreset;
 }
 
 export function buildContextualAssetCoverageReport(input: BuildContextualCoverageInput): ContextualAssetCoverageReport {
   const assetById = new Map(input.assetCards.map((asset) => [asset.id, asset]));
   const slotById = new Map((input.structureGraph?.shotSlots ?? []).map((slot) => [slot.id, slot]));
-  const slotCoverages = input.slotRows.map((row) => buildSlotCoverage(row, slotById.get(row.slotId), assetById, input.contentBrief));
+  const slotCoverages = input.slotRows.map((row) => buildSlotCoverage(row, slotById.get(row.slotId), assetById, input.contentBrief, input.categoryPreset));
   const observations = slotCoverages
     .filter((coverage) => coverage.coverageStatus !== 'covered')
     .map((coverage, index) => buildObservation(coverage, index));
@@ -136,7 +147,8 @@ function buildSlotCoverage(
   row: SlotCoverageRow,
   slot: ShotSlotNode | undefined,
   assetById: Map<string, AssetCard>,
-  contentBrief: ContentBrief | undefined
+  contentBrief: ContentBrief | undefined,
+  categoryPreset?: CategoryPreset
 ): ContextualSlotCoverage {
   const requiredIngredients = buildRequiredIngredients(row, slot);
   const candidateAssets = row.candidates
@@ -148,7 +160,7 @@ function buildSlotCoverage(
   const availableIngredients = buildAvailableIngredients(requiredIngredients, row, coverageStatus, bestCandidate);
   const missingIngredients = buildMissingIngredients(requiredIngredients, row, coverageStatus, 'missing');
   const weakIngredients = buildMissingIngredients(requiredIngredients, row, coverageStatus, 'weak');
-  const motifContext = buildSlotMotifContext(slot, contentBrief, coverageStatus);
+  const motifContext = buildSlotMotifContext(slot, contentBrief, coverageStatus, categoryPreset);
 
   return {
     slotId: row.slotId,
@@ -513,9 +525,10 @@ function buildObservationEvidence(coverage: ContextualSlotCoverage): string[] {
 function buildSlotMotifContext(
   slot: ShotSlotNode | undefined,
   contentBrief: ContentBrief | undefined,
-  coverageStatus: ContextualSlotCoverage['coverageStatus']
+  coverageStatus: ContextualSlotCoverage['coverageStatus'],
+  categoryPreset?: CategoryPreset
 ): MotifContext | undefined {
-  const annotation = findSlotMotifAnnotation(slot, contentBrief);
+  const annotation = findSlotMotifAnnotation(slot, contentBrief, categoryPreset);
   if (!annotation) {
     return undefined;
   }
@@ -527,7 +540,11 @@ function buildSlotMotifContext(
   };
 }
 
-function findSlotMotifAnnotation(slot: ShotSlotNode | undefined, contentBrief: ContentBrief | undefined) {
+function findSlotMotifAnnotation(
+  slot: ShotSlotNode | undefined,
+  contentBrief: ContentBrief | undefined,
+  categoryPreset?: CategoryPreset
+) {
   if (!slot) {
     return undefined;
   }
@@ -539,11 +556,17 @@ function findSlotMotifAnnotation(slot: ShotSlotNode | undefined, contentBrief: C
 
   return extractViralMotifAnnotation({
     slot,
-    targetCategory: inferTargetCategory(contentBrief)
+    targetCategory: categoryPreset?.category ?? inferTargetCategory(contentBrief),
+    preset: categoryPreset
   });
 }
 
 function inferTargetCategory(brief: ContentBrief | undefined): string {
+  // Decision D2 / choice (b): an explicit, user-supplied category is authoritative.
+  if (brief?.category) {
+    return normalizeCategory(brief.category);
+  }
+
   const text = [
     brief?.productName,
     brief?.scenario,

@@ -293,6 +293,11 @@ export interface ContentBrief {
   sellingPoints: string[];
   cta: string;
   stylePreference?: string;
+  /**
+   * Target product category for motif transfer (decision D2). User-supplied and
+   * authoritative; inferred from productName when omitted.
+   */
+  category?: string;
 }
 
 export interface AssetVisualContent {
@@ -529,17 +534,54 @@ export type TargetTransitionEquivalent =
   | 'bottle_rotation'
   | 'lineup_sweep'
   | 'clean_cta_end_frame'
-  | 'hyperframes_benefit_card_drop';
+  | 'hyperframes_benefit_card_drop'
+  | (string & {});
+
+export type TargetCategory =
+  | 'beverage'
+  | 'beauty'
+  | 'food'
+  | 'electronics'
+  | 'fashion'
+  | 'home_goods'
+  | 'generic';
+
+export type TransitionFunction =
+  | 'problem_to_solution'
+  | 'heat_to_refresh'
+  | 'chaos_to_order'
+  | 'ingredient_to_product'
+  | 'scene_to_brand_world'
+  | 'product_to_cta'
+  | 'usage_to_benefit'
+  | 'texture_shift'
+  | 'proof_to_cta';
+
+export type TransitionImplementationMode =
+  | 'cut_only'
+  | 'css_motion'
+  | 'gsap'
+  | 'lottie'
+  | 'rive'
+  | 'threejs'
+  | 'remotion'
+  | 'hyperframes'
+  | 'storyboard_image'
+  | 'external_video_generation';
 
 export interface TransitionIngredient {
   id: string;
-  grammarId: TransitionGrammarId;
+  grammarId?: TransitionGrammarId;
+  targetCategory?: TargetCategory;
+  ingredientRole?: 'motion_anchor' | 'object_bridge' | 'texture_bridge' | 'emotion_bridge' | 'copy_bridge' | 'sound_bridge';
   label: string;
-  sourcePattern: string;
-  targetEquivalent: TargetTransitionEquivalent;
+  sourcePattern?: string;
+  targetEquivalent?: TargetTransitionEquivalent;
   requiredEvidence: string[];
-  acceptableAssetRoles: AssetManagerRole[];
-  avoidCopyingSource: string[];
+  acceptableAssetRoles?: AssetManagerRole[];
+  acceptableMediaTypes?: Array<'image' | 'video' | 'text' | 'generated' | 'audio' | 'none'>;
+  avoidCopyingSource?: string[];
+  notes?: string;
 }
 
 export interface TransitionNeed {
@@ -597,6 +639,184 @@ export interface TransitionMotionGrammarHandoff {
   coverageObservations: TransitionCoverageObservation[];
   downstreamHandoff: TransitionHandoffBrief[];
   warnings: string[];
+}
+
+export interface TransitionGrammar {
+  id: string;
+  name: string;
+  motionTokens: MotionToken[];
+  objectContinuity: string;
+  cameraContinuity?: string;
+  rhythm: 'hard_cut' | 'beat_cut' | 'match_cut' | 'speed_ramp' | 'smooth_bridge' | 'hold';
+  emotionalBridge: string;
+  notes: string[];
+}
+
+export interface TransitionMissingAssetFallback {
+  mode: 'cut_only' | 'copy_card' | 'storyboard_prompt' | 'manual_shoot_brief' | 'external_generation_brief';
+  description: string;
+  prompt?: string;
+  limitations: string[];
+}
+
+export interface TransitionShotDescriptor {
+  id: string;
+  label?: string;
+  role?: SegmentRole | ShotSlotRole | AssetManagerRole | string;
+  start?: number;
+  end?: number;
+  script?: string;
+  visualAction?: string;
+}
+
+export interface TransitionRecipe {
+  id: string;
+  name: string;
+  sourceMotifId?: string;
+  sourceMotifType?: MotifType | string;
+  targetCategory: TargetCategory;
+  transitionFunction: TransitionFunction;
+  beforeShotId: string;
+  afterShotId: string;
+  beforeShot?: TransitionShotDescriptor;
+  transitionAction?: string;
+  afterShot?: TransitionShotDescriptor;
+  emotionShift?: string;
+  narrativeFunction?: TransitionFunction;
+  motionGrammar: TransitionGrammar;
+  requiredAssets: TransitionIngredient[];
+  missingAssetFallback: TransitionMissingAssetFallback;
+  implementationMode: TransitionImplementationMode;
+  storyboardPrompt: string;
+  videoPrompt: string;
+  ipRiskNotes: string[];
+  ownership: 'transition_plan_only_not_rendered';
+}
+
+export interface CategoryTransitionPreset {
+  id: string;
+  targetCategory: TargetCategory;
+  name: string;
+  recipeIds: string[];
+  preferredFunctions: TransitionFunction[];
+  targetEquivalents: string[];
+  avoidSourceTerms: string[];
+  notes: string[];
+}
+
+export type AudioCueType =
+  | 'music_bed'
+  | 'foley'
+  | 'impact'
+  | 'whoosh'
+  | 'silence'
+  | 'logo_sting'
+  | 'cta_sound'
+  | 'transition_sound'
+  | 'ambient';
+
+export type AudioNarrativeFunction =
+  | 'hook'
+  | 'transition'
+  | 'product_reveal'
+  | 'proof'
+  | 'usage_demo'
+  | 'cta'
+  | 'brand_memory';
+
+export interface AudioCue {
+  id: string;
+  cueType: AudioCueType;
+  narrativeFunction: AudioNarrativeFunction;
+  startTime: number;
+  duration: number;
+  syncTarget: string;
+  soundDescription: string;
+  emotionalEffect: string;
+  generationPrompt?: string;
+  assetRequirement?: string;
+  assetId?: string;
+  source?: 'planned' | 'licensed_library' | 'user_upload' | 'source_audio' | 'unknown';
+  licenseStatus?: 'cleared' | 'needs_review' | 'unknown';
+  fallback?: string;
+  variantBehavior?: {
+    high_click?: string;
+    high_conversion?: string;
+    premium?: string;
+  };
+}
+
+export interface SonicMotif {
+  id: string;
+  name: string;
+  targetCategory: TargetCategory;
+  cueSequence: AudioCue[];
+  brandTone: string;
+  usageContext: string;
+  warnings: string[];
+}
+
+export interface BeatSyncMap {
+  id: string;
+  bpm?: number;
+  beatTimes: number[];
+  syncPoints: Array<{
+    time: number;
+    targetId: string;
+    reason: string;
+  }>;
+  warnings: string[];
+}
+
+export interface SoundGap {
+  id: string;
+  gapType: 'missing_music_bed' | 'missing_foley' | 'missing_impact' | 'missing_logo_sting' | 'missing_cta_sound' | 'sync_uncertain';
+  affectedCueIds: string[];
+  severity: 'low' | 'medium' | 'high';
+  reason: string;
+  fallback: string;
+}
+
+export interface AudioTrackPlan {
+  id: string;
+  mode: 'silent' | 'bgm_only' | 'sfx_only' | 'bgm_with_sfx' | 'source_audio' | 'plan_only';
+  hasRenderableAudio: boolean;
+  targetCategory: TargetCategory;
+  sonicMotifs: SonicMotif[];
+  cues: AudioCue[];
+  beatSyncMap?: BeatSyncMap;
+  soundGaps: SoundGap[];
+  warnings: string[];
+  ownership: 'audio_plan_only_not_generated';
+}
+
+export interface AudioGenerationJobCard {
+  id: string;
+  cueIds: string[];
+  providerHint: 'generic' | 'elevenlabs' | 'audiocraft' | 'musicgen' | 'stable_audio' | 'manual_sfx' | 'user_upload';
+  prompt: string;
+  negativePrompt?: string;
+  expectedDuration: number;
+  status: 'planned' | 'blocked' | 'needs_user_upload';
+  safetyNotes: string[];
+  ownership: 'external_audio_job_card_only';
+}
+
+export interface TransitionAudioPlanBundle {
+  protocolVersion: 'transition-audio-plan-v1';
+  targetCategory: TargetCategory;
+  recipes: TransitionRecipe[];
+  categoryPresets: CategoryTransitionPreset[];
+  audioTrackPlan: AudioTrackPlan;
+  audioGenerationJobs: AudioGenerationJobCard[];
+  offlineDiagnostics?: Array<{
+    id: string;
+    label: string;
+    value: number;
+    explanation: string;
+  }>;
+  warnings: string[];
+  ownership: 'transition_audio_plan_only_not_rendered';
 }
 
 export type MotifType =

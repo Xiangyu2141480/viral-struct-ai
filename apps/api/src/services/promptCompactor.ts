@@ -93,7 +93,7 @@ function defaultGoalForGap(gap: MaterialGap): string {
     case 'missing_product_closeup':
       return 'Readable product-label close-up with condensation, centered bottle, clean background, premium lighting';
     case 'missing_usage_demo':
-      return 'Natural hand-use shot: hold, open, pour, or drink the iced tea bottle while keeping the label visible';
+      return 'Natural hand-use shot: hold, open, pour, or use the product while keeping the label visible';
     case 'missing_scene_style':
       return 'Clean summer product beauty shot matching the source rhythm, with fresh ice-tea color and readable packaging';
     case 'missing_human_host':

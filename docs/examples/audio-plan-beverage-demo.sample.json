@@ -1,0 +1,455 @@
+{
+  "disclaimer": "No real audio generated. This is a plan-only sonic grammar handoff for evaluation and downstream audio sourcing.",
+  "audioTrackPlan": {
+    "id": "audio_plan_beverage_refresh_demo_high_click",
+    "mode": "plan_only",
+    "hasRenderableAudio": false,
+    "targetCategory": "beverage",
+    "sonicMotifs": [
+      {
+        "id": "sonic_motif_beverage_refresh_demo",
+        "name": "Beverage refresh demo preset sonic motif",
+        "targetCategory": "beverage",
+        "cueSequence": [
+          {
+            "id": "audio_cue_0_bright_summer_music_bed",
+            "cueType": "music_bed",
+            "narrativeFunction": "hook",
+            "startTime": 0,
+            "duration": 16,
+            "syncTarget": "tl_hook",
+            "soundDescription": "bright summer music bed under the full structure; stronger front-loaded hit for high-click variant",
+            "emotionalEffect": "keeps energy coherent across hook, proof and CTA",
+            "generationPrompt": "Plan-only bright summer music bed. Do not use copyrighted music or claim generated audio.",
+            "assetRequirement": "licensed or user-provided BGM only",
+            "source": "planned",
+            "licenseStatus": "unknown",
+            "fallback": "Silent render with visible beat and caption structure.",
+            "variantBehavior": {
+              "high_click": "stronger hit / impact in the first 3 seconds",
+              "high_conversion": "support proof and product clarity",
+              "premium": "more restrained, with softer transient and more whitespace"
+            }
+          },
+          {
+            "id": "audio_cue_1_heat_ambience",
+            "cueType": "ambient",
+            "narrativeFunction": "hook",
+            "startTime": 0,
+            "duration": 1.2,
+            "syncTarget": "tl_hook",
+            "soundDescription": "heat ambience under the opening hook; stronger front-loaded hit for high-click variant",
+            "emotionalEffect": "sets up heat pressure before refresh",
+            "generationPrompt": "Plan-only heat ambience. Do not use copyrighted music or claim generated audio.",
+            "assetRequirement": "licensed, user-provided, or externally generated SFX after review",
+            "source": "planned",
+            "licenseStatus": "unknown",
+            "fallback": "Silent hook with visual heat cue.",
+            "variantBehavior": {
+              "high_click": "stronger hit / impact in the first 3 seconds",
+              "high_conversion": "support proof and product clarity",
+              "premium": "more restrained, with softer transient and more whitespace"
+            }
+          },
+          {
+            "id": "audio_cue_3_ice_cube_rain_hits",
+            "cueType": "transition_sound",
+            "narrativeFunction": "transition",
+            "startTime": 2.3,
+            "duration": 1,
+            "syncTarget": "tl_hook",
+            "soundDescription": "ice cube rain hits across the wipe; stronger front-loaded hit for high-click variant",
+            "emotionalEffect": "turns falling objects into rhythmic attention",
+            "generationPrompt": "Plan-only ice cube rain hits. Do not use copyrighted music or claim generated audio.",
+            "assetRequirement": "licensed, user-provided, or externally generated SFX after review",
+            "source": "planned",
+            "licenseStatus": "unknown",
+            "fallback": "Captioned transition cue.",
+            "variantBehavior": {
+              "high_click": "stronger hit / impact in the first 3 seconds",
+              "high_conversion": "support proof and product clarity",
+              "premium": "more restrained, with softer transient and more whitespace"
+            }
+          },
+          {
+            "id": "audio_cue_11_logo_sting",
+            "cueType": "logo_sting",
+            "narrativeFunction": "brand_memory",
+            "startTime": 14,
+            "duration": 0.65,
+            "syncTarget": "tl_cta",
+            "soundDescription": "logo sting with clean two-note resolve",
+            "emotionalEffect": "supports brand memory without claiming final audio",
+            "generationPrompt": "Plan-only logo sting. Do not use copyrighted music or claim generated audio.",
+            "assetRequirement": "licensed, user-provided, or externally generated SFX after review",
+            "source": "planned",
+            "licenseStatus": "unknown",
+            "fallback": "Silent final lock-up.",
+            "variantBehavior": {
+              "high_click": "keep cue short and rhythm-forward",
+              "high_conversion": "CTA cue should be more explicit and action-oriented",
+              "premium": "more restrained, with softer transient and more whitespace"
+            }
+          }
+        ],
+        "brandTone": "bright fresh summer energy",
+        "usageContext": "Timeline roles: hook, selling_point, usage, cta. Transition cues: Ice Cube Rain Wipe, Cap Pop Transition.",
+        "warnings": ["Beverage sonic cues are plan-only. Use licensed or reviewed audio before final render."]
+      }
+    ],
+    "cues": [
+      {
+        "id": "audio_cue_0_bright_summer_music_bed",
+        "cueType": "music_bed",
+        "narrativeFunction": "hook",
+        "startTime": 0,
+        "duration": 16,
+        "syncTarget": "tl_hook",
+        "soundDescription": "bright summer music bed under the full structure; stronger front-loaded hit for high-click variant",
+        "emotionalEffect": "keeps energy coherent across hook, proof and CTA",
+        "generationPrompt": "Plan-only bright summer music bed. Do not use copyrighted music or claim generated audio.",
+        "assetRequirement": "licensed or user-provided BGM only",
+        "source": "planned",
+        "licenseStatus": "unknown",
+        "fallback": "Silent render with visible beat and caption structure.",
+        "variantBehavior": {
+          "high_click": "stronger hit / impact in the first 3 seconds",
+          "high_conversion": "support proof and product clarity",
+          "premium": "more restrained, with softer transient and more whitespace"
+        }
+      },
+      {
+        "id": "audio_cue_1_heat_ambience",
+        "cueType": "ambient",
+        "narrativeFunction": "hook",
+        "startTime": 0,
+        "duration": 1.2,
+        "syncTarget": "tl_hook",
+        "soundDescription": "heat ambience under the opening hook; stronger front-loaded hit for high-click variant",
+        "emotionalEffect": "sets up heat pressure before refresh",
+        "generationPrompt": "Plan-only heat ambience. Do not use copyrighted music or claim generated audio.",
+        "assetRequirement": "licensed, user-provided, or externally generated SFX after review",
+        "source": "planned",
+        "licenseStatus": "unknown",
+        "fallback": "Silent hook with visual heat cue.",
+        "variantBehavior": {
+          "high_click": "stronger hit / impact in the first 3 seconds",
+          "high_conversion": "support proof and product clarity",
+          "premium": "more restrained, with softer transient and more whitespace"
+        }
+      },
+      {
+        "id": "audio_cue_2_silence_dip",
+        "cueType": "silence",
+        "narrativeFunction": "transition",
+        "startTime": 1.15,
+        "duration": 0.25,
+        "syncTarget": "tl_hook",
+        "soundDescription": "silence dip before the first refresh hit; stronger front-loaded hit for high-click variant",
+        "emotionalEffect": "creates a tiny anticipation gap",
+        "generationPrompt": "Plan-only silence dip. Do not use copyrighted music or claim generated audio.",
+        "assetRequirement": "no audio asset required",
+        "source": "planned",
+        "licenseStatus": "unknown",
+        "fallback": "Visual beat marker only.",
+        "variantBehavior": {
+          "high_click": "stronger hit / impact in the first 3 seconds",
+          "high_conversion": "support proof and product clarity",
+          "premium": "more restrained, with softer transient and more whitespace"
+        }
+      },
+      {
+        "id": "audio_cue_3_ice_cube_rain_hits",
+        "cueType": "transition_sound",
+        "narrativeFunction": "transition",
+        "startTime": 2.3,
+        "duration": 1,
+        "syncTarget": "tl_hook",
+        "soundDescription": "ice cube rain hits across the wipe; stronger front-loaded hit for high-click variant",
+        "emotionalEffect": "turns falling objects into rhythmic attention",
+        "generationPrompt": "Plan-only ice cube rain hits. Do not use copyrighted music or claim generated audio.",
+        "assetRequirement": "licensed, user-provided, or externally generated SFX after review",
+        "source": "planned",
+        "licenseStatus": "unknown",
+        "fallback": "Captioned transition cue.",
+        "variantBehavior": {
+          "high_click": "stronger hit / impact in the first 3 seconds",
+          "high_conversion": "support proof and product clarity",
+          "premium": "more restrained, with softer transient and more whitespace"
+        }
+      },
+      {
+        "id": "audio_cue_4_ice_impact",
+        "cueType": "impact",
+        "narrativeFunction": "hook",
+        "startTime": 2.6,
+        "duration": 0.35,
+        "syncTarget": "tl_hook",
+        "soundDescription": "ice impact on the main beat; stronger front-loaded hit for high-click variant",
+        "emotionalEffect": "makes the first refresh moment feel physical",
+        "generationPrompt": "Plan-only ice impact. Do not use copyrighted music or claim generated audio.",
+        "assetRequirement": "licensed, user-provided, or externally generated SFX after review",
+        "source": "planned",
+        "licenseStatus": "unknown",
+        "fallback": "Hard visual cut.",
+        "variantBehavior": {
+          "high_click": "stronger hit / impact in the first 3 seconds",
+          "high_conversion": "support proof and product clarity",
+          "premium": "more restrained, with softer transient and more whitespace"
+        }
+      },
+      {
+        "id": "audio_cue_5_cap_pop",
+        "cueType": "foley",
+        "narrativeFunction": "product_reveal",
+        "startTime": 3,
+        "duration": 0.4,
+        "syncTarget": "tl_product",
+        "soundDescription": "cap pop as activation foley",
+        "emotionalEffect": "adds tactile product proof",
+        "generationPrompt": "Plan-only cap pop. Do not use copyrighted music or claim generated audio.",
+        "assetRequirement": "licensed, user-provided, or externally generated SFX after review",
+        "source": "planned",
+        "licenseStatus": "unknown",
+        "fallback": "Use visible cap action without sound.",
+        "variantBehavior": {
+          "high_click": "keep cue short and rhythm-forward",
+          "high_conversion": "support proof and product clarity",
+          "premium": "more restrained, with softer transient and more whitespace"
+        }
+      },
+      {
+        "id": "audio_cue_6_fizz_cold_mist_burst",
+        "cueType": "impact",
+        "narrativeFunction": "product_reveal",
+        "startTime": 3,
+        "duration": 0.6,
+        "syncTarget": "tl_product",
+        "soundDescription": "fizz / cold mist burst on the reveal",
+        "emotionalEffect": "turns the product reveal into a freshness payoff",
+        "generationPrompt": "Plan-only fizz / cold mist burst. Do not use copyrighted music or claim generated audio.",
+        "assetRequirement": "licensed, user-provided, or externally generated SFX after review",
+        "source": "planned",
+        "licenseStatus": "unknown",
+        "fallback": "Use cold mist visual only.",
+        "variantBehavior": {
+          "high_click": "keep cue short and rhythm-forward",
+          "high_conversion": "support proof and product clarity",
+          "premium": "more restrained, with softer transient and more whitespace"
+        }
+      },
+      {
+        "id": "audio_cue_7_tea_splash",
+        "cueType": "foley",
+        "narrativeFunction": "usage_demo",
+        "startTime": 8,
+        "duration": 0.8,
+        "syncTarget": "tl_usage",
+        "soundDescription": "tea splash during pour-to-cup proof",
+        "emotionalEffect": "supports usage evidence",
+        "generationPrompt": "Plan-only tea splash. Do not use copyrighted music or claim generated audio.",
+        "assetRequirement": "licensed, user-provided, or externally generated SFX after review",
+        "source": "planned",
+        "licenseStatus": "unknown",
+        "fallback": "Show pour frame without audio.",
+        "variantBehavior": {
+          "high_click": "keep cue short and rhythm-forward",
+          "high_conversion": "support proof and product clarity",
+          "premium": "more restrained, with softer transient and more whitespace"
+        }
+      },
+      {
+        "id": "audio_cue_8_lemon_slice_whoosh",
+        "cueType": "whoosh",
+        "narrativeFunction": "transition",
+        "startTime": 8.05,
+        "duration": 0.45,
+        "syncTarget": "tl_hook",
+        "soundDescription": "lemon slice whoosh for match cut",
+        "emotionalEffect": "makes flavor cue feel fast and clean",
+        "generationPrompt": "Plan-only lemon slice whoosh. Do not use copyrighted music or claim generated audio.",
+        "assetRequirement": "licensed, user-provided, or externally generated SFX after review",
+        "source": "planned",
+        "licenseStatus": "unknown",
+        "fallback": "Use visual match cut only.",
+        "variantBehavior": {
+          "high_click": "keep cue short and rhythm-forward",
+          "high_conversion": "support proof and product clarity",
+          "premium": "more restrained, with softer transient and more whitespace"
+        }
+      },
+      {
+        "id": "audio_cue_9_condensation_wipe",
+        "cueType": "transition_sound",
+        "narrativeFunction": "transition",
+        "startTime": 9.2,
+        "duration": 0.5,
+        "syncTarget": "tl_hook",
+        "soundDescription": "condensation wipe with soft shimmer",
+        "emotionalEffect": "signals cold texture and premium freshness",
+        "generationPrompt": "Plan-only condensation wipe. Do not use copyrighted music or claim generated audio.",
+        "assetRequirement": "licensed, user-provided, or externally generated SFX after review",
+        "source": "planned",
+        "licenseStatus": "unknown",
+        "fallback": "Use condensation card/visual only.",
+        "variantBehavior": {
+          "high_click": "keep cue short and rhythm-forward",
+          "high_conversion": "support proof and product clarity",
+          "premium": "more restrained, with softer transient and more whitespace"
+        }
+      },
+      {
+        "id": "audio_cue_10_cta_pop",
+        "cueType": "cta_sound",
+        "narrativeFunction": "cta",
+        "startTime": 13,
+        "duration": 0.35,
+        "syncTarget": "tl_cta",
+        "soundDescription": "CTA pop before final copy",
+        "emotionalEffect": "pushes the viewer toward action",
+        "generationPrompt": "Plan-only CTA pop. Do not use copyrighted music or claim generated audio.",
+        "assetRequirement": "licensed, user-provided, or externally generated SFX after review",
+        "source": "planned",
+        "licenseStatus": "unknown",
+        "fallback": "Hold CTA card silently.",
+        "variantBehavior": {
+          "high_click": "keep cue short and rhythm-forward",
+          "high_conversion": "CTA cue should be more explicit and action-oriented",
+          "premium": "more restrained, with softer transient and more whitespace"
+        }
+      },
+      {
+        "id": "audio_cue_11_logo_sting",
+        "cueType": "logo_sting",
+        "narrativeFunction": "brand_memory",
+        "startTime": 14,
+        "duration": 0.65,
+        "syncTarget": "tl_cta",
+        "soundDescription": "logo sting with clean two-note resolve",
+        "emotionalEffect": "supports brand memory without claiming final audio",
+        "generationPrompt": "Plan-only logo sting. Do not use copyrighted music or claim generated audio.",
+        "assetRequirement": "licensed, user-provided, or externally generated SFX after review",
+        "source": "planned",
+        "licenseStatus": "unknown",
+        "fallback": "Silent final lock-up.",
+        "variantBehavior": {
+          "high_click": "keep cue short and rhythm-forward",
+          "high_conversion": "CTA cue should be more explicit and action-oriented",
+          "premium": "more restrained, with softer transient and more whitespace"
+        }
+      }
+    ],
+    "beatSyncMap": {
+      "id": "beat_sync_high_click",
+      "bpm": 128,
+      "beatTimes": [0, 0.47, 0.94, 1.41, 1.88, 2.34, 2.81, 3.28, 3.75, 4.22, 4.69, 5.16, 5.63, 6.09, 6.56, 7.03, 7.5, 7.97, 8.44, 8.91, 9.38, 9.84, 10.31, 10.78, 11.25, 11.72, 12.19, 12.66, 13.13, 13.59, 14.06, 14.53, 15, 15.47, 15.94],
+      "syncPoints": [
+        {
+          "time": 0,
+          "targetId": "tl_hook",
+          "reason": "ambient supports hook"
+        },
+        {
+          "time": 2.3,
+          "targetId": "tl_hook",
+          "reason": "transition_sound supports transition"
+        },
+        {
+          "time": 13,
+          "targetId": "tl_cta",
+          "reason": "cta_sound supports cta"
+        }
+      ],
+      "warnings": ["Beat map is an offline plan only; no BGM analysis or audio mixing has been performed."]
+    },
+    "soundGaps": [
+      {
+        "id": "sound_gap_music_bed",
+        "gapType": "missing_music_bed",
+        "affectedCueIds": ["audio_cue_0_bright_summer_music_bed", "audio_cue_1_heat_ambience", "audio_cue_4_ice_impact"],
+        "severity": "medium",
+        "reason": "No licensed or user-provided music bed is attached.",
+        "fallback": "Keep audio as plan-only or use silent demo playback."
+      },
+      {
+        "id": "sound_gap_sfx",
+        "gapType": "missing_foley",
+        "affectedCueIds": ["audio_cue_3_ice_cube_rain_hits", "audio_cue_5_cap_pop", "audio_cue_6_fizz_cold_mist_burst", "audio_cue_7_tea_splash", "audio_cue_8_lemon_slice_whoosh", "audio_cue_9_condensation_wipe"],
+        "severity": "medium",
+        "reason": "Some planned SFX cues have no reviewed audio asset.",
+        "fallback": "Use visible cue labels or external audio job cards."
+      },
+      {
+        "id": "sound_gap_cta",
+        "gapType": "missing_logo_sting",
+        "affectedCueIds": ["audio_cue_10_cta_pop", "audio_cue_11_logo_sting"],
+        "severity": "low",
+        "reason": "CTA or brand-memory cue is planned but not backed by reviewed audio.",
+        "fallback": "Hold final CTA frame silently or request user-uploaded sound."
+      }
+    ],
+    "warnings": [
+      "No renderable audio assets were provided; generated cues are plan-only and hasRenderableAudio=false.",
+      "Beverage sonic cues are plan-only. Use licensed or reviewed audio before final render.",
+      "Audio plan is not mixed into MP4; renderer/export integration is out of scope for this layer."
+    ],
+    "ownership": "audio_plan_only_not_generated"
+  },
+  "beatSyncMap": {
+    "id": "beat_sync_high_click",
+    "bpm": 128,
+    "beatTimes": [0, 0.47, 0.94, 1.41, 1.88, 2.34, 2.81, 3.28, 3.75, 4.22, 4.69, 5.16, 5.63, 6.09, 6.56, 7.03, 7.5, 7.97, 8.44, 8.91, 9.38, 9.84, 10.31, 10.78, 11.25, 11.72, 12.19, 12.66, 13.13, 13.59, 14.06, 14.53, 15, 15.47, 15.94],
+    "syncPoints": [
+      {
+        "time": 0,
+        "targetId": "tl_hook",
+        "reason": "ambient supports hook"
+      }
+    ],
+    "warnings": ["Beat map is an offline plan only; no BGM analysis or audio mixing has been performed."]
+  },
+  "soundGaps": [
+    {
+      "id": "sound_gap_music_bed",
+      "gapType": "missing_music_bed",
+      "affectedCueIds": ["audio_cue_0_bright_summer_music_bed", "audio_cue_1_heat_ambience"],
+      "severity": "medium",
+      "reason": "No licensed or user-provided music bed is attached.",
+      "fallback": "Keep audio as plan-only or use silent demo playback."
+    }
+  ],
+  "audioGenerationJobs": [
+    {
+      "id": "audio_job_1_ice_cube_rain_hits",
+      "cueIds": ["audio_cue_3_ice_cube_rain_hits"],
+      "providerHint": "stable_audio",
+      "prompt": "ice cube rain hits across the wipe. Product context: Kangshifu iced tea. Plan-only external audio job card; do not use copyrighted music.",
+      "negativePrompt": "copyrighted music, celebrity voice, real brand jingle imitation, unlicensed sample",
+      "expectedDuration": 1,
+      "status": "planned",
+      "safetyNotes": [
+        "External audio generation is not called by this service.",
+        "Use licensed, reviewed, or user-uploaded audio before final rendering."
+      ],
+      "ownership": "external_audio_job_card_only"
+    },
+    {
+      "id": "audio_job_2_logo_sting",
+      "cueIds": ["audio_cue_11_logo_sting"],
+      "providerHint": "manual_sfx",
+      "prompt": "logo sting with clean two-note resolve. Product context: Kangshifu iced tea. Plan-only external audio job card; do not use copyrighted music.",
+      "negativePrompt": "copyrighted music, celebrity voice, real brand jingle imitation, unlicensed sample",
+      "expectedDuration": 0.65,
+      "status": "planned",
+      "safetyNotes": [
+        "External audio generation is not called by this service.",
+        "Use licensed, reviewed, or user-uploaded audio before final rendering."
+      ],
+      "ownership": "external_audio_job_card_only"
+    }
+  ],
+  "warnings": [
+    "No renderable audio assets were provided; generated cues are plan-only and hasRenderableAudio=false.",
+    "Audio plan is not mixed into MP4; renderer/export integration is out of scope for this layer."
+  ]
+}

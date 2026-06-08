@@ -17,6 +17,8 @@ import type {
 } from '@viral-struct/shared';
 import { buildMotifAwareBriefs } from '../motifs/motifAwareBriefBuilder';
 import { buildMotifContext, extractViralMotifAnnotation } from '../motifs/viralMotifExtractor';
+import { sanitizeMotionGrammarText } from '../motifs/motionGrammarSanitizer';
+import { normalizeCategory, type CategoryPreset } from '../motifs/categoryPresetProvider';
 
 export interface BuildMissingMaterialBriefsInput {
   contextualCoverage?: ContextualAssetCoverageReport;
@@ -24,6 +26,7 @@ export interface BuildMissingMaterialBriefsInput {
   contentBrief?: ContentBrief;
   materialScenario: MaterialScenarioProfile;
   structureGraph?: ViralStructureGraph;
+  categoryPreset?: CategoryPreset;
 }
 
 const SAFE_NEGATIVE_PROMPT = [
@@ -54,15 +57,16 @@ function buildBrief(
   const normalizedRole = normalizeRole(slotRole);
   const referenceAssetIds = selectReferenceAssetIds(input.assetCards, coverage);
   const missingIngredients = mergeMissingIngredients(coverage);
-  const motif = findMotifAnnotation(slot, input.contentBrief);
+  const motif = findMotifAnnotation(coverage, slot, input.contentBrief, input.categoryPreset);
   const motifBriefs = motif
     ? buildMotifAwareBriefs({
         motif,
         contentBrief: input.contentBrief,
-        referenceAssetIds
+        referenceAssetIds,
+        categoryPreset: input.categoryPreset
       })
     : undefined;
-  const motifContext = motif ? buildMotifContext(motif) : coverage.motifContext;
+  const motifContext = coverage.motifContext ?? (motif ? buildMotifContext(motif) : undefined);
 
   return {
     id: `missing_material_brief_${String(index + 1).padStart(3, '0')}_${safeId(coverage.slotId)}`,
@@ -91,19 +95,25 @@ function findSlot(structureGraph: ViralStructureGraph | undefined, slotId: strin
   return structureGraph?.shotSlots.find((slot) => slot.id === slotId);
 }
 
-function findMotifAnnotation(slot: ShotSlotNode | undefined, brief: ContentBrief | undefined): ViralMotifAnnotation | undefined {
+function findMotifAnnotation(
+  coverage: ContextualSlotCoverage,
+  slot: ShotSlotNode | undefined,
+  brief: ContentBrief | undefined,
+  categoryPreset?: CategoryPreset
+): ViralMotifAnnotation | undefined {
   if (!slot) {
     return undefined;
   }
 
-  const existing = slot.motifAnnotations?.find((annotation) => annotation.motifType === 'kinetic_assembly_reveal');
+  const existing = slot.motifAnnotations?.find((annotation) => annotation.motifType === coverage.motifContext?.motifType);
   if (existing) {
     return existing;
   }
 
   return extractViralMotifAnnotation({
     slot,
-    targetCategory: inferTargetCategory(brief)
+    targetCategory: categoryPreset?.category ?? inferTargetCategory(brief),
+    preset: categoryPreset
   });
 }
 
@@ -119,7 +129,7 @@ function inferTargetCategory(brief: ContentBrief | undefined): string {
     return 'beverage';
   }
 
-  return 'unknown';
+  return normalizeCategory('unknown');
 }
 
 function buildManualShootBrief(role: NormalizedBriefRole, brief: ContentBrief | undefined, coverage: ContextualSlotCoverage): ManualShootBrief {
@@ -144,6 +154,23 @@ function buildManualShootBrief(role: NormalizedBriefRole, brief: ContentBrief | 
   };
 }
 
+/**
+ * Plain-baseline prompts must not paste the raw source `slotIntent`: it can carry
+ * source-specific semantics a target category cannot perform (e.g. "屏幕显示与系统
+ * 交互" for a beverage), and the term blacklist is deliberately not relied on to
+ * catch every such phrase. So we run the intent through the same motion-grammar
+ * sanitizer the motif path uses:
+ *  - B: if transferable motion grammar is detected, inject the abstracted phrase
+ *    (built only from canonical rule-table phrases, so it is leak-free by design).
+ *  - A: otherwise omit the source-intent line entirely and rely on the
+ *    category-native role prompt — better to drop context than to leak source.
+ */
+function buildTransferableIntentLine(slotIntent: string | undefined): string | undefined {
+  if (!slotIntent) return undefined;
+  const sanitized = sanitizeMotionGrammarText(slotIntent);
+  return sanitized.motionTokens.length > 0 ? sanitized.sanitizedIntent : undefined;
+}
+
 function buildAigcBrief(
   role: NormalizedBriefRole,
   brief: ContentBrief | undefined,
@@ -162,7 +189,7 @@ function buildAigcBrief(
     `Prompt brief only, not rendered output.`,
     `Create a 9:16 ordinary smartphone-style short-video shot for ${productName}.`,
     roleSpec.aigcPrompt,
-    `Source structure intent: ${coverage.slotIntent}.`,
+    buildTransferableIntentLine(coverage.slotIntent),
     brief?.sellingPoints.length ? `Respect these verified selling points only: ${brief.sellingPoints.join(', ')}.` : undefined,
     `Do not invent price, promotion, medical benefit, celebrity endorsement, or extra brands.`
   ].filter(Boolean).join(' ');
@@ -413,7 +440,7 @@ function hasProductEvidence(asset: AssetCard): boolean {
     ...asset.detectedObjects,
     ...(asset.detectedIngredients ?? [])
   ].filter(Boolean).join(' ').toLowerCase();
-  return /(product|bottle|label|packaging|商品|瓶身|包装|标签|康师傅|冰红茶)/i.test(text);
+  return /(product|bottle|label|packaging|商品|产品|瓶身|包装|标签)/i.test(text);
 }
 
 function mergeMissingIngredients(coverage: ContextualSlotCoverage): MissingIngredient[] {

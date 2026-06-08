@@ -1,8 +1,15 @@
 import type { MotifType, TargetCategoryMotifMapping } from '@viral-struct/shared';
+import type { CategoryPreset } from './categoryPresetProvider';
 
 export interface TargetCategoryMotifMapperInput {
   motifType: MotifType;
   targetCategory: string;
+  /**
+   * Optional D2 preset (LLM-generated + asset-grounded, produced at asset-parse
+   * time). When provided it drives the mapping; when absent the deterministic
+   * built-in behaviour below is used, so existing callers are unaffected.
+   */
+  preset?: CategoryPreset;
 }
 
 const BEVERAGE_EQUIVALENTS = [
@@ -26,6 +33,16 @@ const SOURCE_SPECIFIC_REJECTIONS = [
 ];
 
 export function mapTargetCategoryMotif(input: TargetCategoryMotifMapperInput): TargetCategoryMotifMapping {
+  if (input.preset) {
+    const preferredEquivalents = input.preset.motifEquivalents[input.motifType] ?? input.preset.defaultEquivalents;
+    return {
+      targetCategory: input.preset.category,
+      preferredEquivalents,
+      rejectedEquivalents: SOURCE_SPECIFIC_REJECTIONS,
+      rationale: `Map ${input.motifType} into ${input.preset.category}-native equivalents (${input.preset.source}).`
+    };
+  }
+
   const targetCategory = normalizeTargetCategory(input.targetCategory);
 
   if (targetCategory === 'beverage' && input.motifType === 'kinetic_assembly_reveal') {
