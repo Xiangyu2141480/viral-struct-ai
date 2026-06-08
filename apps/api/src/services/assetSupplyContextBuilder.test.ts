@@ -673,3 +673,74 @@ test('aigc ready scenario emits safe prompt briefs but no rendered-media claim',
   assert.equal(JSON.stringify(context).includes('fallbackCards'), false);
   assert.equal(JSON.stringify(context).includes('suggestedRepair'), false);
 });
+
+test('plain-baseline AIGC prompt drops a source-specific slot intent instead of leaking it (B+A)', () => {
+  const leakyGraph: ViralStructureGraph = {
+    ...graph,
+    shotSlots: [
+      {
+        id: 'slot_screen_ui',
+        segmentId: 'seg_usage',
+        role: 'usage_demo',
+        requiredAsset: { type: 'video', subject: '屏幕交互演示', camera: 'medium', motion: 'hand_operation', minDuration: 2 },
+        fallbackStrategies: ['ask_user_for_human_demo'],
+        importance: 4,
+        intent: {
+          purpose: '通过虚实结合的创意特效，具象化展示产品屏幕显示与系统交互的流畅特性，制造视觉惊喜',
+          energyLevel: 'high',
+          motionPattern: '屏幕界面流畅切换',
+          compositionPrincipal: '产品居中',
+          durationMs: [1000, 2200]
+        }
+      }
+    ]
+  };
+  const context = buildAssetSupplyContext({
+    structureGraph: leakyGraph,
+    assetCards: [plainProductPanVideo],
+    contentBrief: brief,
+    libraryId: 'plainbaseline_leak_fix'
+  });
+  const prompt = context.missingMaterialBriefs?.find((b) => b.affectedSlotId === 'slot_screen_ui')?.aigcGenerationBrief?.prompt ?? '';
+
+  assert.ok(prompt.length > 0, 'expected a plain-baseline aigc prompt');
+  assert.equal(prompt.includes('屏幕显示'), false);
+  assert.equal(prompt.includes('系统交互'), false);
+  assert.equal(prompt.includes('Source structure intent'), false);
+  // The category-native role instruction is still present.
+  assert.match(prompt, /usage footage|opening cap|drinking|pouring/i);
+});
+
+test('plain-baseline AIGC prompt injects the abstracted motion intent when transferable (B)', () => {
+  const motionGraph: ViralStructureGraph = {
+    ...graph,
+    shotSlots: [
+      {
+        id: 'slot_pour_motion',
+        segmentId: 'seg_usage',
+        role: 'usage_demo',
+        requiredAsset: { type: 'video', subject: '倾倒动作', camera: 'medium', motion: 'hand_operation', minDuration: 2 },
+        fallbackStrategies: ['ask_user_for_human_demo'],
+        importance: 4,
+        intent: {
+          purpose: '把液体缓缓倾倒注入，展示流动质感',
+          energyLevel: 'medium',
+          motionPattern: 'pour',
+          compositionPrincipal: 'centered',
+          durationMs: [1000, 2200]
+        }
+      }
+    ]
+  };
+  const context = buildAssetSupplyContext({
+    structureGraph: motionGraph,
+    assetCards: [plainProductPanVideo],
+    contentBrief: brief,
+    libraryId: 'plainbaseline_motion_intent'
+  });
+  const prompt = context.missingMaterialBriefs?.find((b) => b.affectedSlotId === 'slot_pour_motion')?.aigcGenerationBrief?.prompt ?? '';
+
+  assert.match(prompt, /category-native motion grammar/);
+  // The abstracted phrase is built from canonical tokens, never the raw words.
+  assert.equal(prompt.includes('屏幕'), false);
+});
