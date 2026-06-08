@@ -69,7 +69,7 @@ export function buildMotifContext(annotation: ViralMotifAnnotation): MotifContex
   };
 }
 
-function collectSlotText(slot: ShotSlotNode): string {
+export function collectSlotText(slot: ShotSlotNode): string {
   const acceptanceText = slot.acceptanceCriteria?.anyOf
     .flatMap((criterion) => [
       criterion.motionType,
