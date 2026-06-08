@@ -594,13 +594,16 @@ class FineScanTests(unittest.TestCase):
                 "upload_file": self.module.upload_file,
                 "wait_for_file": self.module.wait_for_file,
                 "create_response": self.module.create_response,
+                "delete_file": self.module.delete_file,
             }
             upload_calls = []
+            delete_calls = []
             try:
                 self.module.prepare_block_clip = lambda *args, **kwargs: ROOT / "seed_assets" / "raw_videos" / "TVC.mp4"
                 self.module.upload_file = lambda **kwargs: upload_calls.append(kwargs) or {"id": "file-test"}
                 self.module.wait_for_file = lambda **kwargs: {"status": "processed"}
                 self.module.create_response = lambda **kwargs: {"output_text": "not json"}
+                self.module.delete_file = lambda **kwargs: delete_calls.append(kwargs) or {"deleted": True}
 
                 result = self.module.run_fine_scan(args)
             finally:
@@ -618,6 +621,10 @@ class FineScanTests(unittest.TestCase):
             # default. Block is 1.0s < min_block_seconds and --no-hard-cut, so no
             # candidate uploads precede it — upload_calls[0] is the block upload.
             self.assertEqual(upload_calls[0]["fps"], 1.0)
+            # Quota hygiene: the uploaded block clip must be deleted even though
+            # the block FAILED (cleanup runs in `finally`), so failures don't leak
+            # Ark file-storage quota.
+            self.assertIn("file-test", [c.get("file_id") for c in delete_calls])
 
 
 class PromptVersionResolutionTests(unittest.TestCase):
@@ -726,6 +733,76 @@ class ResolveConcurrencyTests(unittest.TestCase):
         self.assertEqual(
             self.module.resolve_concurrency(11, 10, 8, 25), (8, 25)
         )
+
+
+class FileCleanupTests(unittest.TestCase):
+    """Best-effort upload cleanup that releases Ark file-storage quota."""
+
+    def setUp(self):
+        self.module = load_module()
+
+    def _logger(self):
+        return self.module.BlockLogger("block_cleanup")
+
+    def _args(self, *extra):
+        return self.module.build_parser().parse_args(list(extra))
+
+    def test_keep_uploads_defaults_false(self):
+        self.assertFalse(self._args().keep_uploads)
+
+    def test_keep_uploads_flag_sets_true(self):
+        self.assertTrue(self._args("--keep-uploads").keep_uploads)
+
+    def test_delete_called_for_uploaded_file(self):
+        calls = []
+        orig = self.module.delete_file
+        try:
+            self.module.delete_file = lambda **kw: calls.append(kw) or {"deleted": True}
+            self.module._best_effort_delete_file(
+                "file-xyz", args=self._args(), base_url="b", api_key="k", logger=self._logger()
+            )
+        finally:
+            self.module.delete_file = orig
+        self.assertEqual([c.get("file_id") for c in calls], ["file-xyz"])
+
+    def test_none_file_id_skips_delete(self):
+        calls = []
+        orig = self.module.delete_file
+        try:
+            self.module.delete_file = lambda **kw: calls.append(kw)
+            self.module._best_effort_delete_file(
+                None, args=self._args(), base_url="b", api_key="k", logger=self._logger()
+            )
+        finally:
+            self.module.delete_file = orig
+        self.assertEqual(calls, [])
+
+    def test_keep_uploads_skips_delete(self):
+        calls = []
+        orig = self.module.delete_file
+        try:
+            self.module.delete_file = lambda **kw: calls.append(kw)
+            self.module._best_effort_delete_file(
+                "file-xyz", args=self._args("--keep-uploads"),
+                base_url="b", api_key="k", logger=self._logger()
+            )
+        finally:
+            self.module.delete_file = orig
+        self.assertEqual(calls, [])
+
+    def test_delete_failure_is_swallowed(self):
+        def boom(**kw):
+            raise RuntimeError("delete boom")
+
+        orig = self.module.delete_file
+        try:
+            self.module.delete_file = boom
+            # Must NOT raise — cleanup is best-effort.
+            self.module._best_effort_delete_file(
+                "file-xyz", args=self._args(), base_url="b", api_key="k", logger=self._logger()
+            )
+        finally:
+            self.module.delete_file = orig
 
 
 if __name__ == "__main__":
