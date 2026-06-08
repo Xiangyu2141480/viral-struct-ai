@@ -9,6 +9,7 @@ import type {
 } from '@viral-struct/shared';
 import { mockExternalGenerationAdapter } from './externalGenerationAdapters/mockAdapter';
 import { checkVisualPromptSafety } from './visualSafetyChecker';
+import { compactMissingMaterialPrompt } from './promptCompactor';
 
 export interface MissingMaterialGenerationPlanResult {
   jobs: MissingMaterialGenerationJob[];
@@ -78,11 +79,22 @@ function buildJob(input: {
     input.gap.reason,
     input.gap.impact
   ].filter(Boolean).join(' | ');
-  const positivePrompt = buildPositivePrompt(input, shotSpec);
-  const negativePrompt = buildNegativePrompt(input.storyboardFrame);
+  const rawPositivePrompt = buildPositivePrompt(input, shotSpec);
+  const rawNegativePrompt = buildNegativePrompt(input.storyboardFrame);
+  const compacted = compactMissingMaterialPrompt({
+    rawPositivePrompt,
+    negativePrompt: rawNegativePrompt,
+    shotSpec,
+    gap: input.gap,
+    repair: input.repair,
+    timelineItem: input.timelineItem,
+    storyboardFrame: input.storyboardFrame,
+    contentBrief: input.contentBrief,
+    aspectRatio: input.aspectRatio
+  });
   const safetyStatus = checkVisualPromptSafety({
-    positivePrompt,
-    negativePrompt,
+    positivePrompt: `${compacted.positivePrompt} ${rawPositivePrompt} ${shotSpec}`,
+    negativePrompt: compacted.negativePrompt,
     contentBrief: input.contentBrief
   });
   const status = safetyStatus.status === 'blocked' ? 'blocked' : 'planned';
@@ -98,13 +110,14 @@ function buildJob(input: {
     status,
     durationSec,
     aspectRatio: input.aspectRatio,
-    positivePrompt,
-    negativePrompt,
+    positivePrompt: compacted.positivePrompt,
+    negativePrompt: compacted.negativePrompt,
     shotSpec: shotSpec || 'Not available',
     gapType: input.gap.type,
     gapSeverity: input.gap.severity,
     repairStrategy: input.repair?.strategy,
     storyboardFrameId: input.storyboardFrame?.id,
+    promptMetadata: compacted.metadata,
     safetyStatus,
     blockedReason: status === 'blocked' ? `Blocked by brand safety: ${safetyStatus.reasons.join(' / ')}` : undefined,
     disclaimer: 'External generation plan, not current core output. No Seedance or external video model was called.'

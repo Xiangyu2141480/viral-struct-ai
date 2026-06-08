@@ -119,7 +119,7 @@ export const ScreenLibrary = ({ onBack }: { onBack?: () => void }) => {
                   <dt>时长</dt><dd><b>{v.duration}s</b> · {v.segments.length} 段落</dd>
                   <dt>播放</dt><dd><b>{v.views}</b></dd>
                   <dt>点赞</dt><dd><b>{v.likes}</b></dd>
-                  <dt>CTR</dt><dd><b>{v.ctr}</b></dd>
+                  <dt>离线点击潜力</dt><dd><b>{v.ctr}</b></dd>
                   <dt>完播率</dt><dd><b>{v.finish_rate}</b></dd>
                   <dt>BGM</dt><dd>{v.bgm}</dd>
                 </dl>
@@ -146,7 +146,7 @@ export const ScreenLibrary = ({ onBack }: { onBack?: () => void }) => {
               </dl>
               <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
                 <div className="stat" style={{ padding: '8px 10px' }}>
-                  <div className="stat-label">CTR</div>
+                  <div className="stat-label">离线点击潜力</div>
                   <div className="stat-value" style={{ fontSize: 18, color: v.color }}>{v.ctr}</div>
                 </div>
                 <div className="stat" style={{ padding: '8px 10px' }}>
@@ -154,7 +154,7 @@ export const ScreenLibrary = ({ onBack }: { onBack?: () => void }) => {
                   <div className="stat-value" style={{ fontSize: 18, color: v.color }}>{v.finish_rate}</div>
                 </div>
                 <div className="stat" style={{ padding: '8px 10px' }}>
-                  <div className="stat-label">CVR</div>
+                  <div className="stat-label">离线转化潜力</div>
                   <div className="stat-value" style={{ fontSize: 18, color: v.color }}>{v.cvr}</div>
                 </div>
               </div>
@@ -455,7 +455,7 @@ export const ScreenLibrary = ({ onBack }: { onBack?: () => void }) => {
                     <div style={{ fontWeight: 600, color: 'var(--text)', marginTop: 1 }}>{v.views}</div>
                   </div>
                   <div>
-                    <span className="mono" style={{ color: 'var(--text-mute)', fontSize: 9.5 }}>CTR</span>
+                    <span className="mono" style={{ color: 'var(--text-mute)', fontSize: 9.5 }}>离线点击潜力</span>
                     <div style={{ fontWeight: 600, color: v.color, marginTop: 1 }}>{v.ctr}</div>
                   </div>
                   <div>

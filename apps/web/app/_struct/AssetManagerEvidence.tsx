@@ -66,6 +66,8 @@ export function AssetManagerEvidencePanel({
           素材供给证据只说明“当前素材能否支撑结构槽位”，最终缺口与补全策略仍由诊断/编译链路决定。
         </div>
 
+        <TransitionSonicEvidenceCards variant={variant} />
+
         <div style={{
           display: 'grid',
           gridTemplateColumns: variant === 'compact' ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)',
@@ -113,6 +115,69 @@ export function AssetManagerEvidencePanel({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+const TRANSITION_SONIC_CARDS = [
+  {
+    title: 'Transition Plan',
+    label: 'transition grammar',
+    body: '热浪破碎、冰块雨、柠檬 match cut、开盖爆点把结构段落连接起来。',
+    boundary: 'plan only · no rendered effect',
+  },
+  {
+    title: 'Sonic Plan',
+    label: 'sonic grammar',
+    body: 'heat ambience、silence dip、ice hits、cap pop、CTA pop 和 logo sting 强化节奏记忆点。',
+    boundary: 'plan only · no audio mix',
+  },
+  {
+    title: 'Missing Transition Assets',
+    label: 'job-card handoff',
+    body: '缺少冰块雨、开盖、冷雾或 CTA lock-up 画面时，只输出拍摄/AIGC/HyperFrames handoff。',
+    boundary: 'job card only · no external generation',
+  },
+  {
+    title: 'Audio Warnings',
+    label: 'safety boundary',
+    body: '没有已审核音频素材时保持静音或 cue label；所有分数均是 offline diagnostics，不是假 CTR。',
+    boundary: 'no fake CTR · no copyrighted BGM claim',
+  },
+] as const;
+
+function TransitionSonicEvidenceCards({ variant }: { variant: PanelVariant }) {
+  const columns = variant === 'compact' ? 'repeat(2, minmax(0, 1fr))' : 'repeat(4, minmax(0, 1fr))';
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: columns, gap: 8 }}>
+      {TRANSITION_SONIC_CARDS.map((card) => (
+        <div
+          key={card.title}
+          style={{
+            padding: '9px 10px',
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 5,
+            minHeight: variant === 'compact' ? 104 : 116,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 5,
+          }}
+        >
+          <div className="mono" style={{ color: 'var(--accent)', fontSize: 9.5, fontWeight: 700 }}>
+            {card.label.toUpperCase()}
+          </div>
+          <div style={{ color: 'var(--text)', fontSize: 12, fontWeight: 650 }}>
+            {card.title}
+          </div>
+          <div style={{ color: 'var(--text-dim)', fontSize: 10.6, lineHeight: 1.42 }}>
+            {card.body}
+          </div>
+          <div className="mono" style={{ color: 'var(--text-mute)', fontSize: 9.5, marginTop: 'auto' }}>
+            {card.boundary}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

@@ -197,7 +197,7 @@ function cardStyleLine(cardType: CardTypeId, fontFamily: string, base: number, h
   const fontSize = Math.round(base * scale);
   const alignment = spec.safeArea === 'center' ? 5 : 2; // 5 = mid-center, 2 = bottom-center
   const marginV = alignment === 2 ? Math.round(height * 0.1) : Math.round(height * 0.04);
-  // Text stays white-on-dark-outline for legibility (differentiation comes from size/weight/alignment +
+  // Text stays white with a dark outline for legibility (differentiation comes from size/weight/alignment +
   // the CARD_REGISTRY background); accent colours drive boxes/bars in a later motion/box pass, not body text.
   return `Style: Card_${cardType},${fontFamily},${fontSize},${hexToAss('0xffffff')},&H000000FF,${hexToAss('0x000000')},&H64000000,${bold},0,0,0,100,100,0,0,1,4,2,${alignment},80,80,${marginV},1`;
 }

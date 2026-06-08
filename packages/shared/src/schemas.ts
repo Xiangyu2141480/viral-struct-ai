@@ -154,7 +154,13 @@ export const ContentBriefSchema = z.object({
   scenario: z.string().min(1),
   sellingPoints: z.array(z.string().min(1)).min(1),
   cta: z.string().min(1),
-  stylePreference: z.string().optional()
+  stylePreference: z.string().optional(),
+  /**
+   * Target product category for motif transfer (decision D2). User-supplied and
+   * authoritative; when omitted it is inferred from productName via
+   * normalizeCategory at parse time. Free-form so any category alias is accepted.
+   */
+  category: z.string().min(1).optional()
 });
 
 export const AssetVisualContentSchema = z.object({
@@ -335,7 +341,16 @@ export const AssetVlmAnalysisProfileSchema = z.object({
   risks: z.array(z.string())
 });
 
-export const AssetAnalysisSourceSchema = z.enum(['static_library', 'mock_filename_rules', 'llm_multimodal', 'manual_text_brief', 'deterministic']);
+export const AssetAnalysisSourceSchema = z.enum([
+  'static_library',
+  'mock_filename_rules',
+  'llm_multimodal',
+  'manual_text_brief',
+  'deterministic',
+  'generated_external',
+  'planned_generation',
+  'aigc'
+]);
 
 export const AssetAnalysisProfileSchema = z.object({
   profileVersion: z.literal('asset_analysis_v1'),
@@ -378,6 +393,408 @@ export const AssetCardSchema = z.object({
   analysisSource: AssetAnalysisSourceSchema.optional(),
   analysis: AssetAnalysisProfileSchema.optional()
 });
+
+export const TransitionGrammarIdSchema = z.enum([
+  'dynamic_entry',
+  'impact_beat',
+  'assembly_reveal',
+  'activation_moment',
+  'lockup_transition'
+]);
+
+export const TargetTransitionEquivalentSchema = z.string().min(1);
+
+export const TargetCategorySchema = z.enum([
+  'beverage',
+  'beauty',
+  'food',
+  'electronics',
+  'fashion',
+  'home_goods',
+  'generic'
+]);
+
+export const TransitionFunctionSchema = z.enum([
+  'problem_to_solution',
+  'heat_to_refresh',
+  'chaos_to_order',
+  'ingredient_to_product',
+  'scene_to_brand_world',
+  'product_to_cta',
+  'usage_to_benefit',
+  'texture_shift',
+  'proof_to_cta'
+]);
+
+export const TransitionImplementationModeSchema = z.enum([
+  'cut_only',
+  'css_motion',
+  'gsap',
+  'lottie',
+  'rive',
+  'threejs',
+  'remotion',
+  'hyperframes',
+  'storyboard_image',
+  'external_video_generation'
+]);
+
+export const TransitionIngredientSchema = z.object({
+  id: z.string(),
+  grammarId: TransitionGrammarIdSchema.optional(),
+  targetCategory: TargetCategorySchema.optional(),
+  ingredientRole: z.enum(['motion_anchor', 'object_bridge', 'texture_bridge', 'emotion_bridge', 'copy_bridge', 'sound_bridge']).optional(),
+  label: z.string(),
+  sourcePattern: z.string().optional(),
+  targetEquivalent: TargetTransitionEquivalentSchema.optional(),
+  requiredEvidence: z.array(z.string()),
+  acceptableAssetRoles: z.array(AssetManagerRoleSchema).optional(),
+  acceptableMediaTypes: z.array(z.enum(['image', 'video', 'text', 'generated', 'audio', 'none'])).optional(),
+  avoidCopyingSource: z.array(z.string()).optional(),
+  notes: z.string().optional()
+});
+
+export const TransitionNeedSchema = z.object({
+  id: z.string(),
+  grammarId: TransitionGrammarIdSchema,
+  sourceMotif: z.string(),
+  transferableIntent: z.string(),
+  targetEquivalent: TargetTransitionEquivalentSchema,
+  targetSlots: z.array(z.string()),
+  importance: z.enum(['low', 'medium', 'high']),
+  ingredients: z.array(TransitionIngredientSchema)
+});
+
+export const AssetTransitionAffordanceSchema = z.object({
+  assetId: z.string(),
+  supportsGrammar: z.array(TransitionGrammarIdSchema),
+  supportedIngredients: z.array(z.string()),
+  confidence: z.number().min(0).max(1),
+  evidence: z.array(z.string()),
+  limitations: z.array(z.string())
+});
+
+export const TransitionCoverageObservationSchema = z.object({
+  id: z.string(),
+  transitionNeedId: z.string(),
+  grammarId: TransitionGrammarIdSchema,
+  coverageStatus: z.enum(['covered', 'weak', 'insufficient']),
+  candidateAssetIds: z.array(z.string()),
+  missingIngredientIds: z.array(z.string()),
+  potentialImpact: z.array(z.string()),
+  confidence: z.enum(['low', 'medium', 'high']),
+  ownership: z.literal('asset_manager_transition_observation_only')
+});
+
+export const TransitionHandoffBriefSchema = z.object({
+  id: z.string(),
+  owner: z.enum(['video_agent', 'gap_repair', 'hyperframes', 'aigc', 'manual_shoot']),
+  transitionNeedIds: z.array(z.string()),
+  brief: z.string(),
+  prompt: z.string().optional(),
+  negativePrompt: z.string().optional(),
+  safetyNotes: z.array(z.string()),
+  notRenderedOutput: z.boolean()
+});
+
+export const TransitionMotionGrammarHandoffSchema = z.object({
+  protocolVersion: z.literal('transition-handoff-v1'),
+  patternId: z.literal('kinetic_assembly'),
+  sourceExample: z.string(),
+  targetProduct: z.string(),
+  designLanguage: z.string(),
+  boundary: z.array(z.string()),
+  transitionNeeds: z.array(TransitionNeedSchema),
+  assetAffordances: z.array(AssetTransitionAffordanceSchema),
+  coverageObservations: z.array(TransitionCoverageObservationSchema),
+  downstreamHandoff: z.array(TransitionHandoffBriefSchema),
+  warnings: z.array(z.string())
+});
+
+export const MotifTypeSchema = z.enum([
+  'surreal_assembly',
+  'kinetic_assembly_reveal',
+  'kinetic_product_reveal',
+  'dynamic_entry',
+  'impact_activation',
+  'ingredient_transformation',
+  'lineup_lockup',
+  'benefit_card_motion',
+  'category_usage_moment'
+]);
+
+export const MotionTokenSchema = z.enum([
+  'dynamic_entry',
+  'component_cascade',
+  'chaos_to_order',
+  'assembly_completion',
+  'interaction_activation',
+  'spectacle_burst',
+  'cta_reveal',
+  'falling_object',
+  'impact_beat',
+  'snap_open',
+  'assembly_reveal',
+  'activation_moment',
+  'pour_flow',
+  'drink_action',
+  'bottle_rotation',
+  'lineup_sweep',
+  'card_drop',
+  'clean_hold',
+  'quick_cut',
+  'push_in',
+  'match_cut',
+  'morph'
+]);
+
+export const TransitionGrammarSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  motionTokens: z.array(MotionTokenSchema),
+  objectContinuity: z.string(),
+  cameraContinuity: z.string().optional(),
+  rhythm: z.enum(['hard_cut', 'beat_cut', 'match_cut', 'speed_ramp', 'smooth_bridge', 'hold']),
+  emotionalBridge: z.string(),
+  notes: z.array(z.string())
+}).strict();
+
+export const TransitionMissingAssetFallbackSchema = z.object({
+  mode: z.enum(['cut_only', 'copy_card', 'storyboard_prompt', 'manual_shoot_brief', 'external_generation_brief']),
+  description: z.string(),
+  prompt: z.string().optional(),
+  limitations: z.array(z.string())
+}).strict();
+
+export const TransitionShotDescriptorSchema = z.object({
+  id: z.string(),
+  label: z.string().optional(),
+  role: z.string().optional(),
+  start: z.number().optional(),
+  end: z.number().optional(),
+  script: z.string().optional(),
+  visualAction: z.string().optional()
+}).strict();
+
+export const TransitionRecipeSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  sourceMotifId: z.string().optional(),
+  sourceMotifType: z.string().optional(),
+  targetCategory: TargetCategorySchema,
+  transitionFunction: TransitionFunctionSchema,
+  beforeShotId: z.string(),
+  afterShotId: z.string(),
+  beforeShot: TransitionShotDescriptorSchema.optional(),
+  transitionAction: z.string().optional(),
+  afterShot: TransitionShotDescriptorSchema.optional(),
+  emotionShift: z.string().optional(),
+  narrativeFunction: TransitionFunctionSchema.optional(),
+  motionGrammar: TransitionGrammarSchema,
+  requiredAssets: z.array(TransitionIngredientSchema),
+  missingAssetFallback: TransitionMissingAssetFallbackSchema,
+  implementationMode: TransitionImplementationModeSchema,
+  storyboardPrompt: z.string(),
+  videoPrompt: z.string(),
+  ipRiskNotes: z.array(z.string()),
+  ownership: z.literal('transition_plan_only_not_rendered')
+}).strict();
+
+export const CategoryTransitionPresetSchema = z.object({
+  id: z.string(),
+  targetCategory: TargetCategorySchema,
+  name: z.string(),
+  recipeIds: z.array(z.string()),
+  preferredFunctions: z.array(TransitionFunctionSchema),
+  targetEquivalents: z.array(z.string()),
+  avoidSourceTerms: z.array(z.string()),
+  notes: z.array(z.string())
+}).strict();
+
+export const AudioCueTypeSchema = z.enum([
+  'music_bed',
+  'foley',
+  'impact',
+  'whoosh',
+  'silence',
+  'logo_sting',
+  'cta_sound',
+  'transition_sound',
+  'ambient'
+]);
+
+export const AudioNarrativeFunctionSchema = z.enum([
+  'hook',
+  'transition',
+  'product_reveal',
+  'proof',
+  'usage_demo',
+  'cta',
+  'brand_memory'
+]);
+
+export const AudioCueSchema = z.object({
+  id: z.string(),
+  cueType: AudioCueTypeSchema,
+  narrativeFunction: AudioNarrativeFunctionSchema,
+  startTime: z.number().min(0),
+  duration: z.number().min(0),
+  syncTarget: z.string(),
+  soundDescription: z.string(),
+  emotionalEffect: z.string(),
+  generationPrompt: z.string().optional(),
+  assetRequirement: z.string().optional(),
+  assetId: z.string().optional(),
+  source: z.enum(['planned', 'licensed_library', 'user_upload', 'source_audio', 'unknown']).optional(),
+  licenseStatus: z.enum(['cleared', 'needs_review', 'unknown']).optional(),
+  fallback: z.string().optional(),
+  variantBehavior: z.object({
+    high_click: z.string().optional(),
+    high_conversion: z.string().optional(),
+    premium: z.string().optional()
+  }).strict().optional()
+}).strict();
+
+export const SonicMotifSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  targetCategory: TargetCategorySchema,
+  cueSequence: z.array(AudioCueSchema),
+  brandTone: z.string(),
+  usageContext: z.string(),
+  warnings: z.array(z.string())
+}).strict();
+
+export const BeatSyncMapSchema = z.object({
+  id: z.string(),
+  bpm: z.number().positive().optional(),
+  beatTimes: z.array(z.number().min(0)),
+  syncPoints: z.array(z.object({
+    time: z.number().min(0),
+    targetId: z.string(),
+    reason: z.string()
+  }).strict()),
+  warnings: z.array(z.string())
+}).strict();
+
+export const SoundGapSchema = z.object({
+  id: z.string(),
+  gapType: z.enum(['missing_music_bed', 'missing_foley', 'missing_impact', 'missing_logo_sting', 'missing_cta_sound', 'sync_uncertain']),
+  affectedCueIds: z.array(z.string()),
+  severity: z.enum(['low', 'medium', 'high']),
+  reason: z.string(),
+  fallback: z.string()
+}).strict();
+
+export const AudioTrackPlanSchema = z.object({
+  id: z.string(),
+  mode: z.enum(['silent', 'bgm_only', 'sfx_only', 'bgm_with_sfx', 'source_audio', 'plan_only']),
+  hasRenderableAudio: z.boolean(),
+  targetCategory: TargetCategorySchema,
+  sonicMotifs: z.array(SonicMotifSchema),
+  cues: z.array(AudioCueSchema),
+  beatSyncMap: BeatSyncMapSchema.optional(),
+  soundGaps: z.array(SoundGapSchema),
+  warnings: z.array(z.string()),
+  ownership: z.literal('audio_plan_only_not_generated')
+}).strict();
+
+export const AudioGenerationJobCardSchema = z.object({
+  id: z.string(),
+  cueIds: z.array(z.string()),
+  providerHint: z.enum(['generic', 'elevenlabs', 'audiocraft', 'musicgen', 'stable_audio', 'manual_sfx', 'user_upload']),
+  prompt: z.string(),
+  negativePrompt: z.string().optional(),
+  expectedDuration: z.number().min(0),
+  status: z.enum(['planned', 'blocked', 'needs_user_upload']),
+  safetyNotes: z.array(z.string()),
+  ownership: z.literal('external_audio_job_card_only')
+}).strict();
+
+export const TransitionAudioPlanBundleSchema = z.object({
+  protocolVersion: z.literal('transition-audio-plan-v1'),
+  targetCategory: TargetCategorySchema,
+  recipes: z.array(TransitionRecipeSchema),
+  categoryPresets: z.array(CategoryTransitionPresetSchema),
+  audioTrackPlan: AudioTrackPlanSchema,
+  audioGenerationJobs: z.array(AudioGenerationJobCardSchema),
+  offlineDiagnostics: z.array(z.object({
+    id: z.string(),
+    label: z.string(),
+    value: z.number(),
+    explanation: z.string()
+  }).strict()).optional(),
+  warnings: z.array(z.string()),
+  ownership: z.literal('transition_audio_plan_only_not_rendered')
+}).strict();
+
+export const TargetCategoryMotifMappingSchema = z.object({
+  targetCategory: z.string(),
+  preferredEquivalents: z.array(z.string()),
+  rejectedEquivalents: z.array(z.string()),
+  rationale: z.string()
+}).strict();
+
+export const MotifTransferVariableSchema = z.object({
+  name: z.string(),
+  sourceValue: z.string(),
+  targetValue: z.string(),
+  allowedTargetValues: z.array(z.string()),
+  notes: z.string().optional()
+}).strict();
+
+export const ViralMotifAnnotationSchema = z.object({
+  id: z.string(),
+  slotId: z.string().optional(),
+  segmentId: z.string().optional(),
+  motifType: MotifTypeSchema,
+  motionTokens: z.array(MotionTokenSchema),
+  sanitizedIntent: z.string(),
+  transferVariables: z.array(MotifTransferVariableSchema),
+  bannedSourceTerms: z.array(z.string()),
+  targetCategoryMapping: TargetCategoryMotifMappingSchema,
+  evidence: z.array(z.string()),
+  confidence: z.number().min(0).max(1)
+}).strict();
+
+export const MotifContextSchema = z.object({
+  motifAnnotationId: z.string(),
+  motifType: MotifTypeSchema,
+  motionTokens: z.array(MotionTokenSchema),
+  missingMotionTokens: z.array(MotionTokenSchema),
+  sanitizedIntent: z.string(),
+  targetMotifHints: z.array(z.string()),
+  confidence: z.number().min(0).max(1),
+  evidence: z.array(z.string())
+}).strict();
+
+const MotifAwareBriefBaseSchema = z.object({
+  id: z.string(),
+  motifAnnotationId: z.string(),
+  targetCategoryMapping: TargetCategoryMotifMappingSchema,
+  sanitizedIntent: z.string(),
+  bannedSourceTerms: z.array(z.string()),
+  motionTokens: z.array(MotionTokenSchema),
+  safetyNotes: z.array(z.string()),
+  notRenderedOutput: z.boolean()
+});
+
+export const MotifAwareManualShootBriefSchema = MotifAwareBriefBaseSchema.extend({
+  shotObjective: z.string(),
+  requiredActions: z.array(z.string()),
+  compositionNotes: z.array(z.string())
+}).strict();
+
+export const MotifAwareAigcPromptBriefSchema = MotifAwareBriefBaseSchema.extend({
+  prompt: z.string(),
+  negativePrompt: z.string()
+}).strict();
+
+export const MotifAwareHyperframesBriefSchema = MotifAwareBriefBaseSchema.extend({
+  cardType: z.enum(['hook_card', 'benefit_card', 'comparison_card', 'cta_card', 'transition_card']),
+  cardMotion: z.enum(['card_drop', 'slide_in', 'snap_cut', 'lineup_sweep', 'clean_hold']),
+  copyIntent: z.string()
+}).strict();
 
 export const RoleCoverageSummarySchema = z.object({
   role: AssetManagerRoleSchema,
@@ -467,6 +884,37 @@ export const NormalizedAssetCardSchema = AssetCardSchema.extend({
 });
 
 export const AssetLibraryProfileSchema = AssetLibraryReportSchema;
+
+export const MaterialScenarioTypeSchema = z.enum([
+  'empty_assets',
+  'single_image_only',
+  'partial_real_footage',
+  'aigc_ready',
+  'mixed_real_and_aigc'
+]);
+
+export const MaterialScenarioProfileSchema = z.object({
+  scenarioType: MaterialScenarioTypeSchema,
+  assetCount: z.number().int().min(0),
+  imageCount: z.number().int().min(0),
+  videoCount: z.number().int().min(0),
+  textCount: z.number().int().min(0),
+  generatedAssetCount: z.number().int().min(0),
+  realFootageCount: z.number().int().min(0),
+  evidenceCoverageScore: z.number().min(0).max(100),
+  completionFeasibilityScore: z.number().min(0).max(100),
+  summary: z.string(),
+  strengths: z.array(z.string()),
+  weaknesses: z.array(z.string()),
+  recommendedDownstreamMode: z.enum([
+    'structure_cards_only',
+    'single_image_motion_reuse',
+    'real_footage_editing',
+    'aigc_missing_material_generation',
+    'mixed_repair_workflow'
+  ]),
+  warnings: z.array(z.string())
+});
 
 export const RequiredIngredientKindSchema = z.enum([
   'visual_subject',
@@ -582,7 +1030,8 @@ export const ContextualSlotCoverageSchema = z.object({
   coverageStatus: z.enum(['covered', 'weak', 'insufficient']),
   confidence: z.enum(['high', 'medium', 'low']),
   evidence: z.array(z.string()),
-  limitations: z.array(z.string())
+  limitations: z.array(z.string()),
+  motifContext: MotifContextSchema.optional()
 });
 
 export const MaterialCoverageObservationSchema = z.object({
@@ -600,6 +1049,7 @@ export const MaterialCoverageObservationSchema = z.object({
     'missing_motion_evidence',
     'missing_product_evidence',
     'missing_usage_evidence',
+    'missing_comparison_evidence',
     'missing_cta_surface',
     'missing_text_safe_area'
   ]),
@@ -611,6 +1061,10 @@ export const MaterialCoverageObservationSchema = z.object({
   severityEstimate: z.enum(['low', 'medium', 'high']),
   confidence: z.enum(['high', 'medium', 'low']),
   evidence: z.array(z.string()),
+  motifContext: MotifContextSchema.optional(),
+  motifType: MotifTypeSchema.optional(),
+  missingMotionTokens: z.array(MotionTokenSchema).optional(),
+  targetMotifHints: z.array(z.string()).optional(),
   ownership: z.literal('asset_manager_observation_only')
 });
 
@@ -630,6 +1084,85 @@ export const ContextualAssetCoverageReportSchema = z.object({
   warnings: z.array(z.string())
 });
 
+export const CompletionChannelEligibilitySchema = z.object({
+  channel: z.enum([
+    'manual_shoot',
+    'aigc_video_prompt',
+    'aigc_image_prompt',
+    'hyperframes_card_animation',
+    'reuse_crop_zoom',
+    'copy_packaging_card',
+    'video_agent_fallback_rendering'
+  ]),
+  eligible: z.boolean(),
+  confidence: z.enum(['high', 'medium', 'low']),
+  reason: z.string(),
+  requiredInputs: z.array(z.string()),
+  providedInputs: z.array(z.string()),
+  missingInputs: z.array(z.string()),
+  ownership: z.enum([
+    'gap_repair_planner',
+    'video_agent',
+    'hyperframes_renderer',
+    'external_generation_adapter',
+    'human_shooting'
+  ])
+});
+
+export const ManualShootBriefSchema = z.object({
+  title: z.string(),
+  objective: z.string(),
+  shotDescription: z.string(),
+  durationSec: z.number().positive(),
+  framing: z.string(),
+  requiredProps: z.array(z.string()),
+  mustCapture: z.array(z.string()),
+  avoid: z.array(z.string())
+});
+
+export const AigcGenerationBriefSchema = z.object({
+  providerHint: z.enum(['gemini', 'seedance', 'generic']),
+  prompt: z.string(),
+  negativePrompt: z.string(),
+  referenceAssetIds: z.array(z.string()),
+  expectedDurationSec: z.number().positive(),
+  aspectRatio: z.enum(['9:16', '16:9', '1:1']),
+  safetyNotes: z.array(z.string())
+});
+
+export const HyperframesFallbackBriefSchema = z.object({
+  title: z.string(),
+  cardType: z.enum([
+    'hook_card',
+    'benefit_card',
+    'usage_placeholder_card',
+    'comparison_card',
+    'cta_card',
+    'timeline_bridge_card'
+  ]),
+  copyIntent: z.string(),
+  visualElements: z.array(z.string()),
+  animationHints: z.array(z.string()),
+  durationSec: z.number().positive(),
+  inputAssets: z.array(z.string())
+});
+
+export const MissingMaterialBriefSchema = z.object({
+  id: z.string(),
+  affectedSegmentId: z.string().optional(),
+  affectedSlotId: z.string(),
+  slotRole: AssetRoleSchema,
+  slotIntent: z.string(),
+  missingIngredients: z.array(MissingIngredientSchema),
+  potentialImpact: z.array(CoverageImpactSchema),
+  manualShootBrief: ManualShootBriefSchema.optional(),
+  aigcGenerationBrief: AigcGenerationBriefSchema.optional(),
+  hyperframesBrief: HyperframesFallbackBriefSchema.optional(),
+  channelEligibility: z.array(CompletionChannelEligibilitySchema),
+  motifContext: MotifContextSchema.optional(),
+  ownership: z.literal('asset_manager_handoff_brief_only')
+});
+
 export const AssetSupplyContextSchema = z.object({
   protocolVersion: z.literal('asset-supply-v1'),
   libraryId: z.string(),
@@ -637,6 +1170,8 @@ export const AssetSupplyContextSchema = z.object({
   assets: z.array(NormalizedAssetCardSchema),
   libraryProfile: AssetLibraryProfileSchema,
   contextualCoverage: ContextualAssetCoverageReportSchema.optional(),
+  materialScenario: MaterialScenarioProfileSchema.optional(),
+  missingMaterialBriefs: z.array(MissingMaterialBriefSchema).optional(),
   warnings: z.array(z.string())
 });
 
@@ -727,7 +1262,8 @@ export const ViralStructureGraphSchema = z.object({
     importance: z.union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)]).optional(),
     intent: ShotSlotIntentSchema.optional(),
     sourceInstance: ShotSlotSourceInstanceSchema.optional(),
-    acceptanceCriteria: ShotSlotAcceptanceCriteriaSchema.optional()
+    acceptanceCriteria: ShotSlotAcceptanceCriteriaSchema.optional(),
+    motifAnnotations: z.array(ViralMotifAnnotationSchema).optional()
   })),
   rhythm: z.object({
     avgShotDuration: z.number(),
@@ -750,7 +1286,8 @@ export const ViralStructureGraphSchema = z.object({
     type: z.enum(['sequence', 'requires', 'maps_to', 'fallback']),
     explanation: z.string().optional()
   })),
-  boundaries: z.array(BoundarySchema).optional()
+  boundaries: z.array(BoundarySchema).optional(),
+  motifAnnotations: z.array(ViralMotifAnnotationSchema).optional()
 });
 
 export const SafetyStatusSchema = z.object({
@@ -844,6 +1381,15 @@ export const GenerationProviderSchema = z.enum(['mock', 'seedance_2_0']);
 export const MissingMaterialGenerationModeSchema = z.enum(['image_to_video', 'text_to_video']);
 export const MissingMaterialGenerationStatusSchema = z.enum(['planned', 'ready', 'blocked']);
 
+export const MissingMaterialPromptMetadataSchema = z.object({
+  source: z.literal('prompt_compactor'),
+  originalPositivePromptLength: z.number().int().nonnegative(),
+  compactPositivePromptLength: z.number().int().nonnegative(),
+  targetMaxCharacters: z.number().int().positive(),
+  shotSpecPreserved: z.boolean(),
+  warnings: z.array(z.string())
+});
+
 export const MissingMaterialGenerationJobSchema = z.object({
   id: z.string(),
   gapId: z.string(),
@@ -862,6 +1408,7 @@ export const MissingMaterialGenerationJobSchema = z.object({
   gapSeverity: z.enum(['low', 'medium', 'high']),
   repairStrategy: GapRepairStrategySchema.optional(),
   storyboardFrameId: z.string().optional(),
+  promptMetadata: MissingMaterialPromptMetadataSchema.optional(),
   safetyStatus: SafetyStatusSchema,
   blockedReason: z.string().optional(),
   disclaimer: z.string()

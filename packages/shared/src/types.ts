@@ -223,6 +223,7 @@ export interface ShotSlotNode {
   intent?: ShotSlotIntent;
   sourceInstance?: ShotSlotSourceInstance;
   acceptanceCriteria?: ShotSlotAcceptanceCriteria;
+  motifAnnotations?: ViralMotifAnnotation[];
 }
 
 export interface RhythmStructure {
@@ -282,6 +283,7 @@ export interface ViralStructureGraph {
   creativeIngredients: CreativeIngredient[];
   edges: GraphEdge[];
   boundaries?: Boundary[];
+  motifAnnotations?: ViralMotifAnnotation[];
 }
 
 export interface ContentBrief {
@@ -291,6 +293,11 @@ export interface ContentBrief {
   sellingPoints: string[];
   cta: string;
   stylePreference?: string;
+  /**
+   * Target product category for motif transfer (decision D2). User-supplied and
+   * authoritative; inferred from productName when omitted.
+   */
+  category?: string;
 }
 
 export interface AssetVisualContent {
@@ -465,7 +472,10 @@ export type AssetAnalysisSource =
   | 'mock_filename_rules'
   | 'llm_multimodal'
   | 'manual_text_brief'
-  | 'deterministic';
+  | 'deterministic'
+  | 'generated_external'
+  | 'planned_generation'
+  | 'aigc';
 
 export interface AssetAnalysisProfile {
   profileVersion: 'asset_analysis_v1';
@@ -507,6 +517,422 @@ export interface AssetCard {
   candidateSlotRoles?: AssetCandidateSlotRole[];
   analysisSource?: AssetAnalysisSource;
   analysis?: AssetAnalysisProfile;
+}
+
+export type TransitionGrammarId =
+  | 'dynamic_entry'
+  | 'impact_beat'
+  | 'assembly_reveal'
+  | 'activation_moment'
+  | 'lockup_transition';
+
+export type TargetTransitionEquivalent =
+  | 'ice_cube_drop'
+  | 'open_cap'
+  | 'pour_to_cup'
+  | 'drink_neck_down'
+  | 'bottle_rotation'
+  | 'lineup_sweep'
+  | 'clean_cta_end_frame'
+  | 'hyperframes_benefit_card_drop'
+  | (string & {});
+
+export type TargetCategory =
+  | 'beverage'
+  | 'beauty'
+  | 'food'
+  | 'electronics'
+  | 'fashion'
+  | 'home_goods'
+  | 'generic';
+
+export type TransitionFunction =
+  | 'problem_to_solution'
+  | 'heat_to_refresh'
+  | 'chaos_to_order'
+  | 'ingredient_to_product'
+  | 'scene_to_brand_world'
+  | 'product_to_cta'
+  | 'usage_to_benefit'
+  | 'texture_shift'
+  | 'proof_to_cta';
+
+export type TransitionImplementationMode =
+  | 'cut_only'
+  | 'css_motion'
+  | 'gsap'
+  | 'lottie'
+  | 'rive'
+  | 'threejs'
+  | 'remotion'
+  | 'hyperframes'
+  | 'storyboard_image'
+  | 'external_video_generation';
+
+export interface TransitionIngredient {
+  id: string;
+  grammarId?: TransitionGrammarId;
+  targetCategory?: TargetCategory;
+  ingredientRole?: 'motion_anchor' | 'object_bridge' | 'texture_bridge' | 'emotion_bridge' | 'copy_bridge' | 'sound_bridge';
+  label: string;
+  sourcePattern?: string;
+  targetEquivalent?: TargetTransitionEquivalent;
+  requiredEvidence: string[];
+  acceptableAssetRoles?: AssetManagerRole[];
+  acceptableMediaTypes?: Array<'image' | 'video' | 'text' | 'generated' | 'audio' | 'none'>;
+  avoidCopyingSource?: string[];
+  notes?: string;
+}
+
+export interface TransitionNeed {
+  id: string;
+  grammarId: TransitionGrammarId;
+  sourceMotif: string;
+  transferableIntent: string;
+  targetEquivalent: TargetTransitionEquivalent;
+  targetSlots: string[];
+  importance: 'low' | 'medium' | 'high';
+  ingredients: TransitionIngredient[];
+}
+
+export interface AssetTransitionAffordance {
+  assetId: string;
+  supportsGrammar: TransitionGrammarId[];
+  supportedIngredients: string[];
+  confidence: number;
+  evidence: string[];
+  limitations: string[];
+}
+
+export interface TransitionCoverageObservation {
+  id: string;
+  transitionNeedId: string;
+  grammarId: TransitionGrammarId;
+  coverageStatus: 'covered' | 'weak' | 'insufficient';
+  candidateAssetIds: string[];
+  missingIngredientIds: string[];
+  potentialImpact: string[];
+  confidence: 'low' | 'medium' | 'high';
+  ownership: 'asset_manager_transition_observation_only';
+}
+
+export interface TransitionHandoffBrief {
+  id: string;
+  owner: 'video_agent' | 'gap_repair' | 'hyperframes' | 'aigc' | 'manual_shoot';
+  transitionNeedIds: string[];
+  brief: string;
+  prompt?: string;
+  negativePrompt?: string;
+  safetyNotes: string[];
+  notRenderedOutput: boolean;
+}
+
+export interface TransitionMotionGrammarHandoff {
+  protocolVersion: 'transition-handoff-v1';
+  patternId: 'kinetic_assembly';
+  sourceExample: string;
+  targetProduct: string;
+  designLanguage: string;
+  boundary: string[];
+  transitionNeeds: TransitionNeed[];
+  assetAffordances: AssetTransitionAffordance[];
+  coverageObservations: TransitionCoverageObservation[];
+  downstreamHandoff: TransitionHandoffBrief[];
+  warnings: string[];
+}
+
+export interface TransitionGrammar {
+  id: string;
+  name: string;
+  motionTokens: MotionToken[];
+  objectContinuity: string;
+  cameraContinuity?: string;
+  rhythm: 'hard_cut' | 'beat_cut' | 'match_cut' | 'speed_ramp' | 'smooth_bridge' | 'hold';
+  emotionalBridge: string;
+  notes: string[];
+}
+
+export interface TransitionMissingAssetFallback {
+  mode: 'cut_only' | 'copy_card' | 'storyboard_prompt' | 'manual_shoot_brief' | 'external_generation_brief';
+  description: string;
+  prompt?: string;
+  limitations: string[];
+}
+
+export interface TransitionShotDescriptor {
+  id: string;
+  label?: string;
+  role?: SegmentRole | ShotSlotRole | AssetManagerRole | string;
+  start?: number;
+  end?: number;
+  script?: string;
+  visualAction?: string;
+}
+
+export interface TransitionRecipe {
+  id: string;
+  name: string;
+  sourceMotifId?: string;
+  sourceMotifType?: MotifType | string;
+  targetCategory: TargetCategory;
+  transitionFunction: TransitionFunction;
+  beforeShotId: string;
+  afterShotId: string;
+  beforeShot?: TransitionShotDescriptor;
+  transitionAction?: string;
+  afterShot?: TransitionShotDescriptor;
+  emotionShift?: string;
+  narrativeFunction?: TransitionFunction;
+  motionGrammar: TransitionGrammar;
+  requiredAssets: TransitionIngredient[];
+  missingAssetFallback: TransitionMissingAssetFallback;
+  implementationMode: TransitionImplementationMode;
+  storyboardPrompt: string;
+  videoPrompt: string;
+  ipRiskNotes: string[];
+  ownership: 'transition_plan_only_not_rendered';
+}
+
+export interface CategoryTransitionPreset {
+  id: string;
+  targetCategory: TargetCategory;
+  name: string;
+  recipeIds: string[];
+  preferredFunctions: TransitionFunction[];
+  targetEquivalents: string[];
+  avoidSourceTerms: string[];
+  notes: string[];
+}
+
+export type AudioCueType =
+  | 'music_bed'
+  | 'foley'
+  | 'impact'
+  | 'whoosh'
+  | 'silence'
+  | 'logo_sting'
+  | 'cta_sound'
+  | 'transition_sound'
+  | 'ambient';
+
+export type AudioNarrativeFunction =
+  | 'hook'
+  | 'transition'
+  | 'product_reveal'
+  | 'proof'
+  | 'usage_demo'
+  | 'cta'
+  | 'brand_memory';
+
+export interface AudioCue {
+  id: string;
+  cueType: AudioCueType;
+  narrativeFunction: AudioNarrativeFunction;
+  startTime: number;
+  duration: number;
+  syncTarget: string;
+  soundDescription: string;
+  emotionalEffect: string;
+  generationPrompt?: string;
+  assetRequirement?: string;
+  assetId?: string;
+  source?: 'planned' | 'licensed_library' | 'user_upload' | 'source_audio' | 'unknown';
+  licenseStatus?: 'cleared' | 'needs_review' | 'unknown';
+  fallback?: string;
+  variantBehavior?: {
+    high_click?: string;
+    high_conversion?: string;
+    premium?: string;
+  };
+}
+
+export interface SonicMotif {
+  id: string;
+  name: string;
+  targetCategory: TargetCategory;
+  cueSequence: AudioCue[];
+  brandTone: string;
+  usageContext: string;
+  warnings: string[];
+}
+
+export interface BeatSyncMap {
+  id: string;
+  bpm?: number;
+  beatTimes: number[];
+  syncPoints: Array<{
+    time: number;
+    targetId: string;
+    reason: string;
+  }>;
+  warnings: string[];
+}
+
+export interface SoundGap {
+  id: string;
+  gapType: 'missing_music_bed' | 'missing_foley' | 'missing_impact' | 'missing_logo_sting' | 'missing_cta_sound' | 'sync_uncertain';
+  affectedCueIds: string[];
+  severity: 'low' | 'medium' | 'high';
+  reason: string;
+  fallback: string;
+}
+
+export interface AudioTrackPlan {
+  id: string;
+  mode: 'silent' | 'bgm_only' | 'sfx_only' | 'bgm_with_sfx' | 'source_audio' | 'plan_only';
+  hasRenderableAudio: boolean;
+  targetCategory: TargetCategory;
+  sonicMotifs: SonicMotif[];
+  cues: AudioCue[];
+  beatSyncMap?: BeatSyncMap;
+  soundGaps: SoundGap[];
+  warnings: string[];
+  ownership: 'audio_plan_only_not_generated';
+}
+
+export interface AudioGenerationJobCard {
+  id: string;
+  cueIds: string[];
+  providerHint: 'generic' | 'elevenlabs' | 'audiocraft' | 'musicgen' | 'stable_audio' | 'manual_sfx' | 'user_upload';
+  prompt: string;
+  negativePrompt?: string;
+  expectedDuration: number;
+  status: 'planned' | 'blocked' | 'needs_user_upload';
+  safetyNotes: string[];
+  ownership: 'external_audio_job_card_only';
+}
+
+export interface TransitionAudioPlanBundle {
+  protocolVersion: 'transition-audio-plan-v1';
+  targetCategory: TargetCategory;
+  recipes: TransitionRecipe[];
+  categoryPresets: CategoryTransitionPreset[];
+  audioTrackPlan: AudioTrackPlan;
+  audioGenerationJobs: AudioGenerationJobCard[];
+  offlineDiagnostics?: Array<{
+    id: string;
+    label: string;
+    value: number;
+    explanation: string;
+  }>;
+  warnings: string[];
+  ownership: 'transition_audio_plan_only_not_rendered';
+}
+
+export type MotifType =
+  | 'surreal_assembly'
+  | 'kinetic_assembly_reveal'
+  | 'kinetic_product_reveal'
+  | 'dynamic_entry'
+  | 'impact_activation'
+  | 'ingredient_transformation'
+  | 'lineup_lockup'
+  | 'benefit_card_motion'
+  | 'category_usage_moment';
+
+export type MotionToken =
+  | 'dynamic_entry'
+  | 'component_cascade'
+  | 'chaos_to_order'
+  | 'assembly_completion'
+  | 'interaction_activation'
+  | 'spectacle_burst'
+  | 'cta_reveal'
+  | 'falling_object'
+  | 'impact_beat'
+  | 'snap_open'
+  | 'assembly_reveal'
+  | 'activation_moment'
+  | 'pour_flow'
+  | 'drink_action'
+  | 'bottle_rotation'
+  | 'lineup_sweep'
+  | 'card_drop'
+  | 'clean_hold'
+  | 'quick_cut'
+  | 'push_in'
+  | 'match_cut'
+  | 'morph';
+
+export interface TargetCategoryMotifMapping {
+  targetCategory: string;
+  preferredEquivalents: string[];
+  rejectedEquivalents: string[];
+  rationale: string;
+}
+
+export interface MotifTransferVariable {
+  name: string;
+  sourceValue: string;
+  targetValue: string;
+  allowedTargetValues: string[];
+  notes?: string;
+}
+
+export interface ViralMotifAnnotation {
+  id: string;
+  slotId?: string;
+  segmentId?: string;
+  motifType: MotifType;
+  motionTokens: MotionToken[];
+  sanitizedIntent: string;
+  transferVariables: MotifTransferVariable[];
+  bannedSourceTerms: string[];
+  targetCategoryMapping: TargetCategoryMotifMapping;
+  evidence: string[];
+  confidence: number;
+}
+
+export interface MotifContext {
+  motifAnnotationId: string;
+  motifType: MotifType;
+  motionTokens: MotionToken[];
+  missingMotionTokens: MotionToken[];
+  sanitizedIntent: string;
+  targetMotifHints: string[];
+  confidence: number;
+  evidence: string[];
+}
+
+export interface MotifAwareManualShootBrief {
+  id: string;
+  motifAnnotationId: string;
+  targetCategoryMapping: TargetCategoryMotifMapping;
+  shotObjective: string;
+  requiredActions: string[];
+  compositionNotes: string[];
+  sanitizedIntent: string;
+  bannedSourceTerms: string[];
+  motionTokens: MotionToken[];
+  safetyNotes: string[];
+  notRenderedOutput: boolean;
+}
+
+export interface MotifAwareAigcPromptBrief {
+  id: string;
+  motifAnnotationId: string;
+  targetCategoryMapping: TargetCategoryMotifMapping;
+  prompt: string;
+  negativePrompt: string;
+  sanitizedIntent: string;
+  bannedSourceTerms: string[];
+  motionTokens: MotionToken[];
+  safetyNotes: string[];
+  notRenderedOutput: boolean;
+}
+
+export interface MotifAwareHyperframesBrief {
+  id: string;
+  motifAnnotationId: string;
+  targetCategoryMapping: TargetCategoryMotifMapping;
+  cardType: 'hook_card' | 'benefit_card' | 'comparison_card' | 'cta_card' | 'transition_card';
+  cardMotion: 'card_drop' | 'slide_in' | 'snap_cut' | 'lineup_sweep' | 'clean_hold';
+  copyIntent: string;
+  sanitizedIntent: string;
+  bannedSourceTerms: string[];
+  motionTokens: MotionToken[];
+  safetyNotes: string[];
+  notRenderedOutput: boolean;
 }
 
 export interface RoleCoverageSummary {
@@ -584,6 +1010,111 @@ export type NormalizedAssetCard = AssetCard & { analysis: AssetAnalysisProfile }
 
 export type AssetLibraryProfile = AssetLibraryReport;
 
+export type MaterialScenarioType =
+  | 'empty_assets'
+  | 'single_image_only'
+  | 'partial_real_footage'
+  | 'aigc_ready'
+  | 'mixed_real_and_aigc';
+
+export interface MaterialScenarioProfile {
+  scenarioType: MaterialScenarioType;
+  assetCount: number;
+  imageCount: number;
+  videoCount: number;
+  textCount: number;
+  generatedAssetCount: number;
+  realFootageCount: number;
+  evidenceCoverageScore: number;
+  completionFeasibilityScore: number;
+  summary: string;
+  strengths: string[];
+  weaknesses: string[];
+  recommendedDownstreamMode:
+    | 'structure_cards_only'
+    | 'single_image_motion_reuse'
+    | 'real_footage_editing'
+    | 'aigc_missing_material_generation'
+    | 'mixed_repair_workflow';
+  warnings: string[];
+}
+
+export interface CompletionChannelEligibility {
+  channel:
+    | 'manual_shoot'
+    | 'aigc_video_prompt'
+    | 'aigc_image_prompt'
+    | 'hyperframes_card_animation'
+    | 'reuse_crop_zoom'
+    | 'copy_packaging_card'
+    | 'video_agent_fallback_rendering';
+  eligible: boolean;
+  confidence: 'high' | 'medium' | 'low';
+  reason: string;
+  requiredInputs: string[];
+  providedInputs: string[];
+  missingInputs: string[];
+  ownership:
+    | 'gap_repair_planner'
+    | 'video_agent'
+    | 'hyperframes_renderer'
+    | 'external_generation_adapter'
+    | 'human_shooting';
+}
+
+export interface ManualShootBrief {
+  title: string;
+  objective: string;
+  shotDescription: string;
+  durationSec: number;
+  framing: string;
+  requiredProps: string[];
+  mustCapture: string[];
+  avoid: string[];
+}
+
+export interface AigcGenerationBrief {
+  providerHint: 'gemini' | 'seedance' | 'generic';
+  prompt: string;
+  negativePrompt: string;
+  referenceAssetIds: string[];
+  expectedDurationSec: number;
+  aspectRatio: '9:16' | '16:9' | '1:1';
+  safetyNotes: string[];
+}
+
+export interface HyperframesFallbackBrief {
+  title: string;
+  cardType:
+    | 'hook_card'
+    | 'benefit_card'
+    | 'usage_placeholder_card'
+    | 'comparison_card'
+    | 'cta_card'
+    | 'timeline_bridge_card';
+  copyIntent: string;
+  visualElements: string[];
+  animationHints: string[];
+  durationSec: number;
+  inputAssets: string[];
+}
+
+export interface MissingMaterialBrief {
+  id: string;
+  affectedSegmentId?: string;
+  affectedSlotId: string;
+  slotRole: AssetRole;
+  slotIntent: string;
+  missingIngredients: MissingIngredient[];
+  potentialImpact: CoverageImpact[];
+  manualShootBrief?: ManualShootBrief;
+  aigcGenerationBrief?: AigcGenerationBrief;
+  hyperframesBrief?: HyperframesFallbackBrief;
+  channelEligibility: CompletionChannelEligibility[];
+  motifContext?: MotifContext;
+  ownership: 'asset_manager_handoff_brief_only';
+}
+
 export interface AssetSupplyContext {
   protocolVersion: 'asset-supply-v1';
   libraryId: string;
@@ -591,6 +1122,8 @@ export interface AssetSupplyContext {
   assets: NormalizedAssetCard[];
   libraryProfile: AssetLibraryProfile;
   contextualCoverage?: ContextualAssetCoverageReport;
+  materialScenario?: MaterialScenarioProfile;
+  missingMaterialBriefs?: MissingMaterialBrief[];
   warnings: string[];
 }
 
@@ -626,6 +1159,7 @@ export interface ContextualSlotCoverage {
   confidence: 'high' | 'medium' | 'low';
   evidence: string[];
   limitations: string[];
+  motifContext?: MotifContext;
 }
 
 export interface MaterialCoverageObservation {
@@ -643,6 +1177,7 @@ export interface MaterialCoverageObservation {
     | 'missing_motion_evidence'
     | 'missing_product_evidence'
     | 'missing_usage_evidence'
+    | 'missing_comparison_evidence'
     | 'missing_cta_surface'
     | 'missing_text_safe_area';
   requiredIngredients: RequiredIngredient[];
@@ -653,6 +1188,10 @@ export interface MaterialCoverageObservation {
   severityEstimate: 'low' | 'medium' | 'high';
   confidence: 'high' | 'medium' | 'low';
   evidence: string[];
+  motifContext?: MotifContext;
+  motifType?: MotifType;
+  missingMotionTokens?: MotionToken[];
+  targetMotifHints?: string[];
   ownership: 'asset_manager_observation_only';
 }
 
@@ -820,6 +1359,7 @@ export interface MaterialGap {
   missingIngredients?: CreativeIngredientType[];
   gapSpec?: GapShootSpec;
   gapSpecSource?: GapSpecSource;
+  motifContext?: MotifContext;
 }
 
 export interface GapRepair {
@@ -943,6 +1483,15 @@ export type GenerationProvider = 'mock' | 'seedance_2_0';
 export type MissingMaterialGenerationMode = 'image_to_video' | 'text_to_video';
 export type MissingMaterialGenerationStatus = 'planned' | 'ready' | 'blocked';
 
+export interface MissingMaterialPromptMetadata {
+  source: 'prompt_compactor';
+  originalPositivePromptLength: number;
+  compactPositivePromptLength: number;
+  targetMaxCharacters: number;
+  shotSpecPreserved: boolean;
+  warnings: string[];
+}
+
 export interface MissingMaterialGenerationRequest {
   materialGaps: MaterialGap[];
   repairs?: GapRepair[];
@@ -971,6 +1520,7 @@ export interface MissingMaterialGenerationJob {
   gapSeverity: MaterialGap['severity'];
   repairStrategy?: GapRepairStrategy;
   storyboardFrameId?: string;
+  promptMetadata?: MissingMaterialPromptMetadata;
   safetyStatus: SafetyStatus;
   blockedReason?: string;
   disclaimer: string;

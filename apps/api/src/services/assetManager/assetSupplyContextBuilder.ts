@@ -9,6 +9,7 @@ import type {
   CoverageImpact,
   MaterialCoverageObservation,
   MissingIngredient,
+  MotifContext,
   NormalizedAssetCard,
   RequiredIngredient,
   ShotSlotNode,
@@ -19,13 +20,25 @@ import type {
   ViralStructureGraph
 } from '@viral-struct/shared';
 import { AssetSupplyContextSchema } from '@viral-struct/shared';
+import { buildMotifContext, extractViralMotifAnnotation } from '../motifs/viralMotifExtractor';
+import { normalizeCategory, type CategoryPreset } from '../motifs/categoryPresetProvider';
 import { analyzeAssetCoverage } from './assetCoverageAnalyzer';
+import { buildMissingMaterialBriefs } from './missingMaterialBriefBuilder';
+import { classifyMaterialScenario, type MaterialScenarioClassifierOptions } from './materialScenarioClassifier';
 
 export interface BuildAssetSupplyContextInput {
   structureGraph?: ViralStructureGraph;
   assetCards: AssetCard[];
   contentBrief?: ContentBrief;
   libraryId?: string;
+  options?: MaterialScenarioClassifierOptions;
+  /**
+   * D2 category preset (LLM-generated + asset-grounded), produced once at the
+   * asset-parse stage and threaded into motif target mapping. Optional: when
+   * absent the deterministic built-in mapping is used, so existing callers and
+   * tests are unaffected.
+   */
+  categoryPreset?: CategoryPreset;
 }
 
 export function buildAssetSupplyContext(input: BuildAssetSupplyContextInput): AssetSupplyContext {
@@ -42,12 +55,35 @@ export function buildAssetSupplyContext(input: BuildAssetSupplyContextInput): As
     assetCards: coverage.assetCards,
     slotRows: coverage.matrix.slotRows,
     libraryId,
-    warnings: coverage.warnings
+    warnings: coverage.warnings,
+    categoryPreset: input.categoryPreset
+  });
+  const preliminaryScenario = classifyMaterialScenario({
+    assets: coverage.assetCards,
+    contextualCoverage,
+    contentBrief: input.contentBrief,
+    options: input.options
+  });
+  const missingMaterialBriefs = buildMissingMaterialBriefs({
+    contextualCoverage,
+    assetCards: coverage.assetCards,
+    contentBrief: input.contentBrief,
+    materialScenario: preliminaryScenario,
+    structureGraph: input.structureGraph,
+    categoryPreset: input.categoryPreset
+  });
+  const materialScenario = classifyMaterialScenario({
+    assets: coverage.assetCards,
+    contextualCoverage,
+    contentBrief: input.contentBrief,
+    missingMaterialBriefs,
+    options: input.options
   });
   const warnings = Array.from(new Set([
     ...coverage.warnings,
     ...coverage.assetCards.flatMap((asset) => asset.analysis?.warnings ?? []),
-    ...contextualCoverage.warnings
+    ...contextualCoverage.warnings,
+    ...materialScenario.warnings
   ]));
 
   const context: AssetSupplyContext = {
@@ -57,6 +93,8 @@ export function buildAssetSupplyContext(input: BuildAssetSupplyContextInput): As
     assets: coverage.assetCards as NormalizedAssetCard[],
     libraryProfile: coverage.report,
     contextualCoverage,
+    materialScenario,
+    missingMaterialBriefs,
     warnings
   };
 
@@ -70,12 +108,13 @@ export interface BuildContextualCoverageInput {
   slotRows: SlotCoverageRow[];
   libraryId: string;
   warnings?: string[];
+  categoryPreset?: CategoryPreset;
 }
 
 export function buildContextualAssetCoverageReport(input: BuildContextualCoverageInput): ContextualAssetCoverageReport {
   const assetById = new Map(input.assetCards.map((asset) => [asset.id, asset]));
   const slotById = new Map((input.structureGraph?.shotSlots ?? []).map((slot) => [slot.id, slot]));
-  const slotCoverages = input.slotRows.map((row) => buildSlotCoverage(row, slotById.get(row.slotId), assetById));
+  const slotCoverages = input.slotRows.map((row) => buildSlotCoverage(row, slotById.get(row.slotId), assetById, input.contentBrief, input.categoryPreset));
   const observations = slotCoverages
     .filter((coverage) => coverage.coverageStatus !== 'covered')
     .map((coverage, index) => buildObservation(coverage, index));
@@ -107,18 +146,21 @@ export function buildContextualAssetCoverageReport(input: BuildContextualCoverag
 function buildSlotCoverage(
   row: SlotCoverageRow,
   slot: ShotSlotNode | undefined,
-  assetById: Map<string, AssetCard>
+  assetById: Map<string, AssetCard>,
+  contentBrief: ContentBrief | undefined,
+  categoryPreset?: CategoryPreset
 ): ContextualSlotCoverage {
   const requiredIngredients = buildRequiredIngredients(row, slot);
   const candidateAssets = row.candidates
     .map((candidate) => buildCandidate(candidate, row, assetById.get(candidate.assetId)))
     .sort((a, b) => b.score - a.score)
     .slice(0, 3);
-  const coverageStatus = row.status === 'missing' ? 'insufficient' : row.status;
   const bestCandidate = candidateAssets[0];
-  const availableIngredients = buildAvailableIngredients(requiredIngredients, row, bestCandidate);
-  const missingIngredients = buildMissingIngredients(requiredIngredients, row, 'missing');
-  const weakIngredients = buildMissingIngredients(requiredIngredients, row, 'weak');
+  const coverageStatus = finalizeCoverageStatus(row, bestCandidate);
+  const availableIngredients = buildAvailableIngredients(requiredIngredients, row, coverageStatus, bestCandidate);
+  const missingIngredients = buildMissingIngredients(requiredIngredients, row, coverageStatus, 'missing');
+  const weakIngredients = buildMissingIngredients(requiredIngredients, row, coverageStatus, 'weak');
+  const motifContext = buildSlotMotifContext(slot, contentBrief, coverageStatus, categoryPreset);
 
   return {
     slotId: row.slotId,
@@ -134,8 +176,9 @@ function buildSlotCoverage(
     candidateAssets,
     coverageStatus,
     confidence: confidenceFromScore(row.bestScore),
-    evidence: buildCoverageEvidence(row, bestCandidate),
-    limitations: buildLimitations(row, bestCandidate)
+    evidence: buildCoverageEvidence(row, bestCandidate, motifContext),
+    limitations: buildLimitations(row, bestCandidate),
+    motifContext
   };
 }
 
@@ -234,15 +277,16 @@ function addIngredient(
 function buildAvailableIngredients(
   ingredients: RequiredIngredient[],
   row: SlotCoverageRow,
+  coverageStatus: ContextualSlotCoverage['coverageStatus'],
   candidate?: SlotAssetCandidate
 ): AvailableIngredient[] {
-  if (!candidate || row.status === 'missing') return [];
+  if (!candidate || coverageStatus === 'insufficient') return [];
   return ingredients
-    .filter((ingredient) => row.status === 'covered' || ['visual_subject', 'shot_type', 'product_evidence', 'cta_surface'].includes(ingredient.kind))
+    .filter((ingredient) => coverageStatus === 'covered' || ['visual_subject', 'shot_type', 'product_evidence', 'cta_surface'].includes(ingredient.kind))
     .map((ingredient) => ({
       requiredIngredientId: ingredient.id,
       assetId: candidate.assetId,
-      score: row.status === 'covered' ? candidate.score : Math.min(candidate.score, 64),
+      score: coverageStatus === 'covered' ? candidate.score : Math.min(candidate.score, 64),
       evidence: candidate.evidence.reasons.slice(0, 2)
     }));
 }
@@ -250,23 +294,36 @@ function buildAvailableIngredients(
 function buildMissingIngredients(
   ingredients: RequiredIngredient[],
   row: SlotCoverageRow,
+  coverageStatus: ContextualSlotCoverage['coverageStatus'],
   mode: 'missing' | 'weak'
 ): MissingIngredient[] {
-  if (row.status === 'covered') return [];
-  if (mode === 'weak' && row.status !== 'weak') return [];
-  if (mode === 'missing' && row.status !== 'missing') return [];
-  const selected = row.status === 'weak'
+  if (coverageStatus === 'covered') return [];
+  if (mode === 'weak' && coverageStatus !== 'weak') return [];
+  if (mode === 'missing' && coverageStatus !== 'insufficient') return [];
+  const selected = coverageStatus === 'weak'
     ? ingredients.filter((ingredient) => ['motion', 'usage_evidence', 'comparison_evidence', 'duration', 'text_safe_area'].includes(ingredient.kind))
     : ingredients;
   return selected.map((ingredient) => ({
     requiredIngredientId: ingredient.id,
     label: ingredient.label,
-    reason: row.gapReason ?? `${row.mappedRole} is ${row.status}; available assets do not fully satisfy ${ingredient.kind}.`,
+    reason: row.gapReason ?? `${row.mappedRole} is ${coverageStatus}; available assets do not fully satisfy ${ingredient.kind}.`,
     evidence: [
       `bestScore=${row.bestScore}`,
-      `coverageStatus=${row.status === 'missing' ? 'insufficient' : row.status}`
+      `coverageStatus=${coverageStatus}`
     ]
   }));
+}
+
+function finalizeCoverageStatus(row: SlotCoverageRow, candidate?: SlotAssetCandidate): ContextualSlotCoverage['coverageStatus'] {
+  const baseStatus: ContextualSlotCoverage['coverageStatus'] = row.status === 'missing' ? 'insufficient' : row.status;
+  if (!candidate || candidate.score < 50) return 'insufficient';
+  if (baseStatus === 'insufficient') return 'insufficient';
+  if (candidate.score < 75) return 'weak';
+  if (!candidate.mediaReadiness.hasUsableUrl) return 'weak';
+  if ((row.slotRole ?? row.mappedRole) === 'cta_visual' && candidate.constraints.textSafeAreaRisk) return 'weak';
+  if (candidate.constraints.notEnoughForStandaloneShot && baseStatus === 'covered') return 'weak';
+  if (candidate.evidence.warnings.length >= 2 && baseStatus === 'covered') return 'weak';
+  return baseStatus;
 }
 
 function buildCandidate(candidate: SlotCandidateAsset, row: SlotCoverageRow, asset?: AssetCard): SlotAssetCandidate {
@@ -278,14 +335,14 @@ function buildCandidate(candidate: SlotCandidateAsset, row: SlotCoverageRow, ass
     : asset?.analysis?.safety.status === 'needs_review'
       ? 55
       : 100;
-  const score = roundScore(
+  const score = Math.min(candidate.score, roundScore(
     0.30 * candidate.roleAffordance
     + 0.20 * candidate.assetQuality
     + 0.15 * mediaReadinessScore
     + 0.15 * candidate.intentSemanticMatch
     + 0.10 * candidate.editabilityFit
     + 0.10 * safetyScore
-  );
+  ));
   return {
     assetId: candidate.assetId,
     score,
@@ -354,7 +411,11 @@ function buildObservation(coverage: ContextualSlotCoverage, index: number): Mate
     potentialImpact: buildPotentialImpact(coverage, severity),
     severityEstimate: severity,
     confidence: coverage.confidence,
-    evidence: coverage.evidence,
+    evidence: buildObservationEvidence(coverage),
+    motifContext: coverage.motifContext,
+    motifType: coverage.motifContext?.motifType,
+    missingMotionTokens: coverage.motifContext?.missingMotionTokens,
+    targetMotifHints: coverage.motifContext?.targetMotifHints,
     ownership: 'asset_manager_observation_only'
   };
 }
@@ -363,11 +424,14 @@ function observationTypeForCoverage(coverage: ContextualSlotCoverage): MaterialC
   if (coverage.slotRole === 'usage_demo' || coverage.missingIngredients.some((ingredient) => ingredient.requiredIngredientId.includes('usage'))) {
     return 'missing_usage_evidence';
   }
+  if (coverage.slotRole === 'comparison' || coverage.missingIngredients.some((ingredient) => ingredient.requiredIngredientId.includes('comparison'))) {
+    return 'missing_comparison_evidence';
+  }
   if (coverage.missingIngredients.some((ingredient) => ingredient.requiredIngredientId.includes('motion'))) return 'missing_motion_evidence';
   if (coverage.slotRole === 'product_closeup' || coverage.missingIngredients.some((ingredient) => ingredient.requiredIngredientId.includes('product'))) {
     return 'missing_product_evidence';
   }
-  if (coverage.slotRole === 'cta') return 'missing_cta_surface';
+  if (coverage.slotRole === 'cta' || coverage.slotRole === 'cta_visual') return 'missing_cta_surface';
   if (coverage.coverageStatus === 'weak' && coverage.candidateAssets.some((candidate) => candidate.evidence.qualityScore < 60)) {
     return 'weak_candidate_quality';
   }
@@ -434,13 +498,87 @@ function firstAcceptanceCriterion(slot?: ShotSlotNode): string | undefined {
   return buildAcceptanceCriteria(slot)?.[0];
 }
 
-function buildCoverageEvidence(row: SlotCoverageRow, candidate?: SlotAssetCandidate): string[] {
+function buildCoverageEvidence(row: SlotCoverageRow, candidate?: SlotAssetCandidate, motifContext?: MotifContext): string[] {
   return [
     `coverageStatus=${row.status === 'missing' ? 'insufficient' : row.status}`,
     `bestScore=${row.bestScore}`,
     row.gapReason,
-    candidate ? `bestCandidate=${candidate.assetId}` : undefined
+    candidate ? `bestCandidate=${candidate.assetId}` : undefined,
+    motifContext ? `motif=${motifContext.motifType}` : undefined,
+    motifContext?.missingMotionTokens.length ? `missingMotionTokens=${motifContext.missingMotionTokens.join('/')}` : undefined,
+    motifContext?.targetMotifHints.length ? `targetMotifHints=${motifContext.targetMotifHints.slice(0, 4).join('/')}` : undefined
   ].filter((value): value is string => Boolean(value));
+}
+
+function buildObservationEvidence(coverage: ContextualSlotCoverage): string[] {
+  if (!coverage.motifContext) {
+    return coverage.evidence;
+  }
+
+  return [
+    ...coverage.evidence,
+    `motifContext=${coverage.motifContext.motifType}`,
+    `motifIntent=${coverage.motifContext.sanitizedIntent}`
+  ];
+}
+
+function buildSlotMotifContext(
+  slot: ShotSlotNode | undefined,
+  contentBrief: ContentBrief | undefined,
+  coverageStatus: ContextualSlotCoverage['coverageStatus'],
+  categoryPreset?: CategoryPreset
+): MotifContext | undefined {
+  const annotation = findSlotMotifAnnotation(slot, contentBrief, categoryPreset);
+  if (!annotation) {
+    return undefined;
+  }
+
+  const context = buildMotifContext(annotation);
+  return {
+    ...context,
+    missingMotionTokens: coverageStatus === 'covered' ? [] : context.motionTokens
+  };
+}
+
+function findSlotMotifAnnotation(
+  slot: ShotSlotNode | undefined,
+  contentBrief: ContentBrief | undefined,
+  categoryPreset?: CategoryPreset
+) {
+  if (!slot) {
+    return undefined;
+  }
+
+  const existing = slot.motifAnnotations?.find((annotation) => annotation.motifType !== undefined);
+  if (existing) {
+    return existing;
+  }
+
+  return extractViralMotifAnnotation({
+    slot,
+    targetCategory: categoryPreset?.category ?? inferTargetCategory(contentBrief),
+    preset: categoryPreset
+  });
+}
+
+function inferTargetCategory(brief: ContentBrief | undefined): string {
+  // Decision D2 / choice (b): an explicit, user-supplied category is authoritative.
+  if (brief?.category) {
+    return normalizeCategory(brief.category);
+  }
+
+  const text = [
+    brief?.productName,
+    brief?.scenario,
+    brief?.stylePreference,
+    ...(brief?.sellingPoints ?? [])
+  ].filter(Boolean).join(' ').toLowerCase();
+
+  if (/beverage|drink|tea|iced|红茶|饮料|冰/.test(text)) {
+    return 'beverage';
+  }
+
+  return 'unknown';
 }
 
 function buildLimitations(row: SlotCoverageRow, candidate?: SlotAssetCandidate): string[] {

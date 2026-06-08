@@ -143,6 +143,31 @@ test('planMissingMaterialGenerationJobs creates jobs for high and medium gaps on
   assert.ok(result.warnings.some((warning) => warning.includes('No external video generation')));
 });
 
+test('planMissingMaterialGenerationJobs compacts generation prompts while preserving shotSpec evidence', () => {
+  const result = planMissingMaterialGenerationJobs({
+    materialGaps: gaps,
+    repairs,
+    timeline,
+    storyboardFrames: [storyboardFrame],
+    contentBrief: brief,
+    aspectRatio: '9:16'
+  });
+
+  const job = result.jobs[0];
+  const metadata = job.promptMetadata;
+
+  assert.ok(job.positivePrompt.length <= 520, `prompt was ${job.positivePrompt.length} characters`);
+  assert.ok(job.positivePrompt.includes('9:16'));
+  assert.ok(job.positivePrompt.includes('康师傅冰红茶'));
+  assert.ok(!job.positivePrompt.includes('External missing-material video generation plan'));
+  assert.ok(!job.positivePrompt.includes('Source structure intent to transfer'));
+  assert.ok(job.shotSpec.includes('真实手持瓶身'));
+  assert.ok(job.shotSpec.includes('卖点卡加推近动效'));
+  assert.equal(metadata?.source, 'prompt_compactor');
+  assert.ok((metadata?.originalPositivePromptLength ?? 0) > job.positivePrompt.length);
+  assert.equal(metadata?.shotSpecPreserved, true);
+});
+
 test('planMissingMaterialGenerationJobs blocks unsafe jobs instead of planning generation', () => {
   const result = planMissingMaterialGenerationJobs({
     materialGaps: [{

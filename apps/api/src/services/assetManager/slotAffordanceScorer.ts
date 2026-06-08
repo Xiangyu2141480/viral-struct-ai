@@ -76,12 +76,26 @@ export function scoreSlotAffordance(asset: AssetCard, contentBrief?: ContentBrie
 }
 
 function applyRoleCaps(role: AssetManagerRole, asset: AssetCard, score: number): number {
+  if (isLowQuality(asset)) return Math.min(score, 49);
+
   if (role === 'usage_demo') {
-    const hasUsageMotionEvidence =
-      asset.type === 'video'
-      || asset.humanPresence?.actions?.some((action) => ['holding_product', 'applying_product', 'swatching'].includes(action))
-      || asset.detectedIngredients?.includes('hand_demo');
-    if (!hasUsageMotionEvidence) return Math.min(score, 49);
+    if (!hasUsageMotionEvidence(asset)) return Math.min(score, 49);
+    if (!hasDrinkPourOpenCue(asset)) return Math.min(score, 68);
+  }
+  if (role === 'comparison' && !hasComparisonCue(asset)) {
+    return Math.min(score, 49);
+  }
+  if (role === 'benefit_proof' && !hasBenefitProofCue(asset)) {
+    return Math.min(score, 64);
+  }
+  if (role === 'opening_hook' && !hasOpeningHookCue(asset)) {
+    return Math.min(score, 68);
+  }
+  if (role === 'lifestyle_scene' && !hasLifestyleCue(asset)) {
+    return Math.min(score, 55);
+  }
+  if (role === 'cta' && !hasCtaSurfaceCue(asset)) {
+    return Math.min(score, 69);
   }
   return score;
 }
@@ -308,6 +322,123 @@ function buildAssetText(asset: AssetCard): string {
   ].filter(Boolean).join(' ').toLowerCase();
 }
 
+function isLowQuality(asset: AssetCard): boolean {
+  return (asset.analysis?.quality.overallScore ?? asset.qualityScore) < 0.5
+    || (asset.analysis?.warnings.length ?? 0) >= 2
+    || (asset.analysis?.quality.issues.length ?? 0) > 0;
+}
+
+function hasUsageMotionEvidence(asset: AssetCard): boolean {
+  return asset.type === 'video'
+    && (
+      asset.humanPresence?.hasHuman
+      || asset.humanPresence?.actions?.some((action) => ['holding_product', 'applying_product', 'swatching'].includes(action))
+      || asset.detectedIngredients?.includes('hand_demo')
+      || includesLoose(buildAssetText(asset), 'hand')
+      || includesLoose(buildAssetText(asset), '手')
+    );
+}
+
+function hasDrinkPourOpenCue(asset: AssetCard): boolean {
+  const text = buildAssetText(asset);
+  return hasAnyPositiveCue(text, [
+    'drink',
+    'drinking',
+    'pour',
+    'open_cap',
+    'open cap',
+    'cap opening',
+    'cup',
+    '饮用',
+    '喝',
+    '倒',
+    '开盖',
+    '杯'
+  ]);
+}
+
+function hasComparisonCue(asset: AssetCard): boolean {
+  const text = buildAssetText(asset);
+  return hasAnyPositiveCue(text, [
+    'compare',
+    'comparison',
+    'lineup',
+    'series',
+    'multiple products',
+    'before after',
+    'multi-pack',
+    '对比',
+    '陈列',
+    '系列',
+    '多瓶',
+    '多规格'
+  ]);
+}
+
+function hasBenefitProofCue(asset: AssetCard): boolean {
+  const text = buildAssetText(asset);
+  return hasAnyPositiveCue(text, [
+    'ice',
+    'cold',
+    'splash',
+    'lemon',
+    'refresh',
+    'condensation',
+    'pour',
+    'drink',
+    '冰',
+    '冰爽',
+    '飞溅',
+    '柠檬',
+    '解腻',
+    '倒',
+    '喝'
+  ]);
+}
+
+function hasOpeningHookCue(asset: AssetCard): boolean {
+  return hasBenefitProofCue(asset)
+    || hasDrinkPourOpenCue(asset)
+    || Boolean(asset.detectedIngredients?.includes('lifestyle_context'))
+    || Boolean(asset.visualStyleTags?.includes('premium_visual'));
+}
+
+function hasLifestyleCue(asset: AssetCard): boolean {
+  const text = buildAssetText(asset);
+  return Boolean(asset.visualStyleTags?.includes('lifestyle_context'))
+    || Boolean(asset.detectedIngredients?.includes('lifestyle_context'))
+    || ['outdoor', 'summer', 'party', 'scene', 'hand', 'drink', 'pour', '户外', '夏日', '聚餐', '场景', '手持', '饮用'].some((keyword) => includesLoose(text, keyword));
+}
+
+function hasCtaSurfaceCue(asset: AssetCard): boolean {
+  const text = buildAssetText(asset);
+  const textSafeArea = asset.analysis?.quality.textSafeArea ?? 0;
+  return asset.type === 'text'
+    || includesLoose(text, 'cta_copy')
+    || includesLoose(text, 'clean_end')
+    || includesLoose(text, 'end frame')
+    || includesLoose(text, 'negative space')
+    || includesLoose(text, '购买')
+    || includesLoose(text, '立即')
+    || (Boolean(asset.visualStyleTags?.includes('clean_background')) && hasProductCue(asset) && textSafeArea >= 0.72 && !asset.humanPresence?.hasHuman);
+}
+
+function hasAnyPositiveCue(text: string, keywords: string[]): boolean {
+  return keywords.some((keyword) => hasPositiveCue(text, keyword));
+}
+
+function hasPositiveCue(text: string, keyword: string): boolean {
+  const normalizedText = text.toLowerCase();
+  const normalizedKeyword = keyword.toLowerCase();
+  let index = normalizedText.indexOf(normalizedKeyword);
+  while (index >= 0) {
+    const before = normalizedText.slice(Math.max(0, index - 16), index);
+    if (!/(^|[\s_\-;,.])(?:no|not|without|missing|lacks?)(?:\s+[a-z0-9_/-]+){0,3}\s*$/.test(before)) return true;
+    index = normalizedText.indexOf(normalizedKeyword, index + normalizedKeyword.length);
+  }
+  return false;
+}
+
 function keywordHitScore(text: string, keywords: string[], maxScore: number): number {
   const hits = keywords.filter((keyword) => includesLoose(text, keyword)).length;
   if (hits === 0) return 25;
@@ -316,7 +447,7 @@ function keywordHitScore(text: string, keywords: string[], maxScore: number): nu
 
 function hasProductCue(asset: AssetCard): boolean {
   const text = buildAssetText(asset);
-  return ['product', 'bottle', 'label', '商品', '产品', '瓶身', '康师傅', '冰红茶'].some((keyword) => includesLoose(text, keyword));
+  return ['product', 'bottle', 'label', 'packaging', '商品', '产品', '瓶身', '包装', '标签'].some((keyword) => includesLoose(text, keyword));
 }
 
 function includesLoose(text: string, needle: string): boolean {

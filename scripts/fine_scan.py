@@ -25,8 +25,12 @@ from llm_client import (  # noqa: E402
     env_value,
     extract_json_object,
     configure_http_semaphore,
+    configure_upload_semaphore,
+    connection_pool_stats,
+    enable_connection_pool,
     extract_response_text,
     gated_call,
+    get_upload_semaphore,
     load_dotenv,
     load_prompt_sections,
     upload_file,
@@ -390,6 +394,10 @@ def resolve_prompt_path(args: argparse.Namespace) -> str:
 # raises simultaneous LLM demand, which only pays off if the http cap follows.
 #   bw=8/cap=40 -> bw=11/cap=40 = +16% (kills the block-worker tail)
 #   bw=11/cap=40 -> bw=11/cap=80 = +24% more (cap now binds) => +40% total
+# NOTE: PR #50 split the old single lane into a light lane (--max-concurrent-http,
+# polls + /responses, what max_http below caps) and a heavy upload lane
+# (--max-concurrent-upload). These constants were measured on the OLD combined
+# lane, so they now govern the LIGHT lane and deserve a fresh A/B re-tune.
 AUTO_BLOCK_WORKERS_MAX = 12  # parallelize all blocks, bounded (I/O-dominated work)
 AUTO_HTTP_FLOOR = 40         # the +30% sweet spot (A/B: 25->40)
 AUTO_HTTP_CEILING = 80       # measured-safe max; W2-B guardrail (50 timed out on
@@ -405,8 +413,8 @@ def resolve_concurrency(
     """Resolve (block_workers, max_http) from explicit args or auto-scale.
 
     Auto mode (arg is None): block_workers parallelizes every block up to
-    AUTO_BLOCK_WORKERS_MAX; the http cap then scales WITH that realized
-    parallelism (block_workers × candidate_workers) clamped to
+    AUTO_BLOCK_WORKERS_MAX; the light-lane http cap then scales WITH that
+    realized parallelism (block_workers × candidate_workers) clamped to
     [AUTO_HTTP_FLOOR, AUTO_HTTP_CEILING]. Explicit args always win and are only
     sanity-clamped (block_workers to [1, n_blocks]; cap to >= 1).
     """
@@ -439,9 +447,16 @@ def run_fine_scan(args: argparse.Namespace) -> int:
     if missing:
         raise SystemExit(f"Missing required config: {', '.join(missing)}")
 
-    # NOTE: the global HTTP semaphore is configured *after* block loading (below),
-    # because auto-scaling --block-workers/--max-concurrent-http needs the block
-    # count. See resolve_concurrency().
+    # C: heavy multipart uploads get their own narrow lane so the light poll/
+    # response calls don't queue behind them. A: keepalive connection pool for
+    # the light calls (no-op for the curl-only multipart uploads). Neither
+    # depends on block count, so they're configured here.
+    configure_upload_semaphore(int(args.max_concurrent_upload))
+    enable_connection_pool(bool(args.http_pool))
+
+    # NOTE: the light-lane HTTP semaphore is configured *after* block loading
+    # (below), because auto-scaling --block-workers/--max-concurrent-http needs
+    # the block count. See resolve_concurrency().
 
     rough_scan_path = Path(args.rough_scan)
     if not rough_scan_path.exists():
@@ -475,9 +490,10 @@ def run_fine_scan(args: argparse.Namespace) -> int:
     failures: list[dict[str, Any]] = []
 
     # Resolve concurrency from explicit args or auto-scale to the block count
-    # (the two levers are coupled — see resolve_concurrency). Configure the
-    # global HTTP semaphore here, before any worker is spawned. Explicit
-    # configure_* (not lazy get_*) — cap mismatch raises (PR #24 review H1).
+    # (the two levers are coupled — see resolve_concurrency). max_http is the
+    # LIGHT lane (polls + /responses); heavy uploads use their own lane
+    # (configured above). Configure the light-lane semaphore here, before any
+    # worker spawns. Explicit configure_* (not lazy get_*) — cap mismatch raises.
     block_workers, max_http = resolve_concurrency(
         len(blocks),
         int(args.candidate_workers),
@@ -494,7 +510,7 @@ def run_fine_scan(args: argparse.Namespace) -> int:
     )
     # INFO only when the outer thread bound is *far* above the cap (>4×), where
     # idle-thread memory starts to matter; extra threads just park on the
-    # semaphore (the API cap is still honored).
+    # semaphore (the light-lane API cap is still honored).
     outer_upper = block_workers * (int(args.candidate_workers) + 1)
     if outer_upper > 4 * max_http:
         print(
@@ -545,6 +561,16 @@ def run_fine_scan(args: argparse.Namespace) -> int:
             },
         )
         print(f"\nSaved combined scan -> {combined_path}")
+
+    # Diagnostic: confirm the keepalive pool actually served light-call traffic
+    # (vs. silently falling back to curl / tripping the breaker).
+    pool_stats = connection_pool_stats()
+    if pool_stats["enabled"]:
+        print(
+            f"[INFO] connection pool: served={pool_stats['served']} "
+            f"fallbacks={pool_stats['fallbacks']} "
+            f"circuit_open={pool_stats['circuit_open']}"
+        )
 
     if failures:
         failure_path = out_dir / "fine_scan_failures.json"
@@ -647,10 +673,12 @@ def _process_one_candidate(
             upload_file,
             base_url=base_url, api_key=api_key,
             video_path=window_clip, fps=args.peak_upload_fps,
+            semaphore=get_upload_semaphore(),
         )
         wait_for_file(
             base_url=base_url, api_key=api_key, file_id=pf["id"],
             poll_interval=args.poll_interval, max_wait_seconds=args.max_wait_seconds,
+            poll_backoff=args.poll_backoff, poll_max_interval=args.poll_max_interval,
         )
         resp = gated_call(
             create_response,
@@ -704,10 +732,12 @@ def _process_block_metadata(
         block_file_info = gated_call(
             upload_file,
             base_url=base_url, api_key=api_key, video_path=clip_path, fps=block_upload_fps,
+            semaphore=get_upload_semaphore(),
         )
         wait_for_file(
             base_url=base_url, api_key=api_key, file_id=block_file_info["id"],
             poll_interval=args.poll_interval, max_wait_seconds=args.max_wait_seconds,
+            poll_backoff=args.poll_backoff, poll_max_interval=args.poll_max_interval,
         )
         block_response = gated_call(
             create_response,
@@ -725,140 +755,6 @@ def _process_block_metadata(
     except Exception as exc:
         logger.log(f"   [ERROR] [{block_id}] block-level fine_structure_scan failed: {exc}")
         return None, {"blockId": block_id, "stage": "fine_structure_scan", "error": str(exc)}
-
-
-# --------------------------------------------------------------------------- #
-# Batched path (--batch-peaks): ONE upload + ONE batched peak-scan per block,
-# replacing the N per-candidate upload/LLM chains. Code still owns all timing.
-# --------------------------------------------------------------------------- #
-
-def _build_visual_peak_record(
-    candidate: dict[str, Any], *, block_start_s: float, block_duration_ms: int,
-    args: argparse.Namespace,
-) -> dict[str, Any]:
-    """Code-owned timing record for one candidate (no clip, no LLM). Mirrors the
-    record the per-peak path builds, so aggregation is identical in both modes."""
-    candidate_id = str(candidate.get("sourceId") or "")
-    candidate_block_rel_ms = int(candidate["tMs"])
-    candidate_abs_s = block_start_s + (candidate_block_rel_ms / 1000.0)
-    block_end_s = block_start_s + block_duration_ms / 1000.0
-    window_start_s = max(block_start_s, candidate_abs_s - args.peak_pre_context)
-    window_end_s = min(block_end_s, candidate_abs_s + args.peak_post_context)
-    anchor_source = str(candidate.get("anchorSource", "visual_peak"))
-    channels = (
-        ["hist_delta", "frame_diff", "flow_mag", "area_delta"]
-        if anchor_source == "visual_peak" else []
-    )
-    return {
-        "peakId": candidate_id,
-        "tMs": int(round(candidate_abs_s * 1000)),
-        "prominence": float(candidate.get("prominence", 0.0)),
-        "motionScore": float(candidate.get("motionScore", 0.0)),
-        "channels": channels,
-        "windowMs": {"start": int(round(window_start_s * 1000)), "end": int(round(window_end_s * 1000))},
-        "anchorSource": anchor_source,
-        "eventType": str(candidate.get("eventType", "peak")),
-    }
-
-
-def _block_metadata_from_file_id(
-    block: dict[str, Any], file_id: str, *, args: argparse.Namespace,
-    base_url: str, api_key: str, model: str, video_id: str, video_duration: float,
-    logger: "BlockLogger",
-) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
-    """Block-level fine_structure_scan reusing an already-uploaded file_id."""
-    block_id = str(block["id"])
-    block_variables = build_block_prompt_variables(block, video_id=video_id, video_duration=video_duration)
-    instructions, prompt_text = load_prompt_sections(args.prompt, block_variables)
-    try:
-        resp = gated_call(
-            create_response, base_url=base_url, api_key=api_key,
-            payload=build_responses_payload(model=model, file_id=file_id, prompt_text=prompt_text, instructions=instructions, store=True),
-            timeout=args.response_timeout,
-        )
-        md = extract_json_object(extract_response_text(resp))
-        if not isinstance(md, dict):
-            raise ValueError("fine_structure_scan response is not a JSON object")
-        return md, None
-    except Exception as exc:
-        logger.log(f"   [ERROR] [{block_id}] batched block-metadata failed: {exc}")
-        return None, {"blockId": block_id, "stage": "fine_structure_scan", "error": str(exc)}
-
-
-def _batched_peak_semantics(
-    block: dict[str, Any], file_id: str, candidates: list[dict[str, Any]], *,
-    block_duration_ms: int, args: argparse.Namespace, base_url: str, api_key: str,
-    model: str, logger: "BlockLogger",
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """ONE call describing ALL candidates in the block. Returns (semantic_results,
-    failures). Input timestamps are localization hints; timing stays code-owned."""
-    block_id = str(block["id"])
-    if not candidates:
-        return [], []
-    lines = []
-    for c in candidates:
-        cid = str(c.get("sourceId") or "")
-        rel_s = int(c["tMs"]) / 1000.0
-        bucket = relative_position_bucket(int(c["tMs"]), block_duration_ms=block_duration_ms)
-        src = str(c.get("anchorSource", "visual_peak"))
-        lines.append(f"- peakId={cid} | 约 {rel_s:.1f}s | 位置 {bucket} | 来源 {src}")
-    variables = {
-        "blockId": block_id,
-        "coarseRoleGuess": block.get("coarseRoleGuess", "unknown"),
-        "candidateList": "\n".join(lines),
-    }
-    instructions, prompt_text = load_prompt_sections(args.peak_batch_prompt, variables)
-    logger.log(f"   [{block_id}] batched peak-scan for {len(candidates)} candidates...")
-    try:
-        resp = gated_call(
-            create_response, base_url=base_url, api_key=api_key,
-            payload=build_responses_payload(model=model, file_id=file_id, prompt_text=prompt_text, instructions=instructions, store=True),
-            timeout=args.response_timeout,
-        )
-        parsed = extract_json_object(extract_response_text(resp))
-        peaks = parsed.get("peaks") if isinstance(parsed, dict) else None
-        if not isinstance(peaks, list):
-            raise ValueError("peak_batch response missing 'peaks' array")
-        results = [p for p in peaks if isinstance(p, dict) and p.get("peakId")]
-        logger.log(f"      [{block_id}] batched -> {len(results)}/{len(candidates)} semantics")
-        return results, []
-    except Exception as exc:
-        logger.log(f"   [WARN] [{block_id}] batched peak-scan failed: {exc}")
-        return [], [{"blockId": block_id, "stage": "peak_batch", "error": str(exc)}]
-
-
-def _process_block_batched(
-    block: dict[str, Any], clip_path: Path, candidates: list[dict[str, Any]], *,
-    args: argparse.Namespace, base_url: str, api_key: str, model: str,
-    video_id: str, video_duration: float, block_start_s: float, block_duration_ms: int,
-    logger: "BlockLogger",
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], dict[str, Any] | None, dict[str, Any] | None]:
-    """Batched block: 1 upload + block-metadata call + 1 batched peak-scan call.
-    Returns (visual_peaks, semantic_results, peak_failures, block_metadata, block_failure)."""
-    block_id = str(block["id"])
-    visual_peaks = [
-        _build_visual_peak_record(c, block_start_s=block_start_s, block_duration_ms=block_duration_ms, args=args)
-        for c in candidates
-    ]
-    fps = args.batch_block_upload_fps if getattr(args, "batch_block_upload_fps", 0) and args.batch_block_upload_fps > 0 else None
-    logger.log(f"   [{block_id}] batched: uploading block clip once (fps={fps})...")
-    try:
-        file_info = gated_call(upload_file, base_url=base_url, api_key=api_key, video_path=clip_path, fps=fps)
-        wait_for_file(base_url=base_url, api_key=api_key, file_id=file_info["id"],
-                      poll_interval=args.poll_interval, max_wait_seconds=args.max_wait_seconds)
-    except Exception as exc:
-        logger.log(f"   [ERROR] [{block_id}] batched block upload failed: {exc}")
-        return visual_peaks, [], [], None, {"blockId": block_id, "stage": "batched_upload", "error": str(exc)}
-    file_id = file_info["id"]
-    block_metadata, block_failure = _block_metadata_from_file_id(
-        block, file_id, args=args, base_url=base_url, api_key=api_key, model=model,
-        video_id=video_id, video_duration=video_duration, logger=logger)
-    if block_failure is not None:
-        return visual_peaks, [], [], None, block_failure
-    semantic_results, peak_failures = _batched_peak_semantics(
-        block, file_id, candidates, block_duration_ms=block_duration_ms,
-        args=args, base_url=base_url, api_key=api_key, model=model, logger=logger)
-    return visual_peaks, semantic_results, peak_failures, block_metadata, None
 
 
 def process_block_with_peak_micro(
@@ -1015,10 +911,10 @@ def process_block_with_peak_micro(
         if beat_map else []
     )
 
-    # Step 4: per-candidate semantics. Two paths (timing is code-owned in both):
-    #  - default: one upload + peak_micro_scan PER candidate (concurrent).
-    #  - --batch-peaks: ONE upload + ONE batched peak-scan for all candidates,
-    #    deleting ~N upload/LLM chains (perf experiment, A/B'd against eval).
+    # Step 4: per-peak window + peak_micro_scan (W1.3: concurrent within block)
+    peak_window_dir = work_dir / block_id
+    peak_window_dir.mkdir(parents=True, exist_ok=True)
+
     logger = BlockLogger(block_id)
     block_coarse_role = block.get("coarseRoleGuess", "unknown")
 
@@ -1028,58 +924,51 @@ def process_block_with_peak_micro(
     block_metadata: dict[str, Any] | None = None
     block_failure: dict[str, Any] | None = None
 
-    if getattr(args, "batch_peaks", False):
-        (visual_peaks_with_windows, semantic_results, peak_failures,
-         block_metadata, block_failure) = _process_block_batched(
-            block, clip_path, candidates,
-            args=args, base_url=base_url, api_key=api_key, model=model,
-            video_id=video_id, video_duration=video_duration,
-            block_start_s=start, block_duration_ms=block_duration_ms, logger=logger,
+    # Submit all candidates + the block-level scan to one pool so they overlap.
+    # D: submit the block-level scan FIRST. With v1's migrationContract it is the
+    # long pole of the block (whole-clip upload + the largest, slowest-to-decode
+    # response), so giving it the earliest worker slot maximises overlap with the
+    # many shorter peak calls instead of leaving it queued behind them.
+    with ThreadPoolExecutor(max_workers=int(args.candidate_workers)) as pool:
+        block_future = pool.submit(
+            _process_block_metadata,
+            block,
+            clip_path,
+            args=args,
+            base_url=base_url,
+            api_key=api_key,
+            model=model,
+            video_id=video_id,
+            video_duration=video_duration,
+            logger=logger,
         )
-    else:
-        peak_window_dir = work_dir / block_id
-        peak_window_dir.mkdir(parents=True, exist_ok=True)
-        # Submit all candidates + the block-level scan to one pool so they overlap.
-        with ThreadPoolExecutor(max_workers=int(args.candidate_workers)) as pool:
-            candidate_futures = {
-                pool.submit(
-                    _process_one_candidate,
-                    candidate,
-                    block_start_s=start,
-                    block_end_s=end,
-                    block_duration_ms=block_duration_ms,
-                    block_coarse_role=block_coarse_role,
-                    args=args,
-                    base_url=base_url,
-                    api_key=api_key,
-                    model=model,
-                    peak_window_dir=peak_window_dir,
-                    logger=logger,
-                ): candidate
-                for candidate in candidates
-            }
-            block_future = pool.submit(
-                _process_block_metadata,
-                block,
-                clip_path,
+        candidate_futures = {
+            pool.submit(
+                _process_one_candidate,
+                candidate,
+                block_start_s=start,
+                block_end_s=end,
+                block_duration_ms=block_duration_ms,
+                block_coarse_role=block_coarse_role,
                 args=args,
                 base_url=base_url,
                 api_key=api_key,
                 model=model,
-                video_id=video_id,
-                video_duration=video_duration,
+                peak_window_dir=peak_window_dir,
                 logger=logger,
-            )
+            ): candidate
+            for candidate in candidates
+        }
 
-            for fut in as_completed(candidate_futures):
-                vp_record, semantic, failure = fut.result()
-                visual_peaks_with_windows.append(vp_record)
-                if semantic is not None:
-                    semantic_results.append(semantic)
-                if failure is not None:
-                    peak_failures.append(failure)
+        for fut in as_completed(candidate_futures):
+            vp_record, semantic, failure = fut.result()
+            visual_peaks_with_windows.append(vp_record)
+            if semantic is not None:
+                semantic_results.append(semantic)
+            if failure is not None:
+                peak_failures.append(failure)
 
-            block_metadata, block_failure = block_future.result()
+        block_metadata, block_failure = block_future.result()
 
     # Block-level scan failure aborts the block.
     if block_failure is not None:
@@ -1170,18 +1059,6 @@ def build_parser() -> argparse.ArgumentParser:
         default="prompts/video_understanding/peak_micro_scan_v0.md",
         help="Per-peak semantic-only prompt (v0.3 pipeline).",
     )
-    # Perf experiment: collapse the N per-peak calls into ONE batched call/block.
-    parser.add_argument("--batch-peaks", action="store_true",
-                        help="Describe all candidates of a block in ONE batched call "
-                             "(1 upload + block-metadata + 1 peak-batch) instead of one "
-                             "upload+peak_micro per candidate. Code still owns timing.")
-    parser.add_argument("--peak-batch-prompt",
-                        default="prompts/video_understanding/peak_batch_scan_v0.md",
-                        help="Batched peak-semantics prompt (used with --batch-peaks).")
-    parser.add_argument("--batch-block-upload-fps", type=float, default=2.0,
-                        help="fps for the single block upload in --batch-peaks mode "
-                             "(the model must see each action moment to describe it). "
-                             "Default 2.0. Set 0 for provider default.")
     parser.add_argument("--out-dir", default=str(_paths.fine_scan_dir))
     parser.add_argument("--work-dir", default=str(_paths.fine_scan_clips_dir))
     parser.add_argument("--block-ids", default="", help="Comma-separated content block IDs to process.")
@@ -1228,23 +1105,51 @@ def build_parser() -> argparse.ArgumentParser:
                              "then follows the realized parallelism. Pass an explicit value to "
                              "override (clamped to block count)." % AUTO_BLOCK_WORKERS_MAX)
     parser.add_argument("--max-concurrent-http", type=int, default=None,
-                        help="Global semaphore cap on simultaneous LLM API calls "
-                             "(upload + responses combined). Default: AUTO — scales with "
-                             "block parallelism (block_workers × candidate_workers) clamped "
-                             "to [%d, %d] (resolve_concurrency). Evidence: A/B 25->40 = +30%%; "
-                             "at high block_workers the cap binds and 40->80 adds more; the "
-                             "%d ceiling is the W2-B guardrail (50 caused write timeouts on "
-                             "large uploads). Pass an explicit value to override."
+                        help="Light-lane semaphore cap on simultaneous LLM/VLM API calls "
+                             "(file-status polls + /responses; heavy uploads use the "
+                             "separate --max-concurrent-upload lane). Default: AUTO — scales "
+                             "with block parallelism (block_workers × candidate_workers) "
+                             "clamped to [%d, %d] (resolve_concurrency). Evidence: A/B 25->40 "
+                             "= +30%%; at high block_workers the cap binds and 40->80 adds "
+                             "more; the %d ceiling is the W2-B guardrail. NOTE: measured on "
+                             "the old combined lane — re-tune for the light lane. Pass an "
+                             "explicit value to override."
                              % (AUTO_HTTP_FLOOR, AUTO_HTTP_CEILING, AUTO_HTTP_CEILING))
+    parser.add_argument("--max-concurrent-upload", type=int, default=20,
+                        help="Separate semaphore cap for heavy multipart file uploads "
+                             "(block clips + peak windows). Default 20 — this pipeline "
+                             "is upload-dominated (120+ window/block uploads vs few "
+                             "polls/responses), so the upload lane must stay wide; a "
+                             "narrow cap (8) throttled throughput below baseline in "
+                             "measurement. Kept under the ~50-wide level that caused "
+                             "write timeouts on large block uploads (W2-B). The light "
+                             "lane (--max-concurrent-http) runs separately for polls + "
+                             "responses, which the keepalive pool serves cheaply.")
+    parser.add_argument("--http-pool", dest="http_pool", action="store_true", default=True,
+                        help="Reuse a keepalive TLS connection per worker for light "
+                             "calls (poll GET + JSON /responses) instead of spawning a "
+                             "fresh curl per call. On (default); cuts per-call TCP+TLS "
+                             "handshake overhead. Multipart uploads still use curl.")
+    parser.add_argument("--no-http-pool", dest="http_pool", action="store_false",
+                        help="Disable the keepalive connection pool; every call spawns "
+                             "a fresh curl (legacy behaviour).")
     parser.add_argument("--env", default=".env")
     parser.add_argument("--base-url", default="")
     parser.add_argument("--api-key", default="")
     parser.add_argument("--model", default="")
     parser.add_argument("--poll-interval", type=float, default=0.5,
-                        help="Seconds between file-status polls (default 0.5 per PR #44; was 2.0). "
-                             "Each upload waits at least one poll for preprocessing; a smaller "
-                             "interval trims pure idle wait. Lower bound is provider preprocessing "
-                             "latency, not this value.")
+                        help="First inter-poll delay for file-status polling (default "
+                             "0.5 per PR #44). Each poll is a real HTTP round-trip; see "
+                             "--poll-backoff for how the delay grows after the first.")
+    parser.add_argument("--poll-backoff", type=float, default=1.5,
+                        help="Geometric growth factor applied to the poll delay after "
+                             "each miss (default 1.5; 1.0 = fixed cadence). A file that "
+                             "takes a while to preprocess then costs far fewer poll "
+                             "round-trips, trimming pure per-call overhead on high-"
+                             "latency links.")
+    parser.add_argument("--poll-max-interval", type=float, default=4.0,
+                        help="Upper bound for the backed-off poll delay in seconds "
+                             "(default 4.0). Set 0 for no cap.")
     parser.add_argument("--max-wait-seconds", type=float, default=300)
     parser.add_argument("--peak-upload-fps", type=float, default=2.0,
                         help="fps hint sent to the LLM/VLM Files API for peak windows (fewer "

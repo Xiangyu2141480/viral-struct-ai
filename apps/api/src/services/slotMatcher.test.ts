@@ -274,6 +274,34 @@ test('matchSlots penalizes low quality and warning-heavy analysis evidence', () 
   assert.ok(matchSlots(graph, [noisy]).matches[0].assetEvidence?.warnings.length);
 });
 
+test('matchSlots carries motif context into material gaps for kinetic assembly slots', () => {
+  const graph = makeGraph();
+  graph.shotSlots = [{
+    id: 'slot_block_004_asset_001',
+    segmentId: 'seg_a',
+    role: 'usage_demo',
+    requiredAsset: { type: 'video', subject: 'surreal product assembly and activation spectacle', motion: 'fast_cut' },
+    fallbackStrategies: ['ask_user_for_human_demo'],
+    importance: 5,
+    intent: {
+      purpose: '键盘碎片在空中飞舞后落到笔记本上自动组装完成，手指按触控板控制屏幕里的火箭飞出笔记本炸开撒彩屑，按圆形按键弹出购买窗口。',
+      energyLevel: 'high',
+      motionPattern: 'component cascade, chaos to order, assembly completion, interaction activation, spectacle burst, CTA reveal',
+      compositionPrincipal: 'surreal kinetic assembly reveal',
+      durationMs: [1600, 4200]
+    },
+    sourceInstance: {
+      productInSource: 'MacBook',
+      specificAction: 'keyboard fragments assemble, touchpad controls rocket, circular button opens purchase window'
+    }
+  }];
+
+  const result = matchSlots(graph, makeAssets());
+  assert.equal(result.gaps[0]?.slotId, 'slot_block_004_asset_001');
+  assert.equal(result.gaps[0]?.motifContext?.motifType, 'kinetic_assembly_reveal');
+  assert.ok(result.gaps[0]?.motifContext?.motionTokens.includes('chaos_to_order'));
+});
+
 // ---------------------------------------------------------------------------
 // LLM judge tests
 // ---------------------------------------------------------------------------

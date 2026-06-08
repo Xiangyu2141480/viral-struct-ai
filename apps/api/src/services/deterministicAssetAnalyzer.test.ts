@@ -84,6 +84,38 @@ test('analyzeAssetsDeterministic returns a controlled video fallback when ffprob
   }
 });
 
+test('analyzeAssetsDeterministic does not over-infer roles for plain product or hand assets', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'det-asset-roles-'));
+  const productPath = path.join(dir, 'table-product-pan.png');
+  const handVideoPath = path.join(dir, 'product-hand-pickup.mp4');
+  await writeFile(productPath, TINY_PNG);
+  await writeFile(handVideoPath, Buffer.from('not a real mp4'));
+
+  try {
+    const [productCard, handCard] = await analyzeAssetsDeterministic({
+      files: [
+        { originalname: 'table-product-pan.png', path: productPath, size: TINY_PNG.length } as Express.Multer.File,
+        { originalname: 'product-hand-pickup.mp4', path: handVideoPath, size: 14 } as Express.Multer.File
+      ],
+      ffprobePath: path.join(dir, 'missing-ffprobe.exe'),
+      ffmpegPath: path.join(dir, 'missing-ffmpeg.exe'),
+      frameDir: path.join(dir, 'frames')
+    });
+
+    assert.ok(productCard.suitableSlots.includes('product_closeup'));
+    assert.ok(productCard.suitableSlots.includes('cta_visual'));
+    assert.equal(productCard.suitableSlots.includes('usage_demo'), false);
+    assert.equal(productCard.suitableSlots.includes('comparison'), false);
+
+    assert.ok(handCard.suitableSlots.includes('usage_demo'));
+    assert.ok(handCard.suitableSlots.includes('product_closeup'));
+    assert.equal(handCard.suitableSlots.includes('cta_visual'), false);
+    assert.equal(handCard.suitableSlots.includes('comparison'), false);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('buildKeyframeOutputPath keeps generated frame paths inside the configured directory', () => {
   const outputDir = path.join(tmpdir(), 'safe-frames');
   const outputPath = buildKeyframeOutputPath(outputDir, '../unsafe asset.mp4', 0);
