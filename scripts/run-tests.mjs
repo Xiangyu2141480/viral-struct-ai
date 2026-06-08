@@ -4,6 +4,9 @@ const pythonCommand = findPythonCommand();
 run(pythonCommand, ['-m', 'unittest', 'discover', '-s', 'tests', '-v']);
 runPnpm(['--filter', '@viral-struct/api', 'test']);
 runPnpm(['--filter', '@viral-struct/api', 'exec', 'node', '--import', 'tsx', '../web/app/_struct/api/assetManager.test.ts']);
+// video-agent (③) has no tsx of its own; run its tests through the api package's tsx, mirroring the
+// cross-package web test above. node:test auto-runs the registered tests when the file executes.
+runPnpm(['--filter', '@viral-struct/api', 'exec', 'node', '--import', 'tsx', '--test', '../../packages/video-agent/src/authoring/authoring.test.ts']);
 
 function findPythonCommand() {
   for (const command of ['python', 'python3']) {
