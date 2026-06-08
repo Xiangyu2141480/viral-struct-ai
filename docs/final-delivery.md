@@ -73,7 +73,7 @@ Use this route to show the product form:
 | Asset Evidence integration | Complete in data layer and minimal evidence panel | `SlotMatch.assetEvidence`, `apps/web/app/_struct/AssetManagerEvidence.tsx` |
 | Transition Grammar | Complete as plan-only handoff | `TransitionRecipe`, `CategoryPresetRegistry`, `docs/examples/transition-recipes-beverage-demo.sample.json` |
 | Sonic Grammar | Complete as plan-only handoff | `AudioTrackPlan`, `AudioCue`, `AudioGenerationJobCard`, `docs/examples/audio-plan-beverage-demo.sample.json` |
-| Transition/Sonic evidence cards | Complete as minimal UI evidence | existing Asset Manager evidence panel shows Transition Plan, Sonic Plan, Missing Transition Assets, Audio Warnings |
+| Transition/Sonic evidence cards | Complete as minimal UI evidence | existing Asset Manager evidence panel shows 转场计划, 声音计划, 缺失转场素材, 音频边界提醒 |
 | Optional VLM asset analyzer | Available but disabled by default | deterministic fallback, `ASSET_VLM_ENABLED=false` |
 | LLM fallback | Complete | source fields and warnings |
 | Deterministic fallback without key | Complete | tests and demo-safe flow |
