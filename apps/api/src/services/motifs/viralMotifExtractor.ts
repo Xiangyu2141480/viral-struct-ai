@@ -2,10 +2,13 @@ import type { MotifTransferVariable, MotionToken, ShotSlotNode, ViralMotifAnnota
 import { mapTargetCategoryMotif } from './targetCategoryMotifMapper';
 import { sanitizeMotionGrammarText } from './motionGrammarSanitizer';
 import { classifyMotif, type MotifClassification } from './motifTaxonomy';
+import type { CategoryPreset } from './categoryPresetProvider';
 
 export interface ViralMotifExtractorInput {
   slot: ShotSlotNode;
   targetCategory: string;
+  /** Optional D2 preset (generated at asset-parse). Drives target mapping. */
+  preset?: CategoryPreset;
 }
 
 export function extractViralMotifAnnotation(input: ViralMotifExtractorInput): ViralMotifAnnotation | undefined {
@@ -24,7 +27,8 @@ export function extractViralMotifAnnotation(input: ViralMotifExtractorInput): Vi
   const { definition, score } = classification;
   const targetCategoryMapping = mapTargetCategoryMotif({
     motifType: definition.motifType,
-    targetCategory: input.targetCategory
+    targetCategory: input.targetCategory,
+    preset: input.preset
   });
 
   return {
