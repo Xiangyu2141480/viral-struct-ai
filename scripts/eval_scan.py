@@ -193,12 +193,13 @@ def _find_cuts(video_id: str, override: str | None) -> Path | None:
 SWEEP_TOLERANCES_MS = (200.0, 400.0, 800.0)
 
 
-def run_eval(video_id: str, tolerance_ms: float, cuts_override: str | None) -> dict:
+def run_eval(video_id: str, tolerance_ms: float, cuts_override: str | None,
+             fine_override: str | None = None) -> dict:
     paths = analysis_paths(video_id)
     report: dict[str, Any] = {"videoId": video_id, "toleranceMs": tolerance_ms, "metrics": {}}
 
     rough_doc = _load(paths.rough_scan) if paths.rough_scan.exists() else None
-    fine_path = paths.fine_scan_dir / "fine_structure_scan.json"
+    fine_path = Path(fine_override) if fine_override else (paths.fine_scan_dir / "fine_structure_scan.json")
     fine_doc = _load(fine_path) if fine_path.exists() else None
     graph_path = paths.analysis_root / "structure_graph.json"
     graph_doc = _load(graph_path) if graph_path.exists() else None
@@ -292,6 +293,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--tolerance-ms", type=float, default=400.0,
                    help="Match tolerance for event/boundary alignment (default 400ms).")
     p.add_argument("--cuts", default=None, help="Override path to a scene_changes pts_time file.")
+    p.add_argument("--fine-scan", default=None, help="Override path to fine_structure_scan.json (A/B).")
     p.add_argument("--json", action="store_true", help="Emit the raw report as JSON.")
     p.add_argument("--save", action="store_true",
                    help="Write the report to <analysis>/eval_report.json as an A/B baseline.")
@@ -300,7 +302,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    report = run_eval(args.video_id, args.tolerance_ms, args.cuts)
+    report = run_eval(args.video_id, args.tolerance_ms, args.cuts, args.fine_scan)
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:

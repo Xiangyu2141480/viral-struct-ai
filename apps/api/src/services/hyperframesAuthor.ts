@@ -16,6 +16,10 @@ export interface HyperframesAssetRef {
   /** Relative path the HTML must use, e.g. './assets/splash.png'. */
   relPath: string;
   description?: string;
+  /** Media kind — drives <img> vs <video> embedding. Defaults to image when absent. */
+  kind?: 'image' | 'video';
+  /** Full source length (video only); lets the author trim to a sub-range via data-media-start. */
+  durationSec?: number;
 }
 
 export interface HyperframesAuthorInput {
@@ -78,6 +82,7 @@ const SYSTEM_PROMPT = `你是一位资深的动态图形导演（motion-graphics
 - 场景内容放进一个 .scene-content 容器：width:100%; height:100%; box-sizing:border-box; display:flex; flex-direction:column; justify-content:center（或 flex-end 做底部字幕）; align-items:center; padding:120px 90px; gap:28px。【用 padding/flex/gap 定位文字，绝不用 margin-top:1400px 这类硬数值把文字顶到边缘或顶出画面】。
 - 先写"高光帧"的静态 CSS（所有元素都摆在最终位置、对齐正确、不出框），确认无重叠后，再用 fromTo 让它们动进来。
 - 图片分两类处理：① 满屏实景照片（多物体/有背景/本身就是完整场景，如飞溅、多瓶陈列、场景照）→ object-fit:cover 铺满 1080×1920；② 仅当能明确判断是"白底/纯色背景的单主体抠图产品照"时 → object-fit:contain 居中，主体要【足够大（height 占 72% 以上）】，并在其后铺一层满屏背景，背景色【取自该图本身的主色调/品牌色】（让产品像融进场景，而非贴在异色卡片上）。【拿不准时一律用 cover】——把实景照片 contain 成一张小卡片漂浮在异色背景里会非常廉价难看（这是常见错误）。
+- 视频素材（清单里标 [视频, 总时长 Xs] 的）：用 <video class="full-img" src="./assets/<文件名>" muted playsinline object-fit:cover 铺满> 嵌入。【必须带 muted 和 playsinline，否则渲染失败】；不要给 <video> 本身做尺寸/缩放动画（要运动就动它的父层 wrapper）。把它放进对应场景的 .clip 里，用该 .clip 的 data-duration 控制本镜头时长。可用 data-media-start="<起始秒>" 把视频裁切到「最佳片段」的入点（0 ≤ 起始秒 < 该视频总时长，且起始秒之后至少还剩本镜头 data-duration 的长度），只播这一小段而不是从头播。
 - 闪卡/纯文字背景：用纯色 + 局部 radial-gradient 光晕（solid + glow）。【避免整屏线性渐变】——H.264 会产生明显色带（banding）。
 - 禁止用 vh/vw 或相对 body 的百分比高度做整体布局（渲染时未必等于 1920）；统一用绝对 px 或 inset:0。
 - 文案排版：【禁止用 <br> 强制换行】（按渲染字宽会错位重叠）——超长句用 max-width 自然换行，或调用 window.__hyperframes.fitTextFontSize(text,{maxWidth,fontFamily,fontWeight}) 自适应字号。竖屏正文 ≥50px、标题 90–140px，确保留出左右安全边、不出框。例外：刻意每词一行的短标题可手动分多个 <div>。
@@ -105,7 +110,15 @@ function buildUserPrompt(input: HyperframesAuthorInput): string {
     .map((s) => `- ${s.role}: ${s.purpose ?? ''}${s.transferRule ? ` | 迁移约束: ${s.transferRule}` : ''} (importance ${s.importance ?? '-'})`)
     .join('\n');
   const ingredients = (g.creativeIngredients ?? []).map((c) => c.name).filter(Boolean).join('、');
-  const assetList = input.assetRefs.map((a) => `${a.relPath}  ——  ${a.description ?? '产品真实图片'}`).join('\n');
+  const assetList = input.assetRefs
+    .map((a) => {
+      const meta =
+        a.kind === 'video'
+          ? `视频, 总时长 ${a.durationSec != null ? `${a.durationSec.toFixed(1)}s` : '未知'}`
+          : '图片';
+      return `${a.relPath}  ——  [${meta}] ${a.description ?? '产品真实素材'}`;
+    })
+    .join('\n');
   const c = input.constraints ?? {};
   return `【样例广告结构摘要（理解"为什么有效"，禁止复制内容）】
 结构概述: ${g.structureSummary ?? '-'}
@@ -233,6 +246,13 @@ export function createDoubaoHyperframesAuthor(opts: { model?: string } = {}): Hy
   };
 }
 
+/** Deterministic "best moment" in-point for a mock video scene: a centered window the scene's length. */
+function mockMediaStart(durationSec: number | undefined, sceneSec: number): string {
+  if (durationSec == null || durationSec <= sceneSec) return '';
+  const start = (durationSec - sceneSec) / 2;
+  return ` data-media-start="${start.toFixed(3)}"`;
+}
+
 const ESC: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;' };
 function esc(text: string): string {
   return text.replace(/[&<>]/g, (ch) => ESC[ch] ?? ch);
@@ -270,9 +290,13 @@ export function mockHyperframesComposition(input: HyperframesAuthorInput): strin
   imgs.forEach((img, i) => {
     const cls = `img-${i}`;
     const cap = points[(i % points.length)] ?? cb.productName;
+    const mediaEl =
+      img.kind === 'video'
+        ? `<video class="kb-img" src="${img.relPath}" muted playsinline${mockMediaStart(img.durationSec, sceneSec)}></video>`
+        : `<img class="kb-img" src="${img.relPath}" alt="" />`;
     scenes.push(
       `<div class="layer clip scene ${cls}" id="${cls}" data-start="${t}" data-duration="${sceneSec}" data-track-index="${track++}">
-        <img class="kb-img" src="${img.relPath}" alt="" />
+        ${mediaEl}
         <div class="cap cap-hook">${esc(cap)}</div>
       </div>`
     );

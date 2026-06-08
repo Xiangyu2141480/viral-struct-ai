@@ -727,6 +727,140 @@ def _process_block_metadata(
         return None, {"blockId": block_id, "stage": "fine_structure_scan", "error": str(exc)}
 
 
+# --------------------------------------------------------------------------- #
+# Batched path (--batch-peaks): ONE upload + ONE batched peak-scan per block,
+# replacing the N per-candidate upload/LLM chains. Code still owns all timing.
+# --------------------------------------------------------------------------- #
+
+def _build_visual_peak_record(
+    candidate: dict[str, Any], *, block_start_s: float, block_duration_ms: int,
+    args: argparse.Namespace,
+) -> dict[str, Any]:
+    """Code-owned timing record for one candidate (no clip, no LLM). Mirrors the
+    record the per-peak path builds, so aggregation is identical in both modes."""
+    candidate_id = str(candidate.get("sourceId") or "")
+    candidate_block_rel_ms = int(candidate["tMs"])
+    candidate_abs_s = block_start_s + (candidate_block_rel_ms / 1000.0)
+    block_end_s = block_start_s + block_duration_ms / 1000.0
+    window_start_s = max(block_start_s, candidate_abs_s - args.peak_pre_context)
+    window_end_s = min(block_end_s, candidate_abs_s + args.peak_post_context)
+    anchor_source = str(candidate.get("anchorSource", "visual_peak"))
+    channels = (
+        ["hist_delta", "frame_diff", "flow_mag", "area_delta"]
+        if anchor_source == "visual_peak" else []
+    )
+    return {
+        "peakId": candidate_id,
+        "tMs": int(round(candidate_abs_s * 1000)),
+        "prominence": float(candidate.get("prominence", 0.0)),
+        "motionScore": float(candidate.get("motionScore", 0.0)),
+        "channels": channels,
+        "windowMs": {"start": int(round(window_start_s * 1000)), "end": int(round(window_end_s * 1000))},
+        "anchorSource": anchor_source,
+        "eventType": str(candidate.get("eventType", "peak")),
+    }
+
+
+def _block_metadata_from_file_id(
+    block: dict[str, Any], file_id: str, *, args: argparse.Namespace,
+    base_url: str, api_key: str, model: str, video_id: str, video_duration: float,
+    logger: "BlockLogger",
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    """Block-level fine_structure_scan reusing an already-uploaded file_id."""
+    block_id = str(block["id"])
+    block_variables = build_block_prompt_variables(block, video_id=video_id, video_duration=video_duration)
+    instructions, prompt_text = load_prompt_sections(args.prompt, block_variables)
+    try:
+        resp = gated_call(
+            create_response, base_url=base_url, api_key=api_key,
+            payload=build_responses_payload(model=model, file_id=file_id, prompt_text=prompt_text, instructions=instructions, store=True),
+            timeout=args.response_timeout,
+        )
+        md = extract_json_object(extract_response_text(resp))
+        if not isinstance(md, dict):
+            raise ValueError("fine_structure_scan response is not a JSON object")
+        return md, None
+    except Exception as exc:
+        logger.log(f"   [ERROR] [{block_id}] batched block-metadata failed: {exc}")
+        return None, {"blockId": block_id, "stage": "fine_structure_scan", "error": str(exc)}
+
+
+def _batched_peak_semantics(
+    block: dict[str, Any], file_id: str, candidates: list[dict[str, Any]], *,
+    block_duration_ms: int, args: argparse.Namespace, base_url: str, api_key: str,
+    model: str, logger: "BlockLogger",
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """ONE call describing ALL candidates in the block. Returns (semantic_results,
+    failures). Input timestamps are localization hints; timing stays code-owned."""
+    block_id = str(block["id"])
+    if not candidates:
+        return [], []
+    lines = []
+    for c in candidates:
+        cid = str(c.get("sourceId") or "")
+        rel_s = int(c["tMs"]) / 1000.0
+        bucket = relative_position_bucket(int(c["tMs"]), block_duration_ms=block_duration_ms)
+        src = str(c.get("anchorSource", "visual_peak"))
+        lines.append(f"- peakId={cid} | 约 {rel_s:.1f}s | 位置 {bucket} | 来源 {src}")
+    variables = {
+        "blockId": block_id,
+        "coarseRoleGuess": block.get("coarseRoleGuess", "unknown"),
+        "candidateList": "\n".join(lines),
+    }
+    instructions, prompt_text = load_prompt_sections(args.peak_batch_prompt, variables)
+    logger.log(f"   [{block_id}] batched peak-scan for {len(candidates)} candidates...")
+    try:
+        resp = gated_call(
+            create_response, base_url=base_url, api_key=api_key,
+            payload=build_responses_payload(model=model, file_id=file_id, prompt_text=prompt_text, instructions=instructions, store=True),
+            timeout=args.response_timeout,
+        )
+        parsed = extract_json_object(extract_response_text(resp))
+        peaks = parsed.get("peaks") if isinstance(parsed, dict) else None
+        if not isinstance(peaks, list):
+            raise ValueError("peak_batch response missing 'peaks' array")
+        results = [p for p in peaks if isinstance(p, dict) and p.get("peakId")]
+        logger.log(f"      [{block_id}] batched -> {len(results)}/{len(candidates)} semantics")
+        return results, []
+    except Exception as exc:
+        logger.log(f"   [WARN] [{block_id}] batched peak-scan failed: {exc}")
+        return [], [{"blockId": block_id, "stage": "peak_batch", "error": str(exc)}]
+
+
+def _process_block_batched(
+    block: dict[str, Any], clip_path: Path, candidates: list[dict[str, Any]], *,
+    args: argparse.Namespace, base_url: str, api_key: str, model: str,
+    video_id: str, video_duration: float, block_start_s: float, block_duration_ms: int,
+    logger: "BlockLogger",
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], dict[str, Any] | None, dict[str, Any] | None]:
+    """Batched block: 1 upload + block-metadata call + 1 batched peak-scan call.
+    Returns (visual_peaks, semantic_results, peak_failures, block_metadata, block_failure)."""
+    block_id = str(block["id"])
+    visual_peaks = [
+        _build_visual_peak_record(c, block_start_s=block_start_s, block_duration_ms=block_duration_ms, args=args)
+        for c in candidates
+    ]
+    fps = args.batch_block_upload_fps if getattr(args, "batch_block_upload_fps", 0) and args.batch_block_upload_fps > 0 else None
+    logger.log(f"   [{block_id}] batched: uploading block clip once (fps={fps})...")
+    try:
+        file_info = gated_call(upload_file, base_url=base_url, api_key=api_key, video_path=clip_path, fps=fps)
+        wait_for_file(base_url=base_url, api_key=api_key, file_id=file_info["id"],
+                      poll_interval=args.poll_interval, max_wait_seconds=args.max_wait_seconds)
+    except Exception as exc:
+        logger.log(f"   [ERROR] [{block_id}] batched block upload failed: {exc}")
+        return visual_peaks, [], [], None, {"blockId": block_id, "stage": "batched_upload", "error": str(exc)}
+    file_id = file_info["id"]
+    block_metadata, block_failure = _block_metadata_from_file_id(
+        block, file_id, args=args, base_url=base_url, api_key=api_key, model=model,
+        video_id=video_id, video_duration=video_duration, logger=logger)
+    if block_failure is not None:
+        return visual_peaks, [], [], None, block_failure
+    semantic_results, peak_failures = _batched_peak_semantics(
+        block, file_id, candidates, block_duration_ms=block_duration_ms,
+        args=args, base_url=base_url, api_key=api_key, model=model, logger=logger)
+    return visual_peaks, semantic_results, peak_failures, block_metadata, None
+
+
 def process_block_with_peak_micro(
     block: dict[str, Any],
     *,
@@ -881,10 +1015,10 @@ def process_block_with_peak_micro(
         if beat_map else []
     )
 
-    # Step 4: per-peak window + peak_micro_scan (W1.3: concurrent within block)
-    peak_window_dir = work_dir / block_id
-    peak_window_dir.mkdir(parents=True, exist_ok=True)
-
+    # Step 4: per-candidate semantics. Two paths (timing is code-owned in both):
+    #  - default: one upload + peak_micro_scan PER candidate (concurrent).
+    #  - --batch-peaks: ONE upload + ONE batched peak-scan for all candidates,
+    #    deleting ~N upload/LLM chains (perf experiment, A/B'd against eval).
     logger = BlockLogger(block_id)
     block_coarse_role = block.get("coarseRoleGuess", "unknown")
 
@@ -894,47 +1028,58 @@ def process_block_with_peak_micro(
     block_metadata: dict[str, Any] | None = None
     block_failure: dict[str, Any] | None = None
 
-    # Submit all candidates + the block-level scan to one pool so they overlap.
-    with ThreadPoolExecutor(max_workers=int(args.candidate_workers)) as pool:
-        candidate_futures = {
-            pool.submit(
-                _process_one_candidate,
-                candidate,
-                block_start_s=start,
-                block_end_s=end,
-                block_duration_ms=block_duration_ms,
-                block_coarse_role=block_coarse_role,
+    if getattr(args, "batch_peaks", False):
+        (visual_peaks_with_windows, semantic_results, peak_failures,
+         block_metadata, block_failure) = _process_block_batched(
+            block, clip_path, candidates,
+            args=args, base_url=base_url, api_key=api_key, model=model,
+            video_id=video_id, video_duration=video_duration,
+            block_start_s=start, block_duration_ms=block_duration_ms, logger=logger,
+        )
+    else:
+        peak_window_dir = work_dir / block_id
+        peak_window_dir.mkdir(parents=True, exist_ok=True)
+        # Submit all candidates + the block-level scan to one pool so they overlap.
+        with ThreadPoolExecutor(max_workers=int(args.candidate_workers)) as pool:
+            candidate_futures = {
+                pool.submit(
+                    _process_one_candidate,
+                    candidate,
+                    block_start_s=start,
+                    block_end_s=end,
+                    block_duration_ms=block_duration_ms,
+                    block_coarse_role=block_coarse_role,
+                    args=args,
+                    base_url=base_url,
+                    api_key=api_key,
+                    model=model,
+                    peak_window_dir=peak_window_dir,
+                    logger=logger,
+                ): candidate
+                for candidate in candidates
+            }
+            block_future = pool.submit(
+                _process_block_metadata,
+                block,
+                clip_path,
                 args=args,
                 base_url=base_url,
                 api_key=api_key,
                 model=model,
-                peak_window_dir=peak_window_dir,
+                video_id=video_id,
+                video_duration=video_duration,
                 logger=logger,
-            ): candidate
-            for candidate in candidates
-        }
-        block_future = pool.submit(
-            _process_block_metadata,
-            block,
-            clip_path,
-            args=args,
-            base_url=base_url,
-            api_key=api_key,
-            model=model,
-            video_id=video_id,
-            video_duration=video_duration,
-            logger=logger,
-        )
+            )
 
-        for fut in as_completed(candidate_futures):
-            vp_record, semantic, failure = fut.result()
-            visual_peaks_with_windows.append(vp_record)
-            if semantic is not None:
-                semantic_results.append(semantic)
-            if failure is not None:
-                peak_failures.append(failure)
+            for fut in as_completed(candidate_futures):
+                vp_record, semantic, failure = fut.result()
+                visual_peaks_with_windows.append(vp_record)
+                if semantic is not None:
+                    semantic_results.append(semantic)
+                if failure is not None:
+                    peak_failures.append(failure)
 
-        block_metadata, block_failure = block_future.result()
+            block_metadata, block_failure = block_future.result()
 
     # Block-level scan failure aborts the block.
     if block_failure is not None:
@@ -1025,6 +1170,18 @@ def build_parser() -> argparse.ArgumentParser:
         default="prompts/video_understanding/peak_micro_scan_v0.md",
         help="Per-peak semantic-only prompt (v0.3 pipeline).",
     )
+    # Perf experiment: collapse the N per-peak calls into ONE batched call/block.
+    parser.add_argument("--batch-peaks", action="store_true",
+                        help="Describe all candidates of a block in ONE batched call "
+                             "(1 upload + block-metadata + 1 peak-batch) instead of one "
+                             "upload+peak_micro per candidate. Code still owns timing.")
+    parser.add_argument("--peak-batch-prompt",
+                        default="prompts/video_understanding/peak_batch_scan_v0.md",
+                        help="Batched peak-semantics prompt (used with --batch-peaks).")
+    parser.add_argument("--batch-block-upload-fps", type=float, default=2.0,
+                        help="fps for the single block upload in --batch-peaks mode "
+                             "(the model must see each action moment to describe it). "
+                             "Default 2.0. Set 0 for provider default.")
     parser.add_argument("--out-dir", default=str(_paths.fine_scan_dir))
     parser.add_argument("--work-dir", default=str(_paths.fine_scan_clips_dir))
     parser.add_argument("--block-ids", default="", help="Comma-separated content block IDs to process.")

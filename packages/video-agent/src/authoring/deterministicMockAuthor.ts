@@ -45,10 +45,21 @@ export function deterministicMockAuthor(context: VideoEditContext): AuthoredTime
       if (!card || !card.url) continue;
       const kind = mediaKindForAsset(card);
       if (!kind) continue;
+      const media: Record<string, unknown> = { id: `asset_${card.id}`, type: kind, assetId: card.id, resolvedPath: card.url };
+      // Deterministic "best moment" for a long video: a centered window the length of the beat.
+      if (kind === 'video') {
+        const dur = card.analysis?.media?.durationSec;
+        const beatLen = Math.max(0.1, seg.duration ?? 3);
+        if (typeof dur === 'number' && dur > beatLen) {
+          const startSec = (dur - beatLen) / 2;
+          media.startSec = Number(startSec.toFixed(3));
+          media.endSec = Number((startSec + beatLen).toFixed(3));
+        }
+      }
       mediaLayers = [
         {
           id: `media_${seg.id}`,
-          media: { id: `asset_${card.id}`, type: kind, assetId: card.id, resolvedPath: card.url },
+          media,
           fit: 'cover',
           zOrder: 0,
           opacity: 1,

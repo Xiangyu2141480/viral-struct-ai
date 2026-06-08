@@ -18,6 +18,25 @@ import {
 import { framesFor } from './manifestExecutor';
 import type { RenderResult, RenderSegmentManifestEntry } from './RenderContract';
 
+/**
+ * Compute the ffmpeg trim plan for a video media layer playing the author-chosen source sub-range
+ * [startSec, endSec) inside a `beatDuration`-long beat. `ss` is the input seek (in-point); `readDuration`
+ * is how much source to read (capped at the beat); `padDuration` > 0 means the chosen clip is shorter than
+ * the beat, so the last frame is held (tpad) to fill the remainder rather than leaving a black gap.
+ * Pure — unit-tested in renderExecutor.test.ts.
+ */
+export function computeVideoTrim(
+  beatDuration: number,
+  startSec?: number,
+  endSec?: number
+): { ss: number; readDuration: number; padDuration: number } {
+  const ss = startSec != null && startSec > 0 ? startSec : 0;
+  const clipLen = endSec != null ? Math.max(0.1, endSec - ss) : beatDuration;
+  const readDuration = Math.min(beatDuration, clipLen);
+  const padDuration = clipLen < beatDuration - 0.05 ? beatDuration - clipLen : 0;
+  return { ss, readDuration, padDuration };
+}
+
 // ffmpeg-static is CommonJS (module.exports = path); load via createRequire to avoid ESM default-interop friction.
 const requireCjs = createRequire(import.meta.url);
 
@@ -183,8 +202,14 @@ async function renderBeat(
       // -framerate fps so the looped still has exactly dur*fps frames → Ken-Burns `on` reaches the final scale.
       inputArgs.push('-loop', '1', '-framerate', String(fps), '-t', durationSec.toFixed(3), '-i', layer.media.resolvedPath);
     } else {
-      const ss = layer.media.startSec ?? 0;
-      inputArgs.push('-ss', ss.toFixed(3), '-t', durationSec.toFixed(3), '-i', layer.media.resolvedPath);
+      // Play the author-chosen source sub-range [startSec, endSec). When the chosen clip is shorter than the
+      // beat we hold its last frame (tpad clone) to fill the beat — honest (no fabricated content, just a
+      // freeze), never a black gap. Input-side -ss is fast and keyframe-accurate to the GOP — fine for trims.
+      const { ss, readDuration, padDuration } = computeVideoTrim(durationSec, layer.media.startSec, layer.media.endSec);
+      inputArgs.push('-ss', ss.toFixed(3), '-t', readDuration.toFixed(3), '-i', layer.media.resolvedPath);
+      if (padDuration > 0) {
+        chain.push(`tpad=stop_mode=clone:stop_duration=${padDuration.toFixed(3)}`);
+      }
     }
     chain.push(`scale=${width}:${height}:force_original_aspect_ratio=increase`, `crop=${width}:${height}`);
     const motion = layer.media.type === 'image' ? layer.motion : undefined;

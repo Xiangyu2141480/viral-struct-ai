@@ -12,6 +12,7 @@
   "dependencies": {
     "@viral-struct/render-executor": "workspace:*",
     "@viral-struct/shared": "workspace:*",
+    "@viral-struct/video-agent": "workspace:*",
     "cors": "^2.8.5",
     "dotenv": "^16.4.0",
     "express": "^4.18.0",

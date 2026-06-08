@@ -239,7 +239,7 @@ function buildAssetRefs(context: VideoEditContext, assetsDir: string, log: strin
   const refs: HyperframesAssetRef[] = [];
   const seen = new Set<string>();
   for (const card of rewriteAssetCardUrlsToDisk(context.assetCards)) {
-    if (card.type !== 'image' || !card.url) continue;
+    if ((card.type !== 'image' && card.type !== 'video') || !card.url) continue;
     const src = card.url; // disk path after rewrite
     if (!existsSync(src)) {
       log.push(`asset ${card.id}: source not found on disk (${src})`);
@@ -250,7 +250,13 @@ function buildAssetRefs(context: VideoEditContext, assetsDir: string, log: strin
     seen.add(base);
     try {
       copyFileSync(src, path.join(assetsDir, base));
-      refs.push({ assetId: card.id, relPath: `./assets/${base}`, description: card.spatialDescription });
+      refs.push({
+        assetId: card.id,
+        relPath: `./assets/${base}`,
+        description: card.spatialDescription,
+        kind: card.type,
+        durationSec: card.type === 'video' ? card.analysis?.media?.durationSec : undefined
+      });
     } catch (err) {
       log.push(`asset ${card.id}: copy failed (${err instanceof Error ? err.message : String(err)})`);
     }

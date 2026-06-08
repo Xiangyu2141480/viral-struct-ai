@@ -4,6 +4,7 @@ import type { TimelineItem } from '@viral-struct/shared';
 import { compileTimelineToRenderInput } from './compileRenderInput';
 import { ManifestRenderExecutor } from './manifestExecutor';
 import { buildRenderTrack } from './renderTrack';
+import { computeVideoTrim } from './authoredFfmpegExecutor';
 
 function makeTimeline(): TimelineItem[] {
   return [
@@ -113,4 +114,27 @@ test('buildRenderTrack tiles [0, span] exactly: collapses overlaps and fills gap
   const tiled = track.reduce((sum, slice) => sum + (slice.endMs - slice.startMs), 0);
   assert.equal(tiled, input.totalDurationMs); // non-overlapping, no gaps, exactly covers [0, span]
   assert.ok(track.some((slice) => slice.sourceSegmentId === '__gap__')); // the 2-3s gap is filled
+});
+
+// --- Video source-range trim math (the "honor endSec" seam) ---
+
+test('computeVideoTrim: no range → read the whole beat from t=0, no pad', () => {
+  assert.deepEqual(computeVideoTrim(3), { ss: 0, readDuration: 3, padDuration: 0 });
+});
+
+test('computeVideoTrim: a chosen sub-range ≥ the beat plays the beat from the in-point', () => {
+  // clip [8,12] = 4s ≥ 3s beat → seek to 8, read 3s, no pad
+  assert.deepEqual(computeVideoTrim(3, 8, 12), { ss: 8, readDuration: 3, padDuration: 0 });
+});
+
+test('computeVideoTrim: a sub-range shorter than the beat holds the last frame (tpad) for the remainder', () => {
+  // clip [8,10] = 2s < 4s beat → read 2s, hold the last frame for the missing 2s
+  const r = computeVideoTrim(4, 8, 10);
+  assert.equal(r.ss, 8);
+  assert.equal(r.readDuration, 2);
+  assert.equal(Number(r.padDuration.toFixed(3)), 2);
+});
+
+test('computeVideoTrim: startSec only (no out-point) reads beat length from the in-point', () => {
+  assert.deepEqual(computeVideoTrim(3, 5), { ss: 5, readDuration: 3, padDuration: 0 });
 });
