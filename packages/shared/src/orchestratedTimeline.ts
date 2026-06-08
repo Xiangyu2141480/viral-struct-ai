@@ -104,6 +104,15 @@ export type GapResolutionOption = z.infer<typeof GapResolutionOptionSchema>;
 export const GapResolutionOptionIdSchema = z.enum(['reshoot', 'hyperframes', 'aigc']);
 export type GapResolutionOptionId = z.infer<typeof GapResolutionOptionIdSchema>;
 
+export const DirectorFillStatusSchema = z.enum([
+  'matched',
+  'partial_asset_support',
+  'needs_hyperframes_enhancement',
+  'source_specific_not_transferable',
+  'missing_generation_required'
+]);
+export type DirectorFillStatus = z.infer<typeof DirectorFillStatusSchema>;
+
 // ---- Per-slot evidence (旁证 from coverage; matching verdict is owned by the LLM/rule matcher) ----
 
 export const OrchestratedSlotEvidenceSchema = z
@@ -163,6 +172,11 @@ export const OrchestratedSlotSchema = z
     index: z.number().int().min(0),
     startMs: z.number().min(0),
     endMs: z.number().min(0),
+    sourceStartMs: z.number().min(0).optional(),
+    sourceEndMs: z.number().min(0).optional(),
+    targetStartMs: z.number().min(0).optional(),
+    targetEndMs: z.number().min(0).optional(),
+    fillStatus: DirectorFillStatusSchema.optional(),
     sourceIntent: z.string().optional(),
     /** transferable intent — already sanitized to prevent source-video leakage into target prompts. */
     transferableIntent: z.string().optional(),
@@ -218,7 +232,43 @@ export const OrchestratedTransitionSchema = z
   .strict();
 export type OrchestratedTransition = z.infer<typeof OrchestratedTransitionSchema>;
 
+// ---- Reusable asset packs (Director handoff for Video Agent / human shooting / external job cards) ----
+
+export const ReusableAssetPackTypeSchema = z.enum([
+  'product_hero_reveal',
+  'product_closeup',
+  'usage_demo',
+  'cap_open_usage',
+  'pour_or_drink_usage',
+  'cold_condensation_macro',
+  'cold_refresh_proof',
+  'motif_assembly_reveal',
+  'transition_pack',
+  'transition_ice_lemon_pack',
+  'cta_lockup',
+  'lineup_social_proof'
+]);
+export type ReusableAssetPackType = z.infer<typeof ReusableAssetPackTypeSchema>;
+
+export const ReusableAssetPackPlanSchema = z
+  .object({
+    id: z.string(),
+    packType: ReusableAssetPackTypeSchema,
+    title: z.string(),
+    status: z.enum(['required', 'optional']),
+    recommendedChannel: z.enum(['reshoot', 'hyperframes', 'aigc']),
+    promptSummary: z.string(),
+    targetSlots: z.array(z.string()),
+    referencedAssetIds: z.array(z.string()),
+    ownership: z.literal('director_handoff_plan_only')
+  })
+  .strict();
+export type ReusableAssetPackPlan = z.infer<typeof ReusableAssetPackPlanSchema>;
+
 // ---- Top-level timeline ----
+
+export const TargetDurationModeSchema = z.enum(['source_preserve', 'high_click_15s', 'high_conversion_20s', 'full_story_30s']);
+export type TargetDurationMode = z.infer<typeof TargetDurationModeSchema>;
 
 export const OrchestratedTimelineMetaSchema = z
   .object({
@@ -226,6 +276,9 @@ export const OrchestratedTimelineMetaSchema = z
     targetCategory: z.string().optional(),
     matchSource: z.enum(['llm_judge', 'rule_based', 'mixed']),
     generatedAt: z.string(),
+    sourceDurationMs: z.number().min(0).optional(),
+    targetDurationMs: z.number().min(0).optional(),
+    targetDurationMode: TargetDurationModeSchema.optional(),
     /** Hard boundary: the Director Agent only plans; it never renders or calls external models. */
     planOnly: z.literal(true)
   })
@@ -239,6 +292,7 @@ export const OrchestratedTimelineSchema = z
     renderProfile: OrchestratedRenderProfileSchema,
     slots: z.array(OrchestratedSlotSchema),
     transitions: z.array(OrchestratedTransitionSchema),
+    reusableAssetPacks: z.array(ReusableAssetPackPlanSchema).optional(),
     meta: OrchestratedTimelineMetaSchema,
     warnings: z.array(z.string())
   })

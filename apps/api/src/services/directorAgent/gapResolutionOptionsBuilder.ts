@@ -3,14 +3,17 @@ import type {
   AssetSupplyContext,
   ContentBrief,
   ContextualSlotCoverage,
+  DirectorFillStatus,
   GapResolutionOption,
   GapResolutionOptionId,
   HyperframesOption,
   MissingMaterialBrief,
   ReshootOption,
-  ShotSlotNode
+  ShotSlotNode,
+  ViralMotifAnnotation
 } from '@viral-struct/shared';
 import { DEFAULT_ASPECT_RATIO, SAFE_NEGATIVE_PROMPT_ZH } from './constants';
+import { containsSourceSpecificTerm } from '../motifs/motionGrammarSanitizer';
 
 /**
  * P2 (§6) — every partial/gap slot gets exactly three resolution options: reshoot / hyperframes / aigc.
@@ -38,6 +41,8 @@ export interface BuildGapResolutionOptionsArgs {
   chosenAssetId?: string;
   /** The slot's detected motion-grammar tokens — drive the per-slot abstract-transfer line in the aigc prompt. */
   motionTokens?: string[];
+  fillStatus?: DirectorFillStatus;
+  motif?: ViralMotifAnnotation;
 }
 
 export interface GapResolutionOptionsResult {
@@ -50,7 +55,7 @@ export function buildGapResolutionOptions(args: BuildGapResolutionOptionsArgs): 
     args.missingBrief
     ?? args.assetSupplyContext?.missingMaterialBriefs?.find((entry) => entry.affectedSlotId === args.slot.id);
 
-  const spec = zhRoleSpec(args.slot.role);
+  const spec = buildDirectorSpec(args, brief);
   const product = args.contentBrief.productName;
 
   const reshoot = buildReshootOption(spec, product, brief);
@@ -120,8 +125,10 @@ function buildHyperframesOption(
   const durationMs = positive(Math.round((brief?.hyperframesBrief?.durationSec ?? 3) * 1000), 3000);
   const refLine = referencedAssetIds.length ? `复用现有素材：${referencedAssetIds.join('、')}。` : '';
 
+  const motifLine = spec.motifLine ? `${spec.motifLine}。` : '';
   const editingGuidanceNL =
     `以 ${product} 为画面主体，${spec.hyperframesIntent}。`
+    + motifLine
     + `用${spec.animationHints.join('、')}等动效承接「${spec.label}」。`
     + refLine
     + `保持 ${product} 原始包装与标签清晰可见，不得加入未授权品牌、价格承诺或健康功效宣称。`;
@@ -174,6 +181,7 @@ function buildAigcOption(
   const prompt =
     '仅为生成提示词，非成片。'
     + `为 ${product} 生成一个竖屏 9:16、普通手机拍摄风格的「${spec.label}」镜头：${spec.aigcScene}。`
+    + (spec.motifLine ? `${spec.motifLine}。` : '')
     + transferLine
     + sellingLine
     + '不得编造价格、促销、医疗功效、明星代言或其它品牌。';
@@ -206,6 +214,7 @@ interface ZhRoleSpec {
   animationHints: string[];
   aigcScene: string;
   cardType: string;
+  motifLine?: string;
 }
 
 const AVOID_ZH = [
@@ -335,6 +344,81 @@ const ZH_ROLE_SPECS: Record<string, ZhRoleSpec> = {
 
 function zhRoleSpec(role: string): ZhRoleSpec {
   return ZH_ROLE_SPECS[normalizeRole(role)] ?? ZH_ROLE_SPECS.generic;
+}
+
+function buildDirectorSpec(args: BuildGapResolutionOptionsArgs, brief?: MissingMaterialBrief): ZhRoleSpec {
+  const base = zhRoleSpec(args.slot.role);
+  if (isKineticAssemblyContext(args, brief)) {
+    return {
+      ...base,
+      label: '冰爽级联组装揭示',
+      reshootShot:
+        '让冰块、柠檬片和红茶水滴从画面四周级联汇聚到产品周围，再用开盖、倒茶或触碰瓶身完成激活，最后收束到干净 CTA 尾帧',
+      mustCapture: [
+        '冰块或柠檬片级联入画',
+        '由散到聚的汇聚过程',
+        '开盖/倒茶/触碰瓶身的激活动作',
+        '冷雾、水汽或茶滴爆发',
+        '干净 CTA 收口画面'
+      ],
+      framing: '竖屏产品居中，前半段留出级联运动空间，尾帧留出 CTA 文案安全区',
+      durationSec: positive(brief?.manualShootBrief?.durationSec ?? 4, 4),
+      hyperframesIntent: '把源片的“部件级联 -> 由散到聚 -> 激活爆发 -> CTA 揭示”抽象成饮料语境的结构动效',
+      animationHints: ['冰块雨', '柠檬片扫过', '红茶水滴汇聚', '冷雾爆发', 'CTA 锁定'],
+      aigcScene:
+        '冰块、柠檬片、红茶水滴和冷雾围绕产品形成由散到聚的级联组装，开盖或倒茶触发冰爽爆发，最终进入产品 CTA 收口',
+      cardType: brief?.hyperframesBrief?.cardType ?? 'timeline_bridge_card',
+      motifLine: '迁移的是抽象运动语法：级联、汇聚、激活、爆发、CTA 收口；目标画面只使用冰块、柠檬、红茶水滴、冷雾和产品尾帧'
+    };
+  }
+
+  if (!containsSourceSpecificTerm(buildSlotText(args.slot))) {
+    return base;
+  }
+
+  return {
+    ...base,
+    label: sourceSpecificLabel(args.slot.role),
+    reshootShot:
+      '把源片里的品类专属结构展示替换成饮料原生画面：瓶身标签、冷凝水、茶色流动、开盖、倒入杯中或多瓶陈列',
+    mustCapture: [
+      '瓶身标签或包装清晰',
+      '冷凝水/冰块/柠檬片等冰爽证据',
+      '开盖、瓶身旋转、倒茶或陈列扫过中的一个饮料动作',
+      '画面留出卖点或 CTA 安全区'
+    ],
+    framing: base.framing,
+    durationSec: base.durationSec,
+    hyperframesIntent: '把源品类专属功能展示替换成饮料可拍摄/可包装的卖点画面',
+    animationHints: ['瓶身标签高光', '冷凝水擦除', '柠檬片扫过', '茶色流动', '卖点卡落下'],
+    aigcScene:
+      '瓶身标签清晰可见，冷凝水、冰块、柠檬片和红茶茶色作为视觉证据，动作可为开盖、瓶身旋转、倒入杯中或多瓶陈列扫过',
+    cardType: base.cardType,
+    motifLine: '只迁移“展示细节与功能递进”的结构，不复制源品类物体；目标等价物是瓶身标签、冷凝水、茶色流动、开盖动作和产品陈列'
+  };
+}
+
+function isKineticAssemblyContext(args: BuildGapResolutionOptionsArgs, brief?: MissingMaterialBrief): boolean {
+  const motifType = args.motif?.motifType ?? brief?.motifContext?.motifType;
+  return motifType === 'kinetic_assembly_reveal';
+}
+
+function sourceSpecificLabel(role: string): string {
+  if (role === 'product_closeup' || role === 'cover') return '饮料细节等价镜头';
+  if (role === 'cta_visual') return '饮料 CTA 等价尾帧';
+  return '饮料动作等价镜头';
+}
+
+function buildSlotText(slot: ShotSlotNode): string {
+  return [
+    slot.requiredAsset.subject,
+    slot.requiredAsset.motion,
+    slot.intent?.purpose,
+    slot.intent?.motionPattern,
+    slot.sourceInstance?.specificAction
+  ]
+    .filter(Boolean)
+    .join(' ');
 }
 
 function normalizeRole(role: string): keyof typeof ZH_ROLE_SPECS {

@@ -28,7 +28,7 @@ export interface BuildOrchestratedTransitionsArgs {
   hyperframesWeight?: number;
 }
 
-const STRONG_BRIDGE_FUNCTIONS = new Set(['chaos_to_order', 'ingredient_to_product']);
+const STRONG_BRIDGE_FUNCTIONS = new Set(['motif_assembly_bridge', 'chaos_to_order', 'ingredient_to_product']);
 const STRONG_BRIDGE_TOKENS = new Set([
   'component_cascade',
   'chaos_to_order',
@@ -51,7 +51,7 @@ export function buildOrchestratedTransitions(args: BuildOrchestratedTransitionsA
     const from = slots[index];
     const to = slots[index + 1];
     const id = `transition_${String(index + 1).padStart(3, '0')}`;
-    const transitionFunction = inferTransitionFunction(from.role, to.role);
+    const transitionFunction = inferTransitionFunction(from, to);
     const requiredAssets = [matchedAssetId(from), matchedAssetId(to)].filter((value): value is string => Boolean(value));
     const missingAssets = [from, to].filter(isGap).map((slot) => `${slot.slotId} asset`);
 
@@ -64,7 +64,7 @@ export function buildOrchestratedTransitions(args: BuildOrchestratedTransitionsA
         mode: 'cut',
         transitionFunction,
         preferredImplementation: 'hyperframes',
-        reason: 'One side is an unfilled gap, so use a simple cut into the next slot rather than a real frame bridge.',
+        reason: '一侧仍是缺口，因此用干净切换进入下一槽位，不做真实帧桥接。',
         requiredAssets,
         missingAssets,
         riskNotes: ['Plan-only transition; one side is a gap pending resolution.']
@@ -86,7 +86,9 @@ export function buildOrchestratedTransitions(args: BuildOrchestratedTransitionsA
         aigcFrameBridge: {
           fromTailFrameRef: `required: extract tail frame from ${from.slotId}`,
           toHeadFrameRef: `required: extract head frame from ${to.slotId}`,
-          prompt: `仅为生成提示词，非成片。为 ${productName} 生成衔接帧：从「${zhRole(from.role)}」镜头自然承接到「${zhRole(to.role)}」镜头，使用目标品类的元素衔接，不得加入任何品牌、价格或医疗宣称。`,
+          prompt:
+            `仅为生成提示词，非成片。为 ${productName} 生成衔接帧：${transitionPrompt(transitionFunction, from, to)}`
+            + '不得加入任何未授权品牌、价格承诺或医疗功效宣称。',
           negativePrompt: SAFE_NEGATIVE_PROMPT_ZH,
           durationMs: 500,
           ownership: 'external_generation_job_card_only'
@@ -109,11 +111,9 @@ export function buildOrchestratedTransitions(args: BuildOrchestratedTransitionsA
       mode: 'hyperframes',
       transitionFunction,
       preferredImplementation: 'hyperframes',
-      reason: `Bridge the ${humanRole(from.role)} shot into the ${humanRole(to.role)} shot with a hyperframes card animation.`,
+      reason: `用语义转场把「${zhRole(from.role)}」承接到「${zhRole(to.role)}」，保留结构节奏但不复制源画面。`,
       hyperframes: {
-        editingGuidanceNL:
-          `以 ${productName} 为主体，从「${zhRole(from.role)}」镜头快速卡点过渡到「${zhRole(to.role)}」镜头`
-          + '（卡片擦除/推近衔接）；保持产品标签清晰可见，不加任何未经证实的宣称。',
+        editingGuidanceNL: `${transitionGuidance(transitionFunction, productName, from, to)}保持产品标签清晰可见，不加任何未经证实的宣称。`,
         durationMs: 400,
         styleTokens: styleTokens(from, to, transitionFunction)
       },
@@ -142,12 +142,62 @@ function hasStrongMotion(slot: OrchestratedSlot): boolean {
   return (slot.motionTokens ?? []).some((token) => STRONG_BRIDGE_TOKENS.has(token));
 }
 
-function inferTransitionFunction(fromRole: string, toRole: string): string {
-  if (toRole === 'cta' || toRole === 'cta_visual') return 'product_to_cta';
-  if (fromRole === 'comparison') return 'product_to_cta';
+function inferTransitionFunction(from: OrchestratedSlot, to: OrchestratedSlot): string {
+  const fromRole = from.role;
+  const toRole = to.role;
+  if (toRole === 'cta' || toRole === 'cta_visual') return fromRole === 'cta_visual' ? 'cta_lockup' : 'product_to_cta';
+  if (isMotifAssemblyBridge(from, to)) return 'motif_assembly_bridge';
+  if (fromRole === 'opening_attention' && (toRole === 'product_closeup' || toRole === 'usage_demo')) return 'opening_to_product';
+  if (fromRole === 'product_closeup' && toRole === 'usage_demo') return 'product_to_usage';
   if (fromRole === 'usage_demo' && (toRole === 'benefit_visual' || toRole === 'testimonial')) return 'usage_to_benefit';
-  if (fromRole === 'opening_attention') return 'ingredient_to_product';
-  return 'ingredient_to_product';
+  if ((fromRole === 'benefit_visual' || fromRole === 'testimonial') && toRole === 'usage_demo') return 'benefit_to_usage';
+  if (fromRole === 'comparison') return 'proof_to_cta';
+  return 'simple_cut';
+}
+
+function isMotifAssemblyBridge(from: OrchestratedSlot, to: OrchestratedSlot): boolean {
+  if (to.role === 'benefit_visual' || to.role === 'testimonial' || to.role === 'cta_visual') {
+    return false;
+  }
+  return from.motifType === 'kinetic_assembly_reveal' || to.motifType === 'kinetic_assembly_reveal';
+}
+
+function transitionGuidance(functionName: string, productName: string, from: OrchestratedSlot, to: OrchestratedSlot): string {
+  switch (functionName) {
+    case 'opening_to_product':
+      return `以 ${productName} 为主体，用热浪破碎或冷雾擦除从「${zhRole(from.role)}」转场到「${zhRole(to.role)}」，前 0.4 秒快速推近产品。`;
+    case 'product_to_usage':
+      return `以 ${productName} 为主体，用开盖声点、瓶身轻转或手部动作触发，从产品特写承接到真实使用动作。`;
+    case 'usage_to_benefit':
+      return `把使用动作的末帧接到卖点证明，用冷凝水擦除、红茶水滴或利益点卡片落下完成转场。`;
+    case 'benefit_to_usage':
+      return `让卖点卡下落或侧滑，露出下一段真实使用动作，保留节奏但降低字幕压力。`;
+    case 'motif_assembly_bridge':
+      return `迁移级联组装语法：冰块、柠檬片、红茶水滴由散到聚，冷雾爆发后承接到「${zhRole(to.role)}」镜头。`;
+    case 'product_to_cta':
+      return `用冷雾散开、产品定格和 CTA 锁定，把前一镜头收束到结尾行动引导。`;
+    case 'cta_lockup':
+      return `保持产品轻微弹动后稳定在 CTA 尾帧，形成干净收口。`;
+    case 'proof_to_cta':
+      return `从证明或对比段落用分屏合拢转场到 CTA 尾帧，避免未经证实的优劣宣称。`;
+    default:
+      return `用干净切换或轻微擦除从「${zhRole(from.role)}」承接到「${zhRole(to.role)}」。`;
+  }
+}
+
+function transitionPrompt(functionName: string, from: OrchestratedSlot, to: OrchestratedSlot): string {
+  switch (functionName) {
+    case 'motif_assembly_bridge':
+      return `冰块、柠檬片、红茶水滴和冷雾从上一镜头级联汇聚，形成由散到聚的冰爽转场，再自然进入「${zhRole(to.role)}」镜头。`;
+    case 'opening_to_product':
+      return `热浪被冰雾击碎，露出清晰产品主体，并自然进入「${zhRole(to.role)}」镜头。`;
+    case 'product_to_usage':
+      return `瓶身轻转或开盖动作触发画面切换，承接到真实使用动作。`;
+    case 'product_to_cta':
+      return `冷雾散开后产品定格，进入 CTA 锁定尾帧。`;
+    default:
+      return `从「${zhRole(from.role)}」镜头以目标品类元素自然承接到「${zhRole(to.role)}」镜头。`;
+  }
 }
 
 function styleTokens(from: OrchestratedSlot, to: OrchestratedSlot, transitionFunction: string): string[] {

@@ -93,7 +93,12 @@ async function main(): Promise<void> {
 
   const counts = countFills(timeline);
   console.log('Director Agent orchestrated-timeline manual test complete.');
-  console.log(`- slots=${timeline.slots.length} matched=${counts.matched} partial=${counts.partial} gap=${counts.gap}`);
+  console.log(
+    `- slots=${timeline.slots.length} fullySatisfied=${counts.fullySatisfied}`
+    + ` partial=${counts.partialWithEnhancement} generationRequired=${counts.generationRequired}`
+  );
+  console.log(`- fillStatus=${JSON.stringify(counts.byStatus)}`);
+  console.log(`- duration=${timeline.meta.sourceDurationMs ?? '-'}ms -> ${timeline.meta.targetDurationMs ?? '-'}ms (${timeline.meta.targetDurationMode ?? '-'})`);
   console.log(`- transitions=${timeline.transitions.length} ${JSON.stringify(countModes(timeline))}`);
   console.log(`- matchSource=${timeline.meta.matchSource} planOnly=${timeline.meta.planOnly}`);
   console.log(`- handoff beats=${authored.beats.length} (timeline only — NOT rendered)`);
@@ -136,15 +141,18 @@ function checkSourceLeakage(timeline: OrchestratedTimeline): LeakageResult {
 }
 
 function countFills(timeline: OrchestratedTimeline) {
-  let matched = 0;
-  let partial = 0;
-  let gap = 0;
+  let fullySatisfied = 0;
+  let partialWithEnhancement = 0;
+  let generationRequired = 0;
+  const byStatus: Record<string, number> = {};
   for (const slot of timeline.slots) {
-    if (slot.fill.kind === 'gap') gap += 1;
-    else if (slot.fill.status === 'partial') partial += 1;
-    else matched += 1;
+    const status = slot.fillStatus ?? (slot.fill.kind === 'gap' ? 'missing_generation_required' : slot.fill.status);
+    byStatus[status] = (byStatus[status] ?? 0) + 1;
+    if (status === 'matched') fullySatisfied += 1;
+    else if (status === 'missing_generation_required') generationRequired += 1;
+    else partialWithEnhancement += 1;
   }
-  return { matched, partial, gap };
+  return { fullySatisfied, partialWithEnhancement, generationRequired, byStatus };
 }
 
 function countModes(timeline: OrchestratedTimeline): Record<string, number> {
@@ -161,8 +169,16 @@ function buildReport(
   const counts = countFills(timeline);
   const modes = countModes(timeline);
   const optionSlots = timeline.slots.filter((s) => (s.fill.kind === 'gap' ? s.fill.options : s.fill.options)?.length);
-  const beatsWithMedia = authored.beats.filter((b) => b.mediaLayers.length > 0).length;
-  const substituteBeats = authored.beats.filter((b) => Boolean(b.unresolvedReason)).length;
+  const realMediaReferenced = timeline.slots.filter((slot) => slot.fill.kind === 'matched' && Boolean(slot.fill.assetId)).length;
+  const fullySatisfied = timeline.slots.filter((slot) => slot.fillStatus === 'matched').length;
+  const partialWithEnhancement = timeline.slots.filter((slot) =>
+    slot.fillStatus === 'partial_asset_support'
+    || slot.fillStatus === 'needs_hyperframes_enhancement'
+    || slot.fillStatus === 'source_specific_not_transferable'
+  ).length;
+  const generationRequired = timeline.slots.filter((slot) => slot.fillStatus === 'missing_generation_required' || slot.fill.kind === 'gap').length;
+  const motifSlots = timeline.slots.filter((slot) => slot.motifType || slot.slotId.includes('slot_block_004'));
+  const sourceSpecificSlots = timeline.slots.filter((slot) => slot.fillStatus === 'source_specific_not_transferable');
 
   const jobCards: string[][] = [];
   for (const slot of timeline.slots) {
@@ -193,10 +209,17 @@ function buildReport(
         ['target category', timeline.meta.targetCategory ?? '-'],
         ['match source', timeline.meta.matchSource],
         ['plan only', String(timeline.meta.planOnly)],
-        ['slots (matched / partial / gap)', `${counts.matched} / ${counts.partial} / ${counts.gap}`],
+        ['duration compression', `${timeline.meta.sourceDurationMs ?? '-'}ms -> ${timeline.meta.targetDurationMs ?? '-'}ms (${timeline.meta.targetDurationMode ?? '-'})`],
+        ['fillStatus breakdown', JSON.stringify(counts.byStatus)],
+        ['real media referenced', `${realMediaReferenced} / ${timeline.slots.length}`],
+        ['fully satisfied slots', `${fullySatisfied} / ${timeline.slots.length}`],
+        ['partial with enhancement', `${partialWithEnhancement} / ${timeline.slots.length}`],
+        ['generation required', `${generationRequired} / ${timeline.slots.length}`],
         ['transitions', `${timeline.transitions.length} ${JSON.stringify(modes)}`],
+        ['transition functions', JSON.stringify(countTransitionFunctions(timeline))],
+        ['reusable asset packs', `${timeline.reusableAssetPacks?.length ?? 0}`],
         ['slots offering 3 options', String(optionSlots.length)],
-        ['handoff beats (real media / honest substitute)', `${beatsWithMedia} / ${substituteBeats} of ${authored.beats.length}`],
+        ['authored handoff beats', `${authored.beats.length} timeline beats, not rendered`],
         ['source leakage check', leakage.passed ? 'PASS' : `FAIL (${leakage.hits.join(', ')})`]
       ]
     ),
@@ -204,16 +227,42 @@ function buildReport(
     '## Slot timeline',
     '',
     markdownTable(
-      ['#', 'slotId', 'role', 'ms', 'fill', 'asset / recommended'],
+      ['#', 'slotId', 'role', 'source ms -> target ms', 'fillStatus', 'asset / recommended'],
       timeline.slots.map((slot) => [
         String(slot.index),
         slot.slotId,
         slot.role,
-        `${slot.startMs}-${slot.endMs}`,
-        slot.fill.kind === 'gap' ? 'gap' : slot.fill.status,
+        `${slot.sourceStartMs ?? '-'}-${slot.sourceEndMs ?? '-'} -> ${slot.startMs}-${slot.endMs}`,
+        slot.fillStatus ?? (slot.fill.kind === 'gap' ? 'missing_generation_required' : slot.fill.status),
         slot.fill.kind === 'gap' ? `→ ${slot.fill.recommendedOptionId}` : slot.fill.assetId + (slot.fill.recommendedOptionId ? ` (+${slot.fill.recommendedOptionId})` : '')
       ])
     ),
+    '',
+    '## Motif-aware and source-specific checks',
+    '',
+    motifSlots.length
+      ? markdownTable(
+          ['slotId', 'motifType', 'fillStatus', 'sample prompt'],
+          motifSlots.map((slot) => [
+            slot.slotId,
+            slot.motifType ?? '-',
+            slot.fillStatus ?? '-',
+            firstOptionText(slot).slice(0, 180)
+          ])
+        )
+      : '_No motif slots detected._',
+    '',
+    sourceSpecificSlots.length
+      ? markdownTable(
+          ['slotId', 'role', 'fillStatus', 'beverage equivalent'],
+          sourceSpecificSlots.slice(0, 12).map((slot) => [
+            slot.slotId,
+            slot.role,
+            slot.fillStatus ?? '-',
+            firstOptionText(slot).slice(0, 180)
+          ])
+        )
+      : '_No source-specific slots were downgraded._',
     '',
     '## Gap / partial options (three ways each)',
     '',
@@ -226,6 +275,21 @@ function buildReport(
       })
       .join('\n\n'),
     '',
+    '## Reusable asset packs',
+    '',
+    timeline.reusableAssetPacks?.length
+      ? markdownTable(
+          ['packType', 'status', 'channel', 'targetSlots', 'promptSummary'],
+          timeline.reusableAssetPacks.map((pack) => [
+            pack.packType,
+            pack.status,
+            pack.recommendedChannel,
+            String(pack.targetSlots.length),
+            pack.promptSummary
+          ])
+        )
+      : '_No reusable asset packs emitted._',
+    '',
     '## Transition plan',
     '',
     markdownTable(
@@ -237,7 +301,7 @@ function buildReport(
     '',
     '```',
     'OrchestratedTimeline → orchestratedToAuthored → AuthoredTimeline',
-    `beats=${authored.beats.length}  realMedia=${beatsWithMedia}  honestSubstitute=${substituteBeats}`,
+    `beats=${authored.beats.length}  realMediaReferenced=${realMediaReferenced}  fullySatisfied=${fullySatisfied}  partialWithEnhancement=${partialWithEnhancement}  generationRequired=${generationRequired}`,
     'Director delivers this timeline; rendering (renderAuthoredTimeline) is the Video Agent\'s job, run separately.',
     '```',
     '',
@@ -259,6 +323,21 @@ function describeOption(option: GapResolutionOption): string {
   if (option.id === 'reshoot') return option.guidanceNL.slice(0, 160);
   if (option.id === 'hyperframes') return option.editingGuidanceNL.slice(0, 160);
   return `[${option.providerHint}] ${option.prompt.slice(0, 160)}`;
+}
+
+function firstOptionText(slot: OrchestratedTimeline['slots'][number]): string {
+  const options = slot.fill.kind === 'gap' ? slot.fill.options : slot.fill.options ?? [];
+  const option = options[0];
+  return option ? describeOption(option) : slot.fill.videoEngineInstruction;
+}
+
+function countTransitionFunctions(timeline: OrchestratedTimeline): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const transition of timeline.transitions) {
+    const key = transition.transitionFunction ?? 'unknown';
+    out[key] = (out[key] ?? 0) + 1;
+  }
+  return out;
 }
 
 function markdownTable(headers: string[], rows: string[][]): string {

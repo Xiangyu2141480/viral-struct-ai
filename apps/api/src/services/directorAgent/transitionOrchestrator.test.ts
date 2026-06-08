@@ -41,6 +41,7 @@ function slot(
     index,
     startMs: index * 3000,
     endMs: index * 3000 + 3000,
+    motifType: motionTokens?.includes('component_cascade') ? 'kinetic_assembly_reveal' : undefined,
     motionTokens,
     fill
   };
@@ -99,4 +100,30 @@ test('a gap on either side becomes a cut and never requires frame extraction', (
   assert.equal(t.mode, 'cut');
   assert.equal(t.aigcFrameBridge, undefined);
   assert.ok(t.missingAssets.includes('c asset'));
+});
+
+test('infers diverse semantic transition functions with Chinese execution guidance', () => {
+  const slots = [
+    slot('opening', 'opening_attention', 0, matchedFill('asset_open')),
+    slot('product', 'product_closeup', 1, matchedFill('asset_open')),
+    slot('motif', 'usage_demo', 2, matchedFill('asset_usage'), ['component_cascade', 'chaos_to_order']),
+    slot('benefit', 'benefit_visual', 3, matchedFill('asset_open')),
+    slot('usage', 'usage_demo', 4, matchedFill('asset_usage')),
+    slot('cta', 'cta_visual', 5, matchedFill('asset_open'))
+  ];
+
+  const transitions = buildOrchestratedTransitions({ slots, ...base, hyperframesWeight: 1 });
+  const functions = new Set(transitions.map((transition) => transition.transitionFunction));
+
+  assert.ok(functions.has('opening_to_product'));
+  assert.ok(functions.has('motif_assembly_bridge'));
+  assert.ok(functions.has('usage_to_benefit'));
+  assert.ok(functions.has('benefit_to_usage'));
+  assert.ok(functions.has('product_to_cta'));
+  assert.ok(functions.size >= 4);
+
+  const guidance = transitions.map((transition) => transition.hyperframes?.editingGuidanceNL ?? transition.aigcFrameBridge?.prompt ?? '').join('\n');
+  assert.match(guidance, /冰块|柠檬|茶滴|冷雾|开盖|CTA/);
+  assert.match(guidance, /转场|承接|擦除|收口|汇聚/);
+  assert.doesNotMatch(guidance, /MacBook|keyboard|laptop|touchpad|rocket|hardware|键盘|笔记本|触控板|火箭|硬件/);
 });

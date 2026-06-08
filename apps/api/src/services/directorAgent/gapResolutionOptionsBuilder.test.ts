@@ -218,3 +218,71 @@ test('synthesizes all three options when no brief exists (gate-blocked covered s
     assert.equal(aigc.ownership, 'external_generation_job_card_only');
   }
 });
+
+test('kinetic assembly brief produces beverage-native reshoot, hyperframes and AIGC prompts', () => {
+  const slot: ShotSlotNode = {
+    ...makeSlot('usage_demo'),
+    id: 'slot_block_004_asset_001',
+    requiredAsset: { type: 'video', subject: 'surreal kinetic assembly reveal' },
+    intent: {
+      purpose: 'dynamic assembly and CTA reveal',
+      energyLevel: 'high',
+      motionPattern: 'component cascade, chaos to order, assembly completion, interaction activation, spectacle burst, cta reveal',
+      compositionPrincipal: 'kinetic assembly reveal',
+      durationMs: [1200, 3200]
+    }
+  };
+  const brief = makeBrief();
+  brief.id = 'brief_kinetic_004';
+  brief.affectedSlotId = slot.id;
+  brief.motifContext = {
+    motifAnnotationId: 'motif_kinetic_004',
+    motifType: 'kinetic_assembly_reveal',
+    motionTokens: [
+      'component_cascade',
+      'chaos_to_order',
+      'assembly_completion',
+      'interaction_activation',
+      'spectacle_burst',
+      'cta_reveal'
+    ],
+    missingMotionTokens: ['component_cascade', 'chaos_to_order', 'spectacle_burst', 'cta_reveal'],
+    sanitizedIntent: 'dynamic assembly, interaction activation, spectacle burst and CTA reveal',
+    targetMotifHints: ['ice cubes', 'lemon slices', 'tea droplets', 'cold mist', 'CTA lock-up'],
+    confidence: 0.92,
+    evidence: ['test motif context']
+  };
+
+  const { options } = buildGapResolutionOptions({
+    slot,
+    tier: 'partial',
+    missingBrief: brief,
+    contentBrief: makeContentBrief(),
+    referenceAssetIds: ['plain_002_hand_pickup'],
+    chosenAssetId: 'plain_002_hand_pickup',
+    motionTokens: [
+      'component_cascade',
+      'chaos_to_order',
+      'assembly_completion',
+      'interaction_activation',
+      'spectacle_burst',
+      'cta_reveal'
+    ]
+  });
+
+  const allPositiveText = options
+    .flatMap((option) => {
+      if (option.id === 'reshoot') return [option.guidanceNL, option.framing, ...option.mustCapture];
+      if (option.id === 'hyperframes') return [option.editingGuidanceNL, option.copy?.headline, option.copy?.subline, option.copy?.cta];
+      return [option.prompt];
+    })
+    .filter(Boolean)
+    .join('\n');
+
+  assert.match(allPositiveText, /级联|汇聚|由散到聚|由乱到序/);
+  assert.match(allPositiveText, /激活/);
+  assert.match(allPositiveText, /冷雾|茶滴|水汽|茶花|爆发/);
+  assert.match(allPositiveText, /CTA|收口|锁定/);
+  assert.match(allPositiveText, /冰块|柠檬|红茶/);
+  assert.doesNotMatch(allPositiveText, /MacBook|keyboard|laptop|touchpad|rocket|hardware|键盘|笔记本|触控板|火箭|硬件/);
+});
