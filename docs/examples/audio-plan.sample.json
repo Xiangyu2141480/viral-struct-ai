@@ -1,0 +1,146 @@
+{
+  "id": "audio_plan_beverage_plan_only_001",
+  "mode": "plan_only",
+  "hasRenderableAudio": false,
+  "targetCategory": "beverage",
+  "sonicMotifs": [
+    {
+      "id": "sonic_beverage_refresh_001",
+      "name": "Refresh impact and clean CTA",
+      "targetCategory": "beverage",
+      "cueSequence": [
+        {
+          "id": "cue_bgm_drive",
+          "cueType": "music_bed",
+          "narrativeFunction": "hook",
+          "startTime": 0,
+          "duration": 12,
+          "syncTarget": "timeline_full",
+          "soundDescription": "Bright percussive bed with light summer energy.",
+          "emotionalEffect": "Creates momentum while keeping the product fresh and approachable.",
+          "generationPrompt": "Bright summer percussion bed, clean commercial energy, no lyrics.",
+          "assetRequirement": "User-provided licensed music or manual upload.",
+          "fallback": "Silent render with visible beat markers.",
+          "variantBehavior": {
+            "high_click": "Raise percussive attack in first 3 seconds.",
+            "high_conversion": "Lower bed under benefit and CTA copy.",
+            "premium": "Use softer percussion and more silence."
+          }
+        },
+        {
+          "id": "cue_transition_ice_hit",
+          "cueType": "transition_sound",
+          "narrativeFunction": "transition",
+          "startTime": 2.4,
+          "duration": 0.4,
+          "syncTarget": "tr_beverage_heat_to_refresh_001",
+          "soundDescription": "Short cold impact, like ice hitting glass.",
+          "emotionalEffect": "Marks the heat-to-refresh transition beat.",
+          "generationPrompt": "Short clean ice hit foley, crisp, not harsh.",
+          "assetRequirement": "Foley upload or generated SFX.",
+          "fallback": "Use visual impact beat only."
+        },
+        {
+          "id": "cue_cta_clean_sting",
+          "cueType": "cta_sound",
+          "narrativeFunction": "cta",
+          "startTime": 10.8,
+          "duration": 0.6,
+          "syncTarget": "slot_cta_lockup",
+          "soundDescription": "Small clean logo sting without brand-jingle claim.",
+          "emotionalEffect": "Creates a memorable ending without implying official brand audio.",
+          "generationPrompt": "Short clean commercial logo sting, neutral, no melody from known songs.",
+          "assetRequirement": "Manual SFX or licensed upload.",
+          "fallback": "End on silence and visual CTA card."
+        }
+      ],
+      "brandTone": "fresh, energetic, youthful, commercial-safe",
+      "usageContext": "Short-video structure transfer demo; audio is planned but not generated.",
+      "warnings": [
+        "No renderable audio file is attached.",
+        "Use only licensed user uploads or generated SFX with review."
+      ]
+    }
+  ],
+  "cues": [
+    {
+      "id": "cue_bgm_drive",
+      "cueType": "music_bed",
+      "narrativeFunction": "hook",
+      "startTime": 0,
+      "duration": 12,
+      "syncTarget": "timeline_full",
+      "soundDescription": "Bright percussive bed with light summer energy.",
+      "emotionalEffect": "Creates momentum while keeping the product fresh and approachable.",
+      "generationPrompt": "Bright summer percussion bed, clean commercial energy, no lyrics.",
+      "assetRequirement": "User-provided licensed music or manual upload.",
+      "fallback": "Silent render with visible beat markers.",
+      "variantBehavior": {
+        "high_click": "Raise percussive attack in first 3 seconds.",
+        "high_conversion": "Lower bed under benefit and CTA copy.",
+        "premium": "Use softer percussion and more silence."
+      }
+    },
+    {
+      "id": "cue_transition_ice_hit",
+      "cueType": "transition_sound",
+      "narrativeFunction": "transition",
+      "startTime": 2.4,
+      "duration": 0.4,
+      "syncTarget": "tr_beverage_heat_to_refresh_001",
+      "soundDescription": "Short cold impact, like ice hitting glass.",
+      "emotionalEffect": "Marks the heat-to-refresh transition beat.",
+      "generationPrompt": "Short clean ice hit foley, crisp, not harsh.",
+      "assetRequirement": "Foley upload or generated SFX.",
+      "fallback": "Use visual impact beat only."
+    },
+    {
+      "id": "cue_cta_clean_sting",
+      "cueType": "cta_sound",
+      "narrativeFunction": "cta",
+      "startTime": 10.8,
+      "duration": 0.6,
+      "syncTarget": "slot_cta_lockup",
+      "soundDescription": "Small clean logo sting without brand-jingle claim.",
+      "emotionalEffect": "Creates a memorable ending without implying official brand audio.",
+      "generationPrompt": "Short clean commercial logo sting, neutral, no melody from known songs.",
+      "assetRequirement": "Manual SFX or licensed upload.",
+      "fallback": "End on silence and visual CTA card."
+    }
+  ],
+  "beatSyncMap": {
+    "id": "beat_map_plan_only_001",
+    "bpm": 124,
+    "beatTimes": [0, 0.48, 0.97, 1.45, 1.94, 2.42, 2.9, 3.39, 3.87],
+    "syncPoints": [
+      {
+        "time": 2.4,
+        "targetId": "tr_beverage_heat_to_refresh_001",
+        "reason": "Impact sound should land on the visual transition beat."
+      },
+      {
+        "time": 10.8,
+        "targetId": "slot_cta_lockup",
+        "reason": "CTA sting should start as the final lock-up appears."
+      }
+    ],
+    "warnings": [
+      "Beat map is a planning estimate and is not rendered."
+    ]
+  },
+  "soundGaps": [
+    {
+      "id": "sound_gap_bgm_upload",
+      "gapType": "missing_music_bed",
+      "affectedCueIds": ["cue_bgm_drive"],
+      "severity": "medium",
+      "reason": "No licensed BGM asset is attached to the render bundle.",
+      "fallback": "Keep video silent or ask user to upload licensed music."
+    }
+  ],
+  "warnings": [
+    "Audio is plan-only.",
+    "No external audio generation is called."
+  ],
+  "ownership": "audio_plan_only_not_generated"
+}

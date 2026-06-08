@@ -1,0 +1,225 @@
+{
+  "protocolVersion": "transition-audio-plan-v1",
+  "targetCategory": "beverage",
+  "recipes": [
+    {
+      "id": "tr_generic_problem_to_solution_001",
+      "name": "Problem to solution match-cut",
+      "targetCategory": "generic",
+      "transitionFunction": "problem_to_solution",
+      "beforeShotId": "slot_problem",
+      "afterShotId": "slot_solution",
+      "motionGrammar": {
+        "id": "mg_generic_match_cut",
+        "name": "Generic match-cut bridge",
+        "motionTokens": ["match_cut", "clean_hold"],
+        "objectContinuity": "Match shape, direction, or screen position across shots.",
+        "cameraContinuity": "Keep the main subject in the same safe-area zone.",
+        "rhythm": "match_cut",
+        "emotionalBridge": "Turns friction into clarity.",
+        "notes": ["Works across product categories when there is a clear before/after visual relationship."]
+      },
+      "requiredAssets": [
+        {
+          "id": "ing_generic_before_after_anchor",
+          "targetCategory": "generic",
+          "ingredientRole": "object_bridge",
+          "label": "Before/after anchor",
+          "requiredEvidence": ["before state", "after state", "shared composition anchor"],
+          "acceptableMediaTypes": ["image", "video", "text", "generated"],
+          "avoidCopyingSource": ["source brand identity", "source product object"],
+          "notes": "Can be satisfied with product, scene, texture, or copy card."
+        }
+      ],
+      "missingAssetFallback": {
+        "mode": "copy_card",
+        "description": "Use a clear before/after copy card if no matching footage exists.",
+        "limitations": ["Less persuasive than real footage.", "Must be labelled as a planned substitute."]
+      },
+      "implementationMode": "cut_only",
+      "storyboardPrompt": "Plan a generic before-to-after match cut with the same subject position and clear transformation.",
+      "videoPrompt": "Plan-only: before state cuts to solution state with matched composition, no source brand copying.",
+      "ipRiskNotes": ["Do not reproduce source visual identity."],
+      "ownership": "transition_plan_only_not_rendered"
+    },
+    {
+      "id": "tr_ice_tea_refresh_001",
+      "name": "Ice tea refresh impact",
+      "sourceMotifId": "motif_kinetic_entry_001",
+      "sourceMotifType": "kinetic_assembly_reveal",
+      "targetCategory": "beverage",
+      "transitionFunction": "heat_to_refresh",
+      "beforeShotId": "slot_heat_problem",
+      "afterShotId": "slot_refresh_product",
+      "motionGrammar": {
+        "id": "mg_ice_tea_impact",
+        "name": "Ice impact to bottle lock-up",
+        "motionTokens": ["dynamic_entry", "impact_beat", "chaos_to_order", "clean_hold"],
+        "objectContinuity": "Ice, lemon, tea droplets, or cap motion carries the transition.",
+        "cameraContinuity": "Close kinetic impact resolves to centered bottle or CTA frame.",
+        "rhythm": "beat_cut",
+        "emotionalBridge": "Heat and urgency resolve into cold refreshment.",
+        "notes": ["Ice tea is a category preset only; the contract remains category-agnostic."]
+      },
+      "requiredAssets": [
+        {
+          "id": "ing_ice_impact",
+          "grammarId": "impact_beat",
+          "targetCategory": "beverage",
+          "ingredientRole": "object_bridge",
+          "label": "Ice or cap impact",
+          "sourcePattern": "A kinetic object creates the boundary beat.",
+          "targetEquivalent": "ice_cube_drop",
+          "requiredEvidence": ["cold cue", "impact beat", "product-safe composition"],
+          "acceptableMediaTypes": ["video", "generated"],
+          "avoidCopyingSource": ["keyboard", "laptop", "rocket"],
+          "notes": "Can be shot manually or handed off to AIGC as prompt-ready evidence."
+        }
+      ],
+      "missingAssetFallback": {
+        "mode": "external_generation_brief",
+        "description": "Prepare an external generation prompt for the missing cold impact beat.",
+        "prompt": "Ice cube impact, tea droplets, cold mist, centered bottle reveal, no device objects.",
+        "limitations": ["External generation is not called by this contract.", "Must be reviewed for brand safety."]
+      },
+      "implementationMode": "external_video_generation",
+      "storyboardPrompt": "Show ice or cap impact resolving into a clean ice tea product lock-up.",
+      "videoPrompt": "Plan-only: ice impact, tea splash, cold mist, clean CTA end frame; no source device objects.",
+      "ipRiskNotes": ["Avoid source product objects and third-party brand marks."],
+      "ownership": "transition_plan_only_not_rendered"
+    }
+  ],
+  "categoryPresets": [
+    {
+      "id": "preset_generic_structure_bridge",
+      "targetCategory": "generic",
+      "name": "Generic structural bridge",
+      "recipeIds": ["tr_generic_problem_to_solution_001"],
+      "preferredFunctions": ["problem_to_solution", "usage_to_benefit", "proof_to_cta"],
+      "targetEquivalents": ["shape match", "copy card bridge", "clean CTA lock-up"],
+      "avoidSourceTerms": ["source brand", "source character", "source logo"],
+      "notes": ["Use when the target category is unknown or mixed."]
+    },
+    {
+      "id": "preset_beverage_ice_tea",
+      "targetCategory": "beverage",
+      "name": "Beverage refresh bridge",
+      "recipeIds": ["tr_ice_tea_refresh_001"],
+      "preferredFunctions": ["heat_to_refresh", "ingredient_to_product", "product_to_cta"],
+      "targetEquivalents": ["ice_cube_drop", "open_cap", "pour_to_cup", "clean_cta_end_frame"],
+      "avoidSourceTerms": ["keyboard", "laptop", "rocket", "source UI"],
+      "notes": ["Ice tea is represented as a preset, not a hard-coded schema."]
+    }
+  ],
+  "audioTrackPlan": {
+    "id": "audio_plan_bundle_001",
+    "mode": "plan_only",
+    "hasRenderableAudio": false,
+    "targetCategory": "beverage",
+    "sonicMotifs": [
+      {
+        "id": "sonic_refresh_bundle",
+        "name": "Refresh impact motif",
+        "targetCategory": "beverage",
+        "cueSequence": [
+          {
+            "id": "cue_bundle_music",
+            "cueType": "music_bed",
+            "narrativeFunction": "hook",
+            "startTime": 0,
+            "duration": 12,
+            "syncTarget": "timeline_full",
+            "soundDescription": "Clean upbeat bed for a short commercial demo.",
+            "emotionalEffect": "Keeps the result energetic without claiming final mastered audio.",
+            "generationPrompt": "Clean upbeat commercial music bed, no lyrics.",
+            "assetRequirement": "Licensed upload or external audio job.",
+            "fallback": "Silent MP4 with visible captions."
+          }
+        ],
+        "brandTone": "fresh commercial",
+        "usageContext": "Plan-only audio handoff for demo and downstream renderer.",
+        "warnings": ["No audio file is attached."]
+      }
+    ],
+    "cues": [
+      {
+        "id": "cue_bundle_music",
+        "cueType": "music_bed",
+        "narrativeFunction": "hook",
+        "startTime": 0,
+        "duration": 12,
+        "syncTarget": "timeline_full",
+        "soundDescription": "Clean upbeat bed for a short commercial demo.",
+        "emotionalEffect": "Keeps the result energetic without claiming final mastered audio.",
+        "generationPrompt": "Clean upbeat commercial music bed, no lyrics.",
+        "assetRequirement": "Licensed upload or external audio job.",
+        "fallback": "Silent MP4 with visible captions."
+      },
+      {
+        "id": "cue_bundle_impact",
+        "cueType": "impact",
+        "narrativeFunction": "product_reveal",
+        "startTime": 2.4,
+        "duration": 0.35,
+        "syncTarget": "tr_ice_tea_refresh_001",
+        "soundDescription": "Crisp impact accent on the transition boundary.",
+        "emotionalEffect": "Makes the visual reveal feel intentional.",
+        "generationPrompt": "Short crisp impact accent, commercial-safe.",
+        "assetRequirement": "Generated SFX or manual upload.",
+        "fallback": "Use cut-only visual emphasis."
+      }
+    ],
+    "beatSyncMap": {
+      "id": "beat_sync_bundle_plan_only",
+      "bpm": 124,
+      "beatTimes": [0, 0.48, 0.97, 1.45, 1.94, 2.42],
+      "syncPoints": [
+        {
+          "time": 2.4,
+          "targetId": "tr_ice_tea_refresh_001",
+          "reason": "Transition impact should align to a strong beat."
+        }
+      ],
+      "warnings": ["Plan-only beat sync; no audio file is rendered."]
+    },
+    "soundGaps": [
+      {
+        "id": "sound_gap_sfx",
+        "gapType": "missing_impact",
+        "affectedCueIds": ["cue_bundle_impact"],
+        "severity": "medium",
+        "reason": "No usable impact SFX is attached.",
+        "fallback": "Keep visual transition and mark SFX as planned."
+      }
+    ],
+    "warnings": ["Audio is not generated or mixed in this bundle."],
+    "ownership": "audio_plan_only_not_generated"
+  },
+  "audioGenerationJobs": [
+    {
+      "id": "audio_job_impact_sfx",
+      "cueIds": ["cue_bundle_impact"],
+      "providerHint": "manual_sfx",
+      "prompt": "Create or upload a short crisp impact SFX for the reveal boundary.",
+      "negativePrompt": "No copyrighted jingle, no recognizable melody.",
+      "expectedDuration": 0.35,
+      "status": "planned",
+      "safetyNotes": ["Manual review required before using generated or uploaded audio."],
+      "ownership": "external_audio_job_card_only"
+    }
+  ],
+  "offlineDiagnostics": [
+    {
+      "id": "diag_transition_audio_coverage",
+      "label": "Plan coverage estimate",
+      "value": 0.72,
+      "explanation": "Offline diagnostic over planned transition and cue coverage; not a performance metric."
+    }
+  ],
+  "warnings": [
+    "This bundle is a plan-only handoff.",
+    "No external image, video, or audio generation is called.",
+    "No renderer changes are implied by this sample."
+  ],
+  "ownership": "transition_audio_plan_only_not_rendered"
+}

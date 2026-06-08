@@ -1,0 +1,98 @@
+{
+  "protocolVersion": "transition-audio-demo-summary-v1",
+  "demoCase": {
+    "sourceCase": "macbook_neo kinetic assembly structure",
+    "targetCategory": "beverage",
+    "demoProduct": "kangshifu_iced_tea",
+    "boundary": "Ice tea is a beverage demo fixture, not the only system target."
+  },
+  "grammarLayers": {
+    "visualGrammar": [
+      "dynamic_entry",
+      "component_cascade",
+      "chaos_to_order",
+      "activation_moment",
+      "cta_reveal"
+    ],
+    "transitionGrammar": [
+      "heatwave shatter",
+      "ice cube rain wipe",
+      "lemon slice match cut",
+      "tea swirl morph",
+      "cap pop transition",
+      "chaos-to-CTA transition"
+    ],
+    "sonicGrammar": [
+      "heat ambience",
+      "silence dip",
+      "ice cube rain hits",
+      "cap pop",
+      "fizz / cold mist burst",
+      "CTA pop",
+      "logo sting"
+    ]
+  },
+  "categoryMapping": [
+    {
+      "sourcePattern": "object rain / component cascade",
+      "targetEquivalent": "ice cubes, lemon slices and tea droplets moving into product focus"
+    },
+    {
+      "sourcePattern": "activation beat",
+      "targetEquivalent": "cap pop, bottle touch, pour-to-cup proof"
+    },
+    {
+      "sourcePattern": "clean CTA reveal",
+      "targetEquivalent": "product end card, CTA lock-up and two-note logo sting"
+    }
+  ],
+  "evidenceCards": [
+    {
+      "title": "Transition Plan",
+      "summary": "7 beverage transition recipes describe how each structure beat moves into the next.",
+      "boundary": "plan only; no rendered visual effect is claimed"
+    },
+    {
+      "title": "Sonic Plan",
+      "summary": "12 audio cues describe music bed, foley, impact, silence, CTA and logo memory cues.",
+      "boundary": "plan only; no real audio generated or mixed into MP4"
+    },
+    {
+      "title": "Missing Transition Assets",
+      "summary": "Missing falling-object, cap-action or CTA-lockup footage is expressed as reviewed handoff needs.",
+      "boundary": "job card only; no real external generation submitted"
+    },
+    {
+      "title": "Audio Warnings",
+      "summary": "No reviewed audio assets are present in the sample, so playback remains silent or cue-labeled.",
+      "boundary": "plan only; no fake CTR, no real user behavior, no copyrighted BGM claim"
+    }
+  ],
+  "boundaries": [
+    "No real external generation is called.",
+    "No MP4 audio mix is claimed.",
+    "No fake CTR or conversion metric is produced.",
+    "Scores, if shown elsewhere, are offline heuristic diagnostics only."
+  ],
+  "rendererHandoff": {
+    "status": "plan_only",
+    "transitionFields": [
+      "transitionRecipes[].beforeShotId",
+      "transitionRecipes[].afterShotId",
+      "transitionRecipes[].transitionAction",
+      "transitionRecipes[].motionGrammar",
+      "transitionRecipes[].implementationMode",
+      "transitionRecipes[].storyboardPrompt",
+      "transitionRecipes[].missingAssetFallback"
+    ],
+    "audioFields": [
+      "audioPlan.mode",
+      "audioPlan.hasRenderableAudio",
+      "audioCues[].startTime",
+      "audioCues[].cueType",
+      "audioCues[].syncTarget",
+      "audioCues[].soundDescription",
+      "audioWarnings"
+    ]
+  }
+}

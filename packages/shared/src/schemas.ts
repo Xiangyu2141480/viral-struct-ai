@@ -396,26 +396,56 @@ export const TransitionGrammarIdSchema = z.enum([
   'lockup_transition'
 ]);
 
-export const TargetTransitionEquivalentSchema = z.enum([
-  'ice_cube_drop',
-  'open_cap',
-  'pour_to_cup',
-  'drink_neck_down',
-  'bottle_rotation',
-  'lineup_sweep',
-  'clean_cta_end_frame',
-  'hyperframes_benefit_card_drop'
+export const TargetTransitionEquivalentSchema = z.string().min(1);
+
+export const TargetCategorySchema = z.enum([
+  'beverage',
+  'beauty',
+  'food',
+  'electronics',
+  'fashion',
+  'home_goods',
+  'generic'
+]);
+
+export const TransitionFunctionSchema = z.enum([
+  'problem_to_solution',
+  'heat_to_refresh',
+  'chaos_to_order',
+  'ingredient_to_product',
+  'scene_to_brand_world',
+  'product_to_cta',
+  'usage_to_benefit',
+  'texture_shift',
+  'proof_to_cta'
+]);
+
+export const TransitionImplementationModeSchema = z.enum([
+  'cut_only',
+  'css_motion',
+  'gsap',
+  'lottie',
+  'rive',
+  'threejs',
+  'remotion',
+  'hyperframes',
+  'storyboard_image',
+  'external_video_generation'
 ]);
 
 export const TransitionIngredientSchema = z.object({
   id: z.string(),
-  grammarId: TransitionGrammarIdSchema,
+  grammarId: TransitionGrammarIdSchema.optional(),
+  targetCategory: TargetCategorySchema.optional(),
+  ingredientRole: z.enum(['motion_anchor', 'object_bridge', 'texture_bridge', 'emotion_bridge', 'copy_bridge', 'sound_bridge']).optional(),
   label: z.string(),
-  sourcePattern: z.string(),
-  targetEquivalent: TargetTransitionEquivalentSchema,
+  sourcePattern: z.string().optional(),
+  targetEquivalent: TargetTransitionEquivalentSchema.optional(),
   requiredEvidence: z.array(z.string()),
-  acceptableAssetRoles: z.array(AssetManagerRoleSchema),
-  avoidCopyingSource: z.array(z.string())
+  acceptableAssetRoles: z.array(AssetManagerRoleSchema).optional(),
+  acceptableMediaTypes: z.array(z.enum(['image', 'video', 'text', 'generated', 'audio', 'none'])).optional(),
+  avoidCopyingSource: z.array(z.string()).optional(),
+  notes: z.string().optional()
 });
 
 export const TransitionNeedSchema = z.object({
@@ -511,6 +541,186 @@ export const MotionTokenSchema = z.enum([
   'match_cut',
   'morph'
 ]);
+
+export const TransitionGrammarSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  motionTokens: z.array(MotionTokenSchema),
+  objectContinuity: z.string(),
+  cameraContinuity: z.string().optional(),
+  rhythm: z.enum(['hard_cut', 'beat_cut', 'match_cut', 'speed_ramp', 'smooth_bridge', 'hold']),
+  emotionalBridge: z.string(),
+  notes: z.array(z.string())
+}).strict();
+
+export const TransitionMissingAssetFallbackSchema = z.object({
+  mode: z.enum(['cut_only', 'copy_card', 'storyboard_prompt', 'manual_shoot_brief', 'external_generation_brief']),
+  description: z.string(),
+  prompt: z.string().optional(),
+  limitations: z.array(z.string())
+}).strict();
+
+export const TransitionShotDescriptorSchema = z.object({
+  id: z.string(),
+  label: z.string().optional(),
+  role: z.string().optional(),
+  start: z.number().optional(),
+  end: z.number().optional(),
+  script: z.string().optional(),
+  visualAction: z.string().optional()
+}).strict();
+
+export const TransitionRecipeSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  sourceMotifId: z.string().optional(),
+  sourceMotifType: z.string().optional(),
+  targetCategory: TargetCategorySchema,
+  transitionFunction: TransitionFunctionSchema,
+  beforeShotId: z.string(),
+  afterShotId: z.string(),
+  beforeShot: TransitionShotDescriptorSchema.optional(),
+  transitionAction: z.string().optional(),
+  afterShot: TransitionShotDescriptorSchema.optional(),
+  emotionShift: z.string().optional(),
+  narrativeFunction: TransitionFunctionSchema.optional(),
+  motionGrammar: TransitionGrammarSchema,
+  requiredAssets: z.array(TransitionIngredientSchema),
+  missingAssetFallback: TransitionMissingAssetFallbackSchema,
+  implementationMode: TransitionImplementationModeSchema,
+  storyboardPrompt: z.string(),
+  videoPrompt: z.string(),
+  ipRiskNotes: z.array(z.string()),
+  ownership: z.literal('transition_plan_only_not_rendered')
+}).strict();
+
+export const CategoryTransitionPresetSchema = z.object({
+  id: z.string(),
+  targetCategory: TargetCategorySchema,
+  name: z.string(),
+  recipeIds: z.array(z.string()),
+  preferredFunctions: z.array(TransitionFunctionSchema),
+  targetEquivalents: z.array(z.string()),
+  avoidSourceTerms: z.array(z.string()),
+  notes: z.array(z.string())
+}).strict();
+
+export const AudioCueTypeSchema = z.enum([
+  'music_bed',
+  'foley',
+  'impact',
+  'whoosh',
+  'silence',
+  'logo_sting',
+  'cta_sound',
+  'transition_sound',
+  'ambient'
+]);
+
+export const AudioNarrativeFunctionSchema = z.enum([
+  'hook',
+  'transition',
+  'product_reveal',
+  'proof',
+  'usage_demo',
+  'cta',
+  'brand_memory'
+]);
+
+export const AudioCueSchema = z.object({
+  id: z.string(),
+  cueType: AudioCueTypeSchema,
+  narrativeFunction: AudioNarrativeFunctionSchema,
+  startTime: z.number().min(0),
+  duration: z.number().min(0),
+  syncTarget: z.string(),
+  soundDescription: z.string(),
+  emotionalEffect: z.string(),
+  generationPrompt: z.string().optional(),
+  assetRequirement: z.string().optional(),
+  assetId: z.string().optional(),
+  source: z.enum(['planned', 'licensed_library', 'user_upload', 'source_audio', 'unknown']).optional(),
+  licenseStatus: z.enum(['cleared', 'needs_review', 'unknown']).optional(),
+  fallback: z.string().optional(),
+  variantBehavior: z.object({
+    high_click: z.string().optional(),
+    high_conversion: z.string().optional(),
+    premium: z.string().optional()
+  }).strict().optional()
+}).strict();
+
+export const SonicMotifSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  targetCategory: TargetCategorySchema,
+  cueSequence: z.array(AudioCueSchema),
+  brandTone: z.string(),
+  usageContext: z.string(),
+  warnings: z.array(z.string())
+}).strict();
+
+export const BeatSyncMapSchema = z.object({
+  id: z.string(),
+  bpm: z.number().positive().optional(),
+  beatTimes: z.array(z.number().min(0)),
+  syncPoints: z.array(z.object({
+    time: z.number().min(0),
+    targetId: z.string(),
+    reason: z.string()
+  }).strict()),
+  warnings: z.array(z.string())
+}).strict();
+
+export const SoundGapSchema = z.object({
+  id: z.string(),
+  gapType: z.enum(['missing_music_bed', 'missing_foley', 'missing_impact', 'missing_logo_sting', 'missing_cta_sound', 'sync_uncertain']),
+  affectedCueIds: z.array(z.string()),
+  severity: z.enum(['low', 'medium', 'high']),
+  reason: z.string(),
+  fallback: z.string()
+}).strict();
+
+export const AudioTrackPlanSchema = z.object({
+  id: z.string(),
+  mode: z.enum(['silent', 'bgm_only', 'sfx_only', 'bgm_with_sfx', 'source_audio', 'plan_only']),
+  hasRenderableAudio: z.boolean(),
+  targetCategory: TargetCategorySchema,
+  sonicMotifs: z.array(SonicMotifSchema),
+  cues: z.array(AudioCueSchema),
+  beatSyncMap: BeatSyncMapSchema.optional(),
+  soundGaps: z.array(SoundGapSchema),
+  warnings: z.array(z.string()),
+  ownership: z.literal('audio_plan_only_not_generated')
+}).strict();
+
+export const AudioGenerationJobCardSchema = z.object({
+  id: z.string(),
+  cueIds: z.array(z.string()),
+  providerHint: z.enum(['generic', 'elevenlabs', 'audiocraft', 'musicgen', 'stable_audio', 'manual_sfx', 'user_upload']),
+  prompt: z.string(),
+  negativePrompt: z.string().optional(),
+  expectedDuration: z.number().min(0),
+  status: z.enum(['planned', 'blocked', 'needs_user_upload']),
+  safetyNotes: z.array(z.string()),
+  ownership: z.literal('external_audio_job_card_only')
+}).strict();
+
+export const TransitionAudioPlanBundleSchema = z.object({
+  protocolVersion: z.literal('transition-audio-plan-v1'),
+  targetCategory: TargetCategorySchema,
+  recipes: z.array(TransitionRecipeSchema),
+  categoryPresets: z.array(CategoryTransitionPresetSchema),
+  audioTrackPlan: AudioTrackPlanSchema,
+  audioGenerationJobs: z.array(AudioGenerationJobCardSchema),
+  offlineDiagnostics: z.array(z.object({
+    id: z.string(),
+    label: z.string(),
+    value: z.number(),
+    explanation: z.string()
+  }).strict()).optional(),
+  warnings: z.array(z.string()),
+  ownership: z.literal('transition_audio_plan_only_not_rendered')
+}).strict();
 
 export const TargetCategoryMotifMappingSchema = z.object({
   targetCategory: z.string(),

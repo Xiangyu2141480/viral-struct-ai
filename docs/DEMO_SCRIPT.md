@@ -86,12 +86,17 @@ Say:
 
 > This is the key scoring evidence. Each row explains how a source structure becomes a new result: source pattern, migrated content, asset coverage or gap, repair strategy and final timeline item. The data layer can also attach Asset Evidence, including quality score, top slot affordance, keyframe ids and match rationale.
 
+Also say:
+
+> We are not only generating images or captions. The structure is split into visual grammar, transition grammar and sonic grammar. Visual grammar explains what appears in the shot, transition grammar explains how one beat connects to the next, and sonic grammar explains how rhythm, silence, impact and brand-memory cues support the migration.
+
 Show:
 
 - Generation Trace
 - Migration Evidence
 - Timeline list
 - Web visual preview
+- Transition / Sonic evidence cards when shown in the Asset Manager evidence panel
 
 Call out:
 
@@ -100,6 +105,14 @@ Call out:
 - Asset / Gap
 - Repair
 - Final Timeline
+- Transition Plan
+- Sonic Plan
+- Missing Transition Assets
+- Audio Warnings
+
+Ice tea demo wording:
+
+> In the MacBook Neo sample, the source has kinetic assembly logic. We do not copy keyboard or laptop imagery. For the beverage demo, that motion logic becomes ice cube rain, heatwave shatter, cap pop, cold mist, CTA lock-up and a plan-only sonic sequence. These are handoff plans, not rendered external generation.
 
 ## 2:40 - 3:20 Variant Diff
 
@@ -150,6 +163,10 @@ Say:
 Also say:
 
 > Asset Manager uses deterministic analysis as the stable path. Optional VLM enrichment is off by default and is not required for the recording. Advanced modules such as SAM2, GroundingDINO, SigLIP2, VideoRAG and complete long-video temporal grounding are not claimed as finished.
+
+Also say:
+
+> Transition and audio plans are plan-only / job-card-only. They do not call external video or audio models, do not generate real BGM or SFX, and do not produce fake CTR or real user metrics. Any score shown elsewhere is an offline heuristic diagnostic.
 
 Show:
 
