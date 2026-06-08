@@ -211,6 +211,9 @@ async function renderBeat(
     writeFileSync(assPath, ass.content, 'utf8');
     chain.push(`subtitles=filename='${escapeFilterPath(assPath)}':fontsdir='${escapeFilterPath(font.dir)}'`);
   }
+  // Flash cut: each real beat flashes up from white (~0.12s) for punchy energy at the boundary.
+  // Honest substitutes stay plain (no flash) so styling never dresses up missing evidence.
+  if (!unresolved) chain.push('fade=t=in:st=0:d=0.12:color=white');
   chain.push('fps=' + fps, 'format=yuv420p', 'setsar=1');
 
   const args = [...inputArgs, '-vf', chain.join(','), '-an', ...codecArgs(videoCodec), '-r', String(fps), '-y', outPath];
@@ -238,7 +241,7 @@ function buildAuthoredAss(beat: AuthoredComposition, height: number, fontFamily:
     if (lines.length === 0) return;
     const name = `T${styleIndex++}`;
     styles.push(textStyleLine(name, el, base, height, fontFamily, forcePlain));
-    events.push(`Dialogue: 0,0:00:00.00,${end},${name},,0,0,0,,${lines.join('\\N')}`);
+    events.push(`Dialogue: 0,0:00:00.00,${end},${name},,0,0,0,,${textAnim(el.type, forcePlain)}${lines.join('\\N')}`);
   };
 
   if (unresolved) {
@@ -275,6 +278,17 @@ function buildAuthoredAss(beat: AuthoredComposition, height: number, fontFamily:
     ...events
   ].join('\n');
   return { content, hasEvents: true };
+}
+
+/** Kinetic entrance per text type (libass override tags). Headlines pop in (fade + scale overshoot);
+ *  body/annotation fade in. Substitutes and the honest marker stay plain (no animation). */
+function textAnim(type: TextElement['type'], forcePlain: boolean): string {
+  if (forcePlain || type === 'honest_marker') return '';
+  const bs = '\\'; // single backslash for ASS override tags
+  if (type === 'headline') {
+    return `{${bs}fad(120,0)${bs}t(0,160,${bs}fscx118${bs}fscy118)${bs}t(160,300,${bs}fscx100${bs}fscy100)}`;
+  }
+  return `{${bs}fad(160,0)}`;
 }
 
 function textStyleLine(name: string, el: TextElement, base: number, height: number, fontFamily: string, forcePlain: boolean): string {
