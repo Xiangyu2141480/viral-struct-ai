@@ -17,6 +17,7 @@ import type {
 } from '@viral-struct/shared';
 import { buildMotifAwareBriefs } from '../motifs/motifAwareBriefBuilder';
 import { buildMotifContext, extractViralMotifAnnotation } from '../motifs/viralMotifExtractor';
+import { sanitizeMotionGrammarText } from '../motifs/motionGrammarSanitizer';
 
 export interface BuildMissingMaterialBriefsInput {
   contextualCoverage?: ContextualAssetCoverageReport;
@@ -144,6 +145,23 @@ function buildManualShootBrief(role: NormalizedBriefRole, brief: ContentBrief | 
   };
 }
 
+/**
+ * Plain-baseline prompts must not paste the raw source `slotIntent`: it can carry
+ * source-specific semantics a target category cannot perform (e.g. "屏幕显示与系统
+ * 交互" for a beverage), and the term blacklist is deliberately not relied on to
+ * catch every such phrase. So we run the intent through the same motion-grammar
+ * sanitizer the motif path uses:
+ *  - B: if transferable motion grammar is detected, inject the abstracted phrase
+ *    (built only from canonical rule-table phrases, so it is leak-free by design).
+ *  - A: otherwise omit the source-intent line entirely and rely on the
+ *    category-native role prompt — better to drop context than to leak source.
+ */
+function buildTransferableIntentLine(slotIntent: string | undefined): string | undefined {
+  if (!slotIntent) return undefined;
+  const sanitized = sanitizeMotionGrammarText(slotIntent);
+  return sanitized.motionTokens.length > 0 ? sanitized.sanitizedIntent : undefined;
+}
+
 function buildAigcBrief(
   role: NormalizedBriefRole,
   brief: ContentBrief | undefined,
@@ -162,7 +180,7 @@ function buildAigcBrief(
     `Prompt brief only, not rendered output.`,
     `Create a 9:16 ordinary smartphone-style short-video shot for ${productName}.`,
     roleSpec.aigcPrompt,
-    `Source structure intent: ${coverage.slotIntent}.`,
+    buildTransferableIntentLine(coverage.slotIntent),
     brief?.sellingPoints.length ? `Respect these verified selling points only: ${brief.sellingPoints.join(', ')}.` : undefined,
     `Do not invent price, promotion, medical benefit, celebrity endorsement, or extra brands.`
   ].filter(Boolean).join(' ');
