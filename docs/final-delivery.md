@@ -70,7 +70,10 @@ Use this route to show the product form:
 | Asset supply context | Complete for contract/API handoff | `/api/assets/manager/asset-supply-context`, `docs/examples/asset-supply-context.sample.json`; legacy `/video-agent-bundle` returns the same `asset-supply-v1` response |
 | Asset Manager scenario support | Complete for backend/data handoff | `MaterialScenarioProfile`, `MissingMaterialBrief`, scenario sample JSON, manual scenario script |
 | Missing material input briefs | Complete as handoff inputs | manual shoot brief, AIGC prompt brief, HyperFrames brief; no real external generation |
-| Asset Evidence integration | Complete in data layer | `SlotMatch.assetEvidence`, `apps/web/lib/migrationEvidence.ts` |
+| Asset Evidence integration | Complete in data layer and minimal evidence panel | `SlotMatch.assetEvidence`, `apps/web/app/_struct/AssetManagerEvidence.tsx` |
+| Transition Grammar | Complete as plan-only handoff | `TransitionRecipe`, `CategoryPresetRegistry`, `docs/examples/transition-recipes-beverage-demo.sample.json` |
+| Sonic Grammar | Complete as plan-only handoff | `AudioTrackPlan`, `AudioCue`, `AudioGenerationJobCard`, `docs/examples/audio-plan-beverage-demo.sample.json` |
+| Transition/Sonic evidence cards | Complete as minimal UI evidence | existing Asset Manager evidence panel shows Transition Plan, Sonic Plan, Missing Transition Assets, Audio Warnings |
 | Optional VLM asset analyzer | Available but disabled by default | deterministic fallback, `ASSET_VLM_ENABLED=false` |
 | LLM fallback | Complete | source fields and warnings |
 | Deterministic fallback without key | Complete | tests and demo-safe flow |
@@ -102,6 +105,7 @@ Expected:
 - Generation Trace
 - Migration Evidence
 - Asset Evidence if UI handoff fields are being shown
+- Transition / Sonic Grammar evidence cards if shown
 - Variant Diff
 - Edit Summary after natural-language edit
 - Quality metrics
@@ -116,6 +120,9 @@ Expected:
 - Asset Manager UI panels are a handoff target for frontend teammates; this checkpoint completes the backend/data contract and examples.
 - Asset Manager `MissingMaterialBrief` is a handoff input for downstream repair/generation/render modules, not the final repair strategy.
 - AIGC-ready means prompt-ready planning only; Gemini, Seedance, and HyperFrames are not called by Asset Manager.
+- Transition recipes and audio cues are plan-only / job-card-only. They do not call external video or audio generation, do not mix audio into MP4, and do not claim real rendered output.
+- The ice tea mapping is a beverage demo case. The core contracts remain category-agnostic and can fall back to `generic`.
+- Offline diagnostic scores, if shown, are not fake CTR, conversion, or real user behavior.
 - Deterministic asset analysis is the main path; optional VLM enrichment is disabled by default and must not be required for the demo.
 - SAM2, GroundingDINO, SigLIP2, VideoRAG, and complete long-video temporal grounding are not implemented.
 - Natural-language editing is deterministic rule-based patching.

@@ -1,0 +1,423 @@
+[
+  {
+    "id": "transition_beverage_heatwave_shatter",
+    "name": "Heatwave Shatter",
+    "sourceMotifId": "motif_kinetic_assembly",
+    "sourceMotifType": "kinetic_assembly_reveal",
+    "targetCategory": "beverage",
+    "transitionFunction": "heat_to_refresh",
+    "beforeShotId": "tl_hook",
+    "afterShotId": "tl_ingredient",
+    "beforeShot": {
+      "id": "tl_hook",
+      "label": "热浪里，第一口冰爽先冲出来。",
+      "role": "hook",
+      "start": 0,
+      "end": 3,
+      "script": "热浪里，第一口冰爽先冲出来。",
+      "visualAction": "sun glare breaks into a product reveal"
+    },
+    "transitionAction": "Break a hot, tense hook frame into a cold refresh texture burst.",
+    "afterShot": {
+      "id": "tl_ingredient",
+      "label": "冰块、柠檬和茶感一起聚拢。",
+      "role": "usage",
+      "start": 3,
+      "end": 6,
+      "script": "冰块、柠檬和茶感一起聚拢。",
+      "visualAction": "ingredients cascade toward the bottle"
+    },
+    "emotionShift": "from heat pressure to instant refresh",
+    "narrativeFunction": "problem_to_solution",
+    "motionGrammar": {
+      "id": "beverage_heatwave_shatter_motion_grammar",
+      "name": "Heatwave Shatter grammar",
+      "motionTokens": ["dynamic_entry", "impact_beat", "spectacle_burst", "match_cut"],
+      "objectContinuity": "cold mist -> splash -> fizz",
+      "cameraContinuity": "Keep the refresh texture readable and resolve into the next shot.",
+      "rhythm": "match_cut",
+      "emotionalBridge": "from heat pressure to instant refresh",
+      "notes": [
+        "Use a cold texture burst as a structure-transfer transition.",
+        "This is a transition plan, not rendered video."
+      ]
+    },
+    "requiredAssets": [
+      {
+        "id": "beverage_heatwave_shatter_ingredient_1",
+        "targetCategory": "beverage",
+        "ingredientRole": "texture_bridge",
+        "label": "cold mist",
+        "sourcePattern": "A peak burst turns attention into emotional payoff.",
+        "targetEquivalent": "cold mist",
+        "requiredEvidence": ["Shows instant refresh.", "Can bridge a hot hook into a beverage frame."],
+        "acceptableAssetRoles": ["opening_hook", "benefit_proof", "cover"],
+        "acceptableMediaTypes": ["image", "video", "generated"],
+        "notes": "Use category-native refresh signals."
+      }
+    ],
+    "missingAssetFallback": {
+      "mode": "storyboard_prompt",
+      "description": "If cold texture footage is missing, use a storyboard prompt or manual shoot brief.",
+      "prompt": "Cold mist and splash burst reveal a chilled Kangshifu iced tea product frame.",
+      "limitations": ["Plan-only fallback; no external generation is submitted."]
+    },
+    "implementationMode": "storyboard_image",
+    "storyboardPrompt": "Heatwave Shatter: cold mist and splash break a hot summer hook into Kangshifu iced tea refresh.",
+    "videoPrompt": "Plan a short beverage transition: cold mist and splash resolve into a readable Kangshifu iced tea frame. Handoff only, not rendered output.",
+    "ipRiskNotes": ["Use target-category-native refresh objects. Do not recreate the source scene."],
+    "ownership": "transition_plan_only_not_rendered"
+  },
+  {
+    "id": "transition_beverage_ice_cube_rain_wipe",
+    "name": "Ice Cube Rain Wipe",
+    "sourceMotifId": "motif_kinetic_assembly",
+    "sourceMotifType": "kinetic_assembly_reveal",
+    "targetCategory": "beverage",
+    "transitionFunction": "ingredient_to_product",
+    "beforeShotId": "tl_ingredient",
+    "afterShotId": "tl_product",
+    "beforeShot": {
+      "id": "tl_ingredient",
+      "label": "冰块、柠檬和茶感一起聚拢。",
+      "role": "usage",
+      "start": 3,
+      "end": 6,
+      "script": "冰块、柠檬和茶感一起聚拢。",
+      "visualAction": "ingredients cascade toward the bottle"
+    },
+    "transitionAction": "Use falling category-native refresh objects as a wipe into product focus.",
+    "afterShot": {
+      "id": "tl_product",
+      "label": "冰红茶瓶身冷凝，清爽卖点提前出现。",
+      "role": "selling_point",
+      "start": 6,
+      "end": 9,
+      "script": "冰红茶瓶身冷凝，清爽卖点提前出现。",
+      "visualAction": "product closeup with condensation"
+    },
+    "emotionShift": "from scattered impact to focused product desire",
+    "narrativeFunction": "ingredient_to_product",
+    "motionGrammar": {
+      "id": "beverage_ice_cube_rain_wipe_motion_grammar",
+      "name": "Ice Cube Rain Wipe grammar",
+      "motionTokens": ["component_cascade", "falling_object", "chaos_to_order", "assembly_completion"],
+      "objectContinuity": "ice cubes -> lemon slices -> tea droplets -> product closeup",
+      "cameraContinuity": "Falling objects wipe into the product closeup.",
+      "rhythm": "speed_ramp",
+      "emotionalBridge": "from scattered impact to focused product desire",
+      "notes": ["Preserve the object cascade grammar with beverage-native objects."]
+    },
+    "requiredAssets": [
+      {
+        "id": "beverage_ice_cube_rain_wipe_ingredient_1",
+        "targetCategory": "beverage",
+        "ingredientRole": "object_bridge",
+        "label": "ice cubes",
+        "sourcePattern": "Falling objects create a high-energy entry.",
+        "targetEquivalent": "ice cubes",
+        "requiredEvidence": ["Falling object motion.", "Resolves toward product focus."],
+        "acceptableAssetRoles": ["opening_hook", "usage_demo", "product_closeup"],
+        "acceptableMediaTypes": ["video", "generated"],
+        "notes": "Ice tea is only the beverage demo preset, not core logic."
+      }
+    ],
+    "missingAssetFallback": {
+      "mode": "external_generation_brief",
+      "description": "If falling-object footage is missing, hand off a planned external generation brief.",
+      "prompt": "Ice cubes and tea droplets fall as a wipe into a Kangshifu iced tea product closeup.",
+      "limitations": ["External generation job card only; not submitted by this service."]
+    },
+    "implementationMode": "external_video_generation",
+    "storyboardPrompt": "Ice Cube Rain Wipe: ice cubes, lemon slices and tea droplets wipe into the bottle closeup.",
+    "videoPrompt": "Plan a short image-to-video ready transition with falling ice cubes, lemon slices and tea droplets resolving into the product closeup.",
+    "ipRiskNotes": ["Use reviewed beverage objects and avoid source-scene copying."],
+    "ownership": "transition_plan_only_not_rendered"
+  },
+  {
+    "id": "transition_beverage_lemon_slice_match_cut",
+    "name": "Lemon Slice Match Cut",
+    "sourceMotifId": "motif_kinetic_assembly",
+    "sourceMotifType": "kinetic_assembly_reveal",
+    "targetCategory": "beverage",
+    "transitionFunction": "ingredient_to_product",
+    "beforeShotId": "tl_ingredient",
+    "afterShotId": "tl_product",
+    "beforeShot": {
+      "id": "tl_ingredient",
+      "label": "冰块、柠檬和茶感一起聚拢。",
+      "role": "usage"
+    },
+    "transitionAction": "Match a round ingredient motion into a readable product or cup frame.",
+    "afterShot": {
+      "id": "tl_product",
+      "label": "冰红茶瓶身冷凝，清爽卖点提前出现。",
+      "role": "selling_point"
+    },
+    "emotionShift": "from ingredient cue to flavor clarity",
+    "narrativeFunction": "ingredient_to_product",
+    "motionGrammar": {
+      "id": "beverage_lemon_slice_match_cut_motion_grammar",
+      "name": "Lemon Slice Match Cut grammar",
+      "motionTokens": ["match_cut", "bottle_rotation", "clean_hold"],
+      "objectContinuity": "lemon slice -> bottle label -> cup rim",
+      "cameraContinuity": "Match circular shapes across the cut.",
+      "rhythm": "match_cut",
+      "emotionalBridge": "from ingredient cue to flavor clarity",
+      "notes": ["Uses shape continuity rather than source-object continuity."]
+    },
+    "requiredAssets": [
+      {
+        "id": "beverage_lemon_slice_match_cut_ingredient_1",
+        "targetCategory": "beverage",
+        "ingredientRole": "object_bridge",
+        "label": "lemon slices",
+        "sourcePattern": "Ingredient cue bridges into product clarity.",
+        "targetEquivalent": "lemon slices",
+        "requiredEvidence": ["Lemon or round flavor cue.", "Clean product resolve."],
+        "acceptableAssetRoles": ["usage_demo", "product_closeup", "benefit_proof"],
+        "acceptableMediaTypes": ["image", "video", "generated"]
+      }
+    ],
+    "missingAssetFallback": {
+      "mode": "storyboard_prompt",
+      "description": "If lemon motion footage is missing, use a still storyboard prompt.",
+      "prompt": "A lemon slice match cut resolves into a chilled bottle and cup composition.",
+      "limitations": ["Prompt-ready still only."]
+    },
+    "implementationMode": "storyboard_image",
+    "storyboardPrompt": "Lemon Slice Match Cut: lemon slice shape matches into bottle label and cup rim.",
+    "videoPrompt": "Plan a clean match cut from lemon slice motion to the Kangshifu iced tea product scene.",
+    "ipRiskNotes": ["Use generic flavor imagery and reviewed product assets."],
+    "ownership": "transition_plan_only_not_rendered"
+  },
+  {
+    "id": "transition_beverage_tea_swirl_morph",
+    "name": "Tea Swirl Morph",
+    "sourceMotifId": "motif_kinetic_assembly",
+    "sourceMotifType": "kinetic_assembly_reveal",
+    "targetCategory": "beverage",
+    "transitionFunction": "chaos_to_order",
+    "beforeShotId": "tl_ingredient",
+    "afterShotId": "tl_product",
+    "beforeShot": {
+      "id": "tl_ingredient",
+      "label": "冰块、柠檬和茶感一起聚拢。",
+      "role": "usage"
+    },
+    "transitionAction": "Let swirling refresh textures converge into a clean product scene.",
+    "afterShot": {
+      "id": "tl_product",
+      "label": "冰红茶瓶身冷凝，清爽卖点提前出现。",
+      "role": "selling_point"
+    },
+    "emotionShift": "from kinetic chaos to organized product clarity",
+    "narrativeFunction": "chaos_to_order",
+    "motionGrammar": {
+      "id": "beverage_tea_swirl_morph_motion_grammar",
+      "name": "Tea Swirl Morph grammar",
+      "motionTokens": ["chaos_to_order", "morph", "assembly_completion"],
+      "objectContinuity": "tea swirl -> bottle silhouette -> benefit frame",
+      "cameraContinuity": "Swirl motion resolves into a centered product frame.",
+      "rhythm": "speed_ramp",
+      "emotionalBridge": "from kinetic chaos to organized product clarity",
+      "notes": ["Retains assembly reveal logic with beverage-native texture."]
+    },
+    "requiredAssets": [
+      {
+        "id": "beverage_tea_swirl_morph_ingredient_1",
+        "targetCategory": "beverage",
+        "ingredientRole": "texture_bridge",
+        "label": "tea droplets",
+        "sourcePattern": "Chaotic texture converges into product state.",
+        "targetEquivalent": "tea droplets",
+        "requiredEvidence": ["Swirling beverage texture.", "Clean product resolve."],
+        "acceptableAssetRoles": ["usage_demo", "benefit_proof"],
+        "acceptableMediaTypes": ["video", "generated"]
+      }
+    ],
+    "missingAssetFallback": {
+      "mode": "storyboard_prompt",
+      "description": "If swirl footage is missing, hand off a storyboard image prompt.",
+      "prompt": "Tea swirl morphs into a centered bottle with clear benefit copy.",
+      "limitations": ["No rendered morph effect is claimed."]
+    },
+    "implementationMode": "storyboard_image",
+    "storyboardPrompt": "Tea Swirl Morph: tea droplets swirl and resolve into a clean product benefit frame.",
+    "videoPrompt": "Plan a chaos-to-order tea swirl transition into Kangshifu iced tea product clarity.",
+    "ipRiskNotes": ["Do not copy source composition; use beverage-native texture."]
+  ,
+    "ownership": "transition_plan_only_not_rendered"
+  },
+  {
+    "id": "transition_beverage_condensation_wipe",
+    "name": "Condensation Wipe",
+    "sourceMotifId": "motif_kinetic_assembly",
+    "sourceMotifType": "kinetic_assembly_reveal",
+    "targetCategory": "beverage",
+    "transitionFunction": "texture_shift",
+    "beforeShotId": "tl_product",
+    "afterShotId": "tl_proof",
+    "beforeShot": {
+      "id": "tl_product",
+      "label": "冰红茶瓶身冷凝，清爽卖点提前出现。",
+      "role": "selling_point"
+    },
+    "transitionAction": "Use a cold texture wipe to move from proof detail into benefit memory.",
+    "afterShot": {
+      "id": "tl_proof",
+      "label": "开盖、倒入杯中，冷感细节形成证明。",
+      "role": "proof"
+    },
+    "emotionShift": "from visual proof to sensory freshness",
+    "narrativeFunction": "usage_to_benefit",
+    "motionGrammar": {
+      "id": "beverage_condensation_wipe_motion_grammar",
+      "name": "Condensation Wipe grammar",
+      "motionTokens": ["push_in", "match_cut", "clean_hold"],
+      "objectContinuity": "condensation detail -> pour detail -> benefit memory",
+      "cameraContinuity": "Macro texture wipes into usage proof.",
+      "rhythm": "smooth_bridge",
+      "emotionalBridge": "from visual proof to sensory freshness",
+      "notes": ["Texture shift is plan-only unless renderer supports it."]
+    },
+    "requiredAssets": [
+      {
+        "id": "beverage_condensation_wipe_ingredient_1",
+        "targetCategory": "beverage",
+        "ingredientRole": "texture_bridge",
+        "label": "condensation detail",
+        "sourcePattern": "Texture detail bridges product proof.",
+        "targetEquivalent": "cold surface detail",
+        "requiredEvidence": ["Cold texture evidence.", "Readable benefit transition."],
+        "acceptableAssetRoles": ["product_closeup", "benefit_proof"],
+        "acceptableMediaTypes": ["image", "video", "generated"]
+      }
+    ],
+    "missingAssetFallback": {
+      "mode": "copy_card",
+      "description": "If cold texture footage is missing, use a benefit card drop or product detail still.",
+      "prompt": "Cold condensation texture supports a benefit card transition.",
+      "limitations": ["HyperFrames/card handoff only."]
+    },
+    "implementationMode": "hyperframes",
+    "storyboardPrompt": "Condensation Wipe: cold bottle detail wipes into usage proof and benefit memory.",
+    "videoPrompt": "Plan a smooth condensation texture transition from product closeup to proof detail.",
+    "ipRiskNotes": ["Use owned product detail or generated neutral texture."],
+    "ownership": "transition_plan_only_not_rendered"
+  },
+  {
+    "id": "transition_beverage_cap_pop_transition",
+    "name": "Cap Pop Transition",
+    "sourceMotifId": "motif_kinetic_assembly",
+    "sourceMotifType": "kinetic_assembly_reveal",
+    "targetCategory": "beverage",
+    "transitionFunction": "usage_to_benefit",
+    "beforeShotId": "tl_proof",
+    "afterShotId": "tl_cta",
+    "beforeShot": {
+      "id": "tl_proof",
+      "label": "开盖、倒入杯中，冷感细节形成证明。",
+      "role": "proof"
+    },
+    "transitionAction": "Use a product interaction beat to activate the next benefit frame.",
+    "afterShot": {
+      "id": "tl_cta",
+      "label": "现在就来一瓶，给夏天降温。",
+      "role": "cta"
+    },
+    "emotionShift": "from passive viewing to tactile refresh",
+    "narrativeFunction": "usage_to_benefit",
+    "motionGrammar": {
+      "id": "beverage_cap_pop_transition_motion_grammar",
+      "name": "Cap Pop Transition grammar",
+      "motionTokens": ["snap_open", "activation_moment", "impact_beat"],
+      "objectContinuity": "cap opening -> benefit card -> CTA frame",
+      "cameraContinuity": "Interaction beat lands on the next frame.",
+      "rhythm": "beat_cut",
+      "emotionalBridge": "from passive viewing to tactile refresh",
+      "notes": ["Activation maps to product-native interaction."]
+    },
+    "requiredAssets": [
+      {
+        "id": "beverage_cap_pop_transition_ingredient_1",
+        "targetCategory": "beverage",
+        "ingredientRole": "motion_anchor",
+        "label": "cap pop",
+        "sourcePattern": "Interaction activates the reveal.",
+        "targetEquivalent": "cap pop",
+        "requiredEvidence": ["Open-cap or tactile product action.", "Beat-aligned transition point."],
+        "acceptableAssetRoles": ["usage_demo", "benefit_proof"],
+        "acceptableMediaTypes": ["video", "generated"]
+      }
+    ],
+    "missingAssetFallback": {
+      "mode": "storyboard_prompt",
+      "description": "If product interaction footage is missing, use a manual shoot brief or storyboard prompt.",
+      "prompt": "Cap opening beat activates the next benefit frame.",
+      "limitations": ["Plan-only interaction; not a rendered action."]
+    },
+    "implementationMode": "storyboard_image",
+    "storyboardPrompt": "Cap Pop Transition: cap opening beat activates the benefit and leads into CTA.",
+    "videoPrompt": "Plan a short cap-opening transition beat for Kangshifu iced tea leading into the CTA.",
+    "ipRiskNotes": ["Use owned product action or a reviewed replacement shot."],
+    "ownership": "transition_plan_only_not_rendered"
+  },
+  {
+    "id": "transition_beverage_chaos_to_cta_transition",
+    "name": "Chaos-to-CTA Transition",
+    "sourceMotifId": "motif_kinetic_assembly",
+    "sourceMotifType": "kinetic_assembly_reveal",
+    "targetCategory": "beverage",
+    "transitionFunction": "product_to_cta",
+    "beforeShotId": "tl_product",
+    "afterShotId": "tl_cta",
+    "beforeShot": {
+      "id": "tl_product",
+      "label": "冰红茶瓶身冷凝，清爽卖点提前出现。",
+      "role": "selling_point"
+    },
+    "transitionAction": "Resolve the high-energy assembly into a clean end frame and CTA lock-up.",
+    "afterShot": {
+      "id": "tl_cta",
+      "label": "现在就来一瓶，给夏天降温。",
+      "role": "cta"
+    },
+    "emotionShift": "from excitement to purchase-ready clarity",
+    "narrativeFunction": "product_to_cta",
+    "motionGrammar": {
+      "id": "beverage_chaos_to_cta_transition_motion_grammar",
+      "name": "Chaos-to-CTA Transition grammar",
+      "motionTokens": ["chaos_to_order", "cta_reveal", "clean_hold"],
+      "objectContinuity": "ingredient motion -> product lock-up -> CTA copy",
+      "cameraContinuity": "High-energy motion resolves into a stable CTA frame.",
+      "rhythm": "hold",
+      "emotionalBridge": "from excitement to purchase-ready clarity",
+      "notes": ["This is the final structure-transfer lock-up."]
+    },
+    "requiredAssets": [
+      {
+        "id": "beverage_chaos_to_cta_transition_ingredient_1",
+        "targetCategory": "beverage",
+        "ingredientRole": "copy_bridge",
+        "label": "product end card",
+        "sourcePattern": "Final reveal becomes a purchase or action frame.",
+        "targetEquivalent": "product end card",
+        "requiredEvidence": ["CTA-safe copy surface.", "Stable product lock-up."],
+        "acceptableAssetRoles": ["cta", "cover", "packaging_card"],
+        "acceptableMediaTypes": ["image", "text", "generated"]
+      }
+    ],
+    "missingAssetFallback": {
+      "mode": "copy_card",
+      "description": "If final lock-up footage is missing, use a product end card or HyperFrames CTA card.",
+      "prompt": "Clean Kangshifu iced tea end card with CTA-safe copy space.",
+      "limitations": ["Card handoff only; not a full render."]
+    },
+    "implementationMode": "hyperframes",
+    "storyboardPrompt": "Chaos-to-CTA Transition: beverage motion resolves into product lock-up and clear CTA.",
+    "videoPrompt": "Plan a clean CTA lock-up transition from ingredient motion into the final Kangshifu iced tea product frame.",
+    "ipRiskNotes": ["Use reviewed product frame, claim-safe copy, and no source-scene reproduction."],
+    "ownership": "transition_plan_only_not_rendered"
+  }
+]
