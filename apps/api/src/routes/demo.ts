@@ -10,6 +10,16 @@ import { type StructureExtractionResult, extractStructureFromVideoAnalysis } fro
 import { generateTimelineWithFallback } from '../services/timelineGenerator';
 import { analyzeVideoFile, getSeedVideoPath } from '../services/videoAnalyzer';
 import { renderTimeline } from '../services/renderService';
+import {
+  authoredRenderEnabled,
+  authoredRenderFromContext,
+  rewriteAssetCardUrlsToDisk
+} from '../services/authoredRenderService';
+import {
+  hyperframesRenderEnabled,
+  hyperframesRenderFromContext
+} from '../services/hyperframesRenderService';
+import type { EditConstraints, VideoEditContext } from '@viral-struct/video-agent';
 
 export const demoRouter = Router();
 
@@ -106,6 +116,70 @@ demoRouter.post('/run', async (_req, res) => {
       llmWarnings.push(`render skipped: ${error instanceof Error ? error.message : String(error)}`);
     }
 
+    // Optional authored real-pixel render (flag-gated, additive). Composites the user's REAL asset
+    // media via the LLM Director (or the deterministic mock author when no LLM creds exist). A failure
+    // here must never break the demo, so it is wrapped and surfaced as a warning.
+    // Optional real-pixel renders (flag-gated, additive). Both build the SAME inherited VideoEditContext
+    // and must never break the demo on failure. The authored path composites via ffmpeg; the HyperFrames
+    // path has the LLM author an HTML+GSAP composition that HyperFrames renders (rich motion/effects).
+    let authoredRenderMediaUrl: string | null = null;
+    let authoredRenderManifest: Awaited<ReturnType<typeof authoredRenderFromContext>>['render'] | null = null;
+    let authoredRenderSource: 'llm' | 'mock' | null = null;
+    let authoredRenderTrace: Awaited<ReturnType<typeof authoredRenderFromContext>>['trace'] | null = null;
+    let hyperframesRenderMediaUrl: string | null = null;
+    let hyperframesRenderSource: 'llm' | 'mock' | null = null;
+    let hyperframesRenderLint: Awaited<ReturnType<typeof hyperframesRenderFromContext>>['lint'] | null = null;
+    if (authoredRenderEnabled() || hyperframesRenderEnabled()) {
+      const sourceAspectRatio = structure.structureGraph.meta.aspectRatio;
+      const aspectRatio = narrowAspectRatio(sourceAspectRatio);
+      if (sourceAspectRatio !== aspectRatio) {
+        llmWarnings.push(`render: aspectRatio "${sourceAspectRatio}" coerced to "${aspectRatio}".`);
+      }
+      const constraints: EditConstraints = {
+        aspectRatio,
+        allowAigc: false,
+        allowHumanGeneration: false,
+        allowedClaimSources: [],
+        forbiddenClaims: []
+      };
+      const editContext: VideoEditContext = {
+        projectId: showcase.case.id,
+        structureGraph: structure.structureGraph,
+        contentBrief,
+        assetCards: rewriteAssetCardUrlsToDisk(assetLoad.assetCards),
+        slotMatches: slotResult.matches,
+        materialGaps: slotResult.gaps,
+        gapRepairs: repairResult.repairs,
+        timeline: generation.timeline,
+        qualityReport,
+        constraints
+      };
+      if (authoredRenderEnabled()) {
+        try {
+          const authored = await authoredRenderFromContext(editContext);
+          authoredRenderMediaUrl = authored.mediaUrl;
+          authoredRenderManifest = authored.render;
+          authoredRenderSource = authored.source;
+          authoredRenderTrace = authored.trace;
+        } catch (error) {
+          llmWarnings.push(`authored render skipped: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+      if (hyperframesRenderEnabled()) {
+        try {
+          const hf = await hyperframesRenderFromContext(editContext);
+          hyperframesRenderMediaUrl = hf.mediaUrl;
+          hyperframesRenderSource = hf.source;
+          hyperframesRenderLint = hf.lint;
+          if (!hf.rendered) {
+            llmWarnings.push(`hyperframes render skipped${hf.lint.errors.length ? ` (lint): ${hf.lint.errors.join('; ')}` : ''}`);
+          }
+        } catch (error) {
+          llmWarnings.push(`hyperframes render skipped: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+    }
+
     res.json({
       showcase,
       contentBrief,
@@ -127,6 +201,13 @@ demoRouter.post('/run', async (_req, res) => {
       renderMediaUrl,
       renderManifest,
       renderDurationCheck,
+      authoredRenderMediaUrl,
+      authoredRenderManifest,
+      authoredRenderSource,
+      authoredRenderTrace,
+      hyperframesRenderMediaUrl,
+      hyperframesRenderSource,
+      hyperframesRenderLint,
       llmStageSources: {
         alignment: slotResult.alignmentSource,
         gapSpec: repairResult.gapSpecSource,
@@ -153,6 +234,10 @@ demoRouter.post('/run', async (_req, res) => {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function narrowAspectRatio(value: string | undefined): EditConstraints['aspectRatio'] {
+  return value === '16:9' || value === '1:1' ? value : '9:16';
 }
 
 async function loadDemoAssetCards(showcase: ReturnType<typeof getDemoShowcase>): Promise<DemoAssetLoadResult> {
