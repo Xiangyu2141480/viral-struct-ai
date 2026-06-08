@@ -59,12 +59,12 @@ test('transition audio demo summary exposes judge-facing evidence cards without 
   assert.equal(sample.demoCase.targetCategory, 'beverage');
   assert.equal(sample.demoCase.demoProduct, 'kangshifu_iced_tea');
   assert.deepEqual(cardTitles, [
-    'Transition Plan',
-    'Sonic Plan',
-    'Missing Transition Assets',
-    'Audio Warnings'
+    '转场计划',
+    '声音计划',
+    '缺失转场素材',
+    '音频边界提醒'
   ]);
-  assert.ok(sample.evidenceCards.every((card) => /plan only|job card only|no real external generation/i.test(card.boundary)));
+  assert.ok(sample.evidenceCards.every((card) => /仅计划|仅任务卡|不提交真实外部生成任务/i.test(card.boundary)));
   assert.equal(serialized.includes('real ctr'), false);
   assert.equal(serialized.includes('estimatedctrlift'), false);
   assert.equal(serialized.includes('+18%'), false);
