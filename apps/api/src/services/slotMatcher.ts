@@ -477,6 +477,18 @@ ${JSON.stringify(assets, null, 2)}
 只输出 JSON 本体。`;
 }
 
+function isUnsupportedResponseFormatError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return /response_format|json_object/i.test(message);
+}
+
+const DEFAULT_ALIGNMENT_MAX_TOKENS = 8192;
+
+function resolveAlignmentMaxTokens(): number {
+  const fromEnv = Number(process.env.LLM_MAX_TOKENS);
+  return Number.isFinite(fromEnv) && fromEnv > 0 ? fromEnv : DEFAULT_ALIGNMENT_MAX_TOKENS;
+}
+
 function stripJsonFence(raw: string): string {
   const trimmed = raw.trim();
   if (trimmed.startsWith('```')) {
@@ -566,15 +578,32 @@ export async function matchSlotsLLM(opts: MatchSlotsLLMOptions): Promise<{ match
   const slotSummaries = graph.shotSlots.map(summarizeSlot);
   const assetSummaries = assets.map(summarizeAsset);
 
-  const response = await client.chat.completions.create({
-    model: modelId,
-    messages: [
-      { role: 'system', content: SLOT_ALIGNMENT_SYSTEM_PROMPT },
-      { role: 'user', content: buildAlignmentUserPrompt(slotSummaries, assetSummaries) }
-    ],
-    temperature: 0.2,
-    response_format: { type: 'json_object' }
-  });
+  const messages = [
+    { role: 'system' as const, content: SLOT_ALIGNMENT_SYSTEM_PROMPT },
+    { role: 'user' as const, content: buildAlignmentUserPrompt(slotSummaries, assetSummaries) }
+  ];
+
+  // The alignment JSON has one entry per shotSlot, so a graph with many slots produces a long response.
+  // Without a generous output budget the model truncates mid-JSON (parse fails -> rule-based fallback),
+  // so we request a large max_tokens (env-overridable via LLM_MAX_TOKENS).
+  const maxTokens = resolveAlignmentMaxTokens();
+
+  // Most OpenAI-compatible endpoints accept response_format json_object, but some models (e.g. certain
+  // domestic providers) reject it with a 400. The system prompt already mandates raw JSON and
+  // stripJsonFence parses it, so on an unsupported-response_format error we retry once without the hint.
+  let response;
+  try {
+    response = await client.chat.completions.create({
+      model: modelId,
+      messages,
+      temperature: 0.2,
+      max_tokens: maxTokens,
+      response_format: { type: 'json_object' }
+    });
+  } catch (err) {
+    if (!isUnsupportedResponseFormatError(err)) throw err;
+    response = await client.chat.completions.create({ model: modelId, messages, temperature: 0.2, max_tokens: maxTokens });
+  }
 
   const raw = response.choices[0]?.message?.content ?? '';
   const parsed = JSON.parse(stripJsonFence(raw));
