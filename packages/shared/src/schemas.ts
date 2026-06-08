@@ -154,7 +154,13 @@ export const ContentBriefSchema = z.object({
   scenario: z.string().min(1),
   sellingPoints: z.array(z.string().min(1)).min(1),
   cta: z.string().min(1),
-  stylePreference: z.string().optional()
+  stylePreference: z.string().optional(),
+  /**
+   * Target product category for motif transfer (decision D2). User-supplied and
+   * authoritative; when omitted it is inferred from productName via
+   * normalizeCategory at parse time. Free-form so any category alias is accepted.
+   */
+  category: z.string().min(1).optional()
 });
 
 export const AssetVisualContentSchema = z.object({

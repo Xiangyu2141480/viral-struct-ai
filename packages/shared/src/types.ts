@@ -293,6 +293,11 @@ export interface ContentBrief {
   sellingPoints: string[];
   cta: string;
   stylePreference?: string;
+  /**
+   * Target product category for motif transfer (decision D2). User-supplied and
+   * authoritative; inferred from productName when omitted.
+   */
+  category?: string;
 }
 
 export interface AssetVisualContent {
