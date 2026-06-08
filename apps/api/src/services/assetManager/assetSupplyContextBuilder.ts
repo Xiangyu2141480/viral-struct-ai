@@ -69,7 +69,8 @@ export function buildAssetSupplyContext(input: BuildAssetSupplyContextInput): As
     assetCards: coverage.assetCards,
     contentBrief: input.contentBrief,
     materialScenario: preliminaryScenario,
-    structureGraph: input.structureGraph
+    structureGraph: input.structureGraph,
+    categoryPreset: input.categoryPreset
   });
   const materialScenario = classifyMaterialScenario({
     assets: coverage.assetCards,

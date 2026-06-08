@@ -161,13 +161,13 @@ export const ScreenHistory = ({ onReEdit }: { onReEdit?: () => void }) => {
             {/* Stats */}
             <div className="panel">
               <div className="panel-head">
-                <h4>预测效果</h4>
-                <span className="eyebrow">AI 预测</span>
+                <h4>离线诊断</h4>
+                <span className="eyebrow">Offline estimate</span>
               </div>
               <div className="panel-body">
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
                   <div className="stat">
-                    <div className="stat-label">CTR</div>
+                    <div className="stat-label">离线点击潜力</div>
                     <div className="stat-value" style={{ color: r.color }}>{r.stats.ctr}</div>
                   </div>
                   <div className="stat">
@@ -175,7 +175,7 @@ export const ScreenHistory = ({ onReEdit }: { onReEdit?: () => void }) => {
                     <div className="stat-value" style={{ color: r.color }}>{r.stats.finish}</div>
                   </div>
                   <div className="stat">
-                    <div className="stat-label">转化率</div>
+                    <div className="stat-label">离线转化潜力</div>
                     <div className="stat-value" style={{ color: r.color }}>{r.stats.convert}</div>
                   </div>
                 </div>
@@ -352,7 +352,7 @@ export const ScreenHistory = ({ onReEdit }: { onReEdit?: () => void }) => {
                 {/* Stats row */}
                 <div style={{ display: 'flex', gap: 12, fontSize: 11 }}>
                   <div>
-                    <span className="mono" style={{ color: 'var(--text-mute)', fontSize: 9.5 }}>CTR</span>
+                    <span className="mono" style={{ color: 'var(--text-mute)', fontSize: 9.5 }}>离线点击潜力</span>
                     <div style={{ fontWeight: 600, color: r.color, marginTop: 1 }}>{r.stats.ctr}</div>
                   </div>
                   <div>

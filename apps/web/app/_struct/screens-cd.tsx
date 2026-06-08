@@ -886,7 +886,7 @@ export const ScreenCompile = ({ onBack }: { onBack: () => void }) => {
         variant="compact"
       />
       <ScreenFooter
-        status="v3 已编译 · CTR 4.7% / 完播 19%"
+        status="v3 已编译 · 离线点击潜力 4.7 / 完播潜力 19"
         statusTone="ok"
         secondary={[{ label: '返回诊断', onClick: onBack }, { label: '重新生成', onClick: () => {
           void compile().then(() => showToast('已重新编译 · 新版本已生成'));

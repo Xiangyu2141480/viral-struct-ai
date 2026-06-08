@@ -40,7 +40,7 @@ interface CategoryPresetSeed {
 // to support it offline; the LLM path can enrich any category at runtime.
 const CATEGORY_PRESET_SEEDS: Record<string, CategoryPresetSeed> = {
   beverage: {
-    objects: ['iced tea bottle', 'ice cubes', 'lemon slices', 'tea droplets', 'cold mist', 'clear cup'],
+    objects: ['beverage bottle', 'ice cubes', 'lemon slices', 'tea droplets', 'cold mist', 'clear cup'],
     actions: ['ice drop', 'cap opening', 'pour to cup', 'bottle rotation', 'cold mist burst'],
     sensoryKeywords: ['冰爽', '冷凝水', '解渴', '清爽', '茶香'],
     motifEquivalents: {

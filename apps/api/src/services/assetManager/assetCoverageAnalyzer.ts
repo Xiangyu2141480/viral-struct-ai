@@ -657,7 +657,7 @@ function hasCtaEvidence(asset: AssetCard): boolean {
 
 function hasProductCue(asset: AssetCard): boolean {
   const text = buildAssetText(asset);
-  return ['product', 'bottle', 'label', '商品', '产品', '瓶身', '康师傅', '冰红茶'].some((keyword) => text.includes(keyword));
+  return ['product', 'bottle', 'label', 'packaging', '商品', '产品', '瓶身', '包装', '标签'].some((keyword) => text.includes(keyword));
 }
 
 function hasAnyPositiveCue(text: string, keywords: string[]): boolean {

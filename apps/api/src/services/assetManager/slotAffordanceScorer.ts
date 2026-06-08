@@ -447,7 +447,7 @@ function keywordHitScore(text: string, keywords: string[], maxScore: number): nu
 
 function hasProductCue(asset: AssetCard): boolean {
   const text = buildAssetText(asset);
-  return ['product', 'bottle', 'label', '商品', '产品', '瓶身', '康师傅', '冰红茶'].some((keyword) => includesLoose(text, keyword));
+  return ['product', 'bottle', 'label', 'packaging', '商品', '产品', '瓶身', '包装', '标签'].some((keyword) => includesLoose(text, keyword));
 }
 
 function includesLoose(text: string, needle: string): boolean {

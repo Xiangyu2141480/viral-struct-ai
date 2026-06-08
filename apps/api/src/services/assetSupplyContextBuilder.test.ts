@@ -597,6 +597,47 @@ test('an injected category preset drives the motif target hints (D2 wiring)', ()
 
   assert.ok(hintsWith.includes('PRESET_MARKER_ice_rain'));
   assert.equal(hintsWithout.includes('PRESET_MARKER_ice_rain'), false);
+
+  const briefWithPreset = withPreset.missingMaterialBriefs
+    ?.find((item) => item.affectedSlotId === 'slot_block_004_asset_001');
+  const promptWithPreset = briefWithPreset?.aigcGenerationBrief?.prompt ?? '';
+  const visualElementsWithPreset = briefWithPreset?.hyperframesBrief?.visualElements.join(' ') ?? '';
+  assert.equal(briefWithPreset?.motifContext?.motifType, 'kinetic_assembly_reveal');
+  assert.match(promptWithPreset, /PRESET_MARKER_ice_rain/);
+  assert.match(briefWithPreset?.manualShootBrief?.requiredProps.join(' ') ?? '', /plain_005_pour_to_cup\.mp4/);
+  assert.match(visualElementsWithPreset, /PRESET_MARKER_ice_rain/);
+  assert.doesNotMatch(promptWithPreset, /keyboard|laptop|trackpad|rocket|hardware|MacBook|Apple/i);
+
+  const genericPreset = {
+    category: 'generic',
+    objects: ['GENERIC_MARKER_product_orbit', 'neutral prop cluster'],
+    actions: ['GENERIC_MARKER_reveal_action'],
+    sensoryKeywords: ['clean'],
+    bannedSourceTerms: [],
+    motifEquivalents: { kinetic_assembly_reveal: ['GENERIC_MARKER_product_orbit', 'GENERIC_MARKER_clean_lockup'] },
+    defaultEquivalents: ['GENERIC_MARKER_clean_lockup'],
+    requiredAssets: ['generic_reference_plate'],
+    fallbackAssets: ['generic product still'],
+    source: 'deterministic_preset' as const
+  };
+  const genericContext = buildAssetSupplyContext({
+    structureGraph: kineticGraph,
+    assetCards: [plainProductPanVideo],
+    contentBrief: {
+      ...brief,
+      category: 'generic',
+      productName: 'Demo Gadget',
+      scenario: 'generic product demo'
+    },
+    libraryId: 'motif_preset_generic_fallback_test',
+    categoryPreset: genericPreset
+  });
+  const genericBrief = genericContext.missingMaterialBriefs
+    ?.find((item) => item.affectedSlotId === 'slot_block_004_asset_001');
+  const genericPrompt = genericBrief?.aigcGenerationBrief?.prompt ?? '';
+  assert.match(genericPrompt, /GENERIC_MARKER_product_orbit/);
+  assert.match(genericBrief?.hyperframesBrief?.visualElements.join(' ') ?? '', /GENERIC_MARKER_clean_lockup/);
+  assert.doesNotMatch(genericPrompt, /ice cubes|lemon slices|tea droplets|cold mist/i);
 });
 
 test('single image only scenario produces completion briefs without owning repair strategy', () => {

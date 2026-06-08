@@ -18,6 +18,7 @@ import type {
 import { buildMotifAwareBriefs } from '../motifs/motifAwareBriefBuilder';
 import { buildMotifContext, extractViralMotifAnnotation } from '../motifs/viralMotifExtractor';
 import { sanitizeMotionGrammarText } from '../motifs/motionGrammarSanitizer';
+import { normalizeCategory, type CategoryPreset } from '../motifs/categoryPresetProvider';
 
 export interface BuildMissingMaterialBriefsInput {
   contextualCoverage?: ContextualAssetCoverageReport;
@@ -25,6 +26,7 @@ export interface BuildMissingMaterialBriefsInput {
   contentBrief?: ContentBrief;
   materialScenario: MaterialScenarioProfile;
   structureGraph?: ViralStructureGraph;
+  categoryPreset?: CategoryPreset;
 }
 
 const SAFE_NEGATIVE_PROMPT = [
@@ -55,15 +57,16 @@ function buildBrief(
   const normalizedRole = normalizeRole(slotRole);
   const referenceAssetIds = selectReferenceAssetIds(input.assetCards, coverage);
   const missingIngredients = mergeMissingIngredients(coverage);
-  const motif = findMotifAnnotation(slot, input.contentBrief);
+  const motif = findMotifAnnotation(coverage, slot, input.contentBrief, input.categoryPreset);
   const motifBriefs = motif
     ? buildMotifAwareBriefs({
         motif,
         contentBrief: input.contentBrief,
-        referenceAssetIds
+        referenceAssetIds,
+        categoryPreset: input.categoryPreset
       })
     : undefined;
-  const motifContext = motif ? buildMotifContext(motif) : coverage.motifContext;
+  const motifContext = coverage.motifContext ?? (motif ? buildMotifContext(motif) : undefined);
 
   return {
     id: `missing_material_brief_${String(index + 1).padStart(3, '0')}_${safeId(coverage.slotId)}`,
@@ -92,19 +95,25 @@ function findSlot(structureGraph: ViralStructureGraph | undefined, slotId: strin
   return structureGraph?.shotSlots.find((slot) => slot.id === slotId);
 }
 
-function findMotifAnnotation(slot: ShotSlotNode | undefined, brief: ContentBrief | undefined): ViralMotifAnnotation | undefined {
+function findMotifAnnotation(
+  coverage: ContextualSlotCoverage,
+  slot: ShotSlotNode | undefined,
+  brief: ContentBrief | undefined,
+  categoryPreset?: CategoryPreset
+): ViralMotifAnnotation | undefined {
   if (!slot) {
     return undefined;
   }
 
-  const existing = slot.motifAnnotations?.find((annotation) => annotation.motifType === 'kinetic_assembly_reveal');
+  const existing = slot.motifAnnotations?.find((annotation) => annotation.motifType === coverage.motifContext?.motifType);
   if (existing) {
     return existing;
   }
 
   return extractViralMotifAnnotation({
     slot,
-    targetCategory: inferTargetCategory(brief)
+    targetCategory: categoryPreset?.category ?? inferTargetCategory(brief),
+    preset: categoryPreset
   });
 }
 
@@ -120,7 +129,7 @@ function inferTargetCategory(brief: ContentBrief | undefined): string {
     return 'beverage';
   }
 
-  return 'unknown';
+  return normalizeCategory('unknown');
 }
 
 function buildManualShootBrief(role: NormalizedBriefRole, brief: ContentBrief | undefined, coverage: ContextualSlotCoverage): ManualShootBrief {
@@ -431,7 +440,7 @@ function hasProductEvidence(asset: AssetCard): boolean {
     ...asset.detectedObjects,
     ...(asset.detectedIngredients ?? [])
   ].filter(Boolean).join(' ').toLowerCase();
-  return /(product|bottle|label|packaging|商品|瓶身|包装|标签|康师傅|冰红茶)/i.test(text);
+  return /(product|bottle|label|packaging|商品|产品|瓶身|包装|标签)/i.test(text);
 }
 
 function mergeMissingIngredients(coverage: ContextualSlotCoverage): MissingIngredient[] {

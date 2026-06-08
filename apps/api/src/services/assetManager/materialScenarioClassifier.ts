@@ -197,7 +197,7 @@ function hasProductEvidence(asset: AssetCard): boolean {
     ...(asset.detectedIngredients ?? []),
     ...(asset.analysis?.search.tags ?? [])
   ].filter(Boolean).join(' ').toLowerCase();
-  return /(product|bottle|label|packaging|商品|瓶身|包装|标签|康师傅|冰红茶)/i.test(text);
+  return /(product|bottle|label|packaging|商品|产品|瓶身|包装|标签)/i.test(text);
 }
 
 function hasCleanProductAsset(asset: AssetCard): boolean {
