@@ -244,6 +244,149 @@ test('important motif with missing bridge assets selects hyperframes with explic
   assert.ok(plan.hyperframesGuidance);
 });
 
+test('particle_bridge requires real particle or atmosphere evidence', () => {
+  const from = slot({
+    id: 'from_motif_plain',
+    role: 'usage_demo',
+    index: 0,
+    fill: matchedFill('asset_plain'),
+    intent: 'abstract chaos to order reveal',
+    motifType: 'kinetic_assembly_reveal',
+    motionTokens: ['component_cascade', 'chaos_to_order']
+  });
+  const to = slot({
+    id: 'to_product_plain',
+    role: 'product_closeup',
+    index: 1,
+    fill: matchedFill('asset_product'),
+    intent: 'product payoff'
+  });
+
+  const withoutBridge = planTransition(baseContext(from, to, [
+    asset('asset_plain', { detectedObjects: ['product'], temporalDescription: 'plain product turntable' }),
+    asset('asset_product', { detectedObjects: ['product'] })
+  ]));
+
+  assert.notEqual(withoutBridge.implementationMode, 'particle_bridge');
+  assert.equal(withoutBridge.implementationMode, 'hyperframes');
+  assert.ok((withoutBridge.missingTransitionAssets ?? []).some((item) => /particle|bridge|atmosphere/i.test(item)));
+
+  const withBridge = planTransition(baseContext(from, to, [
+    asset('asset_plain', { detectedObjects: ['product', 'particles'], temporalDescription: 'cold mist particles and droplets bridge into product reveal' }),
+    asset('asset_product', { detectedObjects: ['product'] })
+  ]));
+
+  assert.equal(withBridge.implementationMode, 'particle_bridge');
+});
+
+test('CTA or benefit role alone does not imply clean safe area for card animation', () => {
+  const from = slot({
+    id: 'from_benefit_no_safe_area',
+    role: 'benefit_visual',
+    index: 0,
+    fill: matchedFill('asset_busy'),
+    intent: 'benefit proof'
+  });
+  const to = slot({
+    id: 'to_cta_no_safe_area',
+    role: 'cta_visual',
+    index: 1,
+    fill: matchedFill('asset_busy_cta'),
+    intent: 'CTA lockup'
+  });
+
+  const plan = planTransition(baseContext(from, to, [
+    asset('asset_busy', { detectedObjects: ['product', 'people'], spatialDescription: 'busy crowd background, no blank area' }),
+    asset('asset_busy_cta', { detectedObjects: ['product'], spatialDescription: 'full-frame product with cluttered shelves' })
+  ]));
+
+  assert.notEqual(plan.implementationMode, 'card_animation');
+  assert.ok((plan.whyNot ?? []).some((entry) => entry.mode === 'card_animation' && /safe area|clean/i.test(entry.reason)));
+  assert.ok((plan.missingTransitionAssets ?? []).some((item) => /safe area|clean/i.test(item)));
+});
+
+test('fully covered match cut does not attach an optional AIGC job card', () => {
+  const from = slot({
+    id: 'from_covered_action',
+    role: 'usage_demo',
+    index: 0,
+    fill: matchedFill('asset_open'),
+    intent: 'hand starts opening cap',
+    motionTokens: ['open_cap']
+  });
+  const to = slot({
+    id: 'to_covered_action',
+    role: 'usage_demo',
+    index: 1,
+    fill: matchedFill('asset_finish'),
+    intent: 'hand completes opening cap',
+    motionTokens: ['open_cap']
+  });
+
+  const plan = planTransition(baseContext(from, to, [
+    asset('asset_open', { detectedObjects: ['product', 'hand'], temporalDescription: 'hand starts opening cap' }),
+    asset('asset_finish', { detectedObjects: ['product', 'hand'], temporalDescription: 'hand completes opening cap' })
+  ]));
+
+  assert.equal(plan.implementationMode, 'match_cut');
+  assert.equal(plan.optionalAIGCJobCard, undefined);
+  assert.equal(plan.optionalAigcJobCardId, undefined);
+  assert.equal(plan.aigcFrameBridge, undefined);
+});
+
+test('rewritten source terms are recorded in safetyResult while keeping post-rewrite plan passed', () => {
+  const from = slot({
+    id: 'from_source_terms',
+    role: 'usage_demo',
+    index: 0,
+    fill: partialFill('asset_source', ['keyboard-like bridge']),
+    intent: 'MacBook keyboard motion should be abstracted',
+    motionTokens: ['component_cascade']
+  });
+  const to = slot({
+    id: 'to_safe',
+    role: 'benefit_visual',
+    index: 1,
+    fill: matchedFill('asset_safe'),
+    intent: 'safe product benefit'
+  });
+
+  const plan = planTransition(baseContext(from, to, [asset('asset_source'), asset('asset_safe')]));
+
+  assert.equal(plan.safetyResult?.passed, true);
+  assert.equal(plan.safetyResult?.sourceLeakageRisk, 'needs_rewrite');
+  assert.ok(plan.safetyResult?.policyFlags.includes('source_terms_rewritten_after_planning'));
+  assert.ok(plan.riskNotes.some((note) => /rewritten/i.test(note)));
+});
+
+test('apple as a food ingredient is not treated as a source leakage term', () => {
+  const from = slot({
+    id: 'from_food',
+    role: 'product_closeup',
+    index: 0,
+    fill: matchedFill('asset_apple'),
+    intent: 'apple slices drop beside the product'
+  });
+  const to = slot({
+    id: 'to_food',
+    role: 'benefit_visual',
+    index: 1,
+    fill: matchedFill('asset_food'),
+    intent: 'fresh fruit benefit proof'
+  });
+
+  const plan = planTransition({
+    ...baseContext(from, to, [
+      asset('asset_apple', { detectedObjects: ['apple slices', 'product'], temporalDescription: 'apple slices fall into frame' }),
+      asset('asset_food', { detectedObjects: ['apple slices', 'product'] })
+    ]),
+    targetCategory: 'food'
+  });
+
+  assert.equal(plan.safetyResult?.requiredRewrites.includes('apple'), false);
+  assert.doesNotMatch(plan.semanticBridgeExplanation ?? '', /源片专属元素/);
+});
+
 test('gap plus very short duration falls back to cut and keeps AIGC plan-only', () => {
   const from = slot({ id: 'from_gap', role: 'usage_demo', index: 0, fill: gapFill(), durationMs: 300 });
   const to = slot({ id: 'to_cta', role: 'cta_visual', index: 1, fill: matchedFill('asset_cta'), durationMs: 300 });

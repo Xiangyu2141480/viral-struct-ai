@@ -70,13 +70,13 @@ test('two plain matched slots with no bridge evidence use a safe cut with explan
   assert.ok(t.whyNot?.some((entry) => entry.mode === 'hyperframes'));
 });
 
-test('both-matched + strong motif avoids AIGC and uses a plan-only particle bridge when real bridge assets are absent', () => {
+test('both-matched + strong motif without bridge-carrier evidence uses HyperFrames instead of particle bridge', () => {
   const slots = [
     slot('a', 'opening_attention', 0, matchedFill('asset_open'), ['component_cascade']),
     slot('b', 'usage_demo', 1, matchedFill('asset_usage'))
   ];
   const [t] = buildOrchestratedTransitions({ slots, ...base });
-  assert.equal(t.mode, 'particle_bridge');
+  assert.equal(t.mode, 'hyperframes');
   assert.notEqual(t.mode, 'aigc_job_card');
   assert.equal(t.optionalAIGCJobCard?.ownership, 'external_generation_job_card_only');
   assert.equal(t.optionalAIGCJobCard?.planOnly, true);
@@ -88,7 +88,7 @@ test('legacy hyperframesWeight parameter no longer overrides evidence-aware mode
     slot('b', 'usage_demo', 1, matchedFill('asset_usage'))
   ];
   const [t] = buildOrchestratedTransitions({ slots, ...base, hyperframesWeight: 1 });
-  assert.equal(t.mode, 'particle_bridge');
+  assert.equal(t.mode, 'hyperframes');
   assert.ok(t.whyThisMode);
 });
 

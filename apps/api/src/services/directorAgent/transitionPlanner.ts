@@ -40,6 +40,8 @@ interface TransitionAnchors {
   foregroundCrossing: boolean;
   motionContinuity: boolean;
   cleanSafeArea: boolean;
+  needsCardSafeArea: boolean;
+  particleBridgeEvidence: boolean;
   strongMotif: boolean;
   hasGap: boolean;
   hasPartial: boolean;
@@ -78,7 +80,6 @@ const DEFAULT_SOURCE_TERMS = [
   'touchpad',
   'laptop',
   'rocket',
-  'apple',
   'hardware',
   'purchase window',
   '键盘',
@@ -155,7 +156,32 @@ const CROSSING_TERMS = [
 ];
 
 const MOTION_TERMS = ['left to right', 'right to left', 'push', 'pan', 'tilt', 'zoom', 'rotate', 'rotation', 'slide', '推', '摇', '旋转', '滑动'];
-const SAFE_AREA_TERMS = ['clean', 'safe area', 'minimal', 'blank', 'text card', 'cta', '留白', '干净', '卡片'];
+const SAFE_AREA_TERMS = ['clean', 'safe area', 'minimal', 'blank', 'text card', '留白', '干净', '卡片'];
+const PARTICLE_BRIDGE_TERMS = [
+  'particle',
+  'particles',
+  'atmosphere',
+  'mist',
+  'fog',
+  'droplet',
+  'droplets',
+  'splash',
+  'steam',
+  'smoke',
+  'shimmer',
+  'confetti',
+  'water',
+  'lemon',
+  'ice',
+  '粒子',
+  '氛围',
+  '雾',
+  '水滴',
+  '飞溅',
+  '蒸汽',
+  '冰',
+  '柠檬'
+];
 const STRONG_MOTIF_TERMS = ['component_cascade', 'chaos_to_order', 'assembly_completion', 'assembly_reveal', 'spectacle_burst', 'kinetic_assembly_reveal'];
 
 export function planTransition(ctx: TransitionPlanningContext): OrchestratedTransition {
@@ -176,7 +202,7 @@ export function collectTransitionAnchors(ctx: TransitionPlanningContext): Transi
   const fromText = `${slotContinuityText(ctx.fromSlot)}\n${fromAssets.map(assetEvidenceText).join('\n')}`.toLowerCase();
   const toText = `${slotContinuityText(ctx.toSlot)}\n${toAssets.map(assetEvidenceText).join('\n')}`.toLowerCase();
   const sourceTerms = [...DEFAULT_SOURCE_TERMS, ...(ctx.safetyConstraints?.sourceTerms ?? [])].map((term) => term.toLowerCase());
-  const missingIngredients = unique([
+  const baseMissingIngredients = unique([
     ...(ctx.missingIngredients ?? []),
     ...(ctx.fromSlot.fill.evidence.missingIngredients ?? []),
     ...(ctx.toSlot.fill.evidence.missingIngredients ?? [])
@@ -191,6 +217,15 @@ export function collectTransitionAnchors(ctx: TransitionPlanningContext): Transi
     || (ctx.fromSlot.fill.kind === 'matched' && ctx.fromSlot.fill.status === 'partial')
     || (ctx.toSlot.fill.kind === 'matched' && ctx.toSlot.fill.status === 'partial');
   const durationMs = Math.max(0, Math.min(ctx.fromSlot.endMs - ctx.fromSlot.startMs, ctx.toSlot.endMs - ctx.toSlot.startMs));
+  const cleanSafeArea = hasSafeAreaEvidence(combined);
+  const needsCardSafeArea = (ctx.fromSlot.role === 'benefit_visual' || ctx.toSlot.role === 'benefit_visual' || ctx.toSlot.role === 'cta_visual')
+    && !cleanSafeArea;
+  const particleBridgeEvidence = hasAny(combined, PARTICLE_BRIDGE_TERMS);
+  const missingIngredients = unique([
+    ...baseMissingIngredients,
+    ...(strongMotif && !particleBridgeEvidence ? ['particle/atmosphere bridge carrier evidence'] : []),
+    ...(needsCardSafeArea ? ['clean safe area for card animation'] : [])
+  ]);
 
   return {
     sourceTerms,
@@ -201,7 +236,9 @@ export function collectTransitionAnchors(ctx: TransitionPlanningContext): Transi
     graphicContinuity: sharedSignalCount(fromText, toText, GRAPHIC_TERMS) >= 2,
     foregroundCrossing: hasAny(fromText, CROSSING_TERMS),
     motionContinuity: hasAny(fromText, MOTION_TERMS) && hasAny(toText, MOTION_TERMS),
-    cleanSafeArea: hasAny(combined, SAFE_AREA_TERMS) || ctx.toSlot.role === 'cta_visual' || ctx.toSlot.role === 'benefit_visual',
+    cleanSafeArea,
+    needsCardSafeArea,
+    particleBridgeEvidence,
     strongMotif,
     hasGap,
     hasPartial,
@@ -267,7 +304,14 @@ function explainTransition(
       mode: candidate.mode,
       reason: whyCandidateNot(candidate, chosen, anchors)
     })) satisfies TransitionWhyNot[];
-  const optionalAIGCJobCard = buildOptionalAigcJobCard(ctx, anchors, missingTransitionAssets);
+  const shouldAttachAigcJobCard =
+    implementationMode === 'aigc_job_card'
+    || implementationMode === 'hyperframes'
+    || anchors.hasGap
+    || missingTransitionAssets.length > 0;
+  const optionalAIGCJobCard = shouldAttachAigcJobCard
+    ? buildOptionalAigcJobCard(ctx, anchors, missingTransitionAssets)
+    : undefined;
   const hyperframesGuidance = implementationMode === 'hyperframes'
     ? sanitizePositiveText(`用图文/动效卡补足缺失的转场载体：${missingTransitionAssets.join('、') || '抽象动势承接'}；保持计划边界，不声明已生成外部视频。`, anchors.sourceTerms)
     : undefined;
@@ -291,8 +335,7 @@ function explainTransition(
     missingTransitionAssets,
     fallbackStrategy: fallbackForMode(implementationMode),
     hyperframesGuidance,
-    optionalAigcJobCardId: optionalAIGCJobCard?.id,
-    optionalAIGCJobCard,
+    ...(optionalAIGCJobCard ? { optionalAigcJobCardId: optionalAIGCJobCard.id, optionalAIGCJobCard } : {}),
     audioCueHandoff: audioCueForMode(implementationMode),
     safetyResult,
     llmEnhancement: null,
@@ -308,7 +351,7 @@ function explainTransition(
           }
         }
       : {}),
-    ...(implementationMode === 'aigc_job_card' || anchors.hasGap
+    ...(optionalAIGCJobCard && (implementationMode === 'aigc_job_card' || anchors.hasGap)
       ? {
           aigcFrameBridge: {
             prompt: optionalAIGCJobCard.prompt,
@@ -335,9 +378,16 @@ function candidateForMode(mode: OrchestratedTransitionMode, anchors: TransitionA
     case 'card_animation':
       return makeCandidate(mode, ['clean safe area or CTA/explanation need'], anchors.cleanSafeArea ? ['clean safe area or CTA/explanation need'] : [], anchors.cleanSafeArea ? [] : ['clean safe area'], anchors.cleanSafeArea ? 0.9 : 0.25, '存在说明、卖点或 CTA 承接需求，并且画面可容纳卡片动画。');
     case 'particle_bridge':
-      return makeCandidate(mode, ['large semantic distance', 'atmosphere/particle bridge'], anchors.strongMotif ? ['large semantic distance'] : [], anchors.strongMotif ? ['particle bridge asset'] : ['large semantic distance'], anchors.strongMotif ? 0.72 : 0.12, '源结构需要抽象氛围/粒子承接，但真实素材证据有限。');
+      return makeCandidate(
+        mode,
+        ['large semantic distance', 'atmosphere/particle bridge'],
+        anchors.strongMotif && anchors.particleBridgeEvidence ? ['large semantic distance', 'atmosphere/particle bridge'] : anchors.strongMotif ? ['large semantic distance'] : [],
+        anchors.strongMotif && anchors.particleBridgeEvidence ? [] : ['particle/atmosphere bridge carrier evidence'],
+        anchors.strongMotif && anchors.particleBridgeEvidence ? 0.92 : 0.12,
+        '源结构需要抽象氛围/粒子承接；只有存在粒子/氛围/桥接载体证据时才使用 particle bridge。'
+      );
     case 'hyperframes':
-      return makeCandidate(mode, ['important motif or missing bridge assets'], anchors.strongMotif || anchors.hasPartial ? ['important motif or missing bridge assets'] : [], anchors.strongMotif || anchors.hasPartial ? anchors.missingSignals : ['important motif'], anchors.strongMotif && anchors.missingSignals.length ? 0.94 : anchors.hasPartial ? 0.68 : 0.18, '重要结构动机或局部素材不足，需要 HyperFrames 计划卡补足桥接表达。');
+      return makeCandidate(mode, ['important motif or missing bridge assets'], anchors.strongMotif || anchors.hasPartial ? ['important motif or missing bridge assets'] : [], anchors.strongMotif || anchors.hasPartial ? anchors.missingSignals : ['important motif'], anchors.strongMotif && anchors.missingSignals.length ? 0.96 : anchors.hasPartial ? 0.68 : 0.18, '重要结构动机或局部素材不足，需要 HyperFrames 计划卡补足桥接表达。');
     case 'aigc_job_card':
       return makeCandidate(mode, ['no real transition support'], anchors.hasGap ? ['gap-side transition support missing'] : [], anchors.hasGap ? anchors.missingSignals : ['true material gap'], anchors.hasGap && !anchors.durationMs ? 0.52 : anchors.hasGap ? 0.45 : 0.04, '外部生成只作为可选任务卡，保持 plan-only。');
     case 'split_edit_j_cut':
@@ -381,12 +431,16 @@ function buildSafetyResult(ctx: TransitionPlanningContext, anchors: TransitionAn
     slotEvidenceText(ctx.toSlot)
   ].join('\n');
   const requiredRewrites = anchors.sourceTerms.filter((term) => positive.toLowerCase().includes(term.toLowerCase()));
+  const policyFlags = [
+    ...(requiredRewrites.length ? ['source_terms_rewritten_after_planning'] : []),
+    'deterministic_ip_claim_check_limited'
+  ];
   return {
     passed: true,
     sourceLeakageRisk: requiredRewrites.length ? 'needs_rewrite' : 'none',
     ipRisk: 'none',
     claimRisk: 'none',
-    policyFlags: [],
+    policyFlags,
     requiredRewrites
   };
 }
@@ -588,6 +642,14 @@ function sharedSignalCount(a: string, b: string, terms: string[]): number {
 function hasAny(text: string, terms: string[]): boolean {
   const lower = text.toLowerCase();
   return terms.some((term) => lower.includes(term.toLowerCase()));
+}
+
+function hasSafeAreaEvidence(text: string): boolean {
+  const lower = text.toLowerCase();
+  if (/no\s+(?:clean|blank|safe area|text card)|without\s+(?:clean|blank|safe area)|无(?:留白|干净|卡片)/i.test(lower)) {
+    return false;
+  }
+  return hasAny(lower, SAFE_AREA_TERMS);
 }
 
 function hasActionContinuity(fromText: string, toText: string, fromSlot: OrchestratedSlot, toSlot: OrchestratedSlot): boolean {
