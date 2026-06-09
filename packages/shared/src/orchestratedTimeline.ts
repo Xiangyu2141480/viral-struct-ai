@@ -41,7 +41,7 @@ export const OrchestratedTreatmentSpecSchema = z
   .strict();
 export type OrchestratedTreatmentSpec = z.infer<typeof OrchestratedTreatmentSpecSchema>;
 
-// ---- Gap-resolution options (three ways to resolve a partial/missing slot) ----
+// ---- Gap-resolution options (asset-preserving options for partial slots; AIGC only for true gaps) ----
 
 /** Reshoot: a natural-language shooting brief for the user. Highest fidelity, but needs a human. */
 export const ReshootOptionSchema = z
@@ -113,6 +113,31 @@ export const DirectorFillStatusSchema = z.enum([
 ]);
 export type DirectorFillStatus = z.infer<typeof DirectorFillStatusSchema>;
 
+export const SourceSpecificTransferSubtypeSchema = z.enum([
+  'opening_transform',
+  'interface_detail',
+  'assembly_detail',
+  'ui_sequence',
+  'device_handoff',
+  'cta_lockup',
+  'kinetic_assembly_reveal',
+  'generic_source_specific'
+]);
+export type SourceSpecificTransferSubtype = z.infer<typeof SourceSpecificTransferSubtypeSchema>;
+
+export const SourceAbstractionSchema = z
+  .object({
+    sourceSpecific: z.boolean(),
+    subtype: SourceSpecificTransferSubtypeSchema,
+    sourcePattern: z.string(),
+    abstractGrammar: z.string(),
+    targetEquivalentLabel: z.string(),
+    targetEquivalentActions: z.array(z.string()),
+    rationale: z.string()
+  })
+  .strict();
+export type SourceAbstraction = z.infer<typeof SourceAbstractionSchema>;
+
 // ---- Per-slot evidence (旁证 from coverage; matching verdict is owned by the LLM/rule matcher) ----
 
 export const OrchestratedSlotEvidenceSchema = z
@@ -137,7 +162,7 @@ export const SlotFillMatchedSchema = z
     treatmentSpec: OrchestratedTreatmentSpecSchema.optional(),
     status: z.enum(['matched', 'partial']),
     videoEngineInstruction: z.string(),
-    /** partial slots also carry the three "可增强" options so the user can override. */
+    /** partial slots carry asset-preserving options; true gaps may also carry an AIGC job card. */
     options: z.array(GapResolutionOptionSchema).optional(),
     recommendedOptionId: GapResolutionOptionIdSchema.optional(),
     evidence: OrchestratedSlotEvidenceSchema
@@ -180,6 +205,7 @@ export const OrchestratedSlotSchema = z
     sourceIntent: z.string().optional(),
     /** transferable intent — already sanitized to prevent source-video leakage into target prompts. */
     transferableIntent: z.string().optional(),
+    sourceAbstraction: SourceAbstractionSchema.optional(),
     motifType: z.string().optional(),
     motionTokens: z.array(z.string()).optional(),
     fill: SlotFillSchema

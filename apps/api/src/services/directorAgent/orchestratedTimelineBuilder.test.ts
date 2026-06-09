@@ -39,7 +39,7 @@ test('produces exactly one OrchestratedSlot per shotSlot, in time order, schema-
   }
 });
 
-test('degradation ladder: strong=matched, weak=partial+options, missing=gap+3 options', async () => {
+test('degradation ladder: strong=matched, weak=partial+non-AIGC options, missing=gap+3 options', async () => {
   const timeline = await buildOrchestratedTimeline({
     projectId: 'p1',
     structureGraph: makeGraph(),
@@ -62,7 +62,7 @@ test('degradation ladder: strong=matched, weak=partial+options, missing=gap+3 op
   if (usage.kind === 'matched') {
     assert.equal(usage.status, 'partial');
     assert.equal(usage.assetId, 'asset_usage'); // asset is still filled in
-    assert.equal(usage.options?.length, 3);
+    assert.deepEqual(usage.options?.map((option) => option.id).sort(), ['hyperframes', 'reshoot']);
     assert.equal(usage.recommendedOptionId, 'hyperframes'); // §6.4: partial → hyperframes
   }
 
@@ -431,7 +431,7 @@ test('weak kinetic assembly motif is not treated as fully matched and carries mo
   assert.equal(slot.fill.kind, 'matched');
   if (slot.fill.kind === 'matched') {
     assert.equal(slot.fill.status, 'partial');
-    assert.equal(slot.fill.options?.length, 3);
+    assert.deepEqual(slot.fill.options?.map((option) => option.id).sort(), ['hyperframes', 'reshoot']);
     const positiveText = JSON.stringify(slot.fill.options);
     assert.match(positiveText, /冰块|柠檬|茶滴|冷雾/);
     assert.match(positiveText, /CTA|收口|锁定/);
@@ -481,6 +481,66 @@ test('source-specific hardware semantics are downgraded and rewritten to beverag
     assert.match(text, /瓶身标签|冷凝水|茶色流动|开盖|倒入杯中|多瓶陈列/);
     assert.doesNotMatch(text, /MacBook|keyboard|laptop|touchpad|rocket|hardware|键盘|笔记本|触控板|火箭|硬件/);
   }
+});
+
+test('source-specific slots expose an explicit abstraction layer for Video Agent handoff', async () => {
+  const graph = makeGraph();
+  graph.shotSlots = [
+    {
+      ...graph.shotSlots[0],
+      id: 'slot_hardware_interface',
+      role: 'product_closeup',
+      requiredAsset: { type: 'video', subject: 'side port hardware interface reveal' },
+      intent: {
+        purpose: '展示笔记本侧边接口、摄像头和硬件部件归位',
+        energyLevel: 'medium',
+        motionPattern: 'interface reveal and hardware assembly',
+        compositionPrincipal: 'hardware detail reveal',
+        durationMs: [1200, 2500]
+      },
+      sourceInstance: {
+        productInSource: 'MacBook',
+        specificAction: 'ports reveal, camera lens flies into laptop, hardware module locks in'
+      }
+    },
+    {
+      ...graph.shotSlots[1],
+      id: 'slot_ui_sequence',
+      role: 'usage_demo',
+      requiredAsset: { type: 'video', subject: 'keyboard touchpad multi window app UI switching' },
+      intent: {
+        purpose: '双手操作触控板和键盘，依次切换展示多个应用界面',
+        energyLevel: 'medium',
+        motionPattern: 'sequential ui switch with hand interaction',
+        compositionPrincipal: 'multi-window feature demo',
+        durationMs: [2500, 5200]
+      },
+      sourceInstance: {
+        productInSource: 'MacBook',
+        specificAction: 'hands operate touchpad and keyboard to switch multiple app windows'
+      }
+    }
+  ];
+  graph.segments = [{ id: 'seg_hook', role: 'hook', start: 0, end: 6, duration: 6, purpose: 'source structure', transferRule: '', importance: 5 }];
+
+  const timeline = await buildOrchestratedTimeline({
+    projectId: 'p_abstraction',
+    structureGraph: graph,
+    assetCards: makeAssets(),
+    contentBrief: makeContentBrief(),
+    useLlmMatcher: false
+  });
+
+  const abstractions = new Map(timeline.slots.map((slot) => [slot.slotId, slot.sourceAbstraction]));
+  assert.equal(abstractions.size, 2);
+  assert.ok([...abstractions.values()].every(Boolean), 'every source-specific slot should expose abstraction metadata');
+  assert.equal(abstractions.get('slot_hardware_interface')?.subtype, 'interface_detail');
+  assert.equal(abstractions.get('slot_ui_sequence')?.subtype, 'ui_sequence');
+
+  const text = JSON.stringify([...abstractions.values()]);
+  assert.match(text, /瓶身细节扫光|卖点场景卡连跳/);
+  assert.match(text, /source structure|abstract grammar|target beverage equivalent|源结构|抽象/);
+  assert.doesNotMatch(text, /MacBook|keyboard|laptop|touchpad|rocket|hardware|键盘|笔记本|触控板|火箭|硬件/);
 });
 
 test('default Director Agent timing compresses source timeline into a high-conversion 20s target', async () => {

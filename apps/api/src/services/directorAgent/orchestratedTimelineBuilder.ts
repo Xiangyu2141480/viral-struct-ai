@@ -30,6 +30,7 @@ import { createOpenAICompatibleClient } from '../llmProvider';
 import { evaluateSourceSpecificGate } from './sourceSpecificGate';
 import { buildGapResolutionOptions } from './gapResolutionOptionsBuilder';
 import { buildOrchestratedTransitions } from './transitionOrchestrator';
+import { buildSourceAbstraction } from './sourceSpecificAbstraction';
 import { DEFAULT_ASPECT_RATIO, DEFAULT_HYPERFRAMES_TRANSITION_WEIGHT } from './constants';
 
 type LlmClient = ReturnType<typeof createOpenAICompatibleClient>;
@@ -115,6 +116,11 @@ export async function buildOrchestratedTimeline(input: BuildOrchestratedTimeline
     const transferableIntent = motionTokens.length > 0
       ? sanitizeMotionGrammarText(slot.intent?.purpose ?? buildSlotText(slot)).sanitizedIntent
       : undefined;
+    const sourceAbstraction = buildSourceAbstraction({
+      slot,
+      motif,
+      targetCategory
+    });
 
     const fill = buildFill({
       tier,
@@ -147,6 +153,7 @@ export async function buildOrchestratedTimeline(input: BuildOrchestratedTimeline
       // so the raw source intent can never leak through the handoff (§12; mirrors the PR #60 leak fix).
       sourceIntent: safeSourceIntent(slot.intent?.purpose),
       transferableIntent,
+      sourceAbstraction,
       motifType: motif?.motifType,
       motionTokens: motionTokens.length > 0 ? motionTokens : undefined,
       fill

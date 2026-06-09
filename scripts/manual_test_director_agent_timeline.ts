@@ -6,7 +6,7 @@
  *     ② buildAssetSupplyContext (kept — asset scan / coverage, read-only evidence)
  *       → Director Agent runDirectorAgent
  *           · matchSlotsWithFallback (rule-based here; LLM is opt-in)
- *           · degradation ladder (matched / partial+options / gap+3 options) + source-specific gate
+ *           · degradation ladder (matched / partial asset-preserving options / gap AIGC job-card option) + source-specific gate
  *           · transition orchestration (hyperframes-weighted, aigc frame-bridge gated)
  *         → OrchestratedTimeline
  *       → orchestratedToAuthored → AuthoredTimeline (the deliverable: a TIMELINE, not a rendered MP4)
@@ -169,6 +169,7 @@ function buildReport(
   const counts = countFills(timeline);
   const modes = countModes(timeline);
   const optionSlots = timeline.slots.filter((s) => (s.fill.kind === 'gap' ? s.fill.options : s.fill.options)?.length);
+  const aigcOptionSlots = timeline.slots.filter((s) => ((s.fill.kind === 'gap' ? s.fill.options : s.fill.options) ?? []).some((option) => option.id === 'aigc'));
   const realMediaReferenced = timeline.slots.filter((slot) => slot.fill.kind === 'matched' && Boolean(slot.fill.assetId)).length;
   const fullySatisfied = timeline.slots.filter((slot) => slot.fillStatus === 'matched').length;
   const partialWithEnhancement = timeline.slots.filter((slot) =>
@@ -218,7 +219,8 @@ function buildReport(
         ['transitions', `${timeline.transitions.length} ${JSON.stringify(modes)}`],
         ['transition functions', JSON.stringify(countTransitionFunctions(timeline))],
         ['reusable asset packs', `${timeline.reusableAssetPacks?.length ?? 0}`],
-        ['slots offering 3 options', String(optionSlots.length)],
+        ['slots with resolution options', String(optionSlots.length)],
+        ['AIGC job-card slots', String(aigcOptionSlots.length)],
         ['authored handoff beats', `${authored.beats.length} timeline beats, not rendered`],
         ['source leakage check', leakage.passed ? 'PASS' : `FAIL (${leakage.hits.join(', ')})`]
       ]
@@ -254,17 +256,29 @@ function buildReport(
     '',
     sourceSpecificSlots.length
       ? markdownTable(
-          ['slotId', 'role', 'fillStatus', 'beverage equivalent'],
+          ['slotId', 'role', 'fillStatus', 'source subtype', 'beverage equivalent'],
           sourceSpecificSlots.slice(0, 12).map((slot) => [
             slot.slotId,
             slot.role,
             slot.fillStatus ?? '-',
-            firstOptionText(slot).slice(0, 180)
+            slot.sourceAbstraction?.subtype ?? '-',
+            slot.sourceAbstraction?.targetEquivalentLabel ?? firstOptionText(slot).slice(0, 120)
           ])
         )
       : '_No source-specific slots were downgraded._',
     '',
-    '## Gap / partial options (three ways each)',
+    sourceSpecificSlots.length
+      ? markdownTable(
+          ['slotId', 'abstract grammar', 'target actions'],
+          sourceSpecificSlots.slice(0, 12).map((slot) => [
+            slot.slotId,
+            slot.sourceAbstraction?.abstractGrammar ?? '-',
+            slot.sourceAbstraction?.targetEquivalentActions.join(' / ') ?? '-'
+          ])
+        )
+      : '_No source-specific abstractions emitted._',
+    '',
+    '## Gap / partial resolution options',
     '',
     optionSlots
       .map((slot) => {

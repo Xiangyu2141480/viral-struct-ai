@@ -38,8 +38,8 @@ test('matched / partial / gap fills discriminate correctly', () => {
   assert.equal(partial.kind, 'matched');
   if (partial.kind === 'matched') {
     assert.equal(partial.status, 'partial');
-    // partial carries the three enhancement options + a hyperframes recommendation
-    assert.equal(partial.options?.length, 3);
+    // partial carries asset-preserving options + a hyperframes recommendation; AIGC is reserved for true gaps.
+    assert.deepEqual(partial.options?.map((option) => option.id).sort(), ['hyperframes', 'reshoot']);
     assert.equal(partial.recommendedOptionId, 'hyperframes');
   }
 
@@ -51,13 +51,17 @@ test('matched / partial / gap fills discriminate correctly', () => {
   }
 });
 
-test('every gap/partial slot offers exactly the three option ids', () => {
+test('partial slots do not offer AIGC, while true gaps can offer the AIGC job card', () => {
   const tl = OrchestratedTimelineSchema.parse(loadSample());
   for (const slot of tl.slots) {
     const options = slot.fill.kind === 'gap' ? slot.fill.options : slot.fill.options;
     if (!options) continue;
     const ids = options.map((o) => o.id).sort();
-    assert.deepEqual(ids, ['aigc', 'hyperframes', 'reshoot']);
+    if (slot.fill.kind === 'gap') {
+      assert.deepEqual(ids, ['aigc', 'hyperframes', 'reshoot']);
+    } else {
+      assert.deepEqual(ids, ['hyperframes', 'reshoot']);
+    }
   }
 });
 

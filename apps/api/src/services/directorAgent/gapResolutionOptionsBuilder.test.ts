@@ -66,7 +66,7 @@ function makeBrief(aigcEligible = true): MissingMaterialBrief {
   };
 }
 
-test('always returns exactly three options: reshoot / hyperframes / aigc', () => {
+test('gap tier can offer three options: reshoot / hyperframes / aigc', () => {
   const { options } = buildGapResolutionOptions({
     slot: makeSlot(),
     tier: 'gap',
@@ -77,15 +77,18 @@ test('always returns exactly three options: reshoot / hyperframes / aigc', () =>
   assert.deepEqual(options.map((o) => o.id).sort(), ['aigc', 'hyperframes', 'reshoot']);
 });
 
-test('partial tier recommends hyperframes', () => {
-  const { recommendedOptionId } = buildGapResolutionOptions({
+test('partial tier with existing asset support recommends hyperframes and does not offer AIGC', () => {
+  const { options, recommendedOptionId } = buildGapResolutionOptions({
     slot: makeSlot(),
     tier: 'partial',
     missingBrief: makeBrief(),
     contentBrief: makeContentBrief(),
-    referenceAssetIds: ['asset_usage']
+    referenceAssetIds: ['asset_usage'],
+    chosenAssetId: 'asset_usage',
+    fillStatus: 'partial_asset_support'
   });
   assert.equal(recommendedOptionId, 'hyperframes');
+  assert.deepEqual(options.map((o) => o.id).sort(), ['hyperframes', 'reshoot']);
 });
 
 test('gap tier recommends aigc, but falls back to hyperframes when aigc is not eligible', () => {
@@ -183,12 +186,12 @@ test('收敛: options reference only the single chosen asset, not a pool', () =>
     missingBrief: makeBrief(),
     contentBrief: makeContentBrief(),
     referenceAssetIds: ['asset_usage', 'asset_other_1', 'asset_other_2'],
-    chosenAssetId: 'asset_usage'
+    chosenAssetId: 'asset_usage',
+    fillStatus: 'partial_asset_support'
   });
   const hyper = options.find((o) => o.id === 'hyperframes')!;
-  const aigc = options.find((o) => o.id === 'aigc')!;
   if (hyper.id === 'hyperframes') assert.deepEqual(hyper.referencedAssetIds, ['asset_usage']);
-  if (aigc.id === 'aigc') assert.deepEqual(aigc.referenceAssetIds, ['asset_usage']);
+  assert.equal(options.some((option) => option.id === 'aigc'), false);
 });
 
 test('aigc option is job-card only', () => {
@@ -204,19 +207,17 @@ test('aigc option is job-card only', () => {
   assert.equal(aigc.ownership, 'external_generation_job_card_only');
 });
 
-test('synthesizes all three options when no brief exists (gate-blocked covered slot)', () => {
+test('synthesizes non-AIGC options when no brief exists for a covered/partial slot', () => {
   const { options, recommendedOptionId } = buildGapResolutionOptions({
     slot: makeSlot(),
     tier: 'partial',
     contentBrief: makeContentBrief(),
-    referenceAssetIds: ['asset_usage']
+    referenceAssetIds: ['asset_usage'],
+    chosenAssetId: 'asset_usage',
+    fillStatus: 'needs_hyperframes_enhancement'
   });
-  assert.deepEqual(options.map((o) => o.id).sort(), ['aigc', 'hyperframes', 'reshoot']);
+  assert.deepEqual(options.map((o) => o.id).sort(), ['hyperframes', 'reshoot']);
   assert.equal(recommendedOptionId, 'hyperframes');
-  const aigc = options.find((o) => o.id === 'aigc')!;
-  if (aigc.id === 'aigc') {
-    assert.equal(aigc.ownership, 'external_generation_job_card_only');
-  }
 });
 
 test('kinetic assembly brief produces beverage-native reshoot, hyperframes and AIGC prompts', () => {
@@ -285,4 +286,126 @@ test('kinetic assembly brief produces beverage-native reshoot, hyperframes and A
   assert.match(allPositiveText, /CTA|收口|锁定/);
   assert.match(allPositiveText, /冰块|柠檬|红茶/);
   assert.doesNotMatch(allPositiveText, /MacBook|keyboard|laptop|touchpad|rocket|hardware|键盘|笔记本|触控板|火箭|硬件/);
+});
+
+test('source-specific slots are abstracted into distinct beverage equivalents instead of one repeated template', () => {
+  const scenarios: Array<{
+    name: string;
+    slot: ShotSlotNode;
+    expected: RegExp;
+    forbidden?: RegExp;
+  }> = [
+    {
+      name: 'opening transform',
+      slot: {
+        ...makeSlot('opening_attention'),
+        id: 'slot_opening_transform',
+        requiredAsset: { type: 'video', subject: 'MacBook product color transform and screen opening' },
+        intent: {
+          purpose: '双手从纯白空白画面中拿出银色苹果笔记本，悬浮过程中色彩渐变，放置桌面后打开屏幕',
+          energyLevel: 'high',
+          motionPattern: 'symmetric hand presenting, object transform, screen opening',
+          compositionPrincipal: 'hero reveal',
+          durationMs: [0, 3000]
+        }
+      },
+      expected: /热浪|冰爽入场|英雄亮相|夏日场景/,
+      forbidden: /侧边接口|多窗口|跨设备/
+    },
+    {
+      name: 'interface reveal',
+      slot: {
+        ...makeSlot('product_closeup'),
+        id: 'slot_interface_reveal',
+        requiredAsset: { type: 'video', subject: 'side port hardware interface camera module reveal' },
+        intent: {
+          purpose: '镜头移动展示笔记本侧边接口，圆形镜片飞入变成摄像头，放大展示摄像头镜片细节',
+          energyLevel: 'medium',
+          motionPattern: 'sequential interface reveal then object assembly',
+          compositionPrincipal: 'detail reveal',
+          durationMs: [3000, 6000]
+        }
+      },
+      expected: /标签扫光|冷凝水擦除|瓶身微距|瓶盖特写/,
+      forbidden: /多窗口|手递|热浪破开/
+    },
+    {
+      name: 'ui sequence',
+      slot: {
+        ...makeSlot('usage_demo'),
+        id: 'slot_ui_sequence',
+        requiredAsset: { type: 'video', subject: 'keyboard touchpad multi window app UI switching' },
+        intent: {
+          purpose: '双手操作触控板和键盘，依次切换展示多个应用界面，涵盖网页浏览、视频剪辑、AI 训练计划',
+          energyLevel: 'medium',
+          motionPattern: 'sequential ui switch with hand interaction',
+          compositionPrincipal: 'multi-window feature demo',
+          durationMs: [6000, 9000]
+        }
+      },
+      expected: /卖点卡|场景卡|卡片连跳|信息卡/,
+      forbidden: /侧边接口|摄像头|多瓶阵列/
+    },
+    {
+      name: 'device handoff',
+      slot: {
+        ...makeSlot('usage_demo'),
+        id: 'slot_device_handoff',
+        requiredAsset: { type: 'video', subject: 'iPhone cross-device handoff to laptop screen' },
+        intent: {
+          purpose: '手持 iPhone 操作聊天界面，将手机放到笔记本旁边隔空投送图片，笔记本接力显示地图导航界面',
+          energyLevel: 'medium',
+          motionPattern: 'seamless cross device transition',
+          compositionPrincipal: 'handoff interaction',
+          durationMs: [9000, 12000]
+        }
+      },
+      expected: /手递|场景切换|分享|通勤|社交/,
+      forbidden: /侧边接口|摄像头|多窗口/
+    },
+    {
+      name: 'cta lockup',
+      slot: {
+        ...makeSlot('cta_visual'),
+        id: 'slot_cta_lockup',
+        requiredAsset: { type: 'image', subject: 'MacBook Neo From $599 logo lockup end frame' },
+        intent: {
+          purpose: '依次展示产品全配色，弹出产品名与售价信息，最后通过拼接动画呈现品牌标识完成收尾',
+          energyLevel: 'low',
+          motionPattern: 'static centered reveal with sequential assembly',
+          compositionPrincipal: 'cta lockup',
+          durationMs: [12000, 14000]
+        }
+      },
+      expected: /多瓶阵列|CTA 尾帧|购买引导|干净收口/,
+      forbidden: /侧边接口|多窗口|热浪破开/
+    }
+  ];
+
+  const normalizedPrompts = new Set<string>();
+  for (const scenario of scenarios) {
+    const { options } = buildGapResolutionOptions({
+      slot: scenario.slot,
+      tier: 'partial',
+      contentBrief: makeContentBrief(),
+      referenceAssetIds: ['plain_002_hand_pickup'],
+      chosenAssetId: 'plain_002_hand_pickup'
+    });
+    const positiveText = options
+      .flatMap((option) => {
+        if (option.id === 'reshoot') return [option.guidanceNL, option.framing, ...option.mustCapture];
+        if (option.id === 'hyperframes') return [option.editingGuidanceNL, option.copy?.headline, option.copy?.subline, option.copy?.cta];
+        return [option.prompt];
+      })
+      .filter(Boolean)
+      .join('\n');
+    assert.match(positiveText, scenario.expected, `${scenario.name} should have a distinct beverage mapping`);
+    if (scenario.forbidden) {
+      assert.doesNotMatch(positiveText, scenario.forbidden, `${scenario.name} should not reuse another subtype mapping`);
+    }
+    assert.doesNotMatch(positiveText, /MacBook|keyboard|laptop|touchpad|rocket|hardware|键盘|笔记本|触控板|火箭|硬件/);
+    normalizedPrompts.add(positiveText.replace(/\d+(?:\.\d+)? 秒/g, 'N 秒').slice(0, 240));
+  }
+
+  assert.equal(normalizedPrompts.size, scenarios.length, 'each subtype should produce a distinct prompt body');
 });

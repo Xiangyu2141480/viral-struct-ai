@@ -68,16 +68,6 @@
             "copy": { "headline": "一拧就开", "bullets": ["开盖", "畅饮"] },
             "referencedAssetIds": ["asset_002"],
             "durationMs": 4000
-          },
-          {
-            "id": "aigc",
-            "prompt": "Prompt brief only, not rendered output. Create a 9:16 ordinary smartphone-style usage shot: hand-only, opening cap and drinking, realistic and casual. Do not invent price, promotion, medical benefit, celebrity endorsement, or extra brands.",
-            "negativePrompt": "no text overlays, no watermark, no celebrity, no other brands, no price promotion, no medical claims",
-            "referenceAssetIds": ["asset_002"],
-            "aspectRatio": "9:16",
-            "expectedDurationSec": 4,
-            "providerHint": "seedance",
-            "ownership": "external_generation_job_card_only"
           }
         ],
         "evidence": {
