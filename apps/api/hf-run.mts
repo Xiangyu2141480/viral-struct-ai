@@ -19,7 +19,7 @@ const contentBrief: ContentBrief = {
   scenario: showcase.case.scenario,
   sellingPoints: showcase.case.sellingPoints,
   cta: showcase.case.cta,
-  stylePreference: '超酷、强动感、夏日冰感、快节奏、闪卡与真实产品图混排'
+  stylePreference: '【闪卡为主】：以纯文字 / 色彩 / 渐变的动态闪卡 + kinetic typography 文字冲击为绝对主体（占大部分镜头），真实产品图只作少量点缀镜头。自由发挥、潮流、超酷、强烈节奏与设计感，尽情展示你的美学、配色与排版功力——这是一次纯粹的设计表现。'
 };
 const assetCards = await loadAssetLibrary('kangshifu_demo');
 const constraints: EditConstraints = { aspectRatio: '9:16', allowAigc: false, allowHumanGeneration: false, allowedClaimSources: [], forbiddenClaims: [] };

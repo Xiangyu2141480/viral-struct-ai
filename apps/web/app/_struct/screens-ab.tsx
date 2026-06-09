@@ -29,6 +29,8 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
   const v = useProjectStore((s) => s.sourceVideo);
   const analyzing = useProjectStore((s) => s.analyzing);
   const analyzeSample = useProjectStore((s) => s.analyzeSample);
+  const runDemo = useProjectStore((s) => s.runDemo);
+  const loadingDemo = useProjectStore((s) => s.loadingDemo);
   const T = v.duration;
   const [hoveredSeg, setHoveredSeg] = useState<Seg>(v.segments[0]);
   const [toastMsg, setToastMsg] = useState('');
@@ -54,6 +56,11 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
           </div>
         </div>
         <div className="screen-head-r">
+          <button className="btn primary" style={{ padding: '5px 12px', fontSize: 11.5 }}
+            disabled={loadingDemo}
+            onClick={() => { void runDemo().then(() => showToast('一键演示已载入 · 真实后端全流程数据')); }}>
+            <Icon name="sparkle" size={12} /> {loadingDemo ? '运行中…' : '一键演示'}
+          </button>
           <span className="pill"><span className="dot" style={{ background: 'var(--accent)' }} /> {analyzing ? '解析中…' : '已解析'}</span>
           <span>{v.protocol_version}</span>
         </div>
@@ -245,6 +252,8 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
   const assetManagerWarnings = useProjectStore((s) => s.assetManagerWarnings);
   const assetManagerLastError = useProjectStore((s) => s.assetManagerLastError);
   const addMaterials = useProjectStore((s) => s.addMaterials);
+  const loadLibrary = useProjectStore((s) => s.loadLibrary);
+  const uploading = useProjectStore((s) => s.uploading);
   const applyAssignments = useProjectStore((s) => s.applyAssignments);
   const updateProduct = useProjectStore((s) => s.updateProduct);
   const runDiagnosis = useProjectStore((s) => s.runDiagnosis);
@@ -323,6 +332,11 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
           </div>
         </div>
         <div className="screen-head-r">
+          <button className="btn" style={{ padding: '5px 12px', fontSize: 11.5 }}
+            disabled={uploading}
+            onClick={() => { void loadLibrary('kangshifu_demo').then(() => showToast('已加载示例素材库 · 康师傅 demo')); }}>
+            <Icon name="upload" size={11} /> {uploading ? '加载中…' : '加载示例素材库'}
+          </button>
           <span className="mono">{materials.length} 个素材</span>
           <span className="pill"><span className="dot" style={{ background: 'var(--accent)' }} /> 已适配</span>
         </div>

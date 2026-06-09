@@ -9,12 +9,29 @@
 // `warnings`, so the prototype renders end-to-end with or without a backend.
 
 import { create } from 'zustand';
-import type { AssetSupplyContext } from '@viral-struct/shared';
+import type {
+  AssetSupplyContext,
+  DemoEstimate,
+  MissingMaterialGenerationJob,
+  QualityReport,
+  SafetyStatus,
+  StoryboardFrame,
+} from '@viral-struct/shared';
 import { analyzeStructAssetManagerCoverage } from '../api/assetManager';
 import { compile as compileApi, exportVideo as exportApi, nlEdit as nlEditApi } from '../api/compile';
 import { applyStrategy as applyStrategyApi, diagnose as diagnoseApi } from '../api/diagnose';
 import { matchMaterials as matchMaterialsApi, uploadMaterials as uploadMaterialsApi } from '../api/materials';
 import { analyzeSample as analyzeSampleApi } from '../api/sample';
+import {
+  type InsightRequest,
+  checkSafety as checkSafetyApi,
+  estimatePerformance as estimatePerformanceApi,
+  evaluateQuality as evaluateQualityApi,
+  loadLibraryMaterials as loadLibraryMaterialsApi,
+  planMaterialJobs as planMaterialJobsApi,
+  planStoryboard as planStoryboardApi,
+  runDemo as runDemoApi,
+} from '../api/insights';
 import type { ExportResult, TimelineSeg } from '../api/types';
 import {
   COMPILE_VERSIONS,
@@ -44,6 +61,13 @@ interface ProjectState {
   exportResult: ExportResult | null;
   assetSupplyContext: AssetSupplyContext | null;
 
+  // ── insights / generation (capability buttons) ─────────────
+  qualityReport: QualityReport | null;
+  demoEstimate: DemoEstimate | null;
+  safetyStatus: SafetyStatus | null;
+  storyboardFrames: StoryboardFrame[] | null;
+  materialJobs: MissingMaterialGenerationJob[] | null;
+
   // ── status ────────────────────────────────────────────────
   mode: ApiMode;
   analyzing: boolean;
@@ -56,6 +80,9 @@ interface ProjectState {
   assetManagerLoading: boolean;
   assetManagerWarnings: string[];
   assetManagerLastError: string | null;
+  /** Which capability insight is currently loading (null = idle). */
+  insightLoading: string | null;
+  loadingDemo: boolean;
   warnings: string[];
   /** Real error message from the last failed API call (null when the last call
    * succeeded or no call has been made yet). Distinguishes a genuine failure
@@ -76,6 +103,15 @@ interface ProjectState {
   compile: () => Promise<void>;
   applyNlEdit: (instruction: string) => Promise<string>;
   exportVideo: (format: string) => Promise<ExportResult>;
+
+  // ── insights / generation actions ─────────────────────────
+  evaluateQuality: () => Promise<void>;
+  estimatePerformance: () => Promise<void>;
+  checkSafety: () => Promise<void>;
+  planStoryboard: () => Promise<void>;
+  planMaterialJobs: () => Promise<void>;
+  loadLibrary: (libraryId: string) => Promise<void>;
+  runDemo: () => Promise<void>;
   reset: () => void;
 }
 
@@ -111,6 +147,11 @@ const initialState = {
   timeline: null as TimelineSeg[] | null,
   exportResult: null as ExportResult | null,
   assetSupplyContext: null as AssetSupplyContext | null,
+  qualityReport: null as QualityReport | null,
+  demoEstimate: null as DemoEstimate | null,
+  safetyStatus: null as SafetyStatus | null,
+  storyboardFrames: null as StoryboardFrame[] | null,
+  materialJobs: null as MissingMaterialGenerationJob[] | null,
   mode: 'mock' as ApiMode,
   analyzing: false,
   uploading: false,
@@ -122,6 +163,8 @@ const initialState = {
   assetManagerLoading: false,
   assetManagerWarnings: [] as string[],
   assetManagerLastError: null as string | null,
+  insightLoading: null as string | null,
+  loadingDemo: false,
   warnings: [] as string[],
   lastError: null as string | null,
 };
@@ -319,5 +362,112 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     }
   },
 
+  evaluateQuality: async () => {
+    set({ insightLoading: 'quality', lastError: null });
+    try {
+      const { qualityReport, warnings } = await evaluateQualityApi(buildInsightRequest(get()));
+      set({ qualityReport, mode: 'live', warnings: warnings ?? [] });
+    } catch (e) {
+      set({ warnings: ['质量评估接口不可用 · ' + errMsg(e)], lastError: errMsg(e) });
+    } finally {
+      set({ insightLoading: null });
+    }
+  },
+
+  estimatePerformance: async () => {
+    set({ insightLoading: 'estimate', lastError: null });
+    try {
+      const { demoEstimate, warnings } = await estimatePerformanceApi(buildInsightRequest(get()));
+      set({ demoEstimate, mode: 'live', warnings: warnings ?? [] });
+    } catch (e) {
+      set({ warnings: ['预测评分接口不可用 · ' + errMsg(e)], lastError: errMsg(e) });
+    } finally {
+      set({ insightLoading: null });
+    }
+  },
+
+  checkSafety: async () => {
+    set({ insightLoading: 'safety', lastError: null });
+    try {
+      const { safetyStatus } = await checkSafetyApi(buildInsightRequest(get()));
+      set({ safetyStatus, mode: 'live' });
+    } catch (e) {
+      set({ warnings: ['安全检查接口不可用 · ' + errMsg(e)], lastError: errMsg(e) });
+    } finally {
+      set({ insightLoading: null });
+    }
+  },
+
+  planStoryboard: async () => {
+    set({ insightLoading: 'storyboard', lastError: null });
+    try {
+      const { frames, warnings } = await planStoryboardApi(buildInsightRequest(get()));
+      set({ storyboardFrames: frames, mode: 'live', warnings: warnings ?? [] });
+    } catch (e) {
+      set({ warnings: ['分镜规划接口不可用 · ' + errMsg(e)], lastError: errMsg(e) });
+    } finally {
+      set({ insightLoading: null });
+    }
+  },
+
+  planMaterialJobs: async () => {
+    set({ insightLoading: 'materialJobs', lastError: null });
+    try {
+      const { jobs, warnings } = await planMaterialJobsApi(buildInsightRequest(get()));
+      set({ materialJobs: jobs, mode: 'live', warnings: warnings ?? [] });
+    } catch (e) {
+      set({ warnings: ['AIGC 生成规划接口不可用 · ' + errMsg(e)], lastError: errMsg(e) });
+    } finally {
+      set({ insightLoading: null });
+    }
+  },
+
+  loadLibrary: async (libraryId) => {
+    set({ uploading: true, lastError: null });
+    try {
+      const { materials, warnings } = await loadLibraryMaterialsApi(libraryId);
+      set({ materials, mode: 'live', warnings: warnings ?? [] });
+      void get().refreshAssetManagerCoverage();
+    } catch (e) {
+      set({ warnings: ['示例素材库加载失败 · ' + errMsg(e)], lastError: errMsg(e) });
+    } finally {
+      set({ uploading: false });
+    }
+  },
+
+  runDemo: async () => {
+    set({ loadingDemo: true, lastError: null });
+    try {
+      const bundle = await runDemoApi();
+      set({
+        sourceVideo: bundle.sourceVideo,
+        product: bundle.product,
+        materials: bundle.materials,
+        diagnosis: bundle.diagnosis,
+        timeline: bundle.timeline,
+        selectedVersionId: bundle.version?.id ?? get().selectedVersionId,
+        appliedSlots: {},
+        mode: 'live',
+        warnings: bundle.warnings ?? [],
+      });
+      void get().refreshAssetManagerCoverage();
+    } catch (e) {
+      set({ warnings: ['一键演示接口不可用 · ' + errMsg(e)], lastError: errMsg(e) });
+    } finally {
+      set({ loadingDemo: false });
+    }
+  },
+
   reset: () => set({ ...initialState }),
 }));
+
+/** Build the shared evaluation/generation request from current store state. */
+function buildInsightRequest(state: ProjectState): InsightRequest {
+  return {
+    sourceVideo: state.sourceVideo,
+    materials: state.materials,
+    product: state.product,
+    timeline: state.timeline ?? undefined,
+    versionId: state.selectedVersionId,
+  };
+}

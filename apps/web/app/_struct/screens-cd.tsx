@@ -1,12 +1,21 @@
 'use client';
 
 // screens-cd.tsx — Screens 3–4 (Diagnose + Compile, the heavy hitters)
-// (Ported from screens-cd.jsx; React/window globals replaced with imports.)
+// (Ported from the redesigned screens-cd.jsx; React/window globals replaced
+//  with imports, and real-backend Zustand store wiring preserved.)
 
 import { useEffect, useRef, useState, type CSSProperties, type ReactElement } from 'react';
-import { NL_PROMPTS, ROLES, type StateKey } from './data';
+import {
+  NL_PROMPTS,
+  ROLES,
+  type Diagnosis,
+  type SourceSegment,
+  type StateKey,
+  type Transition,
+} from './data';
 import { useProjectStore } from './store/useProjectStore';
 import { AssetManagerEvidencePanel } from './AssetManagerEvidence';
+import { InsightsPanel } from './InsightsPanel';
 import {
   FramePlaceholder,
   Icon,
@@ -26,6 +35,7 @@ import {
   TimeRuler,
   Toast,
 } from './components';
+import { TransitionGlyph, TransitionSeams } from './viz';
 
 /* ============================================================
    屏 3 · 素材缺口诊断  ★ 重点屏 (the moat)
@@ -33,6 +43,456 @@ import {
 
 const STATE_ORDER: StateKey[] = ['filled', 'weakly', 'missing', 'critical'];
 const STATE_LABELS: Record<string, string> = { filled: '已满足', weakly: '弱满足', missing: '缺失', critical: '关键缺失' };
+
+/* ── Gap-fill studio: 3 ways to 补素材 — 补拍 / HyperFrames / AIGC ── */
+interface FillMethod {
+  id: 'reshoot' | 'hyperframes' | 'aigc';
+  label: string;
+  icon: string;
+  hint: string;
+}
+
+const FILL_METHODS: FillMethod[] = [
+  { id: 'reshoot', label: '补拍建议', icon: 'image', hint: '去拍真素材 · 质感最高' },
+  { id: 'hyperframes', label: 'HyperFrames 补全', icon: 'layers', hint: '复用现有素材 · 一键生成' },
+  { id: 'aigc', label: 'AIGC 补全', icon: 'sparkle', hint: 'AI 生成后上传' },
+];
+
+type GenState = 'idle' | 'generating' | 'done';
+
+const UploadedChip = ({ name, onRe }: { name: string; onRe: () => void }) => (
+  <div style={{
+    display: 'flex', alignItems: 'center', gap: 8,
+    padding: '8px 10px', borderRadius: 5,
+    background: 'var(--st-filled-bg)', border: '1px solid var(--st-filled-line)',
+    fontSize: 11.5, color: 'var(--st-filled)',
+  }}>
+    <Icon name="check" size={13} />
+    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>已上传 · {name}</span>
+    <button className="btn" style={{ padding: '2px 8px', fontSize: 10.5 }} onClick={onRe}>重新上传</button>
+  </div>
+);
+
+const GapFillStudio = ({
+  seg,
+  d,
+  previewActive,
+  onPreview,
+  onToast,
+  applied,
+  onApply,
+}: {
+  seg: SourceSegment;
+  d: Diagnosis;
+  previewActive: boolean;
+  onPreview: () => void;
+  onToast: (msg: string) => void;
+  applied: boolean;
+  onApply: () => void;
+}) => {
+  const fill = d.fill;
+  const recommended: FillMethod['id'] = d.strategy === 'aigc' ? 'aigc' : (d.strategy === 'hyperframes' ? 'hyperframes' : 'reshoot');
+  const [method, setMethod] = useState<FillMethod['id']>(recommended);
+  const [hfState, setHfState] = useState<GenState>('idle');
+  const [reshootFile, setReshootFile] = useState<string | null>(null);
+  const [aigcFile, setAigcFile] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const reshootInput = useRef<HTMLInputElement>(null);
+  const aigcInput = useRef<HTMLInputElement>(null);
+
+  const reshoot = fill?.reshoot;
+  const hyperframes = fill?.hyperframes;
+  const aigc = fill?.aigc;
+
+  const copyPrompt = () => {
+    try {
+      if (navigator.clipboard) void navigator.clipboard.writeText(aigc?.prompt ?? '');
+    } catch {
+      /* clipboard not available */
+    }
+    setCopied(true);
+    onToast('Prompt 已复制 · 粘贴到你的 AI 工具');
+    setTimeout(() => setCopied(false), 1600);
+  };
+
+  return (
+    <div style={{ border: '1px solid var(--accent-line)', borderLeft: '3px solid var(--accent)', borderRadius: 5, background: 'var(--bg-2)', overflow: 'hidden' }}>
+      {/* header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
+        <span className="eyebrow" style={{ color: 'var(--accent)' }}>补全工作台</span>
+        <span className="mono" style={{ fontSize: 10, color: 'var(--text-mute)' }}>选一种方式补素材</span>
+        <span style={{ flex: 1 }} />
+        <button className="btn" style={{ padding: '4px 10px', fontSize: 11 }} onClick={onPreview}>
+          <Icon name="play" size={11} /> {previewActive ? '关闭预览' : '预览补全'}
+        </button>
+        <button
+          className="btn primary"
+          style={{ padding: '4px 10px', fontSize: 11 }}
+          disabled={applied}
+          onClick={onApply}
+        >
+          <Icon name={applied ? 'check' : 'sparkle'} size={11} /> {applied ? '已应用' : '应用策略'}
+        </button>
+      </div>
+
+      {/* method selector — three options */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, padding: '10px 12px' }}>
+        {FILL_METHODS.map(fm => {
+          const active = method === fm.id;
+          const isRec = recommended === fm.id;
+          return (
+            <button key={fm.id} onClick={() => setMethod(fm.id)} className="btn"
+              style={{
+                flexDirection: 'column', alignItems: 'flex-start', gap: 3, padding: '8px 9px',
+                background: active ? 'var(--accent-dim)' : 'var(--surface)',
+                borderColor: active ? 'var(--accent-line)' : 'var(--border)',
+                color: active ? 'var(--accent)' : 'var(--text-2)',
+                position: 'relative', textAlign: 'left', height: '100%',
+              }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 600 }}>
+                <Icon name={fm.icon} size={13} /> {fm.label}
+              </span>
+              <span className="mono" style={{ fontSize: 9, color: active ? 'var(--accent-2)' : 'var(--text-mute)', lineHeight: 1.3, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                {isRec && (
+                  <span style={{
+                    fontSize: 8, fontFamily: 'var(--ff-mono)',
+                    color: 'var(--bg)', background: 'var(--accent)', padding: '0 4px', borderRadius: 2, fontWeight: 700,
+                  }}>推荐</span>
+                )}
+                {fm.hint}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* method content */}
+      <div style={{ padding: '0 12px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {/* 补拍建议 */}
+        {method === 'reshoot' && (
+          <>
+            <div style={{ fontSize: 11.5, color: 'var(--text-dim)', lineHeight: 1.5 }}>{reshoot?.guide}</div>
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 5, padding: '8px 10px' }}>
+              <div className="eyebrow" style={{ marginBottom: 6 }}>拍摄分镜清单</div>
+              {(reshoot?.shots ?? []).map((s, i) => (
+                <div key={i} style={{ display: 'flex', gap: 8, fontSize: 11.5, color: 'var(--text-2)', padding: '3px 0', lineHeight: 1.4 }}>
+                  <span className="mono" style={{ color: 'var(--text-mute)', flexShrink: 0 }}>{String(i + 1).padStart(2, '0')}</span>
+                  <span>{s}</span>
+                </div>
+              ))}
+            </div>
+            <input ref={reshootInput} type="file" accept="video/*,image/*" style={{ display: 'none' }}
+              onChange={e => {
+                const f = e.target.files?.[0];
+                if (f) { setReshootFile(f.name); onToast('补拍素材已上传 · 待编入时间线'); }
+                e.target.value = '';
+              }} />
+            {reshootFile
+              ? <UploadedChip name={reshootFile} onRe={() => setReshootFile(null)} />
+              : <button className="btn primary" style={{ justifyContent: 'center', padding: '8px 12px' }} onClick={() => reshootInput.current?.click()}>
+                  <Icon name="upload" size={12} /> 上传补拍素材
+                </button>}
+          </>
+        )}
+
+        {/* HyperFrames 补全 */}
+        {method === 'hyperframes' && (
+          <>
+            <div style={{ fontSize: 11.5, color: 'var(--text-dim)', lineHeight: 1.5 }}>{hyperframes?.desc}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="eyebrow">将复用</span>
+              <div style={{ display: 'flex', gap: 5 }}>
+                {(hyperframes?.uses ?? []).map(u => <span key={u} className="need-chip have">{u.toUpperCase()}</span>)}
+              </div>
+            </div>
+            {hfState === 'done' ? (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 5,
+                background: 'var(--st-filled-bg)', border: '1px solid var(--st-filled-line)',
+                fontSize: 11.5, color: 'var(--st-filled)',
+              }}>
+                <Icon name="check" size={13} />
+                <span style={{ flex: 1 }}>已生成 · 已编入时间线</span>
+                <button className="btn" style={{ padding: '2px 8px', fontSize: 10.5 }} onClick={() => setHfState('idle')}>重新生成</button>
+              </div>
+            ) : (
+              <button className="btn primary" style={{ justifyContent: 'center', padding: '8px 12px' }}
+                disabled={hfState === 'generating'}
+                onClick={() => { setHfState('generating'); setTimeout(() => { setHfState('done'); onToast('HyperFrames 已生成补全片段'); }, 1500); }}>
+                <Icon name={hfState === 'generating' ? 'layers' : 'sparkle'} size={12} />
+                {hfState === 'generating' ? ' 生成中…' : ' 立即生成'}
+              </button>
+            )}
+          </>
+        )}
+
+        {/* AIGC 补全 */}
+        {method === 'aigc' && (
+          <>
+            <div className="eyebrow">给 AI 的 Prompt</div>
+            <div style={{ position: 'relative' }}>
+              <textarea readOnly value={aigc?.prompt ?? ''} rows={3}
+                style={{
+                  width: '100%', resize: 'none', boxSizing: 'border-box',
+                  background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 5,
+                  color: 'var(--text-2)', fontSize: 11.5, lineHeight: 1.5, padding: '8px 10px',
+                  fontFamily: 'var(--ff-sans)', outline: 'none',
+                }} />
+              <button className="btn" style={{ position: 'absolute', top: 6, right: 6, padding: '2px 8px', fontSize: 10.5 }}
+                onClick={copyPrompt}>
+                <Icon name={copied ? 'check' : 'text'} size={11} /> {copied ? '已复制' : '复制'}
+              </button>
+            </div>
+            <div className="mono" style={{ fontSize: 10, color: 'var(--text-mute)', lineHeight: 1.4 }}>
+              粘贴到即梦 / 可灵 / Sora 等工具生成后，回到这里上传 ↓
+            </div>
+            <input ref={aigcInput} type="file" accept="video/*" style={{ display: 'none' }}
+              onChange={e => {
+                const f = e.target.files?.[0];
+                if (f) { setAigcFile(f.name); onToast('AI 生成视频已上传 · 待编入时间线'); }
+                e.target.value = '';
+              }} />
+            {aigcFile
+              ? <UploadedChip name={aigcFile} onRe={() => setAigcFile(null)} />
+              : <button className="btn primary" style={{ justifyContent: 'center', padding: '8px 12px' }} onClick={() => aigcInput.current?.click()}>
+                  <Icon name="upload" size={12} /> 上传 AI 生成的视频
+                </button>}
+          </>
+        )}
+      </div>
+
+      {/* impact footer */}
+      <div style={{ padding: '8px 12px', borderTop: '1px solid var(--border)', background: 'var(--surface)', fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.5 }}>
+        <span className="mono" style={{ color: 'var(--accent-2)', fontSize: 10.5 }}>IMPACT</span>　·　{d.impact.note}
+      </div>
+    </div>
+  );
+};
+
+/* ── Transition-fill studio: 硬切 / 过渡帧 / AIGC 补间 ── */
+interface TransFillMethod {
+  id: 'cut' | 'frame' | 'aigc';
+  glyph: string;
+  label: string;
+  hint: string;
+}
+
+const TRANS_FILL_METHODS: TransFillMethod[] = [
+  { id: 'cut', glyph: '硬切', label: '硬切', hint: '直接拼接 · 无需素材' },
+  { id: 'frame', glyph: '叠化', label: '过渡帧', hint: '前后帧 + HyperFrames 剪辑' },
+  { id: 'aigc', glyph: '推镜', label: 'AIGC 补间', hint: '相邻首尾帧 → AI 生成' },
+];
+
+const HF_EFFECT: Record<string, string> = { 叠化: '交叉叠化', 推镜: 'Ken Burns 推近', 卡点: '节奏闪切', 硬切: '短暂叠化柔化' };
+
+const MiniFrame = ({ seg, ok, label }: { seg: SourceSegment | undefined; ok: boolean; label: string }) => (
+  <div style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>
+    <div style={{
+      aspectRatio: '1/1', borderRadius: 5, overflow: 'hidden', position: 'relative',
+      border: ok ? '1px solid var(--border)' : '1px dashed var(--st-missing-line)',
+      background: ok ? 'var(--surface-2)' : 'var(--bg-2)', display: 'grid', placeItems: 'center',
+    }}>
+      {ok && seg
+        ? <div style={{ position: 'absolute', inset: 0, opacity: 0.75 }}><FramePlaceholder role={seg.role} label="" /></div>
+        : <span className="mono" style={{ fontSize: 9, color: 'var(--st-missing)' }}>缺失</span>}
+    </div>
+    <div className="mono" style={{ fontSize: 9, color: ok ? 'var(--text-mute)' : 'var(--st-missing)', marginTop: 3 }}>{label}</div>
+  </div>
+);
+
+const TransitionFillStudio = ({
+  tr,
+  segments,
+  diagnosis,
+  onToast,
+}: {
+  tr: Transition;
+  segments: SourceSegment[];
+  diagnosis: Record<string, Diagnosis>;
+  onToast: (msg: string) => void;
+}) => {
+  const fromSeg = segments.find(s => s.id === tr.from);
+  const toSeg = segments.find(s => s.id === tr.to);
+  const fromD = diagnosis[tr.from];
+  const toD = diagnosis[tr.to];
+  const frameAvail = (st: StateKey | undefined) => st === 'filled' || st === 'weakly';
+  const fromOK = frameAvail(fromD?.state);
+  const toOK = frameAvail(toD?.state);
+  const aigcReady = fromOK && toOK;
+  const recommended: TransFillMethod['id'] = !tr.upgradable ? 'cut' : (aigcReady ? 'aigc' : 'frame');
+  // HyperFrames effect the Agent will compose, inferred from the source transition intent.
+  const hfEffect = HF_EFFECT[tr.type] ?? '交叉叠化';
+  const [method, setMethod] = useState<TransFillMethod['id']>(recommended);
+  const [gen, setGen] = useState<Partial<Record<TransFillMethod['id'], GenState>>>({});
+  const st = gen[method] ?? 'idle';
+  const runGen = (msg: string) => {
+    setGen(prev => ({ ...prev, [method]: 'generating' }));
+    setTimeout(() => { setGen(prev => ({ ...prev, [method]: 'done' })); onToast(msg); }, 1400);
+  };
+
+  return (
+    <div style={{ border: '1px solid var(--accent-line)', borderLeft: '3px solid var(--accent)', borderRadius: 5, background: 'var(--bg-2)', overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
+        <span className="eyebrow" style={{ color: 'var(--accent)' }}>转场补全工作台</span>
+        <span className="mono" style={{ fontSize: 10, color: 'var(--text-mute)' }}>选一种方式接上这条缝</span>
+      </div>
+
+      {/* three transition methods */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, padding: '10px 12px' }}>
+        {TRANS_FILL_METHODS.map(fm => {
+          const active = method === fm.id;
+          const isRec = recommended === fm.id;
+          return (
+            <button key={fm.id} onClick={() => setMethod(fm.id)} className="btn"
+              style={{
+                flexDirection: 'column', alignItems: 'flex-start', gap: 3, padding: '8px 9px', textAlign: 'left', height: '100%',
+                background: active ? 'var(--accent-dim)' : 'var(--surface)',
+                borderColor: active ? 'var(--accent-line)' : 'var(--border)',
+                color: active ? 'var(--accent)' : 'var(--text-2)',
+              }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 600 }}>
+                <span style={{ display: 'grid', placeItems: 'center', width: 14, height: 14 }}>
+                  <TransitionGlyph type={fm.glyph} color="currentColor" size={13} />
+                </span>
+                {fm.label}
+              </span>
+              <span className="mono" style={{ fontSize: 9, color: active ? 'var(--accent-2)' : 'var(--text-mute)', lineHeight: 1.3, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                {isRec && (
+                  <span style={{ fontSize: 8, fontFamily: 'var(--ff-mono)', color: 'var(--bg)', background: 'var(--accent)', padding: '0 4px', borderRadius: 2, fontWeight: 700 }}>推荐</span>
+                )}
+                {fm.hint}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* method content */}
+      <div style={{ padding: '0 12px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {method === 'cut' && (
+          <>
+            <div style={{ fontSize: 11.5, color: 'var(--text-dim)', lineHeight: 1.5 }}>
+              两段直接拼接，无过渡素材、节奏顿挫。{!tr.upgradable ? '原结构此处本就是硬切，这是忠实复现。' : '最低配兜底，可改用右侧更柔的方式。'}
+            </div>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 5,
+              background: 'var(--st-weakly-bg)', border: '1px solid var(--st-weakly-line)',
+              fontSize: 11.5, color: 'var(--st-weakly)',
+            }}>
+              <Icon name="check" size={13} /> 当前已应用：硬切（弱满足下限）
+            </div>
+          </>
+        )}
+
+        {method === 'frame' && (
+          <>
+            <div style={{ fontSize: 11.5, color: 'var(--text-dim)', lineHeight: 1.5 }}>
+              点「生成」后，Agent 读取前后帧做视觉理解，再结合原结构在此处的转场意图，用 HyperFrames 剪辑效果合成过渡帧 —— 不生成新像素。
+            </div>
+            {/* inputs: boundary frames the agent reads */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <MiniFrame seg={fromSeg} ok={fromOK} label={`${tr.from.toUpperCase()} 末帧`} />
+              <Icon name="arrow" size={12} />
+              <div style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>
+                <div style={{
+                  aspectRatio: '1/1', borderRadius: 5,
+                  border: '1px dashed var(--accent-line)', background: 'var(--accent-dim)',
+                  display: 'grid', placeItems: 'center',
+                }}>
+                  <Icon name="layers" size={14} />
+                </div>
+                <div className="mono" style={{ fontSize: 9, color: 'var(--accent-2)', marginTop: 3 }}>HyperFrames</div>
+              </div>
+              <Icon name="arrow" size={12} />
+              <MiniFrame seg={toSeg} ok={toOK} label={`${tr.to.toUpperCase()} 首帧`} />
+            </div>
+            {/* the intent the agent reads from the source structure */}
+            <div style={{
+              display: 'flex', alignItems: 'flex-start', gap: 8,
+              padding: '8px 10px', borderRadius: 5,
+              background: 'var(--surface)', border: '1px solid var(--border)',
+              fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.5,
+            }}>
+              <span className="mono" style={{ fontSize: 9.5, color: 'var(--text-mute)', flexShrink: 0, paddingTop: 1 }}>原意</span>
+              <span>原结构此处为 <b style={{ color: 'var(--text-2)' }}>{tr.type}</b> · {tr.note}</span>
+            </div>
+            {st === 'done' ? (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 5,
+                background: 'var(--st-filled-bg)', border: '1px solid var(--st-filled-line)',
+                fontSize: 11.5, color: 'var(--st-filled)',
+              }}>
+                <Icon name="check" size={13} />
+                <span style={{ flex: 1 }}>Agent 已合成 · HyperFrames「{hfEffect}」</span>
+                <button className="btn" style={{ padding: '2px 8px', fontSize: 10.5 }} onClick={() => setGen(p => ({ ...p, frame: 'idle' }))}>重做</button>
+              </div>
+            ) : (
+              <button className="btn primary" style={{ justifyContent: 'center', padding: '8px 12px' }}
+                disabled={st === 'generating'}
+                onClick={() => runGen(`Agent 已用 HyperFrames「${hfEffect}」合成过渡帧`)}>
+                <Icon name={st === 'generating' ? 'layers' : 'sparkle'} size={12} />
+                {st === 'generating' ? ' Agent 分析前后帧…' : ' 生成过渡帧'}
+              </button>
+            )}
+          </>
+        )}
+
+        {method === 'aigc' && (
+          <>
+            <div style={{ fontSize: 11.5, color: 'var(--text-dim)', lineHeight: 1.5 }}>
+              取相邻两段的边界帧，AIGC 生成中间补间帧 —— 比硬切自然、比图形过渡更贴素材。
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <MiniFrame seg={fromSeg} ok={fromOK} label={`${tr.from.toUpperCase()} 末帧`} />
+              <Icon name="arrow" size={12} />
+              <div style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>
+                <div style={{
+                  aspectRatio: '1/1', borderRadius: 5,
+                  border: '1px dashed var(--accent-line)', background: 'var(--accent-dim)',
+                  display: 'grid', placeItems: 'center',
+                }}>
+                  <Icon name="sparkle" size={14} />
+                </div>
+                <div className="mono" style={{ fontSize: 9, color: 'var(--accent-2)', marginTop: 3 }}>AI 补间</div>
+              </div>
+              <Icon name="arrow" size={12} />
+              <MiniFrame seg={toSeg} ok={toOK} label={`${tr.to.toUpperCase()} 首帧`} />
+            </div>
+            {!aigcReady && (
+              <div style={{
+                fontSize: 10.5, color: 'var(--st-missing)', fontFamily: 'var(--ff-mono)',
+                padding: '6px 8px', background: 'var(--st-missing-bg)', border: '1px solid var(--st-missing-line)', borderRadius: 4,
+              }}>
+                需先补 {!fromOK ? tr.from.toUpperCase() : tr.to.toUpperCase()} 的边界帧，才能做首尾帧补间
+              </div>
+            )}
+            {st === 'done'
+              ? (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 5,
+                  background: 'var(--st-filled-bg)', border: '1px solid var(--st-filled-line)',
+                  fontSize: 11.5, color: 'var(--st-filled)',
+                }}>
+                  <Icon name="check" size={13} />
+                  <span style={{ flex: 1 }}>AIGC 补间帧已生成 · 已编入接缝</span>
+                  <button className="btn" style={{ padding: '2px 8px', fontSize: 10.5 }} onClick={() => setGen(p => ({ ...p, aigc: 'idle' }))}>重做</button>
+                </div>
+              )
+              : <button className="btn primary" style={{ justifyContent: 'center', padding: '8px 12px' }}
+                  disabled={st === 'generating' || !aigcReady}
+                  onClick={() => runGen('AIGC 补间帧已生成')}>
+                  <Icon name="sparkle" size={12} /> {st === 'generating' ? ' 生成中…' : ' 生成补间帧'}
+                </button>}
+          </>
+        )}
+      </div>
+
+      <div style={{ padding: '8px 12px', borderTop: '1px solid var(--border)', background: 'var(--surface)', fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.5 }}>
+        <span className="mono" style={{ color: 'var(--accent-2)', fontSize: 10.5 }}>IMPACT</span>　·　{tr.impact.note}
+      </div>
+    </div>
+  );
+};
 
 export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack: () => void }) => {
   const v = useProjectStore((s) => s.sourceVideo);
@@ -44,6 +504,7 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
   const assetManagerLastError = useProjectStore((s) => s.assetManagerLastError);
   const applyStrategy = useProjectStore((s) => s.applyStrategy);
   const T = v.duration;
+  // `selected` may hold a SEGMENT id (s1..s7) OR a TRANSITION id (t1..t6).
   const [selected, setSelected] = useState('s2');
   const [previewSlot, setPreviewSlot] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState('');
@@ -59,6 +520,9 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
     acc[st] = Object.values(diagnosis).filter(d => d.state === st).length;
     return acc;
   }, {});
+
+  const transFilled = v.transitions.filter(t => t.state === 'filled').length;
+  const transWeakly = v.transitions.filter(t => t.state === 'weakly').length;
 
   return (
     <div className="screen">
@@ -166,7 +630,6 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
               const d = diagnosis[seg.id];
               const dur = seg.end - seg.start;
               const w = (dur / T) * 100;
-              const stateClass = d.state;
               const stateColor = {
                 filled: 'var(--st-filled)',
                 weakly: 'var(--st-weakly)',
@@ -194,12 +657,22 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
             })}
           </div>
           <TimeRuler duration={T} intervals={7} />
-          <div className="hrule">图例 · 四态</div>
-          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-            <StateBadge state="filled"   /> <span className="mono dim" style={{ fontSize: 11 }}>{summary.filled} 槽位</span>
-            <StateBadge state="weakly"   /> <span className="mono dim" style={{ fontSize: 11 }}>{summary.weakly} 槽位</span>
-            <StateBadge state="missing"  /> <span className="mono dim" style={{ fontSize: 11 }}>{summary.missing} 槽位</span>
-            <StateBadge state="critical" /> <span className="mono dim" style={{ fontSize: 11 }}>{summary.critical} 槽位</span>
+
+          {/* transition slots — special slots, floor = 硬切 = 弱满足 */}
+          <div style={{ marginTop: 12, marginBottom: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span className="eyebrow">◇ 转场槽 · Slot 之间(硬切=弱满足下限)</span>
+            <span className="mono" style={{ fontSize: 9.5, color: 'var(--text-mute)' }}>
+              {transFilled} 已满足 · {transWeakly} 弱满足 · 0 缺失
+            </span>
+          </div>
+          <TransitionSeams segments={v.segments} transitions={v.transitions} total={T} selected={selected} onSelect={setSelected} />
+
+          <div className="hrule">图例 · 四态(转场槽永不触及缺失/关键缺失)</div>
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+            <StateBadge state="filled"   /> <span className="mono dim" style={{ fontSize: 11 }}>{summary.filled} 内容 · {transFilled} 转场</span>
+            <StateBadge state="weakly"   /> <span className="mono dim" style={{ fontSize: 11 }}>{summary.weakly} 内容 · {transWeakly} 转场</span>
+            <StateBadge state="missing"  /> <span className="mono dim" style={{ fontSize: 11 }}>{summary.missing} 内容 · <span style={{ color: 'var(--text-faint)' }}>转场 N/A</span></span>
+            <StateBadge state="critical" /> <span className="mono dim" style={{ fontSize: 11 }}>{summary.critical} 内容 · <span style={{ color: 'var(--text-faint)' }}>转场 N/A</span></span>
           </div>
         </div>
       </div>
@@ -240,13 +713,143 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
                       </tr>
                     );
                   })}
+                  {/* transition slots — a special slot group; floor = 硬切 = 弱满足 */}
+                  <tr>
+                    <td colSpan={4} style={{ background: 'var(--bg-2)', padding: '6px 12px' }}>
+                      <span className="eyebrow">◇ 转场槽 · 硬切=弱满足下限，永不缺失</span>
+                    </td>
+                  </tr>
+                  {v.transitions.map(tr => {
+                    const degraded = tr.applied !== tr.type;
+                    return (
+                      <tr key={tr.id} onClick={() => setSelected(tr.id)} style={{ cursor: 'pointer', background: selected === tr.id ? 'var(--accent-dim)' : 'transparent' }}>
+                        <td>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ display: 'grid', placeItems: 'center', width: 14, height: 14 }}>
+                              <TransitionGlyph type={tr.applied} color={tr.state === 'filled' ? 'var(--st-filled)' : 'var(--st-weakly)'} size={13} />
+                            </span>
+                            <span className="mono" style={{ fontSize: 11 }}>{tr.id}</span>
+                            <span style={{ color: 'var(--text-dim)', fontSize: 11 }}>{tr.from}→{tr.to}</span>
+                          </span>
+                        </td>
+                        <td className="mono" style={{ color: 'var(--text-dim)', fontSize: 11 }}>
+                          {tr.type}{degraded ? <span style={{ color: 'var(--st-weakly)' }}> → {tr.applied}</span> : ''}
+                        </td>
+                        <td className="mono" style={{ color: 'var(--text-dim)', fontSize: 11 }}>{tr.have.join(' · ')}</td>
+                        <td><StateBadge state={tr.state} /></td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           </div>
 
-        {/* RIGHT: 槽位详情 */}
+        {/* RIGHT: 槽位详情 / 转场槽详情 */}
         <div className="col">
+
+          {/* ── TRANSITION DETAIL · when a transition slot is selected ── */}
+          {(() => {
+            const tr = v.transitions.find(t => t.id === selected);
+            if (!tr) return null;
+            const color = tr.state === 'filled' ? 'var(--st-filled)' : 'var(--st-weakly)';
+            const degraded = tr.applied !== tr.type;
+            return (
+              <div className="panel slot-detail-panel">
+                <div className="panel-head">
+                  <h4>
+                    <span className="mono" style={{ color: 'var(--text-mute)', fontSize: 11, marginRight: 8 }}>
+                      {tr.id.toUpperCase()}
+                    </span>
+                    转场槽详情 · {tr.from.toUpperCase()} → {tr.to.toUpperCase()}
+                  </h4>
+                  <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-mute)' }}>
+                    特殊 Slot · 硬切兜底
+                  </span>
+                </div>
+                <div className="panel-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {/* head row */}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 12, alignItems: 'center' }}>
+                    <div style={{
+                      width: 46, height: 46, background: 'var(--bg-2)',
+                      border: `1px solid ${color}`, borderRadius: 6,
+                      display: 'grid', placeItems: 'center',
+                    }}>
+                      <TransitionGlyph type={tr.applied} color={color} size={22} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>
+                        {degraded
+                          ? <span>原 {tr.type} <span style={{ color: 'var(--text-mute)' }}>→</span> 现 <span style={{ color }}>{tr.applied}</span></span>
+                          : <span>{tr.applied}</span>}
+                      </div>
+                      <div style={{ fontSize: 11.5, color: 'var(--text-mute)', marginTop: 2 }}>
+                        {tr.note}
+                      </div>
+                    </div>
+                    <StateBadge state={tr.state} />
+                  </div>
+
+                  {/* the floor rule, stated explicitly */}
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '8px 10px', borderRadius: 5,
+                    background: 'var(--bg-2)', border: '1px solid var(--border)',
+                    fontSize: 11, color: 'var(--text-dim)',
+                  }}>
+                    <span className="mono" style={{ fontSize: 9.5, color: 'var(--text-mute)', letterSpacing: '0.04em' }}>FLOOR</span>
+                    转场槽永不缺失 —— 硬切是免费兜底，最差也是<b style={{ color: 'var(--st-weakly)' }}> 弱满足</b>
+                  </div>
+
+                  {/* need / have */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '60px 1fr', gap: '6px 12px', alignItems: 'center' }}>
+                    <span className="eyebrow">需要</span>
+                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                      {tr.need.map((n, i) => {
+                        const hasIt = tr.have.some(h => h.includes(n) || n.includes(h));
+                        return <span key={i} className={`need-chip ${hasIt ? 'have' : 'miss'}`}>{n}</span>;
+                      })}
+                    </div>
+                    <span className="eyebrow">已有</span>
+                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                      {tr.have.map((h, i) => <span key={i} className="need-chip have">{h}</span>)}
+                    </div>
+                  </div>
+
+                  {/* gap reason (only when degraded / weakly) */}
+                  {tr.state === 'weakly' && tr.gap_reason !== '—' && (
+                    <div style={{
+                      padding: '10px 12px', background: 'var(--surface)',
+                      border: '1px solid var(--border)', borderRadius: 5,
+                      fontSize: 11.5, lineHeight: 1.5, color: 'var(--text-dim)',
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                        <Icon name="diagnose" size={12} />
+                        <span className="eyebrow" style={{ color: 'var(--st-weakly)' }}>降级原因</span>
+                      </div>
+                      {tr.gap_reason}
+                    </div>
+                  )}
+
+                  {/* fix ladder OR satisfied note */}
+                  {/* transition fill — 硬切 / 过渡帧 / AIGC 首尾帧补间 */}
+                  {tr.state === 'filled' ? (
+                    <div style={{
+                      padding: '10px 12px', background: 'var(--st-filled-bg)',
+                      border: '1px solid var(--st-filled-line)', borderRadius: 5,
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      fontSize: 11.5, color: 'var(--st-filled)',
+                    }}>
+                      <Icon name="check" size={14} />
+                      富转场已成立 · {tr.impact.note}
+                    </div>
+                  ) : (
+                    <TransitionFillStudio key={tr.id} tr={tr} segments={v.segments} diagnosis={diagnosis} onToast={showToast} />
+                  )}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* ── SLOT DETAIL · master-detail bound to `selected` ── */}
           {(() => {
@@ -254,7 +857,6 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
             if (!seg) return null;
             const d = diagnosis[selected];
             const role = ROLES[seg.role];
-            const stratKind = d.strategy;
             return (
               <div className="panel slot-detail-panel">
                 <div className="panel-head">
@@ -334,50 +936,18 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
                     </div>
                   )}
 
-                  {/* recommended strategy */}
-                  {stratKind ? (
-                    <div style={{
-                      padding: '12px 14px',
-                      background: 'var(--bg-2)',
-                      border: '1px solid var(--accent-line)',
-                      borderLeft: '3px solid var(--accent)',
-                      borderRadius: 5,
-                    }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-                        <span className="eyebrow" style={{ color: 'var(--accent)' }}>推荐补全策略</span>
-                        <StrategyTag kind={stratKind} />
-                        <span style={{ flex: 1 }} />
-                        <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-mute)' }}>
-                          AI 置信度 <b style={{ color: 'var(--st-filled)' }}>85%</b>
-                        </span>
-                      </div>
-                      <div style={{ fontSize: 12, color: 'var(--text)', lineHeight: 1.5 }}>
-                        <b style={{ color: 'var(--text-2)' }}>{d.fix?.kind}</b>
-                        <span style={{ color: 'var(--text-dim)' }}>　·　{d.fix?.desc}</span>
-                      </div>
-                      <div style={{
-                        marginTop: 10,
-                        padding: '8px 10px',
-                        background: 'var(--surface)',
-                        borderRadius: 4,
-                        fontSize: 11, color: 'var(--text-dim)',
-                        lineHeight: 1.5,
-                      }}>
-                        <span className="mono" style={{ color: 'var(--accent-2)', fontSize: 10.5 }}>IMPACT</span>
-                        　·　{d.impact.note}
-                      </div>
-                      <div style={{ display: 'flex', gap: 8, marginTop: 10, justifyContent: 'flex-end' }}>
-                        <button className="btn" style={{ padding: '5px 12px', fontSize: 11.5 }}
-                          onClick={() => { setPreviewSlot(previewSlot === selected ? null : selected); }}>
-                          <Icon name="play" size={11} /> {previewSlot === selected ? '关闭预览' : '预览补全'}
-                        </button>
-                        <button className="btn primary" style={{ padding: '5px 12px', fontSize: 11.5 }}
-                          disabled={appliedSlots[selected]}
-                          onClick={() => { void applyStrategy(selected); showToast(`${seg.label} 补全策略已应用`); }}>
-                          <Icon name={appliedSlots[selected] ? 'check' : 'sparkle'} size={11} /> {appliedSlots[selected] ? '已应用' : '应用策略'}
-                        </button>
-                      </div>
-                    </div>
+                  {/* gap-fill studio (redesigned) — 3 methods: 补拍 / HyperFrames / AIGC */}
+                  {d.state !== 'filled' ? (
+                    <GapFillStudio
+                      key={seg.id}
+                      seg={seg}
+                      d={d}
+                      previewActive={previewSlot === selected}
+                      onPreview={() => setPreviewSlot(previewSlot === selected ? null : selected)}
+                      onToast={showToast}
+                      applied={!!appliedSlots[selected]}
+                      onApply={() => { void applyStrategy(selected); showToast(`${seg.label} 补全策略已应用`); }}
+                    />
                   ) : (
                     <div style={{
                       padding: '10px 12px',
@@ -523,10 +1093,8 @@ export const ScreenCompile = ({ onBack }: { onBack: () => void }) => {
     return () => { if (autoPlayRef.current) clearInterval(autoPlayRef.current); };
   }, []);
 
-  const fixSegs = v.segments.filter(s => diagnosis[s.id]?.fix);
   const currentVersion = versions.find(c => c.id === selectedVersionId)!;
   const playingSegData = playingSeg ? v.segments.find(s => s.id === playingSeg) : null;
-  const playingRole = playingSegData ? ROLES[playingSegData.role] : null;
 
   return (
     <div className="screen">
@@ -713,6 +1281,13 @@ export const ScreenCompile = ({ onBack }: { onBack: () => void }) => {
                   );
                 })}
               </div>
+              <div className="eyebrow" style={{ marginBottom: 2, marginTop: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span>◇ 转场层 · 特殊 Slot</span>
+                <span className="mono" style={{ color: 'var(--text-mute)', fontSize: 9.5, textTransform: 'none', letterSpacing: 0 }}>
+                  富转场=已满足(绿) · 硬切=弱满足下限(琥珀) · 永不缺失
+                </span>
+              </div>
+              <TransitionSeams segments={v.segments} transitions={v.transitions} total={T} />
               <div className="eyebrow" style={{ marginBottom: 6, marginTop: 4 }}>▼ 编译后镜头层 + 补全标记</div>
               <div className="tline" style={{ height: 76 }}>
                 {v.segments.map(seg => {
@@ -885,6 +1460,7 @@ export const ScreenCompile = ({ onBack }: { onBack: () => void }) => {
         selectedSlotId={playingSeg}
         variant="compact"
       />
+      <InsightsPanel />
       <ScreenFooter
         status="v3 已编译 · 离线点击潜力 4.7 / 完播潜力 19"
         statusTone="ok"
