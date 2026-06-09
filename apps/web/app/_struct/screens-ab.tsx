@@ -58,7 +58,7 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
         <div className="screen-head-r">
           <button className="btn primary" style={{ padding: '5px 12px', fontSize: 11.5 }}
             disabled={loadingDemo}
-            onClick={() => { void runDemo().then(() => showToast('一键演示已载入 · 真实后端全流程数据')); }}>
+            onClick={() => { void runDemo().then(() => showToast('一键演示已载入 · 真实后端全流程数据')).catch(() => {}); }}>
             <Icon name="sparkle" size={12} /> {loadingDemo ? '运行中…' : '一键演示'}
           </button>
           <span className="pill"><span className="dot" style={{ background: 'var(--accent)' }} /> {analyzing ? '解析中…' : '已解析'}</span>
@@ -223,7 +223,7 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
           onFiles={(files) => {
             setUploadOpen(false);
             showToast(`样例视频已上传: ${files[0].name} · 解析中…`);
-            void analyzeSample({ file: files[0] });
+            void analyzeSample({ file: files[0] }).catch(() => {});
           }}
           label="拖拽视频到此处，或点击选择"
         />
@@ -280,7 +280,7 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
     const names = files.map(f => f.name).join(', ');
     setUploadedFiles(prev => [...prev, ...files.map(f => f.name)]);
     setUploadOpen(false);
-    void addMaterials(files);
+    void addMaterials(files).catch(() => {});
     showToast(`已上传 ${files.length} 个文件: ${names}`);
   };
 
@@ -298,13 +298,12 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
   const handleBatchConfirm = () => {
     const assignments: Record<string, string | null> = {};
     for (const [id, slot] of Object.entries(assignDraft)) assignments[id] = slot || null;
-    void applyAssignments(assignments);
+    void applyAssignments(assignments).then(() => showToast('槽位分配已更新')).catch(() => {});
     setBatchOpen(false);
-    showToast('槽位分配已更新');
   };
 
   const handleNext = () => {
-    void runDiagnosis();
+    void runDiagnosis().catch(() => {});
     onNext();
   };
 
@@ -334,7 +333,7 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
         <div className="screen-head-r">
           <button className="btn" style={{ padding: '5px 12px', fontSize: 11.5 }}
             disabled={uploading}
-            onClick={() => { void loadLibrary('kangshifu_demo').then(() => showToast('已加载示例素材库 · 康师傅 demo')); }}>
+            onClick={() => { void loadLibrary('kangshifu_demo').then(() => showToast('已加载示例素材库 · 康师傅 demo')).catch(() => {}); }}>
             <Icon name="upload" size={11} /> {uploading ? '加载中…' : '加载示例素材库'}
           </button>
           <span className="mono">{materials.length} 个素材</span>

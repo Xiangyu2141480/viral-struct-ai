@@ -946,7 +946,7 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
                       onPreview={() => setPreviewSlot(previewSlot === selected ? null : selected)}
                       onToast={showToast}
                       applied={!!appliedSlots[selected]}
-                      onApply={() => { void applyStrategy(selected); showToast(`${seg.label} 补全策略已应用`); }}
+                      onApply={() => { void applyStrategy(selected).then(() => showToast(`${seg.label} 补全策略已应用`)).catch(() => {}); }}
                     />
                   ) : (
                     <div style={{
@@ -1110,7 +1110,7 @@ export const ScreenCompile = ({ onBack }: { onBack: () => void }) => {
         </div>
         <div className="screen-head-r">
           <button className="btn primary" disabled={compiling} onClick={() => {
-            void compile().then(() => showToast('渲染完成 · 成片已生成'));
+            void compile().then(() => showToast('渲染完成 · 成片已生成')).catch(() => {});
           }}>
             <Icon name="sparkle" size={12} /> {compiling ? '渲染中…' : '渲染成片'}
           </button>
@@ -1402,7 +1402,7 @@ export const ScreenCompile = ({ onBack }: { onBack: () => void }) => {
                     void applyNlEdit(instruction).then((summary) => {
                       setNlText('');
                       showToast(summary || 'NL 改片已应用 · 新草稿已生成');
-                    });
+                    }).catch(() => {});
                   }}
                   disabled={!nlText.trim() || nlApplying}
                   style={{
@@ -1465,7 +1465,7 @@ export const ScreenCompile = ({ onBack }: { onBack: () => void }) => {
         status="v3 已编译 · 离线点击潜力 4.7 / 完播潜力 19"
         statusTone="ok"
         secondary={[{ label: '返回诊断', onClick: onBack }, { label: '重新生成', onClick: () => {
-          void compile().then(() => showToast('已重新编译 · 新版本已生成'));
+          void compile().then(() => showToast('已重新编译 · 新版本已生成')).catch(() => {});
         } }]}
         primary={{ label: '导出视频 MP4', onClick: () => setExportOpen(true) }}
       />
@@ -1490,7 +1490,7 @@ export const ScreenCompile = ({ onBack }: { onBack: () => void }) => {
               onClick={() => {
                 setExportOpen(false);
                 showToast(`正在导出 ${opt.format}…`);
-                void exportVideo(opt.format).then((r) => showToast(r.downloadUrl ? '导出完成 · 可下载' : '导出完成'));
+                void exportVideo(opt.format).then((r) => showToast(r.downloadUrl ? '导出完成 · 可下载' : '导出完成')).catch(() => {});
               }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{opt.format}</div>
                 <div style={{ fontSize: 11, color: 'var(--text-mute)', marginTop: 3 }}>{opt.desc}</div>

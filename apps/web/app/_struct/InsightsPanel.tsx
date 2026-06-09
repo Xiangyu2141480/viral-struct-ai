@@ -33,11 +33,11 @@ export function InsightsPanel() {
   const materialJobs = useProjectStore((s) => s.materialJobs);
 
   const buttons: { key: string; label: string; icon: string; onClick: () => void }[] = [
-    { key: 'quality', label: '质量评估', icon: 'check', onClick: () => void evaluateQuality() },
-    { key: 'estimate', label: '预测评分', icon: 'sparkle', onClick: () => void estimatePerformance() },
-    { key: 'safety', label: '安全检查', icon: 'alert', onClick: () => void checkSafety() },
-    { key: 'storyboard', label: '生成分镜', icon: 'play', onClick: () => void planStoryboard() },
-    { key: 'materialJobs', label: 'AIGC 生成规划', icon: 'sparkle', onClick: () => void planMaterialJobs() },
+    { key: 'quality', label: '质量评估', icon: 'check', onClick: () => void evaluateQuality().catch(() => {}) },
+    { key: 'estimate', label: '预测评分', icon: 'sparkle', onClick: () => void estimatePerformance().catch(() => {}) },
+    { key: 'safety', label: '安全检查', icon: 'alert', onClick: () => void checkSafety().catch(() => {}) },
+    { key: 'storyboard', label: '生成分镜', icon: 'play', onClick: () => void planStoryboard().catch(() => {}) },
+    { key: 'materialJobs', label: 'AIGC 生成规划', icon: 'sparkle', onClick: () => void planMaterialJobs().catch(() => {}) },
   ];
 
   return (

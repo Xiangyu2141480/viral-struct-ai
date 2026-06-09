@@ -2,11 +2,13 @@
 
 // useProjectStore.ts — single source of truth across Screens 01–04.
 //
-// Each async action calls the dedicated `/api/struct/*` endpoint and, if that
-// throws (backend not up yet / route unimplemented), falls back to a local
-// derivation from the mock fixtures in ../data.ts. The active path is tracked
-// in `mode` ('live' once any call succeeds, otherwise 'mock') and surfaced in
-// `warnings`, so the prototype renders end-to-end with or without a backend.
+// FAIL-FAST: each async action calls the dedicated `/api/struct/*` endpoint and,
+// if that throws (backend down / route unimplemented / non-2xx), records a rich
+// `lastError` (which call + endpoint + HTTP status + body) and RE-THROWS. It does
+// NOT silently swap in mock fixtures or report success — so a real failure is
+// always visible (red ERROR badge + error banner) and never masked as "live"
+// data. `mode` reflects the source of the data currently shown ('mock' initially,
+// 'live' after a successful call); a failed call leaves the prior data untouched.
 
 import { create } from 'zustand';
 import type {
@@ -115,8 +117,6 @@ interface ProjectState {
   reset: () => void;
 }
 
-const MOCK_NOTE = '后端未连接 · 使用本地示例数据';
-
 /** Normalize a thrown value into a human-readable message. */
 function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -205,11 +205,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       set({ sourceVideo, mode: 'live', warnings: warnings ?? [] });
       void get().refreshAssetManagerCoverage();
     } catch (e) {
-      // Fallback: keep the mock sample (optionally retitle to the uploaded file).
-      const base = get().sourceVideo;
-      const sourceVideo = input.file ? { ...base, title: input.file.name.replace(/\.[^.]+$/, '') } : base;
-      set({ sourceVideo, mode: 'mock', warnings: [MOCK_NOTE], lastError: errMsg(e) });
-      void get().refreshAssetManagerCoverage();
+      set({ lastError: '样例解析失败 · ' + errMsg(e) });
+      throw e;
     } finally {
       set({ analyzing: false });
     }
@@ -223,18 +220,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       set({ materials, mode: 'live', warnings: warnings ?? [] });
       void get().refreshAssetManagerCoverage();
     } catch (e) {
-      // Fallback: synthesize material cards from the file list.
-      const existing = get().materials;
-      const synthesized: Material[] = files.map((f, i) => ({
-        id: `u${existing.length + i + 1}`,
-        kind: f.type.startsWith('image') || /\.(png|jpe?g|webp)$/i.test(f.name) ? 'photo' : 'text',
-        subject: f.name.replace(/\.[^.]+$/, ''),
-        slot: null,
-        quality: 0.7,
-        color: '#3d4a3a',
-      }));
-      set({ materials: [...existing, ...synthesized], mode: 'mock', warnings: [MOCK_NOTE], lastError: errMsg(e) });
-      void get().refreshAssetManagerCoverage();
+      set({ lastError: '素材上传失败 · ' + errMsg(e) });
+      throw e;
     } finally {
       set({ uploading: false });
     }
@@ -260,8 +247,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       set({ materials, mode: 'live', warnings: warnings ?? [] });
       void get().refreshAssetManagerCoverage();
     } catch (e) {
-      set({ materials: local, mode: 'mock', warnings: [MOCK_NOTE], lastError: errMsg(e) });
-      void get().refreshAssetManagerCoverage();
+      set({ lastError: '素材匹配失败 · ' + errMsg(e) });
+      throw e;
     } finally {
       set({ matching: false });
     }
@@ -283,7 +270,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       });
       set({ diagnosis, mode: 'live', warnings: warnings ?? [] });
     } catch (e) {
-      set({ diagnosis: SLOT_DIAGNOSIS, mode: 'mock', warnings: [MOCK_NOTE], lastError: errMsg(e) });
+      set({ lastError: '缺口诊断失败 · ' + errMsg(e) });
+      throw e;
     } finally {
       set({ diagnosing: false });
     }
@@ -303,7 +291,10 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       appliedSlots.forEach((s) => (applied[s] = true));
       set({ diagnosis, appliedSlots: applied, mode: 'live', warnings: warnings ?? [] });
     } catch (e) {
-      set({ mode: 'mock', warnings: [MOCK_NOTE], lastError: errMsg(e) });
+      // Roll back the optimistic "applied" flag — the strategy did NOT apply.
+      set((state) => ({ appliedSlots: { ...state.appliedSlots, [slotId]: false } }));
+      set({ lastError: '补全策略应用失败 · ' + errMsg(e) });
+      throw e;
     }
   },
 
@@ -320,7 +311,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       });
       set({ timeline, selectedVersionId: version.id, mode: 'live', warnings: warnings ?? [] });
     } catch (e) {
-      set({ timeline: deriveTimeline(get().sourceVideo, get().diagnosis), mode: 'mock', warnings: [MOCK_NOTE], lastError: errMsg(e) });
+      set({ lastError: '成片编译失败 · ' + errMsg(e) });
+      throw e;
     } finally {
       set({ compiling: false });
     }
@@ -339,8 +331,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       set({ timeline: res.timeline, mode: 'live', warnings: res.warnings ?? [] });
       return res.patchSummary;
     } catch (e) {
-      set({ timeline, mode: 'mock', warnings: [MOCK_NOTE], lastError: errMsg(e) });
-      return `已记录改片指令：${instruction}`;
+      set({ lastError: '自然语言改片失败 · ' + errMsg(e) });
+      throw e;
     } finally {
       set({ nlApplying: false });
     }
@@ -354,9 +346,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       set({ exportResult: result, mode: 'live', warnings: result.warnings ?? [] });
       return result;
     } catch (e) {
-      const result: ExportResult = { jobId: `mock-${Date.now()}`, status: 'done', progress: 100 };
-      set({ exportResult: result, mode: 'mock', warnings: [MOCK_NOTE], lastError: errMsg(e) });
-      return result;
+      set({ lastError: '导出失败 · ' + errMsg(e) });
+      throw e;
     } finally {
       set({ exporting: false });
     }
@@ -368,7 +359,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       const { qualityReport, warnings } = await evaluateQualityApi(buildInsightRequest(get()));
       set({ qualityReport, mode: 'live', warnings: warnings ?? [] });
     } catch (e) {
-      set({ warnings: ['质量评估接口不可用 · ' + errMsg(e)], lastError: errMsg(e) });
+      set({ lastError: '质量评估失败 · ' + errMsg(e) });
+      throw e;
     } finally {
       set({ insightLoading: null });
     }
@@ -380,7 +372,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       const { demoEstimate, warnings } = await estimatePerformanceApi(buildInsightRequest(get()));
       set({ demoEstimate, mode: 'live', warnings: warnings ?? [] });
     } catch (e) {
-      set({ warnings: ['预测评分接口不可用 · ' + errMsg(e)], lastError: errMsg(e) });
+      set({ lastError: '预测评分失败 · ' + errMsg(e) });
+      throw e;
     } finally {
       set({ insightLoading: null });
     }
@@ -392,7 +385,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       const { safetyStatus } = await checkSafetyApi(buildInsightRequest(get()));
       set({ safetyStatus, mode: 'live' });
     } catch (e) {
-      set({ warnings: ['安全检查接口不可用 · ' + errMsg(e)], lastError: errMsg(e) });
+      set({ lastError: '安全检查失败 · ' + errMsg(e) });
+      throw e;
     } finally {
       set({ insightLoading: null });
     }
@@ -404,7 +398,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       const { frames, warnings } = await planStoryboardApi(buildInsightRequest(get()));
       set({ storyboardFrames: frames, mode: 'live', warnings: warnings ?? [] });
     } catch (e) {
-      set({ warnings: ['分镜规划接口不可用 · ' + errMsg(e)], lastError: errMsg(e) });
+      set({ lastError: '分镜规划失败 · ' + errMsg(e) });
+      throw e;
     } finally {
       set({ insightLoading: null });
     }
@@ -416,7 +411,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       const { jobs, warnings } = await planMaterialJobsApi(buildInsightRequest(get()));
       set({ materialJobs: jobs, mode: 'live', warnings: warnings ?? [] });
     } catch (e) {
-      set({ warnings: ['AIGC 生成规划接口不可用 · ' + errMsg(e)], lastError: errMsg(e) });
+      set({ lastError: 'AIGC 生成规划失败 · ' + errMsg(e) });
+      throw e;
     } finally {
       set({ insightLoading: null });
     }
@@ -429,7 +425,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       set({ materials, mode: 'live', warnings: warnings ?? [] });
       void get().refreshAssetManagerCoverage();
     } catch (e) {
-      set({ warnings: ['示例素材库加载失败 · ' + errMsg(e)], lastError: errMsg(e) });
+      set({ lastError: '示例素材库加载失败 · ' + errMsg(e) });
+      throw e;
     } finally {
       set({ uploading: false });
     }
@@ -452,7 +449,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       });
       void get().refreshAssetManagerCoverage();
     } catch (e) {
-      set({ warnings: ['一键演示接口不可用 · ' + errMsg(e)], lastError: errMsg(e) });
+      set({ lastError: '一键演示失败 · ' + errMsg(e) });
+      throw e;
     } finally {
       set({ loadingDemo: false });
     }

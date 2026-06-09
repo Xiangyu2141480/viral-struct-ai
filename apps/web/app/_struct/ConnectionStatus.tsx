@@ -1,48 +1,62 @@
 'use client';
 
-// ConnectionStatus.tsx — surfaces the store's live/mock mode and warnings/errors.
+// ConnectionStatus.tsx — surfaces the store's data-source mode and FAIL-FAST errors.
 //
-// During backend integration the store silently falls back to local fixtures when
-// an `/api/struct/*` call fails (see useProjectStore). That makes the demo robust
-// but hides whether you are actually talking to the backend. These two components
-// make that state visible:
-//   • <ConnectionBadge/>  — a fixed corner pill: live (green) vs mock (amber).
-//   • <StatusBanner/>     — an in-flow strip showing the last error / warnings,
-//                            with a dismiss button.
+// The store no longer hides backend failures behind a silent mock fallback: when an
+// `/api/struct/*` call fails it records a rich `lastError` and re-throws. These two
+// components make that loud and unmissable:
+//   • <ConnectionBadge/>  — a pill in the Spine top bar: live (green) / mock (amber)
+//                            / ERROR (red) when the last call failed.
+//   • <StatusBanner/>     — a prominent in-flow strip: red error (what failed, where,
+//                            HTTP status) or amber backend warnings, with a dismiss.
 
 import { useProjectStore } from './store/useProjectStore';
 import { Icon } from './components';
 
-/* ─── Inline pill: is the frontend talking to the backend? ────
+/* ─── Inline pill: live / mock / error ───────────────────────
    Rendered inside the Spine top bar (see App.tsx) so it never overlaps screen
-   content. Inline-flex, no fixed positioning. */
+   content. Error takes priority over the data-source mode. */
 export const ConnectionBadge = () => {
   const mode = useProjectStore((s) => s.mode);
-  const live = mode === 'live';
-  const color = live ? 'var(--st-filled)' : 'var(--st-weakly)';
-  const bg = live ? 'var(--st-filled-bg)' : 'var(--st-weakly-bg)';
-  const line = live ? 'var(--st-filled-line)' : 'var(--st-weakly-line)';
+  const hasError = useProjectStore((s) => Boolean(s.lastError));
+  const state: 'error' | 'live' | 'mock' = hasError ? 'error' : mode;
+
+  const cfg = {
+    error: {
+      color: 'var(--st-critical)', bg: 'var(--st-critical-bg)', line: 'var(--st-critical-line)',
+      label: 'ERROR 后端失败', title: '最近一次后端调用失败（fail-fast）· 详见下方红色错误条',
+    },
+    live: {
+      color: 'var(--st-filled)', bg: 'var(--st-filled-bg)', line: 'var(--st-filled-line)',
+      label: 'LIVE 实时数据', title: '实时数据：已连接后端 /api/struct/*',
+    },
+    mock: {
+      color: 'var(--st-weakly)', bg: 'var(--st-weakly-bg)', line: 'var(--st-weakly-line)',
+      label: 'MOCK 本地示例', title: '本地示例数据：尚未成功调用后端 /api/struct/*',
+    },
+  }[state];
+
   return (
     <span
-      title={live ? '实时数据：已连接后端 /api/struct/*' : '本地示例数据：后端未连接，使用 mock fixtures'}
+      title={cfg.title}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 6,
         padding: '3px 9px', borderRadius: 999,
-        background: bg, border: `1px solid ${line}`,
-        font: '600 10.5px/1 var(--ff-mono, monospace)', color,
+        background: cfg.bg, border: `1px solid ${cfg.line}`,
+        font: '600 10.5px/1 var(--ff-mono, monospace)', color: cfg.color,
         letterSpacing: '0.02em', whiteSpace: 'nowrap',
       }}
     >
       <span style={{
-        width: 6, height: 6, borderRadius: '50%', background: color,
-        boxShadow: live ? `0 0 6px ${color}` : 'none',
+        width: 6, height: 6, borderRadius: '50%', background: cfg.color,
+        boxShadow: state === 'mock' ? 'none' : `0 0 6px ${cfg.color}`,
       }} />
-      {live ? 'LIVE 实时数据' : 'MOCK 本地示例'}
+      {cfg.label}
     </span>
   );
 };
 
-/* ─── In-flow strip: last error (red) or warnings (amber) ───── */
+/* ─── In-flow strip: last error (prominent red) or warnings (amber) ───── */
 export const StatusBanner = () => {
   const warnings = useProjectStore((s) => s.warnings);
   const lastError = useProjectStore((s) => s.lastError);
@@ -55,26 +69,34 @@ export const StatusBanner = () => {
   const bg = isError ? 'var(--st-critical-bg)' : 'var(--st-weakly-bg)';
   const line = isError ? 'var(--st-critical-line)' : 'var(--st-weakly-line)';
   const headline = isError
-    ? '接口调用失败，已回退本地示例数据'
+    ? '后端调用失败 · 已停止（fail-fast，未使用降级示例数据）'
     : (warnings[0] ?? '');
 
   return (
     <div
-      role="status"
+      role="alert"
       style={{
         display: 'flex', alignItems: 'flex-start', gap: 10,
-        margin: '8px 24px 0', padding: '8px 12px',
-        background: bg, border: `1px solid ${line}`, borderRadius: 8,
+        margin: '8px 24px 0',
+        padding: isError ? '11px 14px' : '8px 12px',
+        background: bg,
+        border: `1px solid ${line}`,
+        borderLeft: `3px solid ${color}`,
+        borderRadius: 8,
         color: 'var(--text-2)', fontSize: 12.5, lineHeight: 1.5,
+        boxShadow: isError ? '0 2px 14px -6px var(--st-critical-line)' : 'none',
       }}
     >
       <span style={{ color, flexShrink: 0, marginTop: 1 }}>
-        <Icon name={isError ? 'alert' : 'info'} size={14} />
+        <Icon name={isError ? 'alert' : 'info'} size={isError ? 16 : 14} />
       </span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ color, fontWeight: 600 }}>{headline}</div>
+        <div style={{ color, fontWeight: 700, fontSize: isError ? 13 : 12.5 }}>{headline}</div>
         {isError && (
-          <div style={{ color: 'var(--text-dim)', marginTop: 2, wordBreak: 'break-word' }}>
+          <div
+            className="mono"
+            style={{ color: 'var(--text-2)', marginTop: 3, wordBreak: 'break-word', fontSize: 11.5 }}
+          >
             {lastError}
           </div>
         )}
