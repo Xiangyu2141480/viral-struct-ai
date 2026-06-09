@@ -31,6 +31,7 @@ import { authorTimelineOptions } from '../apps/api/src/services/directorAgent/au
 import { analyzeProductIntelligence } from '../apps/api/src/services/productIntelligence/productIntelligenceAnalyzer';
 import { parseContentBrief } from '../apps/api/src/services/productIntelligence/contentBriefParser';
 import { orchestratedToAuthored } from '../apps/api/src/services/videoAgent/orchestratedToAuthored';
+import { buildProductNativeStructureGraph } from '../apps/api/src/services/structureAuthoring/productNativeStructureGraph';
 import type { ProductIntelligence } from '../packages/shared/src/index';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -67,8 +68,10 @@ async function main(): Promise<void> {
   // otherwise the built-in beverageBrief fixture is used.
   const contentBrief = await resolveContentBrief();
 
-  const structureGraph = readJson<ViralStructureGraph>(INPUTS.structureGraph);
-  const assetCards = normalizeAssetCards(readJson<AssetCard[]>(INPUTS.plainAssetCards));
+  // ASSET_CARDS=relative/path.json overrides the asset library (e.g. a freshly extracted one).
+  const assetCardsPath = process.env.ASSET_CARDS ?? INPUTS.plainAssetCards;
+  console.log(`- asset library: ${assetCardsPath}`);
+  const assetCards = normalizeAssetCards(readJson<AssetCard[]>(assetCardsPath));
   const categoryPreset = buildDeterministicPreset({
     category: contentBrief.category ?? 'beverage',
     availableAssets: assetCards.map((a) => a.id)
@@ -88,6 +91,20 @@ async function main(): Promise<void> {
     + ` source=${productIntelligence.analysisSource}`
   );
   piResult.warnings.forEach((w) => console.log(`  · PI: ${w}`));
+
+  // Source skeleton: by default SYNTHESIZE a product-native arc from PI, so the slots speak the TARGET
+  // product's language and good asset matches aren't stamped `source_specific_not_transferable` (the legacy
+  // borrowed MacBook graph penalized them on the source script, not the asset). PRODUCT_NATIVE_GRAPH=false
+  // falls back to the borrowed MacBook source graph for comparison.
+  const useNativeGraph = process.env.PRODUCT_NATIVE_GRAPH !== 'false';
+  const structureGraph = useNativeGraph
+    ? buildProductNativeStructureGraph({ contentBrief, productIntelligence })
+    : readJson<ViralStructureGraph>(INPUTS.structureGraph);
+  console.log(
+    `- structure skeleton: ${useNativeGraph
+      ? `product-native arc (${structureGraph.shotSlots.length} slots, PI-derived)`
+      : 'macbook_neo (legacy borrowed source graph)'}`
+  );
 
   // ② kept: produce the supply-context evidence the Director consumes read-only.
   const assetSupplyContext = buildAssetSupplyContext({
@@ -128,6 +145,7 @@ async function main(): Promise<void> {
     });
     timeline = authoredOptions.timeline;
     console.log(`- option authoring: ${authoredOptions.authoredSlots} slot(s) re-authored; ${authoredOptions.warnings.length} channel warning(s)`);
+    authoredOptions.warnings.forEach((w) => console.log(`  · authoring warning: ${w}`));
   }
 
   // Handoff: map to the Video Agent's AuthoredTimeline (a TIMELINE — never rendered here).
@@ -137,7 +155,7 @@ async function main(): Promise<void> {
 
   writeText(OUTPUTS.timelineJson, `${JSON.stringify(timeline, null, 2)}\n`);
   writeText(OUTPUTS.authoredJson, `${JSON.stringify(authored, null, 2)}\n`);
-  writeText(OUTPUTS.report, buildReport(timeline, authored, leakage, productIntelligence));
+  writeText(OUTPUTS.report, buildReport(timeline, authored, leakage, productIntelligence, structureGraph));
 
   const counts = countFills(timeline);
   console.log('Director Agent orchestrated-timeline manual test complete.');
@@ -246,7 +264,8 @@ function buildReport(
   timeline: OrchestratedTimeline,
   authored: ReturnType<typeof orchestratedToAuthored>,
   leakage: LeakageResult,
-  productIntelligence: ProductIntelligence
+  productIntelligence: ProductIntelligence,
+  sourceGraph: ViralStructureGraph
 ): string {
   const counts = countFills(timeline);
   const modes = countModes(timeline);
@@ -455,14 +474,18 @@ function buildReport(
       ])
     ),
     '',
-    '## Gap / partial resolution options',
+    '## Per-beat resolution channels (covered ⇒ alternatives)',
+    '',
+    '_Every beat now carries all three channels (reshoot / hyperframes / aigc). For a **covered** (matched) beat they are ALTERNATIVES to the placed real asset; for partial/gap they resolve the missing material. The recommended channel is starred._',
     '',
     optionSlots
       .map((slot) => {
-        const options = (slot.fill.kind === 'gap' ? slot.fill.options : slot.fill.options) ?? [];
-        const recommended = slot.fill.kind === 'gap' ? slot.fill.recommendedOptionId : slot.fill.recommendedOptionId;
+        const options = slot.fill.options ?? [];
+        const recommended = slot.fill.recommendedOptionId;
+        const status = slot.fillStatus ?? (slot.fill.kind === 'gap' ? 'missing_generation_required' : slot.fill.status);
+        const alt = status === 'matched' ? ' — covered, channels are alternatives' : '';
         const lines = options.map((option) => `  - ${option.id === recommended ? '**' : ''}${option.id}${option.id === recommended ? '** (recommended)' : ''}: ${describeOption(option)}`);
-        return [`### ${slot.slotId} (${slot.role})`, ...lines].join('\n');
+        return [`### ${slot.slotId} (${slot.role}) · ${status}${alt}`, ...lines].join('\n');
       })
       .join('\n\n'),
     '',
@@ -522,7 +545,7 @@ function buildReport(
   ].join('\n');
 
   function findSourceSlot(slotId: string): ViralStructureGraph['shotSlots'][number] | undefined {
-    return readJson<ViralStructureGraph>(INPUTS.structureGraph).shotSlots.find((slot) => slot.id === slotId);
+    return sourceGraph.shotSlots.find((slot) => slot.id === slotId);
   }
 }
 
