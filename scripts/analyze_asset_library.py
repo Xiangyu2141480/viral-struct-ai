@@ -330,6 +330,30 @@ def _sanitize_human_presence(value: Any) -> dict[str, Any] | None:
     return out
 
 
+def normalize_asset_card(*, asset_id: str, media_type: str, parsed: dict[str, Any]) -> dict[str, Any]:
+    """Backward-compatible sanitizer for the pre-v2 lightweight AssetCard tests.
+
+    The production path now uses ``build_full_card`` to emit a rich ``analysis``
+    block. Keep this small wrapper so older callers/tests can still validate the
+    enum filtering and null-stripping contract without invoking media probing.
+    """
+    spatial = parsed.get("spatialDescription") if isinstance(parsed.get("spatialDescription"), str) else None
+    temporal = parsed.get("temporalDescription") if media_type == "video" and isinstance(parsed.get("temporalDescription"), str) else None
+    card: dict[str, Any] = {
+        "id": asset_id,
+        "type": media_type,
+        "spatialDescription": spatial,
+        "temporalDescription": temporal,
+        "detectedObjects": _str_list(parsed.get("detectedObjects")),
+        "suitableSlots": _filter_enum_list(parsed.get("suitableSlots"), SHOT_SLOT_ROLES),
+        "qualityScore": _clamp01(parsed.get("qualityScore")),
+        "detectedIngredients": _filter_enum_list(parsed.get("detectedIngredients"), INGREDIENT_TYPES),
+        "humanPresence": _sanitize_human_presence(parsed.get("humanPresence")),
+        "visualStyleTags": _filter_enum_list(parsed.get("visualStyleTags"), VISUAL_STYLE_TAGS),
+    }
+    return _strip_none(card)
+
+
 def _sanitize_visual_content(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, dict):
         return None

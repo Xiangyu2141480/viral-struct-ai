@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -48,6 +49,47 @@ class FineScanTests(unittest.TestCase):
         self.assertEqual(args.poll_backoff, 1.5)
         self.assertEqual(args.poll_max_interval, 4.0)
         self.assertTrue(args.http_pool)
+
+    def test_scan_preset_full_keeps_existing_quality_defaults(self):
+        args = self.module.build_parser().parse_args([])
+
+        self.assertEqual(args.scan_preset, "full")
+        self.assertEqual(args.max_peaks, 12)
+        self.assertEqual(args.max_total_candidates, 16)
+        self.assertEqual(args.max_candidate_ceiling, 40)
+        self.assertEqual(args.peak_upload_fps, 2.0)
+        self.assertEqual(args.block_upload_fps, 1.0)
+        self.assertEqual(args.candidate_workers, 10)
+        self.assertEqual(args.block_workers, 8)
+
+    def test_scan_preset_quick_sets_safer_candidate_budget_defaults(self):
+        args = self.module.build_parser().parse_args(["--scan-preset", "quick"])
+
+        self.assertEqual(args.max_peaks, 5)
+        self.assertEqual(args.max_total_candidates, 8)
+        self.assertEqual(args.max_candidate_ceiling, 12)
+        self.assertEqual(args.peak_upload_fps, 1.0)
+        self.assertEqual(args.block_upload_fps, 1.0)
+        self.assertEqual(args.candidate_workers, 6)
+        self.assertEqual(args.block_workers, 4)
+
+    def test_scan_preset_quick_respects_explicit_user_overrides(self):
+        args = self.module.build_parser().parse_args(
+            [
+                "--scan-preset",
+                "quick",
+                "--max-peaks",
+                "9",
+                "--candidate-workers",
+                "3",
+            ]
+        )
+
+        self.assertEqual(args.max_peaks, 9)
+        self.assertEqual(args.candidate_workers, 3)
+        # Other quick defaults still apply.
+        self.assertEqual(args.max_total_candidates, 8)
+        self.assertEqual(args.block_workers, 4)
 
     def test_no_http_pool_flag_disables_pool(self):
         args = self.module.build_parser().parse_args(["--no-http-pool"])
@@ -618,6 +660,523 @@ class FineScanTests(unittest.TestCase):
             # default. Block is 1.0s < min_block_seconds and --no-hard-cut, so no
             # candidate uploads precede it — upload_calls[0] is the block upload.
             self.assertEqual(upload_calls[0]["fps"], 1.0)
+
+    def test_scan_config_fingerprint_tracks_prompt_video_block_and_candidate_config(self):
+        block = {
+            "id": "block_001",
+            "timeRange": {"start": 0, "end": 2.5},
+            "coarseRoleGuess": "attention_grab",
+        }
+        args = self.module.build_parser().parse_args(["--prompt-version", "v1"])
+
+        first = self.module.build_scan_config_fingerprint(block, args, video_id="demo")
+
+        args.max_peaks += 1
+        second = self.module.build_scan_config_fingerprint(block, args, video_id="demo")
+
+        self.assertNotEqual(first["hash"], second["hash"])
+        self.assertEqual(first["config"]["promptVersion"], "v1")
+        self.assertEqual(first["config"]["videoId"], "demo")
+        self.assertEqual(first["config"]["blockId"], "block_001")
+        self.assertEqual(first["config"]["blockTimeRange"], {"start": 0.0, "end": 2.5})
+        self.assertIn("promptFileHash", first["config"])
+        self.assertIn("peakMicroPromptFileHash", first["config"])
+
+    def test_scan_config_fingerprint_invalidates_each_resume_input(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            prompt_path = tmp_dir / "fine_prompt.md"
+            peak_prompt_path = tmp_dir / "peak_prompt.md"
+            prompt_path.write_text("fine prompt v1", encoding="utf-8")
+            peak_prompt_path.write_text("peak prompt v1", encoding="utf-8")
+            block = {
+                "id": "block_001",
+                "timeRange": {"start": 0, "end": 2.5},
+                "coarseRoleGuess": "attention_grab",
+                "boundaryReason": "cut on movement",
+                "observableSummary": "fast object entry",
+                "fineScanFocusQuestions": ["what changed?"],
+            }
+
+            def make_args(*extra: str):
+                return self.module.build_parser().parse_args(
+                    [
+                        "--prompt-version",
+                        "v1",
+                        "--prompt",
+                        str(prompt_path),
+                        "--peak-micro-prompt",
+                        str(peak_prompt_path),
+                        "--model",
+                        "ep-a",
+                        *extra,
+                    ]
+                )
+
+            base_args = make_args()
+            base_hash = self.module.build_scan_config_fingerprint(block, base_args, video_id="demo")["hash"]
+
+            cases: list[tuple[str, dict[str, Any] | None, Any]] = [
+                ("videoId", None, lambda: self.module.build_scan_config_fingerprint(block, base_args, video_id="demo-2")["hash"]),
+                (
+                    "blockTimeRange",
+                    {**block, "timeRange": {"start": 0.5, "end": 2.5}},
+                    None,
+                ),
+                ("model", None, lambda: self.module.build_scan_config_fingerprint(block, make_args("--model", "ep-b"), video_id="demo")["hash"]),
+                (
+                    "fps",
+                    None,
+                    lambda: self.module.build_scan_config_fingerprint(block, make_args("--peak-upload-fps", "1.5"), video_id="demo")["hash"],
+                ),
+                (
+                    "candidateConfig",
+                    None,
+                    lambda: self.module.build_scan_config_fingerprint(block, make_args("--max-peaks", "13"), video_id="demo")["hash"],
+                ),
+            ]
+            for label, changed_block, hash_factory in cases:
+                with self.subTest(label=label):
+                    changed_hash = (
+                        self.module.build_scan_config_fingerprint(changed_block, base_args, video_id="demo")["hash"]
+                        if changed_block is not None
+                        else hash_factory()
+                    )
+                    self.assertNotEqual(base_hash, changed_hash)
+
+            prompt_path.write_text("fine prompt v2", encoding="utf-8")
+            prompt_changed_hash = self.module.build_scan_config_fingerprint(block, base_args, video_id="demo")["hash"]
+            self.assertNotEqual(base_hash, prompt_changed_hash)
+
+            prompt_path.write_text("fine prompt v1", encoding="utf-8")
+            peak_prompt_path.write_text("peak prompt v2", encoding="utf-8")
+            peak_prompt_changed_hash = self.module.build_scan_config_fingerprint(block, base_args, video_id="demo")["hash"]
+            self.assertNotEqual(base_hash, peak_prompt_changed_hash)
+
+    def test_candidate_budget_full_keeps_existing_density_formula(self):
+        args = self.module.build_parser().parse_args([])
+        block = {"id": "block_001", "coarseRoleGuess": "static_explainer"}
+
+        self.assertEqual(self.module.candidate_budget_for_block(block, args, hard_cut_count=30), 30)
+
+    def test_candidate_budget_quick_preserves_more_for_structurally_important_blocks(self):
+        args = self.module.build_parser().parse_args(["--scan-preset", "quick"])
+        block = {
+            "id": "block_001",
+            "coarseRoleGuess": "attention_grab",
+            "observableSummary": "kinetic assembly reveal with CTA burst",
+        }
+
+        self.assertEqual(self.module.candidate_budget_for_block(block, args, hard_cut_count=3), 10)
+
+    def test_candidate_budget_quick_reduces_static_low_motion_blocks(self):
+        args = self.module.build_parser().parse_args(["--scan-preset", "quick"])
+        block = {
+            "id": "block_009",
+            "coarseRoleGuess": "static_explainer",
+            "observableSummary": "static text explanation on product details",
+        }
+
+        self.assertEqual(self.module.candidate_budget_for_block(block, args, hard_cut_count=0), 5)
+
+    def test_candidate_budget_class_describes_budget_reason(self):
+        important = {"coarseRoleGuess": "attention_grab", "observableSummary": "kinetic CTA reveal"}
+        static = {"coarseRoleGuess": "static_explainer", "observableSummary": "static details"}
+        ordinary = {"coarseRoleGuess": "middle", "observableSummary": "product movement"}
+
+        self.assertEqual(self.module.candidate_budget_class_for_block(important), "important_structure")
+        self.assertEqual(self.module.candidate_budget_class_for_block(static), "static_low_motion")
+        self.assertEqual(self.module.candidate_budget_class_for_block(ordinary), "default")
+
+    def test_candidate_source_counts_are_stable_for_benchmarking(self):
+        candidates = [
+            {"anchorSource": "visual_peak"},
+            {"anchorSource": "hard_cut"},
+            {"anchorSource": "hard_cut"},
+            {"anchorSource": "regime_boundary"},
+        ]
+
+        self.assertEqual(
+            self.module.count_candidate_sources(candidates),
+            {"hard_cut": 2, "regime_boundary": 1, "visual_peak": 1},
+        )
+
+    def test_candidate_benchmark_report_computes_reduction_and_guardrails(self):
+        full_scan = {
+            "contentBlocks": [
+                {
+                    "blockId": "block_001",
+                    "candidateBudgetClass": "important_structure",
+                    "totalCandidateCount": 10,
+                    "selectedHardCutCount": 2,
+                    "candidateSourceCounts": {"hard_cut": 2, "visual_peak": 8},
+                },
+                {
+                    "blockId": "block_002",
+                    "candidateBudgetClass": "static_low_motion",
+                    "totalCandidateCount": 8,
+                    "selectedHardCutCount": 0,
+                    "candidateSourceCounts": {"visual_peak": 8},
+                },
+            ],
+        }
+        quick_scan = {
+            "contentBlocks": [
+                {
+                    "blockId": "block_001",
+                    "candidateBudgetClass": "important_structure",
+                    "totalCandidateCount": 6,
+                    "selectedHardCutCount": 2,
+                    "candidateSourceCounts": {"hard_cut": 2, "visual_peak": 4},
+                },
+                {
+                    "blockId": "block_002",
+                    "candidateBudgetClass": "static_low_motion",
+                    "totalCandidateCount": 5,
+                    "selectedHardCutCount": 0,
+                    "candidateSourceCounts": {"visual_peak": 5},
+                },
+            ],
+        }
+
+        report = self.module.build_candidate_benchmark_report(
+            video_id="demo",
+            full_scan=full_scan,
+            quick_scan=quick_scan,
+        )
+
+        self.assertEqual(report["summary"]["fullTotalCandidates"], 18)
+        self.assertEqual(report["summary"]["quickTotalCandidates"], 11)
+        self.assertEqual(report["summary"]["candidateReductionPct"], 38.889)
+        self.assertTrue(report["qualityGuardrail"]["passed"])
+        self.assertEqual(report["qualityGuardrail"]["hardCutLossBlocks"], [])
+        self.assertEqual(report["qualityGuardrail"]["importantBlocksUnderFloor"], [])
+
+    def test_candidate_benchmark_guardrail_fails_when_quick_loses_hard_cuts(self):
+        full_scan = {
+            "contentBlocks": [
+                {
+                    "blockId": "block_001",
+                    "candidateBudgetClass": "important_structure",
+                    "totalCandidateCount": 6,
+                    "selectedHardCutCount": 2,
+                }
+            ],
+        }
+        quick_scan = {
+            "contentBlocks": [
+                {
+                    "blockId": "block_001",
+                    "candidateBudgetClass": "important_structure",
+                    "totalCandidateCount": 6,
+                    "selectedHardCutCount": 1,
+                }
+            ],
+        }
+
+        report = self.module.build_candidate_benchmark_report(
+            video_id="demo",
+            full_scan=full_scan,
+            quick_scan=quick_scan,
+        )
+
+        self.assertFalse(report["qualityGuardrail"]["passed"])
+        self.assertEqual(report["qualityGuardrail"]["hardCutLossBlocks"], ["block_001"])
+
+    def test_candidate_benchmark_markdown_explains_timing_and_quality_guardrail(self):
+        report = {
+            "videoId": "demo",
+            "summary": {
+                "fullTotalCandidates": 18,
+                "quickTotalCandidates": 11,
+                "candidateReductionPct": 38.889,
+            },
+            "qualityGuardrail": {
+                "passed": True,
+                "missingQuickBlocks": [],
+                "hardCutLossBlocks": [],
+                "importantBlocksUnderFloor": [],
+            },
+            "timingReports": {
+                "full": "tmp/fine-scan/full/fine_scan_timing.json",
+                "quick": "tmp/fine-scan/quick/fine_scan_timing.json",
+            },
+            "timingSummary": {
+                "full": {
+                    "totalMs": 600.0,
+                    "topStages": [{"stage": "peak_score", "totalMs": 300.0}],
+                },
+                "quick": {
+                    "totalMs": 280.0,
+                    "topStages": [{"stage": "peak_score", "totalMs": 150.0}],
+                },
+                "deltaMs": 320.0,
+                "reductionPct": 53.333,
+            },
+            "benchmarkSource": {
+                "sourceType": "structure_graph_derived",
+                "effectiveRoughScan": "tmp/out/structure_graph_derived_rough_scan.json",
+                "limitations": [
+                    "structure_graph-derived contentBlocks are for no-LLM candidate/timing benchmarking only"
+                ],
+            },
+            "perBlock": [],
+        }
+
+        markdown = self.module.render_candidate_benchmark_markdown(report)
+
+        self.assertIn("Fine Scan Candidate Benchmark", markdown)
+        self.assertIn("Quality Guardrail", markdown)
+        self.assertIn("Timing report", markdown)
+        self.assertIn("tmp/fine-scan/full/fine_scan_timing.json", markdown)
+        self.assertIn("tmp/fine-scan/quick/fine_scan_timing.json", markdown)
+        self.assertIn("full total: `600.0ms`", markdown)
+        self.assertIn("quick total: `280.0ms`", markdown)
+        self.assertIn("timing reduction: `53.333%`", markdown)
+        self.assertIn("peak_score", markdown)
+        self.assertIn("structure_graph_derived", markdown)
+        self.assertIn("structure_graph-derived contentBlocks", markdown)
+
+    def test_resume_skips_block_only_when_fingerprint_matches(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            rough_scan_path = tmp_dir / "rough_structure_scan.json"
+            out_dir = tmp_dir / "fine_scan"
+            work_dir = tmp_dir / "clips"
+            out_dir.mkdir(parents=True)
+            block = {
+                "id": "block_001",
+                "timeRange": {"start": 0, "end": 1},
+                "coarseRoleGuess": "attention_grab",
+                "boundaryReason": "test",
+                "observableSummary": "test",
+                "fineScanFocusQuestions": [],
+            }
+            rough_scan_path.write_text(
+                json.dumps({"videoId": "demo", "contentBlocks": [block]}),
+                encoding="utf-8",
+            )
+            args = self.module.build_parser().parse_args(
+                [
+                    "--rough-scan",
+                    str(rough_scan_path),
+                    "--video",
+                    str(ROOT / "seed_assets" / "raw_videos" / "TVC.mp4"),
+                    "--out-dir",
+                    str(out_dir),
+                    "--work-dir",
+                    str(work_dir),
+                    "--base-url",
+                    "https://example.invalid/api/v3",
+                    "--api-key",
+                    "dummy",
+                    "--model",
+                    "ep-test",
+                    "--skip-audio",
+                    "--resume",
+                ]
+            )
+            args.prompt = self.module.resolve_prompt_path(args)
+            fingerprint = self.module.build_scan_config_fingerprint(block, args, video_id="demo")
+            cached_block = {
+                "schemaVersion": "fine_content_block_semantic_v0_3",
+                "blockId": "block_001",
+                "videoId": "demo",
+                "scanConfigFingerprint": fingerprint["hash"],
+                "scanConfig": fingerprint["config"],
+                "actionBeats": [],
+            }
+            (out_dir / "block_001_fine_scan.json").write_text(
+                json.dumps(cached_block),
+                encoding="utf-8",
+            )
+
+            calls = []
+            original_process = self.module.process_block_with_peak_micro
+            try:
+                self.module.process_block_with_peak_micro = (
+                    lambda *args, **kwargs: calls.append("processed") or (cached_block, None)
+                )
+                result = self.module.run_fine_scan(args)
+            finally:
+                self.module.process_block_with_peak_micro = original_process
+
+            self.assertEqual(result, 0)
+            self.assertEqual(calls, [])
+            combined = json.loads((out_dir / "fine_structure_scan.json").read_text(encoding="utf-8"))
+            self.assertEqual(combined["blockCount"], 1)
+            self.assertEqual(combined["contentBlocks"][0]["blockId"], "block_001")
+
+    def test_resume_rejects_corrupt_or_incomplete_block_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp)
+            block = {
+                "id": "block_001",
+                "timeRange": {"start": 0, "end": 1},
+                "coarseRoleGuess": "attention_grab",
+            }
+            args = self.module.build_parser().parse_args(["--resume"])
+
+            block_path = out_dir / "block_001_fine_scan.json"
+            block_path.write_text("{not valid json", encoding="utf-8")
+            self.assertIsNone(
+                self.module.load_resumable_block_output(block, args=args, video_id="demo", out_dir=out_dir)
+            )
+
+            fingerprint = self.module.build_scan_config_fingerprint(block, args, video_id="demo")
+            incomplete = {
+                "schemaVersion": "fine_content_block_semantic_v0_3",
+                "blockId": "block_001",
+                "videoId": "demo",
+                "scanConfigFingerprint": fingerprint["hash"],
+                "scanConfig": fingerprint["config"],
+            }
+            block_path.write_text(json.dumps(incomplete), encoding="utf-8")
+            self.assertIsNone(
+                self.module.load_resumable_block_output(block, args=args, video_id="demo", out_dir=out_dir)
+            )
+
+            wrong_schema = {**incomplete, "schemaVersion": "fine_scan_failure", "actionBeats": []}
+            block_path.write_text(json.dumps(wrong_schema), encoding="utf-8")
+            self.assertIsNone(
+                self.module.load_resumable_block_output(block, args=args, video_id="demo", out_dir=out_dir)
+            )
+
+    def test_candidates_only_does_not_require_llm_config(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            rough_scan_path = tmp_dir / "rough_structure_scan.json"
+            out_dir = tmp_dir / "fine_scan"
+            work_dir = tmp_dir / "clips"
+            rough_scan_path.write_text(
+                json.dumps(
+                    {
+                        "videoId": "demo",
+                        "contentBlocks": [
+                            {
+                                "id": "block_001",
+                                "timeRange": {"start": 0, "end": 1},
+                                "coarseRoleGuess": "attention_grab",
+                                "boundaryReason": "test",
+                                "observableSummary": "test",
+                                "fineScanFocusQuestions": [],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            args = self.module.build_parser().parse_args(
+                [
+                    "--rough-scan",
+                    str(rough_scan_path),
+                    "--video",
+                    str(ROOT / "seed_assets" / "raw_videos" / "TVC.mp4"),
+                    "--out-dir",
+                    str(out_dir),
+                    "--work-dir",
+                    str(work_dir),
+                    "--env",
+                    str(tmp_dir / "missing.env"),
+                    "--skip-audio",
+                    "--no-hard-cut",
+                    "--candidates-only",
+                ]
+            )
+
+            originals = {
+                "prepare_block_clip": self.module.prepare_block_clip,
+                "compute_visual_score_series_from_clip": self.module.compute_visual_score_series_from_clip,
+            }
+            try:
+                self.module.prepare_block_clip = lambda *args, **kwargs: ROOT / "seed_assets" / "raw_videos" / "TVC.mp4"
+                self.module.compute_visual_score_series_from_clip = lambda *args, **kwargs: []
+                result = self.module.run_fine_scan(args)
+            finally:
+                for name, value in originals.items():
+                    setattr(self.module, name, value)
+
+            self.assertEqual(result, 0)
+            combined = json.loads((out_dir / "fine_structure_scan.json").read_text(encoding="utf-8"))
+            self.assertTrue(combined["contentBlocks"][0]["candidatesOnly"])
+
+    def test_candidates_only_accepts_windows_utf8_bom_rough_scan(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_dir = Path(tmp)
+            rough_scan_path = tmp_dir / "rough_structure_scan.json"
+            out_dir = tmp_dir / "fine_scan"
+            work_dir = tmp_dir / "clips"
+            rough_scan_path.write_text(
+                json.dumps(
+                    {
+                        "videoId": "demo",
+                        "contentBlocks": [
+                            {
+                                "id": "block_001",
+                                "timeRange": {"start": 0, "end": 1},
+                                "coarseRoleGuess": "attention_grab",
+                                "boundaryReason": "test",
+                                "observableSummary": "test",
+                                "fineScanFocusQuestions": [],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8-sig",
+            )
+            args = self.module.build_parser().parse_args(
+                [
+                    "--rough-scan",
+                    str(rough_scan_path),
+                    "--video",
+                    str(ROOT / "seed_assets" / "raw_videos" / "TVC.mp4"),
+                    "--out-dir",
+                    str(out_dir),
+                    "--work-dir",
+                    str(work_dir),
+                    "--env",
+                    str(tmp_dir / "missing.env"),
+                    "--skip-audio",
+                    "--no-hard-cut",
+                    "--candidates-only",
+                ]
+            )
+
+            originals = {
+                "prepare_block_clip": self.module.prepare_block_clip,
+                "compute_visual_score_series_from_clip": self.module.compute_visual_score_series_from_clip,
+            }
+            try:
+                self.module.prepare_block_clip = lambda *args, **kwargs: ROOT / "seed_assets" / "raw_videos" / "TVC.mp4"
+                self.module.compute_visual_score_series_from_clip = lambda *args, **kwargs: []
+                result = self.module.run_fine_scan(args)
+            finally:
+                for name, value in originals.items():
+                    setattr(self.module, name, value)
+
+            self.assertEqual(result, 0)
+
+    def test_timing_report_writes_named_stage_summary(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp)
+            block_results = [
+                {
+                    "blockId": "block_001",
+                    "timingInfo": [
+                        {"stage": "block_clip_cut", "elapsedMs": 10.0},
+                        {"stage": "candidate_upload", "elapsedMs": 20.0},
+                    ],
+                }
+            ]
+
+            report_path = self.module.write_timing_report(out_dir, video_id="demo", block_results=block_results)
+
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+            self.assertEqual(report["videoId"], "demo")
+            self.assertEqual(report["stageSummary"]["block_clip_cut"]["count"], 1)
+            self.assertEqual(report["stageSummary"]["candidate_upload"]["totalMs"], 20.0)
+            for stage in self.module.FINE_SCAN_TIMING_STAGES:
+                self.assertIn(stage, report["stageSummary"])
 
 
 class PromptVersionResolutionTests(unittest.TestCase):
