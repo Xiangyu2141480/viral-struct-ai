@@ -29,6 +29,7 @@ import { SOURCE_SPECIFIC_TERMS } from '../apps/api/src/services/motifs/motionGra
 import { runDirectorAgent } from '../apps/api/src/services/directorAgent/index';
 import { authorTimelineOptions } from '../apps/api/src/services/directorAgent/authorTimelineOptions';
 import { analyzeProductIntelligence } from '../apps/api/src/services/productIntelligence/productIntelligenceAnalyzer';
+import { parseContentBrief } from '../apps/api/src/services/productIntelligence/contentBriefParser';
 import { orchestratedToAuthored } from '../apps/api/src/services/videoAgent/orchestratedToAuthored';
 import type { ProductIntelligence } from '../packages/shared/src/index';
 
@@ -61,14 +62,22 @@ const beverageBrief: ContentBrief = {
 async function main(): Promise<void> {
   mkdirSync(path.join(repoRoot, 'tmp'), { recursive: true });
 
+  // Front door: in production the user types ONE free-form paragraph; the parser turns it into the brief.
+  // Set USER_INPUT="...你的一段话..." (or USER_INPUT_FILE=relative/path.txt) to test your own input;
+  // otherwise the built-in beverageBrief fixture is used.
+  const contentBrief = await resolveContentBrief();
+
   const structureGraph = readJson<ViralStructureGraph>(INPUTS.structureGraph);
   const assetCards = normalizeAssetCards(readJson<AssetCard[]>(INPUTS.plainAssetCards));
-  const categoryPreset = buildDeterministicPreset({ category: 'beverage', availableAssets: assetCards.map((a) => a.id) });
+  const categoryPreset = buildDeterministicPreset({
+    category: contentBrief.category ?? 'beverage',
+    availableAssets: assetCards.map((a) => a.id)
+  });
 
   // P0-A: understand the TARGET product first (text brief authoritative, assets corroborate, LLM fills
   // world knowledge). Drives compression budget (P0-B), duration选档 and prompt context (P1).
   const piResult = await analyzeProductIntelligence({
-    contentBrief: beverageBrief,
+    contentBrief,
     assetCards,
     useLlm: process.env.PI_LLM !== 'false'
   });
@@ -84,7 +93,7 @@ async function main(): Promise<void> {
   const assetSupplyContext = buildAssetSupplyContext({
     structureGraph,
     assetCards,
-    contentBrief: beverageBrief,
+    contentBrief,
     libraryId: 'director_agent_manual',
     categoryPreset,
     options: { userCanGenerate: false }
@@ -100,7 +109,7 @@ async function main(): Promise<void> {
     structureGraph,
     assetCards,
     assetSupplyContext,
-    contentBrief: beverageBrief,
+    contentBrief,
     categoryPreset,
     options: {
       useLlmMatcher: true,
@@ -113,7 +122,7 @@ async function main(): Promise<void> {
   // capability-bounded prompts (reshoot real-filmable / hyperframes edit-only / aigc surreal).
   if (process.env.AUTHOR_OPTIONS === 'true') {
     const authoredOptions = await authorTimelineOptions(timeline, {
-      contentBrief: beverageBrief,
+      contentBrief,
       productIntelligence,
       enabled: true
     });
@@ -147,6 +156,31 @@ async function main(): Promise<void> {
   console.log(`Wrote ${OUTPUTS.report}`);
 
   if (!leakage.passed) process.exitCode = 1;
+}
+
+/**
+ * Resolve the ContentBrief: parse the user's free-form paragraph (USER_INPUT / USER_INPUT_FILE) into a
+ * structured brief, or fall back to the built-in fixture. This is the production "front door" the web app
+ * will call before the rest of the pipeline.
+ */
+async function resolveContentBrief(): Promise<ContentBrief> {
+  const fromFile = process.env.USER_INPUT_FILE
+    ? readFileSync(path.join(repoRoot, process.env.USER_INPUT_FILE), 'utf8')
+    : undefined;
+  const raw = (fromFile ?? process.env.USER_INPUT ?? '').trim();
+  if (!raw) {
+    console.log('- brief: using built-in beverageBrief fixture (set USER_INPUT="..." or USER_INPUT_FILE=path to test your own paragraph)');
+    return beverageBrief;
+  }
+  const parsed = await parseContentBrief({ rawInput: raw, useLlm: process.env.PI_LLM !== 'false' });
+  console.log(`- brief parsed from user input (${parsed.source}):`);
+  console.log(`    product=${parsed.contentBrief.productName} | category=${parsed.contentBrief.category ?? '-'}`);
+  console.log(`    audience=${parsed.contentBrief.targetAudience}`);
+  console.log(`    scenario=${parsed.contentBrief.scenario}`);
+  console.log(`    sellingPoints=${parsed.contentBrief.sellingPoints.join(' / ')}`);
+  console.log(`    cta=${parsed.contentBrief.cta}`);
+  parsed.warnings.forEach((w) => console.log(`  · brief: ${w}`));
+  return parsed.contentBrief;
 }
 
 interface LeakageResult {
