@@ -9,6 +9,7 @@ import { useProjectStore } from './store/useProjectStore';
 import { AssetAffordanceChips, AssetManagerEvidencePanel } from './AssetManagerEvidence';
 import {
   DropZone,
+  EmptyState,
   Icon,
   MatThumb,
   Modal,
@@ -32,7 +33,7 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
   const runDemo = useProjectStore((s) => s.runDemo);
   const loadingDemo = useProjectStore((s) => s.loadingDemo);
   const T = v.duration;
-  const [hoveredSeg, setHoveredSeg] = useState<Seg>(v.segments[0]);
+  const [hoveredSeg, setHoveredSeg] = useState<Seg | undefined>(v.segments[0]);
   const [toastMsg, setToastMsg] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -42,6 +43,51 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
     setToastVisible(true);
     setTimeout(() => setToastVisible(false), 2200);
   };
+
+  const uploadModal = (
+    <Modal open={uploadOpen} onClose={() => setUploadOpen(false)} title="上传样例视频" width={520}>
+      <DropZone
+        accept="video/*"
+        multiple={false}
+        onFiles={(files) => {
+          setUploadOpen(false);
+          showToast(`样例视频已上传: ${files[0].name} · 解析中…`);
+          void analyzeSample({ file: files[0] }).catch(() => {});
+        }}
+        label="拖拽视频到此处，或点击选择"
+      />
+      <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-mute)', marginTop: 12, textAlign: 'center' }}>
+        上传后将自动解析结构 · 支持 MP4 / MOV / AVI
+      </div>
+    </Modal>
+  );
+
+  // No real sample yet → no mock data; prompt the user to upload or run the real demo.
+  if (v.segments.length === 0) {
+    return (
+      <>
+        <EmptyState
+          icon="upload"
+          eyebrow="01 · 样例解析 / SOURCE"
+          title="上传一个爆款样例视频以开始"
+          hint="拖入或选择一个抖音/短视频样例 — 系统会解析其镜头·节奏·包装并抽取可迁移的结构协议 (StructureIR)。还没有素材？点「一键演示」直接载入真实后端的完整案例。"
+        >
+          <button className="btn primary" disabled={analyzing} onClick={() => setUploadOpen(true)}>
+            <Icon name="upload" size={13} /> {analyzing ? '解析中…' : '上传样例视频'}
+          </button>
+          <button
+            className="btn"
+            disabled={loadingDemo}
+            onClick={() => { void runDemo().then(() => showToast('一键演示已载入 · 真实后端全流程数据')).catch(() => {}); }}
+          >
+            <Icon name="sparkle" size={13} /> {loadingDemo ? '运行中…' : '一键演示'}
+          </button>
+        </EmptyState>
+        {uploadModal}
+        <Toast message={toastMsg} visible={toastVisible} />
+      </>
+    );
+  }
 
   return (
     <div className="screen">
@@ -192,45 +238,36 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
         </div>
       </div>
 
-      {/* row 3: segment detail + packaging */}
-      <div className="panel">
-        <div className="panel-head">
-          <h4>段落明细 · {hoveredSeg?.label}</h4>
-          <span className="tag">
-            <span className={`role-dot role-${hoveredSeg?.role}`} />
-            {ROLES[hoveredSeg?.role]?.name}
-          </span>
-        </div>
-        <div className="panel-body">
-          <dl className="kv">
-            <dt>段落</dt><dd className="mono"><b>{hoveredSeg?.id}</b> · {hoveredSeg?.start?.toFixed(1)} → {hoveredSeg?.end?.toFixed(1)}s</dd>
-            <dt>角色</dt><dd>{ROLES[hoveredSeg?.role]?.name} <span className="dim">— {ROLES[hoveredSeg?.role]?.desc}</span></dd>
-            <dt>镜头</dt><dd>{hoveredSeg?.shot}</dd>
-            <dt>字幕</dt><dd style={{ fontStyle: 'italic' }}>&quot;{hoveredSeg?.caption}&quot;</dd>
-          </dl>
-        </div>
-      </div>
+      {/* row 3: segment detail + packaging (defaults to first segment until hover) */}
+      {(() => {
+        const seg = hoveredSeg ?? v.segments[0];
+        return (
+          <div className="panel">
+            <div className="panel-head">
+              <h4>段落明细 · {seg.label}</h4>
+              <span className="tag">
+                <span className={`role-dot role-${seg.role}`} />
+                {ROLES[seg.role]?.name}
+              </span>
+            </div>
+            <div className="panel-body">
+              <dl className="kv">
+                <dt>段落</dt><dd className="mono"><b>{seg.id}</b> · {seg.start?.toFixed(1)} → {seg.end?.toFixed(1)}s</dd>
+                <dt>角色</dt><dd>{ROLES[seg.role]?.name} <span className="dim">— {ROLES[seg.role]?.desc}</span></dd>
+                <dt>镜头</dt><dd>{seg.shot}</dd>
+                <dt>字幕</dt><dd style={{ fontStyle: 'italic' }}>&quot;{seg.caption}&quot;</dd>
+              </dl>
+            </div>
+          </div>
+        );
+      })()}
       <ScreenFooter
         status="样例已解析 · 7 段角色 + 节奏 + 包装"
         statusTone="ok"
         primary={{ label: '进入素材输入', onClick: onNext }}
       />
 
-      <Modal open={uploadOpen} onClose={() => setUploadOpen(false)} title="上传样例视频" width={520}>
-        <DropZone
-          accept="video/*"
-          multiple={false}
-          onFiles={(files) => {
-            setUploadOpen(false);
-            showToast(`样例视频已上传: ${files[0].name} · 解析中…`);
-            void analyzeSample({ file: files[0] }).catch(() => {});
-          }}
-          label="拖拽视频到此处，或点击选择"
-        />
-        <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-mute)', marginTop: 12, textAlign: 'center' }}>
-          上传后将自动解析结构 · 支持 MP4 / MOV / AVI
-        </div>
-      </Modal>
+      {uploadModal}
 
       <Toast message={toastMsg} visible={toastVisible} />
     </div>
@@ -317,6 +354,20 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
     { key: 'category', label: '品类' },
     { key: 'industry', label: '定位' },
   ];
+
+  // No source structure yet → materials can't be matched; send the user back to 01.
+  if (v.segments.length === 0) {
+    return (
+      <EmptyState
+        icon="film"
+        eyebrow="02 · 素材输入 / ASSETS"
+        title="先解析一个样例视频"
+        hint="素材适配需要先有可迁移的结构。请回到「样例解析」上传样例或运行一键演示，再回来输入新商品与素材。"
+      >
+        <button className="btn primary" onClick={onBack}>← 返回样例解析</button>
+      </EmptyState>
+    );
+  }
 
   return (
     <div className="screen">

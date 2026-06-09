@@ -32,7 +32,7 @@ export const ConnectionBadge = () => {
     },
     mock: {
       color: 'var(--st-weakly)', bg: 'var(--st-weakly-bg)', line: 'var(--st-weakly-line)',
-      label: 'MOCK 本地示例', title: '本地示例数据：尚未成功调用后端 /api/struct/*',
+      label: '未连接 · 待上传', title: '尚未加载真实数据：上传样例或运行一键演示以连接后端 /api/struct/*',
     },
   }[state];
 

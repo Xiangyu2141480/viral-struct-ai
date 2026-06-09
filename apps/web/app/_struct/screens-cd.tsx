@@ -17,6 +17,7 @@ import { useProjectStore } from './store/useProjectStore';
 import { AssetManagerEvidencePanel } from './AssetManagerEvidence';
 import { InsightsPanel } from './InsightsPanel';
 import {
+  EmptyState,
   FramePlaceholder,
   Icon,
   Modal,
@@ -523,6 +524,20 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
 
   const transFilled = v.transitions.filter(t => t.state === 'filled').length;
   const transWeakly = v.transitions.filter(t => t.state === 'weakly').length;
+
+  // No source/diagnosis yet → nothing to diagnose; no mock data shown.
+  if (v.segments.length === 0 || Object.keys(diagnosis).length === 0) {
+    return (
+      <EmptyState
+        icon="diagnose"
+        eyebrow="03 · 缺口诊断 / DIAGNOSE"
+        title="还没有可诊断的素材"
+        hint="缺口诊断需要先解析样例并输入素材。请从「样例解析」开始上传，或点一键演示载入真实后端的完整案例。"
+      >
+        <button className="btn primary" onClick={onBack}>← 返回素材输入</button>
+      </EmptyState>
+    );
+  }
 
   return (
     <div className="screen">
@@ -1095,6 +1110,20 @@ export const ScreenCompile = ({ onBack }: { onBack: () => void }) => {
 
   const currentVersion = versions.find(c => c.id === selectedVersionId)!;
   const playingSegData = playingSeg ? v.segments.find(s => s.id === playingSeg) : null;
+
+  // No source yet → nothing to compile; no mock data shown.
+  if (v.segments.length === 0) {
+    return (
+      <EmptyState
+        icon="compile"
+        eyebrow="04 · 成片编译 / COMPILE"
+        title="还没有可编译的内容"
+        hint="成片编译需要先解析样例、输入素材并完成诊断。请从「样例解析」开始，或点一键演示载入真实后端的完整案例。"
+      >
+        <button className="btn primary" onClick={onBack}>← 返回缺口诊断</button>
+      </EmptyState>
+    );
+  }
 
   return (
     <div className="screen">

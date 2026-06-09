@@ -37,10 +37,6 @@ import {
 import type { ExportResult, TimelineSeg } from '../api/types';
 import {
   COMPILE_VERSIONS,
-  SLOT_DIAGNOSIS,
-  SOURCE_VIDEO,
-  TARGET_MATERIALS,
-  TARGET_PRODUCT,
   type CompileVersion,
   type Diagnosis,
   type Material,
@@ -136,11 +132,24 @@ function deriveTimeline(sourceVideo: SourceVideo, diagnosis: Record<string, Diag
   }));
 }
 
+/** A valid-but-EMPTY source video. The app seeds NO mock content: screen 01 stays
+ *  empty until the user uploads a sample (analyzeSample) or runs the real-backend
+ *  一键演示. Screens gate on `segments.length` and show an empty state instead. */
+const EMPTY_SOURCE: SourceVideo = {
+  id: '', title: '', platform: '', duration: 0, views: '', likes: '',
+  finish_rate: 0, ctr: 0, cvr: 0, protocol_version: '',
+  segments: [], transitions: [],
+  rhythm: { avg_shot: 0, cuts: 0, hook_density: '', bgm_bpm: 0, caption_density: '' },
+  packaging: { title_template: '', captions: '', bgm: '', cover: '' },
+};
+/** Blank product the user fills in — no mock product seeded. */
+const BLANK_PRODUCT: TargetProduct = { name: '', category: '', price: '', stock: 0, asset_count: 0, industry: '' };
+
 const initialState = {
-  sourceVideo: SOURCE_VIDEO,
-  product: TARGET_PRODUCT,
-  materials: TARGET_MATERIALS,
-  diagnosis: SLOT_DIAGNOSIS,
+  sourceVideo: EMPTY_SOURCE,
+  product: BLANK_PRODUCT,
+  materials: [] as Material[],
+  diagnosis: {} as Record<string, Diagnosis>,
   appliedSlots: {} as Record<string, boolean>,
   versions: COMPILE_VERSIONS,
   selectedVersionId: COMPILE_VERSIONS[0].id,
@@ -175,6 +184,11 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   dismissWarnings: () => set({ warnings: [], lastError: null }),
 
   refreshAssetManagerCoverage: async () => {
+    // No source yet → nothing to analyze; keep the panel empty (no mock coverage).
+    if (get().sourceVideo.segments.length === 0) {
+      set({ assetSupplyContext: null, assetManagerWarnings: [], assetManagerLastError: null });
+      return;
+    }
     set({ assetManagerLoading: true, assetManagerLastError: null });
     try {
       const { assetSupplyContext, warnings } = await analyzeStructAssetManagerCoverage({
