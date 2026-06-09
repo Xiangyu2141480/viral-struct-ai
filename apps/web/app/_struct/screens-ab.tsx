@@ -36,6 +36,7 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
   const loadingDemo = useProjectStore((s) => s.loadingDemo);
   const T = v.duration;
   const [hoveredSeg, setHoveredSeg] = useState<Seg | undefined>(v.segments[0]);
+  const [selectedSegId, setSelectedSegId] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -212,7 +213,7 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
               共享时间轴 0 ~ {v.duration}s
             </span>
           </div>
-          <AbstractStructureBand segments={v.segments} total={T} onSegHover={setHoveredSeg} />
+          <AbstractStructureBand segments={v.segments} total={T} onSegHover={setHoveredSeg} onSegClick={(seg) => setSelectedSegId(seg.id ?? null)} selectedId={selectedSegId ?? undefined} />
 
           {/* prominent dashed sync rails connecting the two layers */}
           <SyncRails segments={v.segments} total={T} height={32} />
@@ -256,25 +257,38 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
         </div>
       </div>
 
-      {/* row 3: segment detail + packaging (defaults to first segment until hover) */}
+      {/* row 3: per-segment detail — click a segment in the timeline above */}
       {(() => {
-        const seg = hoveredSeg ?? v.segments[0];
+        const seg = (selectedSegId ? v.segments.find((s) => s.id === selectedSegId) : undefined)
+          ?? (hoveredSeg ? v.segments.find((s) => s.id === hoveredSeg.id) : undefined)
+          ?? v.segments[0];
+        const idx = v.segments.indexOf(seg);
+        const dur = (seg.end ?? 0) - (seg.start ?? 0);
         return (
           <div className="panel">
             <div className="panel-head">
-              <h4>段落明细 · {seg.label}</h4>
-              <span className="tag">
-                <span className={`role-dot role-${seg.role}`} />
-                {ROLES[seg.role]?.name}
-              </span>
+              <h4>段落明细 · {String(idx + 1).padStart(2, '0')} {ROLES[seg.role]?.name ?? seg.label}</h4>
+              <span className="mono dim" style={{ fontSize: 10.5 }}>点击上方时间轴的任一段落查看明细</span>
             </div>
             <div className="panel-body">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+                <span className="tag" style={{ color: `var(--r-${seg.role})`, borderColor: `var(--r-${seg.role})55` }}>
+                  <span className={`role-dot role-${seg.role}`} /> {ROLES[seg.role]?.name ?? seg.role}
+                </span>
+                <span className="mono dim" style={{ fontSize: 11 }}>{seg.start?.toFixed(1)} → {seg.end?.toFixed(1)}s · {dur.toFixed(1)}s</span>
+                <span className="mono dim" style={{ fontSize: 11 }}>{seg.id}</span>
+              </div>
               <dl className="kv">
-                <dt>段落</dt><dd className="mono"><b>{seg.id}</b> · {seg.start?.toFixed(1)} → {seg.end?.toFixed(1)}s</dd>
-                <dt>角色</dt><dd>{ROLES[seg.role]?.name} <span className="dim">— {ROLES[seg.role]?.desc}</span></dd>
-                <dt>镜头</dt><dd>{seg.shot}</dd>
-                <dt>字幕</dt><dd style={{ fontStyle: 'italic' }}>&quot;{seg.caption}&quot;</dd>
+                <dt>角色定位</dt><dd>{ROLES[seg.role]?.name ?? seg.role} <span className="dim">— {ROLES[seg.role]?.desc ?? ''}</span></dd>
+                <dt>镜头内容</dt><dd style={{ lineHeight: 1.65 }}>{seg.caption || '—'}</dd>
+                <dt>迁移规则</dt><dd style={{ lineHeight: 1.65 }}>{seg.shot || '—'}</dd>
               </dl>
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <button className="btn" disabled style={{ opacity: 0.55 }}>
+                  <Icon name="sparkle" size={12} /> 深度分析 · 精扫描此段
+                </button>
+                <span className="mono dim" style={{ fontSize: 10.5 }}>逐峰值动作 / 字幕行为 / 转场 / 可迁移母题（fine scan，即将上线）</span>
+              </div>
             </div>
           </div>
         );

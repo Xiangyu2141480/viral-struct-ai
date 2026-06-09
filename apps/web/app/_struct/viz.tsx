@@ -23,24 +23,36 @@ export const AbstractStructureBand = ({
   segments,
   total,
   onSegHover,
+  onSegClick,
+  selectedId,
   height = 64,
 }: {
   segments: Seg[];
   total: number;
   onSegHover?: (seg: Seg) => void;
+  onSegClick?: (seg: Seg) => void;
+  selectedId?: string;
   height?: number;
 }) =>
 <div className="sband abstract" style={{ height }}>
     {segments.map((seg, i) => {
     const dur = seg.end !== undefined ? seg.end - (seg.start ?? 0) : (seg.dur ?? 0);
     const w = dur / total * 100;
+    const isSel = selectedId !== undefined && seg.id === selectedId;
     return (
       <div
         key={seg.id || i}
-        className={`sband-seg role-${seg.role}`}
-        style={{ width: `${w}%` }}
+        className={`sband-seg role-${seg.role}${isSel ? ' selected' : ''}`}
+        style={{
+          width: `${w}%`,
+          cursor: onSegClick ? 'pointer' : undefined,
+          outline: isSel ? '2px solid var(--accent)' : undefined,
+          outlineOffset: isSel ? '-2px' : undefined,
+          zIndex: isSel ? 2 : undefined,
+        }}
         onMouseEnter={() => onSegHover && onSegHover(seg)}
-        title={`${ROLES[seg.role]?.code} · ${ROLES[seg.role]?.name} · ${dur.toFixed(1)}s`}>
+        onClick={() => onSegClick && onSegClick(seg)}
+        title={`${ROLES[seg.role]?.code} · ${ROLES[seg.role]?.name} · ${dur.toFixed(1)}s（点击查看明细）`}>
 
           <span className="sband-abs-meta top">
             {String(i + 1).padStart(2, '0')} · {ROLES[seg.role]?.code || seg.role.toUpperCase()}
