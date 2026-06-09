@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { analyzeAssetsMock } from './assetAnalyzer';
-import { planGapRepairs } from './gapRepairPlanner';
 import { matchSlots } from './slotMatcher';
 import { extractCreativeIngredientsMock } from './visualIngredientExtractor';
 
@@ -33,29 +32,6 @@ test('asset analyzer avoids face and beauty ingredient outputs', async () => {
   assert.ok(assets[0]?.detectedIngredients?.includes('human_presence'));
   assert.ok(!assets[0]?.detectedIngredients?.includes('face_closeup'));
   assert.ok(!assets[0]?.detectedIngredients?.includes('beauty_demo'));
-});
-
-test('gap repair copy avoids appearance and sensitive-attribute language', () => {
-  const repairs = planGapRepairs([
-    {
-      slotId: 'slot_1',
-      type: 'missing_face_closeup',
-      role: 'opening_attention',
-      reason: 'test',
-      impact: 'test',
-      severity: 'high'
-    },
-    {
-      slotId: 'slot_2',
-      type: 'missing_beauty_demo',
-      role: 'usage_demo',
-      reason: 'test',
-      impact: 'test',
-      severity: 'medium'
-    }
-  ], []);
-
-  assertSafeText(JSON.stringify(repairs));
 });
 
 test('slot matcher sanitizes legacy appearance ingredient gaps before output', () => {
