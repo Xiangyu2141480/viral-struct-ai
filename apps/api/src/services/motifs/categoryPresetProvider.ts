@@ -168,7 +168,7 @@ export async function generateCategoryPresetLLM(opts: GenerateCategoryPresetOpti
       }
     ],
     temperature: 0.4,
-    response_format: { type: 'json_object' }
+    // no response_format: this Ark/Doubao endpoint 400s on json_object; prompt + JSON parser handle it.
   });
 
   const raw = response.choices[0]?.message?.content ?? '';
