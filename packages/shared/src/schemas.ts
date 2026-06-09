@@ -1205,7 +1205,9 @@ export const ShotSlotAcceptanceCriterionSchema = z.object({
 
 export const ShotSlotAcceptanceCriteriaSchema = z.object({
   anyOf: z.array(ShotSlotAcceptanceCriterionSchema),
-  rejectIf: z.array(z.string()).optional()
+  rejectIf: z.array(z.string()).optional(),
+  hardRejectIf: z.array(z.string()).optional(),
+  sourceSpecificRejectIf: z.array(z.string()).optional()
 });
 
 export const BoundarySchema = z.object({

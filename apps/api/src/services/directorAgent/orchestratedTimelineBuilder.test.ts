@@ -113,6 +113,48 @@ test('source-specific gate downgrades a high-score match to partial (never match
   }
 });
 
+test('source-specific gate is evaluated before asset presence and quality so it is not a dead branch', async () => {
+  const graph = makeGraph();
+  graph.shotSlots = [{
+    ...graph.shotSlots[0],
+    id: 'slot_source_specific_no_asset',
+    requiredAsset: { type: 'video', subject: 'keyboard assembly and hardware activation' },
+    intent: {
+      purpose: '键盘碎片自动组装并激活屏幕里的视觉爆发',
+      energyLevel: 'high',
+      motionPattern: 'component cascade, chaos to order, activation burst',
+      compositionPrincipal: 'source-specific kinetic assembly',
+      durationMs: [1000, 3000]
+    },
+    sourceInstance: { productInSource: 'MacBook', specificAction: 'keyboard assembles and activates hardware animation' }
+  }];
+  graph.creativeIngredients = [{
+    id: 'ci_source_specific',
+    type: 'product_closeup_trait',
+    name: 'source-specific assembly interaction',
+    description: 'source-specific interaction that should be abstracted',
+    segmentIds: ['seg_hook'],
+    requiredForSlotIds: ['slot_source_specific_no_asset'],
+    transferability: 'not_transferable',
+    fallbackStrategies: ['text_card'],
+    evidence: [],
+    confidence: 0.9
+  }];
+
+  const timeline = await buildOrchestratedTimeline({
+    projectId: 'p_source_gate_order',
+    structureGraph: graph,
+    assetCards: [],
+    contentBrief: makeContentBrief(),
+    clientFactory: makeFakeClient({
+      slot_source_specific_no_asset: { assetId: null, quality: 0.1, missing: 'no matching asset' }
+    }),
+    model: MODEL
+  });
+
+  assert.equal(timeline.slots[0].fillStatus, 'source_specific_not_transferable');
+});
+
 test('falls back to rule-based matching and still emits a complete timeline when the LLM throws', async () => {
   const timeline = await buildOrchestratedTimeline({
     projectId: 'p1',

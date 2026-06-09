@@ -21,6 +21,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { AssetCard, ContentBrief, GapResolutionOption, OrchestratedTimeline, ViralStructureGraph } from '../packages/shared/src/index';
+import { splitRejectIfForTransfer } from '../packages/shared/src/index';
 import { normalizeAssetCards } from '../apps/api/src/services/assetManager/assetNormalizer';
 import { buildAssetSupplyContext } from '../apps/api/src/services/assetManager/assetSupplyContextBuilder';
 import { buildDeterministicPreset } from '../apps/api/src/services/motifs/categoryPresetProvider';
@@ -197,11 +198,11 @@ function buildReport(
   }
 
   return [
-    '# Director Agent — Orchestrated Timeline (plan-only handoff)',
+    '# Director Agent Champion Pipeline Report',
     '',
     `Generated: ${new Date().toISOString()}`,
     '',
-    '## Summary',
+    '## 1. Summary',
     '',
     markdownTable(
       ['metric', 'value'],
@@ -217,7 +218,9 @@ function buildReport(
         ['partial with enhancement', `${partialWithEnhancement} / ${timeline.slots.length}`],
         ['generation required', `${generationRequired} / ${timeline.slots.length}`],
         ['transitions', `${timeline.transitions.length} ${JSON.stringify(modes)}`],
-        ['transition functions', JSON.stringify(countTransitionFunctions(timeline))],
+        ['matched / partial / gap', `${fullySatisfied} / ${partialWithEnhancement} / ${generationRequired}`],
+        ['transition function counts', JSON.stringify(countTransitionFunctions(timeline))],
+        ['prompt diversity', JSON.stringify(promptDiversity(timeline))],
         ['reusable asset packs', `${timeline.reusableAssetPacks?.length ?? 0}`],
         ['slots with resolution options', String(optionSlots.length)],
         ['AIGC job-card slots', String(aigcOptionSlots.length)],
@@ -226,7 +229,51 @@ function buildReport(
       ]
     ),
     '',
-    '## Slot timeline',
+    '## 2. RejectIf Transfer Filtering',
+    '',
+    '_Raw source-specific terms are intentionally not printed here; this section shows whether they were split into transferable source-category constraints instead of target hard gates._',
+    '',
+    markdownTable(
+      ['slot', 'hard reject count', 'source-specific reject count', 'transfer handling'],
+      timeline.slots.slice(0, 12).map((slot) => {
+        const sourceSlot = findSourceSlot(slot.slotId);
+        const split = splitRejectIfForTransfer({
+          ...sourceSlot?.acceptanceCriteria,
+          slotText: [
+            sourceSlot?.intent?.purpose,
+            sourceSlot?.sourceInstance?.specificAction,
+            sourceSlot?.requiredAsset.subject
+          ].filter(Boolean).join('\n'),
+          targetCategory: timeline.meta.targetCategory
+        });
+        return [
+          slot.slotId,
+          String(split.hardRejectIf.length),
+          String(split.sourceSpecificRejectIf.length),
+          split.sourceSpecificRejectIf.length
+            ? 'kept as source-category evidence, not a target hard gate'
+            : 'no source-category transfer filter'
+        ];
+      })
+    ),
+    '',
+    '## 3. SlotMatcher Quality Distribution',
+    '',
+    markdownTable(
+      ['bucket', 'count'],
+      Object.entries(qualityDistribution(timeline)).map(([bucket, count]) => [bucket, String(count)])
+    ),
+    '',
+    '## 4. Threshold Near Cases',
+    '',
+    thresholdNearCases(timeline).length
+      ? markdownTable(
+          ['slot', 'quality', 'evidenceStrength', 'oldStatus', 'newStatus', 'reason'],
+          thresholdNearCases(timeline)
+        )
+      : '_No 0.40-0.45 threshold-near cases in this fixture run._',
+    '',
+    '## 5. Slot Tiering',
     '',
     markdownTable(
       ['#', 'slotId', 'role', 'source ms -> target ms', 'fillStatus', 'asset / recommended'],
@@ -240,7 +287,7 @@ function buildReport(
       ])
     ),
     '',
-    '## Motif-aware and source-specific checks',
+    '## 6. Motif Transfer Samples',
     '',
     motifSlots.length
       ? markdownTable(
@@ -278,6 +325,19 @@ function buildReport(
         )
       : '_No source-specific abstractions emitted._',
     '',
+    '',
+    '## 7. Prompt Diversity',
+    '',
+    markdownTable(
+      ['type', 'total', 'unique', 'duplicate groups'],
+      Object.entries(promptDiversity(timeline)).map(([type, result]) => [
+        type,
+        String(result.total),
+        String(result.unique),
+        result.duplicateGroups.join('; ') || '-'
+      ])
+    ),
+    '',
     '## Gap / partial resolution options',
     '',
     optionSlots
@@ -289,7 +349,20 @@ function buildReport(
       })
       .join('\n\n'),
     '',
-    '## Reusable asset packs',
+    '## 8. Transition Plan',
+    '',
+    markdownTable(
+      ['id', 'from → to', 'function', 'mode', '中文剪辑指导'],
+      timeline.transitions.map((t) => [
+        t.id,
+        `${t.fromSlotId} → ${t.toSlotId}`,
+        t.transitionFunction ?? '-',
+        t.mode,
+        t.hyperframes?.editingGuidanceNL ?? t.aigcFrameBridge?.prompt ?? t.reason
+      ])
+    ),
+    '',
+    '## 9. Reusable Asset Packs',
     '',
     timeline.reusableAssetPacks?.length
       ? markdownTable(
@@ -303,13 +376,6 @@ function buildReport(
           ])
         )
       : '_No reusable asset packs emitted._',
-    '',
-    '## Transition plan',
-    '',
-    markdownTable(
-      ['id', 'from → to', 'mode', 'function', 'preferred'],
-      timeline.transitions.map((t) => [t.id, `${t.fromSlotId} → ${t.toSlotId}`, t.mode, t.transitionFunction ?? '-', t.preferredImplementation])
-    ),
     '',
     '## Video Agent handoff (timeline only — NOT rendered)',
     '',
@@ -325,12 +391,22 @@ function buildReport(
       ? markdownTable(['target', 'kind', 'provider', 'ownership'], jobCards)
       : '_No external generation job cards in this run._',
     '',
-    `## Source leakage check: ${leakage.passed ? 'PASS' : 'FAIL'}`,
+    `## 10. Safety / Boundary`,
     '',
+    '- 仅计划 / 仅任务卡。',
+    '- 未调用外部生成模型。',
+    '- 未声称真实音频生成。',
+    '- 未伪造真实 CTR。',
+    '- 不把 source-specific rejectIf 当成目标品类 hard gate。',
+    `- Source leakage check: ${leakage.passed ? 'PASS' : 'FAIL'}`,
     leakage.passed
-      ? '- No source-product-specific term (macbook / keyboard / laptop / ...) leaked into the plan.'
+      ? '- No source-product-specific term leaked into positive target prompts.'
       : `- Leaked terms: ${leakage.hits.join(', ')}`
   ].join('\n');
+
+  function findSourceSlot(slotId: string): ViralStructureGraph['shotSlots'][number] | undefined {
+    return readJson<ViralStructureGraph>(INPUTS.structureGraph).shotSlots.find((slot) => slot.id === slotId);
+  }
 }
 
 function describeOption(option: GapResolutionOption): string {
@@ -352,6 +428,57 @@ function countTransitionFunctions(timeline: OrchestratedTimeline): Record<string
     out[key] = (out[key] ?? 0) + 1;
   }
   return out;
+}
+
+function qualityDistribution(timeline: OrchestratedTimeline): Record<string, number> {
+  const buckets = { '<0.40': 0, '0.40-0.45': 0, '0.45-0.85': 0, '>=0.85': 0 };
+  for (const slot of timeline.slots) {
+    const quality = slot.fill.kind === 'matched' ? slot.fill.matchQuality : 0;
+    if (quality < 0.4) buckets['<0.40'] += 1;
+    else if (quality < 0.45) buckets['0.40-0.45'] += 1;
+    else if (quality < 0.85) buckets['0.45-0.85'] += 1;
+    else buckets['>=0.85'] += 1;
+  }
+  return buckets;
+}
+
+function thresholdNearCases(timeline: OrchestratedTimeline): string[][] {
+  return timeline.slots
+    .filter((slot) => slot.fill.kind === 'matched' && slot.fill.matchQuality >= 0.4 && slot.fill.matchQuality < 0.45)
+    .map((slot) => {
+      const quality = slot.fill.kind === 'matched' ? slot.fill.matchQuality : 0;
+      const newStatus = slot.fillStatus ?? (slot.fill.kind === 'gap' ? 'missing_generation_required' : slot.fill.status);
+      const oldStatus = quality >= 0.45 ? 'partial' : 'missing';
+      return [
+        slot.slotId,
+        quality.toFixed(3),
+        slot.fill.evidence.matchedIngredients.length || slot.fill.evidence.coverageStatus ? 'weak-or-better' : 'none',
+        oldStatus,
+        newStatus,
+        slot.fill.videoEngineInstruction.slice(0, 90)
+      ];
+    });
+}
+
+function promptDiversity(timeline: OrchestratedTimeline): Record<string, { total: number; unique: number; duplicateGroups: string[] }> {
+  const grouped: Record<string, string[]> = { reshoot: [], hyperframes: [], aigc: [] };
+  for (const slot of timeline.slots) {
+    const options = slot.fill.kind === 'gap' ? slot.fill.options : slot.fill.options ?? [];
+    for (const option of options) {
+      if (option.id === 'reshoot') grouped.reshoot.push(option.guidanceNL);
+      if (option.id === 'hyperframes') grouped.hyperframes.push(option.editingGuidanceNL);
+      if (option.id === 'aigc') grouped.aigc.push(option.prompt);
+    }
+  }
+  return Object.fromEntries(Object.entries(grouped).map(([type, prompts]) => {
+    const counts = new Map<string, number>();
+    for (const prompt of prompts) counts.set(prompt, (counts.get(prompt) ?? 0) + 1);
+    return [type, {
+      total: prompts.length,
+      unique: counts.size,
+      duplicateGroups: [...counts.entries()].filter(([, count]) => count > 1).map(([prompt, count]) => `${count}x ${prompt.slice(0, 60)}`)
+    }];
+  }));
 }
 
 function markdownTable(headers: string[], rows: string[][]): string {

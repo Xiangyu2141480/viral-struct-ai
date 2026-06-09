@@ -13,6 +13,7 @@ import type {
   SourceSpecificTransferSubtype,
   ViralMotifAnnotation
 } from '@viral-struct/shared';
+import { splitRejectIfForTransfer } from '@viral-struct/shared';
 import { DEFAULT_ASPECT_RATIO, SAFE_NEGATIVE_PROMPT_ZH } from './constants';
 import { containsSourceSpecificTerm } from '../motifs/motionGrammarSanitizer';
 import { inferSourceSpecificTransferSubtype } from './sourceSpecificAbstraction';
@@ -53,17 +54,54 @@ export interface GapResolutionOptionsResult {
   recommendedOptionId: GapResolutionOptionId;
 }
 
+export interface DirectorPromptContext {
+  slotId: string;
+  role: string;
+  slotIntent?: string;
+  acceptanceExamples: string[];
+  acceptanceMotionTypes: string[];
+  hardRejectIf: string[];
+  sourceSpecificRejectIf: string[];
+  sourceSpecificMeaning?: string;
+  targetEquivalentExplanation?: string;
+  motifType?: string;
+  motionTokens: string[];
+  transferVariables: Array<{
+    name: string;
+    sourceValue?: string;
+    targetValue?: string;
+    allowedTargetValues?: string[];
+    notes?: string;
+  }>;
+  targetCategoryMapping?: {
+    preferredEquivalents?: string[];
+    avoidSourceObjects?: string[];
+  };
+  contentBrief: ContentBrief;
+  targetCategory: string;
+  chosenAssetId?: string;
+  referenceAssetIds: string[];
+  assetEvidence?: {
+    semanticSummary?: string;
+    actionHints?: string[];
+    qualityNotes?: string[];
+    keyframes?: unknown[];
+  };
+  fillStatus?: DirectorFillStatus;
+}
+
 export function buildGapResolutionOptions(args: BuildGapResolutionOptionsArgs): GapResolutionOptionsResult {
   const brief =
     args.missingBrief
     ?? args.assetSupplyContext?.missingMaterialBriefs?.find((entry) => entry.affectedSlotId === args.slot.id);
 
   const spec = buildDirectorSpec(args, brief);
+  const context = buildDirectorPromptContext(args, spec, brief);
   const product = args.contentBrief.productName;
 
-  const reshoot = buildReshootOption(spec, product, brief);
-  const hyperframes = buildHyperframesOption(args, spec, product, brief);
-  const aigc = buildAigcOption(args, spec, product, brief);
+  const reshoot = buildReshootOption(spec, context, product, brief);
+  const hyperframes = buildHyperframesOption(args, spec, context, product, brief);
+  const aigc = buildAigcOption(args, spec, context, product, brief);
   const options: GapResolutionOption[] = [reshoot, hyperframes];
   if (shouldOfferAigc(args, brief, aigc)) {
     options.push(aigc);
@@ -110,13 +148,24 @@ function isAigcEligible(brief: MissingMaterialBrief | undefined, aigc: AigcOptio
 
 // --- reshoot (Chinese) ------------------------------------------------------
 
-function buildReshootOption(spec: ZhRoleSpec, product: string, brief?: MissingMaterialBrief): ReshootOption {
+function buildReshootOption(
+  spec: ZhRoleSpec,
+  context: DirectorPromptContext,
+  product: string,
+  brief?: MissingMaterialBrief
+): ReshootOption {
   const durationSec = positive(brief?.manualShootBrief?.durationSec ?? spec.durationSec, spec.durationSec);
   const mustCapture = spec.mustCapture;
   const avoid = AVOID_ZH;
   const guidanceNL =
-    `补拍一个约 ${durationSec} 秒的竖屏「${spec.label}」镜头：${spec.reshootShot}。`
+    `补拍一个约 ${durationSec} 秒的竖屏「${spec.label}」镜头。`
+    + `该槽位目标：${contextGoalLine(context, spec)}。`
+    + `当前素材不足：${assetGapLine(context)}。`
+    + `目标品类等价动作：${targetActionLine(context, spec)}。`
+    + `镜头方案：${spec.reshootShot}。`
+    + `拍摄构图：${spec.framing}。`
     + `务必拍到：${mustCapture.join('、')}。`
+    + `结构迁移作用：${structureSupportLine(context, spec)}。`
     + `注意避免：${avoid.slice(0, 4).join('、')}。`
     + `保持 ${product} 的包装与标签清晰可见、背景干净。`;
   return {
@@ -135,6 +184,7 @@ function buildReshootOption(spec: ZhRoleSpec, product: string, brief?: MissingMa
 function buildHyperframesOption(
   args: BuildGapResolutionOptionsArgs,
   spec: ZhRoleSpec,
+  context: DirectorPromptContext,
   product: string,
   brief?: MissingMaterialBrief
 ): HyperframesOption {
@@ -145,12 +195,20 @@ function buildHyperframesOption(
   const refLine = referencedAssetIds.length ? `复用现有素材：${referencedAssetIds.join('、')}。` : '';
 
   const motifLine = spec.motifLine ? `${spec.motifLine}。` : '';
+  const layerLine = buildLayerLine(context, spec);
+  const stepLine = buildAnimationStepLine(durationMs, context, spec);
+  const bridgeLine = buildBridgeLine(context);
   const editingGuidanceNL =
     `以 ${product} 为画面主体，${spec.hyperframesIntent}。`
+    + `槽位目标：${contextGoalLine(context, spec)}。`
+    + layerLine
+    + stepLine
+    + bridgeLine
     + motifLine
     + `用${spec.animationHints.join('、')}等动效承接「${spec.label}」。`
     + refLine
-    + `保持 ${product} 原始包装与标签清晰可见，不得加入未授权品牌、价格承诺或健康功效宣称。`;
+    + `文字安全区保留在画面上方或侧边，产品包装与标签清晰可见。`
+    + `不得加入未授权品牌、价格承诺或健康功效宣称，也不得加入源片电子设备元素。`;
 
   const copy = buildCopy(args);
 
@@ -179,6 +237,7 @@ function buildCopy(args: BuildGapResolutionOptionsArgs): HyperframesOption['copy
 function buildAigcOption(
   args: BuildGapResolutionOptionsArgs,
   spec: ZhRoleSpec,
+  context: DirectorPromptContext,
   product: string,
   brief?: MissingMaterialBrief
 ): AigcOption {
@@ -190,6 +249,10 @@ function buildAigcOption(
   // prompt distinct and carries the "keep the grammar, swap the objects" intent — rendered in Chinese,
   // so no two slots with different grammar get the same prompt, and no source object leaks.
   const grammar = (args.motionTokens ?? []).map((token) => MOTION_TOKEN_ZH[token] ?? token).filter(Boolean);
+  const variableLine = context.transferVariables.length
+    ? `迁移变量：${context.transferVariables.map((entry) => `${entry.name}→${zhList(entry.targetValue ? [entry.targetValue] : entry.allowedTargetValues ?? [])}`).join('；')}。`
+    : '';
+  const targetMappingLine = targetActionLine(context, spec);
   const transferLine = grammar.length
     ? `保留源片可迁移的动作语法（${grammar.join('、')}），用目标品类的等效动作重新演绎，不照搬源产品或源场景。`
     : '';
@@ -199,11 +262,17 @@ function buildAigcOption(
 
   const prompt =
     '仅为生成提示词，非成片。'
-    + `为 ${product} 生成一个竖屏 9:16、普通手机拍摄风格的「${spec.label}」镜头：${spec.aigcScene}。`
+    + `为 ${product} 生成一个竖屏 9:16、${expectedDurationSec} 秒、普通手机广告质感的「${spec.label}」镜头。`
+    + `主体产品：${product}，包装和标签必须保持清晰。`
+    + `槽位目标：${contextGoalLine(context, spec)}。`
+    + `目标品类等价动作：${targetMappingLine}。`
+    + `分镜动作步骤：${buildAigcActionSteps(context, spec)}。`
+    + `画面描述：${spec.aigcScene}。`
     + (spec.motifLine ? `${spec.motifLine}。` : '')
     + transferLine
+    + variableLine
     + sellingLine
-    + '不得编造价格、促销、医疗功效、明星代言或其它品牌。';
+    + '只允许使用 contentBrief 中的卖点，不得编造价格、促销、医疗功效、明星代言或其它品牌。禁止出现源片电子设备元素。';
 
   return {
     id: 'aigc',
@@ -234,6 +303,7 @@ interface ZhRoleSpec {
   aigcScene: string;
   cardType: string;
   motifLine?: string;
+  targetEquivalentActions?: string[];
 }
 
 const AVOID_ZH = [
@@ -391,11 +461,265 @@ function buildDirectorSpec(args: BuildGapResolutionOptionsArgs, brief?: MissingM
     };
   }
 
-  if (!containsSourceSpecificTerm(buildSlotText(args.slot))) {
+  if (!containsDirectorSourceSpecificTerm(buildSlotText(args.slot))) {
     return base;
   }
 
   return buildSourceSpecificSpec(base, inferSourceSpecificTransferSubtype(args.slot, args.motif));
+}
+
+function buildDirectorPromptContext(
+  args: BuildGapResolutionOptionsArgs,
+  spec: ZhRoleSpec,
+  brief?: MissingMaterialBrief
+): DirectorPromptContext {
+  const split = splitRejectIfForTransfer({
+    ...args.slot.acceptanceCriteria,
+    slotText: buildSlotText(args.slot),
+    targetCategory: args.contentBrief.category
+  });
+  const acceptanceExamples =
+    args.slot.acceptanceCriteria?.anyOf.flatMap((entry) => entry.examples).filter((entry) => !containsSourceSpecificTerm(entry)) ?? [];
+  const acceptanceMotionTypes =
+    args.slot.acceptanceCriteria?.anyOf.map((entry) => entry.motionType).filter((entry): entry is string => Boolean(entry)) ?? [];
+  const transferVariables = args.motif?.transferVariables.map((entry) => ({
+    name: entry.name,
+    sourceValue: entry.sourceValue,
+    targetValue: entry.targetValue,
+    allowedTargetValues: entry.allowedTargetValues,
+    notes: entry.notes
+  })) ?? [];
+  const preferredEquivalents =
+    args.motif?.targetCategoryMapping.preferredEquivalents
+    ?? brief?.motifContext?.targetMotifHints
+    ?? spec.targetEquivalentActions
+    ?? [];
+
+  return {
+    slotId: args.slot.id,
+    role: args.slot.role,
+    slotIntent: targetSafeSlotIntent(args.slot, spec),
+    acceptanceExamples: acceptanceExamples.map(safePromptText).filter((entry): entry is string => Boolean(entry)),
+    acceptanceMotionTypes: acceptanceMotionTypes.map(safePromptText).filter((entry): entry is string => Boolean(entry)),
+    hardRejectIf: split.hardRejectIf,
+    sourceSpecificRejectIf: split.sourceSpecificRejectIf,
+    sourceSpecificMeaning: split.sourceSpecificRejectIf.length
+      ? '源片里的源品类限制只作为动作语法提示，迁移时不直接否决目标品类素材。'
+      : undefined,
+    targetEquivalentExplanation: spec.motifLine,
+    motifType: args.motif?.motifType ?? brief?.motifContext?.motifType,
+    motionTokens: args.motionTokens ?? args.motif?.motionTokens ?? brief?.motifContext?.motionTokens ?? [],
+    transferVariables,
+    targetCategoryMapping: {
+      preferredEquivalents,
+      avoidSourceObjects: args.motif?.bannedSourceTerms ?? split.sourceSpecificRejectIf
+    },
+    contentBrief: args.contentBrief,
+    targetCategory: args.contentBrief.category ?? 'generic',
+    chosenAssetId: args.chosenAssetId,
+    referenceAssetIds: singleReference(args),
+    assetEvidence: {
+      semanticSummary: coverageSemanticSummary(args.coverage),
+      actionHints: [
+        ...(args.coverage?.candidateAssets?.flatMap((candidate) => candidate.evidence.reasons) ?? []),
+        ...(brief?.manualShootBrief?.mustCapture ?? [])
+      ].filter(Boolean).slice(0, 5),
+      qualityNotes: [
+        ...(args.coverage?.candidateAssets?.flatMap((candidate) => candidateConstraintNotes(candidate.constraints)) ?? []),
+        ...(args.coverage?.limitations ?? [])
+      ].filter(Boolean).slice(0, 5)
+    },
+    fillStatus: args.fillStatus
+  };
+}
+
+function contextGoalLine(context: DirectorPromptContext, spec: ZhRoleSpec): string {
+  const pieces = [
+    context.slotIntent,
+    context.acceptanceExamples[0],
+    context.acceptanceMotionTypes[0] ? `动作类型是 ${context.acceptanceMotionTypes[0]}` : undefined,
+    spec.label
+  ].filter((piece): piece is string => Boolean(piece));
+  return pieces[0] ?? spec.label;
+}
+
+function assetGapLine(context: DirectorPromptContext): string {
+  if (context.fillStatus === 'source_specific_not_transferable') {
+    return context.sourceSpecificMeaning ?? '当前素材能做底图，但源片动作属于源品类，需要迁移成目标品类等价动作';
+  }
+  if (context.assetEvidence?.qualityNotes?.length) return context.assetEvidence.qualityNotes.join('；');
+  if (context.chosenAssetId) return `已有素材 ${context.chosenAssetId} 可做真实参考，但动作、时长或结构表达不足`;
+  return '当前素材不足以直接覆盖该槽位，需要补足动作证据或包装表达';
+}
+
+function targetActionLine(context: DirectorPromptContext, spec: ZhRoleSpec): string {
+  const preferred = context.targetCategoryMapping?.preferredEquivalents ?? [];
+  const values = [
+    ...preferred,
+    ...context.transferVariables.flatMap((entry) => [entry.targetValue, ...(entry.allowedTargetValues ?? [])]),
+    ...(spec.targetEquivalentActions ?? [])
+  ].filter((entry): entry is string => Boolean(entry));
+  const resolved = uniqueNonEmpty(values).slice(0, 8);
+  return zhList(resolved.length ? resolved : spec.animationHints);
+}
+
+function structureSupportLine(context: DirectorPromptContext, spec: ZhRoleSpec): string {
+  if (context.motifType === 'kinetic_assembly_reveal') {
+    return '保留源片“级联、由散到聚、激活、爆发、CTA 收口”的结构节奏，但全部替换为饮料原生动作';
+  }
+  return spec.motifLine ?? `支撑「${spec.label}」的结构节奏，并把源片可迁移意图转成目标商品画面`;
+}
+
+function buildLayerLine(context: DirectorPromptContext, spec: ZhRoleSpec): string {
+  const layers = uniqueNonEmpty([
+    '产品主体图层',
+    ...targetActionLine(context, spec).split('、').slice(0, 5),
+    context.contentBrief.sellingPoints[0] ? '卖点文字图层' : undefined,
+    context.chosenAssetId ? `参考素材 ${context.chosenAssetId}` : undefined
+  ].filter((entry): entry is string => Boolean(entry)));
+  return `需要图层：${layers.join('、')}。`;
+}
+
+function buildAnimationStepLine(durationMs: number, context: DirectorPromptContext, spec: ZhRoleSpec): string {
+  const totalSec = Math.max(1, Math.round(durationMs / 1000));
+  const mid = Math.max(0.8, Number((totalSec * 0.45).toFixed(1)));
+  const late = Math.max(mid + 0.6, Number((totalSec * 0.78).toFixed(1)));
+  const actions = targetActionLine(context, spec).split('、');
+  return `动画步骤：0.0s-${mid}s ${actions[0] ?? spec.animationHints[0]}入场；${mid}s-${late}s ${actions[1] ?? spec.animationHints[1]}承接并形成节奏变化；${late}s-${totalSec}s 产品标签定格并收束到文案安全区。`;
+}
+
+function buildBridgeLine(context: DirectorPromptContext): string {
+  if (context.motifType === 'kinetic_assembly_reveal') {
+    return '前后衔接：上一镜头的动势接入冰块/柠檬/茶滴级联，下一镜头以产品居中或 CTA 尾帧承接。';
+  }
+  return '前后衔接：保留上一镜头运动方向，用产品定格或卖点卡承接到下一槽位。';
+}
+
+function buildAigcActionSteps(context: DirectorPromptContext, spec: ZhRoleSpec): string {
+  const actions = targetActionLine(context, spec).split('、');
+  if (context.motifType === 'kinetic_assembly_reveal') {
+    return '冰块、柠檬片、红茶水滴从边缘级联飞入 → 由散到聚围绕瓶身汇聚 → 开盖或触碰瓶身完成激活 → 冷雾、茶花或水汽爆发 → 产品居中并 CTA 收口';
+  }
+  return [
+    actions[0] ?? spec.animationHints[0],
+    actions[1] ?? spec.animationHints[1],
+    actions[2] ?? '产品标签清晰定格',
+    '卖点或 CTA 安全收口'
+  ].join(' → ');
+}
+
+function safePromptText(text: string | undefined): string | undefined {
+  if (!text) return undefined;
+  if (!containsDirectorSourceSpecificTerm(text)) return text;
+  const sanitized = sanitizeSourceSpecificText(text);
+  return sanitized.length > 0 ? sanitized : undefined;
+}
+
+function targetSafeSlotIntent(slot: ShotSlotNode, spec: ZhRoleSpec): string | undefined {
+  const raw = slot.intent?.purpose;
+  if (!raw) {
+    return spec.motifLine ?? `围绕「${spec.label}」完成目标品类等价表达`;
+  }
+  if (!containsDirectorSourceSpecificTerm(raw)) {
+    return raw;
+  }
+  const sanitized = sanitizeSourceSpecificText(raw);
+  if (sanitized && !containsDirectorSourceSpecificTerm(sanitized)) {
+    return sanitized;
+  }
+  return spec.motifLine ?? `围绕「${spec.label}」完成目标品类等价表达`;
+}
+
+function sanitizeSourceSpecificText(text: string): string {
+  let safe = text
+    .replace(/屏幕显示与系统交互/g, '卖点卡与场景卡连续切换')
+    .replace(/系统交互/g, '卖点卡互动')
+    .replace(/多窗口并行操作/g, '多卖点卡并行展示')
+    .replace(/多个应用界面/g, '多个饮用场景卡')
+    .replace(/应用界面/g, '场景卡')
+    .replace(/界面/g, '信息卡')
+    .replace(/产品侧边接口布局/g, '瓶身标签与冷凝水细节布局')
+    .replace(/侧边接口布局/g, '瓶身标签细节布局')
+    .replace(/接口布局/g, '标签细节布局')
+    .replace(/接口/g, '瓶身细节')
+    .replace(/摄像头|镜片/g, '标签高光')
+    .replace(/功能部件组装/g, '冰爽元素汇聚')
+    .replace(/核心功能部件/g, '核心冰爽元素')
+    .replace(/功能部件/g, '冰爽元素')
+    .replace(/高清内容播放/g, '茶色质感呈现')
+    .replace(/按键操作/g, '开盖或触碰瓶身动作')
+    .replace(/按键/g, '开盖动作')
+    .replace(/产品闭合全流程/g, '产品定格收口流程')
+    .replace(/特殊开合结构/g, '开盖/倒茶动作')
+    .replace(/开合结构/g, '开盖/倒茶动作')
+    .replace(/硬件卖点/g, '冰爽卖点')
+    .replace(/硬件功能/g, '冰爽卖点')
+    .replace(/硬件/g, '冰爽卖点')
+    .replace(/跨设备联动/g, '跨场景分享接力')
+    .replace(/无缝协同/g, '顺滑场景接力')
+    .replace(/触控板/g, '触碰瓶身')
+    .replace(/键盘/g, '冰块')
+    .replace(/笔记本/g, '产品主体')
+    .replace(/火箭/g, '冰爽水汽')
+    .replace(/购买窗口/g, 'CTA 卡片');
+
+  safe = safe
+    .replace(/MacBook|Apple|laptop|keyboard|trackpad|touchpad|screen|port|interface|camera|hinge|chassis|rocket|hardware|purchase window|multi[-_\s]?window|system interaction/gi, '目标品类等价动作')
+    .replace(/笔记本|苹果|键盘|触控板|屏幕|接口|摄像头|机身|火箭|购买窗口|硬件功能|硬件|开合结构|闭合|按键|功能部件|多窗口|系统交互|侧边/g, '目标品类等价动作')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return safe;
+}
+
+function containsDirectorSourceSpecificTerm(text: string): boolean {
+  return containsSourceSpecificTerm(text)
+    || /MacBook|Apple|laptop|keyboard|trackpad|touchpad|screen|port|interface|camera|hinge|chassis|rocket|hardware|purchase window|multi[-_\s]?window|system interaction/i.test(text)
+    || /笔记本|苹果|键盘|触控板|屏幕|接口|摄像头|机身|火箭|购买窗口|硬件功能|硬件|开合结构|闭合|按键|功能部件|多窗口|系统交互|侧边/.test(text);
+}
+
+function coverageSemanticSummary(coverage?: ContextualSlotCoverage): string | undefined {
+  const first = coverage?.candidateAssets?.[0];
+  if (!first) return undefined;
+  return [
+    first.assetId,
+    ...first.evidence.reasons.slice(0, 2),
+    first.usableAs,
+    first.mediaReadiness?.hasKeyframe ? '有关键帧证据' : undefined
+  ].filter(Boolean).join('，');
+}
+
+function candidateConstraintNotes(constraints: ContextualSlotCoverage['candidateAssets'][number]['constraints']): string[] {
+  return Object.entries(constraints)
+    .filter(([, value]) => Boolean(value))
+    .map(([key, value]) => value === true ? key : `${key}: ${value}`);
+}
+
+function zhList(values: string[]): string {
+  const translated = values
+    .map(translateEquivalent)
+    .filter((value) => value.length > 0 && !containsSourceSpecificTerm(value));
+  return uniqueNonEmpty(translated).join('、');
+}
+
+function translateEquivalent(value: string): string {
+  const lower = value.toLowerCase();
+  const table: Array<[RegExp, string]> = [
+    [/ice cubes?/, '冰块'],
+    [/lemon slices?/, '柠檬片'],
+    [/tea droplets?/, '红茶水滴'],
+    [/cold mist/, '冷雾'],
+    [/cap opening|cap pop/, '开盖激活'],
+    [/pour/, '倒茶入杯'],
+    [/cta lock|cta/, 'CTA 收口'],
+    [/splash|burst/, '水汽爆发'],
+    [/lineup/, '产品阵列'],
+    [/brand color/, '品牌色块'],
+    [/product/, '产品主体']
+  ];
+  for (const [pattern, translated] of table) {
+    if (pattern.test(lower)) return translated;
+  }
+  return value;
 }
 
 function isKineticAssemblyContext(args: BuildGapResolutionOptionsArgs, brief?: MissingMaterialBrief): boolean {
@@ -423,7 +747,7 @@ function buildSourceSpecificSpec(base: ZhRoleSpec, subtype: SourceSpecificTransf
       return {
         ...base,
         label: '瓶身细节扫光',
-        reshootShot: '用瓶盖特写、标签扫光、冷凝水擦除和瓶身微距替代源品类的接口/镜片细节展示',
+        reshootShot: '用瓶盖特写、标签扫光、冷凝水擦除和瓶身微距完成连续细节展示',
         mustCapture: ['瓶盖特写', '标签扫光', '冷凝水擦除', '瓶身微距', '包装文字保持清晰'],
         framing: '竖屏微距到中近景，镜头沿瓶身或标签缓慢扫过',
         durationSec: base.durationSec,

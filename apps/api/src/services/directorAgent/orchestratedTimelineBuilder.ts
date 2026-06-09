@@ -109,7 +109,7 @@ export async function buildOrchestratedTimeline(input: BuildOrchestratedTimeline
       gateBlocked: gate.blocked,
       gateReasons: gate.reasons
     });
-    const tier = fillStatusToTier(fillStatus);
+    const tier = fillStatusToTier(fillStatus, slotMatch);
     const referenceAssetIds = selectReferenceAssetIds(slotMatch, coverage, assetCards);
     const evidence = buildEvidence(coverage, slotMatch, gate.reasons);
     const motionTokens = sanitizeMotionGrammarText(buildSlotText(slot)).motionTokens;
@@ -227,11 +227,7 @@ interface DecideFillStatusArgs {
 function decideFillStatus(args: DecideFillStatusArgs): DirectorFillStatus {
   const quality = matchQuality(args.match);
   const hasAsset = Boolean(args.match?.assetId);
-  if (!hasAsset || quality < PARTIAL_THRESHOLD) {
-    return 'missing_generation_required';
-  }
-
-  if (args.gateBlocked) {
+  if (args.gateBlocked && hasTransferableSourceSpecificGrammar(args)) {
     return 'source_specific_not_transferable';
   }
 
@@ -246,6 +242,10 @@ function decideFillStatus(args: DecideFillStatusArgs): DirectorFillStatus {
 
   if (hasRawSourceSpecificSemantics(args.slot)) {
     return 'source_specific_not_transferable';
+  }
+
+  if (!hasAsset || quality < PARTIAL_THRESHOLD) {
+    return 'missing_generation_required';
   }
 
   if (args.coverage?.coverageStatus === 'insufficient') {
@@ -266,6 +266,13 @@ function decideFillStatus(args: DecideFillStatusArgs): DirectorFillStatus {
   return 'partial_asset_support';
 }
 
+function hasTransferableSourceSpecificGrammar(args: DecideFillStatusArgs): boolean {
+  return Boolean(args.motif)
+    || args.gateReasons.length > 0
+    || sanitizeMotionGrammarText(buildSlotText(args.slot)).motionTokens.length > 0
+    || hasRawSourceSpecificSemantics(args.slot);
+}
+
 function isDirectVisualRole(role: string): boolean {
   return role === 'opening_attention' || role === 'product_closeup' || role === 'cover' || role === 'cta_visual';
 }
@@ -276,9 +283,10 @@ function hasRawSourceSpecificSemantics(slot: ShotSlotNode): boolean {
     || /键盘|触控板|火箭|硬件功能|接口|摄像头|芯片|屏幕|格栅|脚垫|侧边按键|机身侧边|部件归位|功能部件/.test(lower);
 }
 
-function fillStatusToTier(status: DirectorFillStatus): 'matched' | 'partial' | 'gap' {
+function fillStatusToTier(status: DirectorFillStatus, match?: SlotMatch): 'matched' | 'partial' | 'gap' {
   if (status === 'matched') return 'matched';
   if (status === 'missing_generation_required') return 'gap';
+  if (!match?.assetId) return 'gap';
   return 'partial';
 }
 
@@ -587,7 +595,13 @@ function inferTargetCategory(brief: ContentBrief, categoryPreset?: CategoryPrese
 
 function safeSourceIntent(purpose: string | undefined): string | undefined {
   if (!purpose) return undefined;
-  return containsSourceSpecificTerm(purpose) ? undefined : purpose;
+  return containsDirectorSourceSpecificTerm(purpose) ? undefined : purpose;
+}
+
+function containsDirectorSourceSpecificTerm(text: string): boolean {
+  return containsSourceSpecificTerm(text)
+    || /MacBook|Apple|laptop|keyboard|trackpad|touchpad|screen|port|interface|camera|hinge|chassis|rocket|hardware|purchase window|multi[-_\s]?window|system interaction/i.test(text)
+    || /笔记本|苹果|键盘|触控板|屏幕|接口|摄像头|机身|火箭|购买窗口|硬件功能|硬件|开合结构|闭合|按键|功能部件|多窗口|系统交互|侧边/.test(text);
 }
 
 function buildSlotText(slot: ShotSlotNode): string {
@@ -617,11 +631,55 @@ function buildReusableAssetPacks(args: {
   slots: OrchestratedSlot[];
   contentBrief: ContentBrief;
 }): ReusableAssetPackPlan[] {
-  const slotIdsByRole = (roles: string[]): string[] =>
-    args.slots.filter((slot) => roles.includes(slot.role)).map((slot) => slot.slotId);
-  const motifSlotIds = args.slots
-    .filter((slot) => slot.motifType === 'kinetic_assembly_reveal' || (slot.motionTokens ?? []).includes('component_cascade'))
-    .map((slot) => slot.slotId);
+  const slotIdsByPredicate = (predicate: (slot: OrchestratedSlot) => boolean): string[] => {
+    const ids = args.slots.filter(predicate).map((slot) => slot.slotId);
+    return ids.length ? ids : args.slots.map((slot) => slot.slotId).slice(0, 1);
+  };
+  const slotIdsByRole = (roles: string[]): string[] => slotIdsByPredicate((slot) => roles.includes(slot.role));
+  const actionsByPredicate = (predicate: (slot: OrchestratedSlot) => boolean, fallback: string): string => {
+    const matchingSlots = args.slots.filter(predicate);
+    const vocabulary = packActionVocabulary(matchingSlots.length ? matchingSlots : args.slots);
+    return vocabulary.slice(0, 5).join('、') || fallback;
+  };
+  const motifSlotIds = slotIdsByPredicate((slot) =>
+    slot.motifType === 'kinetic_assembly_reveal'
+    || (slot.motionTokens ?? []).includes('component_cascade')
+    || slot.sourceAbstraction?.subtype === 'kinetic_assembly_reveal'
+  );
+  const heroActions = actionsByPredicate(
+    (slot) => slot.role === 'opening_attention' || slot.sourceAbstraction?.subtype === 'opening_transform',
+    '强开场入场、产品英雄亮相、hook 标题定格'
+  );
+  const closeupActions = actionsByPredicate(
+    (slot) => slot.role === 'product_closeup' || slot.sourceAbstraction?.subtype === 'interface_detail',
+    '瓶盖特写、标签扫光、冷凝水擦除、瓶身微距'
+  );
+  const usageActions = actionsByPredicate(
+    (slot) => slot.role === 'usage_demo' || slot.role === 'technique_demo',
+    '开盖动作、倒茶入杯、饮用动作、手部互动'
+  );
+  const benefitActions = actionsByPredicate(
+    (slot) => slot.role === 'benefit_visual' || slot.sourceAbstraction?.subtype === 'assembly_detail',
+    '冰块汇聚、柠檬片扫过、茶滴环绕、卖点卡落下'
+  );
+  const motifActions = actionsByPredicate(
+    (slot) => motifSlotIds.includes(slot.slotId),
+    '冰块级联、柠檬片扫过、红茶水滴汇聚、开盖激活、CTA 收口'
+  );
+  const transitionActions = actionsByPredicate(
+    (slot) => Boolean(slot.sourceAbstraction) || (slot.motionTokens?.length ?? 0) > 0,
+    '镜头运动、卖点承接、产品定格'
+  );
+  const ctaActions = actionsByPredicate(
+    (slot) => slot.role === 'cta_visual' || slot.sourceAbstraction?.subtype === 'cta_lockup',
+    '多瓶阵列、产品定格、CTA 留白、购买引导弹出'
+  );
+  const socialActions = actionsByPredicate(
+    (slot) => slot.role === 'comparison'
+      || slot.role === 'testimonial'
+      || slot.sourceAbstraction?.subtype === 'device_handoff',
+    '手递产品、通勤场景切换、朋友分享、多瓶陈列'
+  );
   const product = args.contentBrief.productName;
   const packs: ReusableAssetPackPlan[] = [
     {
@@ -630,7 +688,7 @@ function buildReusableAssetPacks(args: {
       title: '产品英雄亮相包',
       status: 'required',
       recommendedChannel: 'reshoot',
-      promptSummary: `拍摄 ${product} 竖屏英雄亮相，标签清晰、入画有冲击力。`,
+      promptSummary: `根据 opening / hero 槽位补齐 ${product} 竖屏英雄亮相；重点动作：${heroActions}；标签清晰、入画有冲击力。`,
       targetSlots: slotIdsByRole(['opening_attention', 'product_closeup']),
       referencedAssetIds: [],
       ownership: 'director_handoff_plan_only'
@@ -641,7 +699,7 @@ function buildReusableAssetPacks(args: {
       title: '产品标签特写包',
       status: 'required',
       recommendedChannel: 'reshoot',
-      promptSummary: `补充 ${product} 瓶身、标签、冷凝水和包装细节，支持特写与卖点证明。`,
+      promptSummary: `从 product_closeup / detail 槽位聚类生成：补充 ${product} 的包装、标签、材质和关键卖点视觉证据；动作参考：${closeupActions}。`,
       targetSlots: slotIdsByRole(['product_closeup', 'benefit_visual']),
       referencedAssetIds: [],
       ownership: 'director_handoff_plan_only'
@@ -652,7 +710,7 @@ function buildReusableAssetPacks(args: {
       title: '开盖使用动作包',
       status: 'required',
       recommendedChannel: 'reshoot',
-      promptSummary: '补拍手部开盖、瓶身拿起和第一口饮用动作，提供真实使用证据。',
+      promptSummary: `从 usage_demo 槽位聚类生成：补齐真实使用动作和手部/场景证据；优先动作：${usageActions}。`,
       targetSlots: slotIdsByRole(['usage_demo', 'technique_demo']),
       referencedAssetIds: [],
       ownership: 'director_handoff_plan_only'
@@ -663,7 +721,7 @@ function buildReusableAssetPacks(args: {
       title: '倒入/饮用动作包',
       status: 'required',
       recommendedChannel: 'reshoot',
-      promptSummary: '补拍倒入杯中、茶色流动或颈部以下饮用镜头，增强使用过程可信度。',
+      promptSummary: `根据 usage_demo 的 motionTokens 与 target equivalents 生成连续动作素材包；用于增强使用过程可信度，覆盖：${usageActions}。`,
       targetSlots: slotIdsByRole(['usage_demo']),
       referencedAssetIds: [],
       ownership: 'director_handoff_plan_only'
@@ -674,7 +732,7 @@ function buildReusableAssetPacks(args: {
       title: '冰爽微距包',
       status: 'required',
       recommendedChannel: 'hyperframes',
-      promptSummary: '用冷凝水、冰块、柠檬片、茶滴微距强化冰爽和夏日感。',
+      promptSummary: `从 benefit / product evidence 槽位聚类生成质感证明素材；使用目标品类等价元素：${benefitActions || closeupActions}。`,
       targetSlots: slotIdsByRole(['benefit_visual', 'product_closeup']),
       referencedAssetIds: [],
       ownership: 'director_handoff_plan_only'
@@ -685,7 +743,7 @@ function buildReusableAssetPacks(args: {
       title: '结构动机迁移包',
       status: motifSlotIds.length ? 'required' : 'optional',
       recommendedChannel: 'aigc',
-      promptSummary: '把源片的级联汇聚、由散到聚、激活爆发迁移为冰块/柠檬/茶滴/冷雾围绕产品形成 CTA 收口。',
+      promptSummary: `从 motif / motionTokens 聚类生成：保留级联、由散到聚、激活、爆发、收口的抽象语法；目标动作：${motifActions}。仅任务卡，不代表已生成。`,
       targetSlots: motifSlotIds,
       referencedAssetIds: [],
       ownership: 'director_handoff_plan_only'
@@ -696,7 +754,7 @@ function buildReusableAssetPacks(args: {
       title: '冰柠转场元素包',
       status: 'optional',
       recommendedChannel: 'hyperframes',
-      promptSummary: '准备冰块雨、柠檬片扫过、茶色旋涡和冷雾擦除，用于镜头之间的语义承接。',
+      promptSummary: `从相邻 slot 的 motionTokens/sourceAbstraction 聚类生成转场元素；用于镜头之间的语义承接：${transitionActions}。`,
       targetSlots: args.slots.map((slot) => slot.slotId),
       referencedAssetIds: [],
       ownership: 'director_handoff_plan_only'
@@ -707,7 +765,7 @@ function buildReusableAssetPacks(args: {
       title: 'CTA 结尾锁定包',
       status: 'required',
       recommendedChannel: 'hyperframes',
-      promptSummary: `制作 ${product} 干净尾帧、行动号召和产品定格，明确购买/尝鲜引导。`,
+      promptSummary: `根据 cta_visual / lockup 槽位聚类生成 ${product} 结尾定格、行动号召和产品收口画面；使用：${ctaActions}。`,
       targetSlots: slotIdsByRole(['cta_visual']),
       referencedAssetIds: [],
       ownership: 'director_handoff_plan_only'
@@ -718,13 +776,43 @@ function buildReusableAssetPacks(args: {
       title: '多瓶陈列/分享包',
       status: 'optional',
       recommendedChannel: 'reshoot',
-      promptSummary: '补充多瓶陈列、朋友分享或货架场景，支持社交证明和对比段落。',
+      promptSummary: `从 comparison / testimonial / device_handoff 槽位聚类生成陈列、分享或证明素材；支持对比和社交证明：${socialActions}。`,
       targetSlots: slotIdsByRole(['comparison', 'testimonial']),
       referencedAssetIds: [],
       ownership: 'director_handoff_plan_only'
     }
   ];
   return packs;
+}
+
+function packActionVocabulary(slots: OrchestratedSlot[]): string[] {
+  return unique(
+    slots.flatMap((slot) => [
+      ...(slot.sourceAbstraction?.targetEquivalentActions ?? []),
+      ...(slot.motionTokens ?? []).map((token) => tokenToPackAction(token)),
+      slot.sourceAbstraction?.targetEquivalentLabel
+    ])
+      .filter((value): value is string => Boolean(value))
+      .filter((value) => !containsSourceSpecificTerm(value))
+  );
+}
+
+function tokenToPackAction(token: string): string {
+  const table: Record<string, string> = {
+    dynamic_entry: '动感入场',
+    component_cascade: '元素级联',
+    chaos_to_order: '由散到聚',
+    assembly_completion: '完成定格',
+    interaction_activation: '交互激活',
+    spectacle_burst: '爆发瞬间',
+    cta_reveal: 'CTA 收口',
+    snap_open: '开启动作',
+    bottle_rotation: '产品旋转',
+    lineup_sweep: '阵列扫过',
+    card_drop: '卡片落下',
+    clean_hold: '干净定格'
+  };
+  return table[token] ?? token;
 }
 
 // SegmentNode is referenced only for its time fields; keep the import meaningful for readers.

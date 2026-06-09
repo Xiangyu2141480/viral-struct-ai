@@ -12,6 +12,7 @@ import type {
   SlotMatch,
   ViralStructureGraph
 } from '@viral-struct/shared';
+import { splitRejectIfForTransfer } from '@viral-struct/shared';
 import { createOpenAICompatibleClient } from './llmProvider';
 import { buildMotifContext, extractViralMotifAnnotation } from './motifs/viralMotifExtractor';
 
@@ -344,6 +345,12 @@ const SLOT_ALIGNMENT_SYSTEM_PROMPT = `你是一个短视频结构迁移系统中
 A. 源片样例的"分镜槽位骨架"：每个槽位含意图 (intent，可迁移)、源片实例 (sourceInstance，仅供识别 SWAP 项)、可接受标准 (acceptanceCriteria.anyOf)。
 B. 新商品的"候选素材清单"：每张 AssetCard 含视觉描述 (visualContent)、动作潜力 (motionPotential)、候选角色 (candidateSlotRoles)。
 
+你会看到 hardRejectIf 和 sourceSpecificRejectIf。
+hardRejectIf 是真正的质量、安全、构图拒绝条件。
+sourceSpecificRejectIf 是源品类专属限制，不得直接用于否决目标品类素材。
+请把 sourceSpecificRejectIf 理解为需要做目标品类等价迁移的提示。
+例如源片要求“不能是无开合结构的素材”，迁移到饮料品类时不应否决瓶装饮料，而应判断是否存在开盖、触碰、倒入、冰爽爆发等目标品类等价动作。
+
 判断原则：
 1. 只看意图 + 接受标准，不要让 sourceInstance 把你带跑——新素材不需要和源片产品长得像。
 2. 接受标准的 anyOf 是「OR」关系：任一组合达成即合格。在结果里列出 matchedCriteria 命中的项。
@@ -377,7 +384,11 @@ interface SlotSummary {
   segmentId: string;
   role: string;
   intent?: ViralStructureGraph['shotSlots'][number]['intent'];
-  acceptanceCriteria?: ViralStructureGraph['shotSlots'][number]['acceptanceCriteria'];
+  acceptanceCriteria?: {
+    anyOf: NonNullable<ViralStructureGraph['shotSlots'][number]['acceptanceCriteria']>['anyOf'];
+    hardRejectIf: string[];
+    sourceSpecificRejectIf: string[];
+  };
   sourceInstance?: ViralStructureGraph['shotSlots'][number]['sourceInstance'];
   fallbackStrategies: ViralStructureGraph['shotSlots'][number]['fallbackStrategies'];
 }
@@ -408,12 +419,26 @@ interface AssetSummary {
 }
 
 function summarizeSlot(slot: ViralStructureGraph['shotSlots'][number]): SlotSummary {
+  const acceptanceCriteria = slot.acceptanceCriteria
+    ? {
+        anyOf: slot.acceptanceCriteria.anyOf,
+        ...splitRejectIfForTransfer({
+          ...slot.acceptanceCriteria,
+          slotText: [
+            slot.intent?.purpose,
+            slot.intent?.motionPattern,
+            slot.sourceInstance?.productInSource,
+            slot.sourceInstance?.specificAction
+          ].filter(Boolean).join('\n')
+        })
+      }
+    : undefined;
   return {
     id: slot.id,
     segmentId: slot.segmentId,
     role: slot.role,
     intent: slot.intent,
-    acceptanceCriteria: slot.acceptanceCriteria,
+    acceptanceCriteria,
     sourceInstance: slot.sourceInstance,
     fallbackStrategies: slot.fallbackStrategies
   };
@@ -497,10 +522,52 @@ function stripJsonFence(raw: string): string {
   return trimmed;
 }
 
-function statusFromQuality(quality: number, assetId: string | null): SlotMatch['status'] {
-  if (assetId && quality >= 0.85) return 'matched';
-  if (assetId && quality >= 0.45) return 'partial';
+export type AssetEvidenceStrength = 'none' | 'weak' | 'medium' | 'strong';
+
+export function statusFromQualityWithEvidence(args: {
+  quality: number;
+  hasAsset: boolean;
+  assetEvidenceStrength: AssetEvidenceStrength;
+  hardRejectTriggered?: boolean;
+  sourceSpecificRejectOnly?: boolean;
+}): SlotMatch['status'] {
+  if (!args.hasAsset) return 'missing';
+  if (args.hardRejectTriggered) return 'missing';
+  if (args.quality >= 0.85) return 'matched';
+  if (args.quality >= 0.45) return 'partial';
+  if (args.quality >= 0.4 && args.assetEvidenceStrength !== 'none') return 'partial';
+  if (args.sourceSpecificRejectOnly && args.assetEvidenceStrength !== 'none') return 'partial';
   return 'missing';
+}
+
+function statusFromQuality(quality: number, asset: AssetCard | undefined, sourceSpecificRejectOnly = false): SlotMatch['status'] {
+  return statusFromQualityWithEvidence({
+    quality,
+    hasAsset: Boolean(asset),
+    assetEvidenceStrength: estimateAssetEvidenceStrength(asset),
+    sourceSpecificRejectOnly
+  });
+}
+
+export function estimateAssetEvidenceStrength(asset: AssetCard | undefined): AssetEvidenceStrength {
+  if (!asset) return 'none';
+  let score = 0;
+  const analysis = asset.analysis;
+  if (asset.visualContent || asset.spatialDescription || asset.temporalDescription) score += 1;
+  if ((asset.detectedObjects?.length ?? 0) > 0 || (asset.detectedIngredients?.length ?? 0) > 0) score += 1;
+  if ((asset.suitableSlots?.length ?? 0) > 0 || (asset.candidateSlotRoles?.length ?? 0) > 0) score += 1;
+  if (analysis?.semantic.summary) score += 1;
+  if ((analysis?.semantic.detectedObjects.length ?? 0) > 0) score += 1;
+  if ((analysis?.media.keyframes.length ?? 0) > 0) score += 1;
+  if ((analysis?.roleAffordance ?? []).some((entry) => entry.score >= 70)) score += 2;
+  if ((analysis?.slotAffordance.primaryRoles.length ?? 0) > 0) score += 1;
+  if ((analysis?.quality.overallScore ?? asset.qualityScore ?? 0) >= 0.75) score += 1;
+  if ((analysis?.warnings.length ?? 0) >= 3) score -= 1;
+
+  if (score >= 6) return 'strong';
+  if (score >= 3) return 'medium';
+  if (score >= 1) return 'weak';
+  return 'none';
 }
 
 function cleanTreatmentSpec(spec: AlignmentResult['treatmentSpec']): import('@viral-struct/shared').SlotTreatmentSpec | undefined {
@@ -528,7 +595,16 @@ function buildLLMMatch(
   asset?: AssetCard
 ): SlotMatch {
   const assetId = result.assetId ?? undefined;
-  const status = statusFromQuality(result.quality, result.assetId);
+  const sourceSplit = splitRejectIfForTransfer({
+    ...slot.acceptanceCriteria,
+    slotText: `${slot.intent?.purpose ?? ''}\n${slot.sourceInstance?.specificAction ?? ''}`
+  });
+  const hardRejectTriggered = sourceSplit.hardRejectIf.some((item) => result.missing.includes(item));
+  const sourceSpecificRejectOnly =
+    sourceSplit.sourceSpecificRejectIf.length > 0
+    && sourceSplit.hardRejectIf.length === 0
+    && result.missing.length > 0;
+  const status = statusFromQuality(result.quality, asset, sourceSpecificRejectOnly && !hardRejectTriggered);
   const treatmentSpec = cleanTreatmentSpec(result.treatmentSpec);
   return {
     slotId: slot.id,

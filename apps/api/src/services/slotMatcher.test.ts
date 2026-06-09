@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { AssetCard, Boundary, ViralStructureGraph } from '@viral-struct/shared';
-import { matchSlots, matchSlotsLLM, matchSlotsWithFallback } from './slotMatcher';
+import { splitRejectIfForTransfer } from '@viral-struct/shared';
+import { matchSlots, matchSlotsLLM, matchSlotsWithFallback, statusFromQualityWithEvidence } from './slotMatcher';
 
 function makeGraph(): ViralStructureGraph {
   return {
@@ -302,6 +303,49 @@ test('matchSlots carries motif context into material gaps for kinetic assembly s
   assert.ok(result.gaps[0]?.motifContext?.motionTokens.includes('chaos_to_order'));
 });
 
+test('splitRejectIfForTransfer separates source-specific source-product constraints from hard rejects', () => {
+  const split = splitRejectIfForTransfer({
+    rejectIf: [
+      '背景杂乱',
+      '产品被遮挡',
+      '产品形态完全固定无开合结构的素材',
+      '没有键盘',
+      '没有触控板',
+      '没有 screen / port / chassis evidence'
+    ],
+    targetCategory: 'beverage'
+  });
+
+  assert.deepEqual(split.hardRejectIf, ['背景杂乱', '产品被遮挡']);
+  assert.deepEqual(split.sourceSpecificRejectIf, [
+    '产品形态完全固定无开合结构的素材',
+    '没有键盘',
+    '没有触控板',
+    '没有 screen / port / chassis evidence'
+  ]);
+});
+
+test('statusFromQualityWithEvidence rescues near-threshold asset evidence from missing', () => {
+  assert.equal(statusFromQualityWithEvidence({
+    quality: 0.42,
+    hasAsset: true,
+    assetEvidenceStrength: 'weak'
+  }), 'partial');
+
+  assert.equal(statusFromQualityWithEvidence({
+    quality: 0.42,
+    hasAsset: true,
+    assetEvidenceStrength: 'none'
+  }), 'missing');
+
+  assert.equal(statusFromQualityWithEvidence({
+    quality: 0.72,
+    hasAsset: true,
+    assetEvidenceStrength: 'medium',
+    hardRejectTriggered: true
+  }), 'missing');
+});
+
 // ---------------------------------------------------------------------------
 // LLM judge tests
 // ---------------------------------------------------------------------------
@@ -442,6 +486,41 @@ test('matchSlotsLLM includes compressed asset analysis evidence in the prompt an
   assert.match(requestText, /kf_001/);
   assert.equal(result.matches[0].assetEvidence?.assetId, 'asset_1');
   assert.equal(result.matches[0].assetEvidence?.topAffordanceRole, 'opening_hook');
+});
+
+test('matchSlotsLLM sends transfer-safe acceptance criteria instead of raw source-specific rejectIf hard gates', async () => {
+  const requests: unknown[] = [];
+  const graph = makeGraph();
+  graph.shotSlots[0] = {
+    ...graph.shotSlots[0],
+    acceptanceCriteria: {
+      anyOf: [{ motionType: 'open_close', examples: ['开合结构完成一次状态变化'] }],
+      rejectIf: [
+        '背景杂乱',
+        '产品形态完全固定无开合结构的素材',
+        '没有键盘',
+        '没有触控板'
+      ]
+    }
+  };
+
+  await matchSlotsLLM({
+    graph,
+    assets: makeAssets(),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    clientFactory: () => makeCapturingFakeClient(happyAlignmentResponse(), requests) as any,
+    model: 'fake-model'
+  });
+
+  const requestText = JSON.stringify(requests[0]);
+  assert.match(requestText, /hardRejectIf/);
+  assert.match(requestText, /sourceSpecificRejectIf/);
+  assert.match(requestText, /背景杂乱/);
+  assert.match(requestText, /产品形态完全固定无开合结构的素材/);
+  assert.match(requestText, /sourceSpecificRejectIf 是源品类专属限制/);
+
+  const hardRejectSection = requestText.slice(requestText.indexOf('hardRejectIf'), requestText.indexOf('sourceSpecificRejectIf'));
+  assert.doesNotMatch(hardRejectSection, /键盘|触控板|开合结构/);
 });
 
 test('matchSlotsLLM rejects response referencing unknown assetId', async () => {
