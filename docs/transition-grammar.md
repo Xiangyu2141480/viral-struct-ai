@@ -63,8 +63,8 @@ docs/examples/transition-recipes-beverage-demo.sample.json
 
 The minimal UI evidence layer should show transition planning as cards, not as a claim of rendered effects:
 
-- `Transition Plan`: explains the planned recipe between adjacent beats.
-- `Missing Transition Assets`: lists target-category-native objects or footage needed to execute the recipe.
+- `转场计划`: explains the planned recipe between adjacent beats.
+- `缺失转场素材`: lists target-category-native objects or footage needed to execute the recipe.
 - `Category Mapping`: explains how a source motion pattern maps to a new category.
 - `Boundary`: always label this as `plan only` or `job card only`.
 

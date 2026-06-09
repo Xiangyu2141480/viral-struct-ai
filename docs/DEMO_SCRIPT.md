@@ -105,10 +105,10 @@ Call out:
 - Asset / Gap
 - Repair
 - Final Timeline
-- Transition Plan
-- Sonic Plan
-- Missing Transition Assets
-- Audio Warnings
+- 转场计划
+- 声音计划
+- 缺失转场素材
+- 音频边界提醒
 
 Ice tea demo wording:
 
