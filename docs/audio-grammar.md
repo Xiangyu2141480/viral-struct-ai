@@ -91,8 +91,8 @@ These are demo preset cues, not a universal system rule.
 
 The minimal evidence layer should show Sonic Grammar as reviewable cards:
 
-- `Sonic Plan`: what cue sequence supports the structure.
-- `Audio Warnings`: whether reviewed audio assets exist and whether audio is renderable.
+- `声音计划`: what cue sequence supports the structure.
+- `音频边界提醒`: whether reviewed audio assets exist and whether audio is renderable.
 - `AudioGenerationJobCard`: optional external handoff, never a claim that audio was generated.
 - `BeatSyncMap`: offline beat/cue alignment for renderer or Video Agent handoff.
 

@@ -48,24 +48,24 @@
   ],
   "evidenceCards": [
     {
-      "title": "Transition Plan",
-      "summary": "7 beverage transition recipes describe how each structure beat moves into the next.",
-      "boundary": "plan only; no rendered visual effect is claimed"
+      "title": "转场计划",
+      "summary": "7 个饮料品类转场方案说明每个结构节拍如何进入下一段。",
+      "boundary": "仅计划；不声称已经渲染真实转场效果"
     },
     {
-      "title": "Sonic Plan",
-      "summary": "12 audio cues describe music bed, foley, impact, silence, CTA and logo memory cues.",
-      "boundary": "plan only; no real audio generated or mixed into MP4"
+      "title": "声音计划",
+      "summary": "12 个声音提示说明音乐底、拟音、冲击点、静音停顿、CTA 和品牌记忆音如何支撑结构。",
+      "boundary": "仅计划；不声称已经生成真实音频或混入 MP4"
     },
     {
-      "title": "Missing Transition Assets",
-      "summary": "Missing falling-object, cap-action or CTA-lockup footage is expressed as reviewed handoff needs.",
-      "boundary": "job card only; no real external generation submitted"
+      "title": "缺失转场素材",
+      "summary": "缺少下落物、开盖动作或 CTA 收尾画面时，只输出待审核的交接需求。",
+      "boundary": "仅任务卡；不提交真实外部生成任务"
     },
     {
-      "title": "Audio Warnings",
-      "summary": "No reviewed audio assets are present in the sample, so playback remains silent or cue-labeled.",
-      "boundary": "plan only; no fake CTR, no real user behavior, no copyrighted BGM claim"
+      "title": "音频边界提醒",
+      "summary": "样例中没有已审核音频素材，因此播放保持静音或只显示节拍提示。",
+      "boundary": "仅计划；不伪造 CTR，不声称真实用户行为，不声称版权 BGM 可用"
     }
   ],
   "boundaries": [
