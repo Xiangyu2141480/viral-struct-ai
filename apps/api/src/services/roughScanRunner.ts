@@ -4,11 +4,12 @@
 //   ffmpeg (5fps/720w preview) -> scripts/rough_scan.py (VLM via Ark Files+Responses)
 //   -> scripts/extract_structure_graph.py (rough-only) -> ViralStructureGraph
 //
-// The graph is the exact format graphToSourceVideo() already consumes, so the
-// rest of the pipeline (UI timeline, slot matching, etc.) is unchanged.
+// The graph is the exact format graphToSourceVideo() already consumes. The per-video
+// work dir (preview, rough.json, graph.json, clips/) is RETAINED so a follow-up fine
+// scan can reuse the raw rough output + the same dir for clips.
 
 import { spawn } from 'node:child_process';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -22,8 +23,13 @@ const REPO_ROOT = process.env.SCAN_REPO_ROOT
 
 const SCRIPTS_DIR = path.join(REPO_ROOT, 'scripts');
 
+/** Persistent per-video scan dir (retained so fine scan can reuse rough output + clips). */
+export function getScanDataDir(): string {
+  return process.env.SCAN_DATA_DIR ? path.resolve(process.env.SCAN_DATA_DIR) : path.join(tmpdir(), 'viral-scans');
+}
+
 /** Python interpreter — prefer the repo .venv, fall back to PATH `python`. */
-function resolvePython(): string {
+export function resolvePython(): string {
   if (process.env.SCAN_PYTHON) return process.env.SCAN_PYTHON;
   const venvWin = path.join(REPO_ROOT, '.venv', 'Scripts', 'python.exe');
   const venvNix = path.join(REPO_ROOT, '.venv', 'bin', 'python');
@@ -36,7 +42,7 @@ function resolveFfmpeg(): string {
   return process.env.FFMPEG_PATH?.trim() || 'ffmpeg';
 }
 
-export interface RoughScanProgress {
+export interface ScanProgress {
   (stage: string): void;
 }
 
@@ -47,7 +53,11 @@ interface RunResult {
 }
 
 /** Spawn a command, capture output, reject on non-zero exit or timeout. */
-function run(command: string, args: string[], opts: { cwd?: string; timeoutMs: number; label: string }): Promise<RunResult> {
+export function runScanCommand(
+  command: string,
+  args: string[],
+  opts: { cwd?: string; timeoutMs: number; label: string }
+): Promise<RunResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { cwd: opts.cwd, windowsHide: true });
     let stdout = '';
@@ -75,66 +85,68 @@ function run(command: string, args: string[], opts: { cwd?: string; timeoutMs: n
 export interface RoughScanResult {
   graph: ViralStructureGraph;
   warnings: string[];
+  /** Persisted rough scan JSON (kept for a follow-up fine scan). */
+  roughScanPath: string;
+  /** Persisted per-video work dir (preview, rough.json, graph.json, clips/). */
+  workDir: string;
 }
 
 /**
  * Run the real rough scan on `videoPath` and return a ViralStructureGraph.
- * `videoId` should be a filesystem-safe id (used for artifact naming + sampling).
+ * `videoId` should be a filesystem-safe id (used for the work dir + sampling).
+ * The work dir is RETAINED for a follow-up fine scan; callers evict it on TTL.
  */
 export async function runRoughScan(
   videoPath: string,
   videoId: string,
   durationSec: number,
-  onProgress?: RoughScanProgress
+  onProgress?: ScanProgress
 ): Promise<RoughScanResult> {
   const python = resolvePython();
   const ffmpeg = resolveFfmpeg();
-  const work = await mkdtemp(path.join(tmpdir(), 'roughscan-'));
+  const workDir = path.join(getScanDataDir(), videoId);
+  await mkdir(path.join(workDir, 'clips'), { recursive: true });
   const warnings: string[] = [];
 
-  try {
-    // 1) Preprocess → 5fps / 720w preview (what rough_scan.py expects).
-    onProgress?.('预处理视频（5fps 预览）');
-    const preview = path.join(work, 'preview.mp4');
-    await run(ffmpeg, ['-y', '-i', videoPath, '-vf', 'fps=5,scale=720:-2', '-an', preview], {
-      timeoutMs: 120_000,
-      label: 'ffmpeg preprocess',
-    });
+  // 1) Preprocess → 5fps / 720w preview (what rough_scan.py expects).
+  onProgress?.('预处理视频（5fps 预览）');
+  const preview = path.join(workDir, 'preview.mp4');
+  await runScanCommand(ffmpeg, ['-y', '-i', videoPath, '-vf', 'fps=5,scale=720:-2', '-an', preview], {
+    timeoutMs: 120_000,
+    label: 'ffmpeg preprocess',
+  });
 
-    // 2) Rough scan via the VLM (upload + Responses API). Slow — generous timeout.
-    onProgress?.('粗扫描中 · VLM 解析镜头与结构');
-    const roughOut = path.join(work, 'rough.json');
-    await run(
-      python,
-      [
-        path.join(SCRIPTS_DIR, 'rough_scan.py'),
-        '--video', preview,
-        '--video-id', videoId,
-        '--duration', String(Math.max(1, Math.round(durationSec * 100) / 100)),
-        '--env', '.env',
-        '--out', roughOut,
-      ],
-      { cwd: REPO_ROOT, timeoutMs: Number(process.env.SCAN_ROUGH_TIMEOUT_MS ?? 300_000), label: 'rough_scan.py' }
-    );
+  // 2) Rough scan via the VLM (upload + Responses API). Slow — generous timeout.
+  onProgress?.('粗扫描中 · VLM 解析镜头与结构');
+  const roughOut = path.join(workDir, 'rough.json');
+  await runScanCommand(
+    python,
+    [
+      path.join(SCRIPTS_DIR, 'rough_scan.py'),
+      '--video', preview,
+      '--video-id', videoId,
+      '--duration', String(Math.max(1, Math.round(durationSec * 100) / 100)),
+      '--env', '.env',
+      '--out', roughOut,
+    ],
+    { cwd: REPO_ROOT, timeoutMs: Number(process.env.SCAN_ROUGH_TIMEOUT_MS ?? 300_000), label: 'rough_scan.py' }
+  );
 
-    // 3) Bridge rough-only → ViralStructureGraph (no fine scan yet).
-    onProgress?.('构建结构图');
-    const graphOut = path.join(work, 'graph.json');
-    await run(
-      python,
-      [
-        path.join(SCRIPTS_DIR, 'extract_structure_graph.py'),
-        '--video-id', videoId,
-        '--rough-scan', roughOut,
-        '--output', graphOut,
-      ],
-      { cwd: REPO_ROOT, timeoutMs: 60_000, label: 'extract_structure_graph.py' }
-    );
+  // 3) Bridge rough-only → ViralStructureGraph (no fine scan yet).
+  onProgress?.('构建结构图');
+  const graphOut = path.join(workDir, 'graph.json');
+  await runScanCommand(
+    python,
+    [
+      path.join(SCRIPTS_DIR, 'extract_structure_graph.py'),
+      '--video-id', videoId,
+      '--rough-scan', roughOut,
+      '--output', graphOut,
+    ],
+    { cwd: REPO_ROOT, timeoutMs: 60_000, label: 'extract_structure_graph.py' }
+  );
 
-    const raw = await readFile(graphOut, 'utf-8');
-    const graph = ViralStructureGraphSchema.parse(JSON.parse(raw));
-    return { graph, warnings };
-  } finally {
-    await rm(work, { recursive: true, force: true }).catch(() => {});
-  }
+  const raw = await readFile(graphOut, 'utf-8');
+  const graph = ViralStructureGraphSchema.parse(JSON.parse(raw));
+  return { graph, warnings, roughScanPath: roughOut, workDir };
 }

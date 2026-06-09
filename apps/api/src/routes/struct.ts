@@ -13,11 +13,12 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { randomUUID } from 'node:crypto';
-import { unlink } from 'node:fs/promises';
+import { readFile, rm, unlink } from 'node:fs/promises';
 import type { Request } from 'express';
 import { analyzeVideoFile, getSeedVideoPath, getUploadedVideoPath, listSeedVideos } from '../services/videoAnalyzer';
 import { extractStructureFromVideoAnalysis } from '../services/structureExtractor';
 import { runRoughScan } from '../services/roughScanRunner';
+import { runFineScan, type FineBlockDetail } from '../services/fineScanRunner';
 import { analyzeAssetsWithFallbackResult } from '../services/assetAnalyzer';
 import { matchSlotsWithFallback } from '../services/slotMatcher';
 import { planGapRepairsWithFallback } from '../services/gapRepairPlanner';
@@ -154,10 +155,41 @@ interface ScanJob {
 }
 const scanJobs = new Map<string, ScanJob>();
 
+interface ScanArtifacts {
+  videoPath: string;
+  roughScanPath: string;
+  workDir: string;
+  createdAt: number;
+}
+/** Retained per-video scan inputs (raw video + rough output) for follow-up fine scans. */
+const scanArtifacts = new Map<string, ScanArtifacts>();
+
+interface FineJob {
+  status: ScanJobStatus;
+  stage?: string;
+  segmentIndex: number;
+  detail?: FineBlockDetail;
+  error?: string;
+  startedAt: number;
+  finishedAt?: number;
+}
+const fineJobs = new Map<string, FineJob>();
+
 function sweepScanJobs(): void {
   const now = Date.now();
   for (const [id, job] of scanJobs) {
     if (job.finishedAt && now - job.finishedAt > 30 * 60_000) scanJobs.delete(id);
+  }
+  for (const [id, job] of fineJobs) {
+    if (job.finishedAt && now - job.finishedAt > 30 * 60_000) fineJobs.delete(id);
+  }
+  // Evict retained scan inputs after 60 min (free disk: raw video + work dir).
+  for (const [id, art] of scanArtifacts) {
+    if (now - art.createdAt > 60 * 60_000) {
+      scanArtifacts.delete(id);
+      void unlink(art.videoPath).catch(() => {});
+      void rm(art.workDir, { recursive: true, force: true }).catch(() => {});
+    }
   }
 }
 
@@ -183,8 +215,10 @@ structRouter.post('/scan', upload.single('video'), (req, res) => {
     try {
       setStage('读取视频信息');
       const analysis = await analyzeVideoFile({ videoId, filePath });
-      const { graph, warnings } = await runRoughScan(filePath, videoId, analysis.metadata.duration, setStage);
+      const { graph, warnings, roughScanPath, workDir } = await runRoughScan(filePath, videoId, analysis.metadata.duration, setStage);
       const sourceVideo = graphToSourceVideo(graph, { videoId, title });
+      // Retain the raw video + rough output so a follow-up fine scan can reuse them.
+      scanArtifacts.set(videoId, { videoPath: filePath, roughScanPath, workDir, createdAt: Date.now() });
       scanJobs.set(jobId, {
         status: 'done',
         sourceVideo,
@@ -198,8 +232,7 @@ structRouter.post('/scan', upload.single('video'), (req, res) => {
       });
     } catch (error) {
       scanJobs.set(jobId, { status: 'error', error: errorMessage(error), startedAt, finishedAt: Date.now() });
-    } finally {
-      void unlink(filePath).catch(() => {});
+      void unlink(filePath).catch(() => {}); // failed → nothing to retain
     }
   })();
 });
@@ -216,6 +249,75 @@ structRouter.get('/scan/:jobId', (req, res) => {
     stage: job.stage,
     sourceVideo: job.sourceVideo,
     warnings: job.warnings,
+    error: job.error,
+    elapsedSec,
+  });
+});
+
+/* ─── POST /api/struct/scan/:videoId/fine — fine-scan ONE segment (deep detail) ──
+   Reuses the rough scan's retained raw video + rough output. Async (per-block VLM,
+   ~30–60s). Body: { segmentIndex }. Poll GET /scan/fine/:jobId. */
+
+structRouter.post('/scan/:videoId/fine', async (req, res) => {
+  const { videoId } = req.params;
+  const artifacts = scanArtifacts.get(videoId);
+  if (!artifacts) {
+    res.status(404).json({ error: '找不到该视频的扫描数据（可能已过期，请重新上传并粗扫描）。' });
+    return;
+  }
+  const segmentIndex = Number((req.body as { segmentIndex?: unknown })?.segmentIndex);
+  if (!Number.isInteger(segmentIndex) || segmentIndex < 0) {
+    res.status(400).json({ error: 'segmentIndex（段落序号）缺失或无效。' });
+    return;
+  }
+
+  let blockId: string;
+  try {
+    const rough = JSON.parse(await readFile(artifacts.roughScanPath, 'utf-8')) as { contentBlocks?: Array<{ id?: string }> };
+    const blocks = rough.contentBlocks ?? [];
+    const block = blocks[segmentIndex];
+    if (!block?.id) {
+      res.status(400).json({ error: '段落序号超出范围。' });
+      return;
+    }
+    blockId = block.id;
+  } catch (error) {
+    res.status(500).json({ error: errorMessage(error) });
+    return;
+  }
+
+  sweepScanJobs();
+  const jobId = randomUUID();
+  fineJobs.set(jobId, { status: 'running', stage: '排队中', segmentIndex, startedAt: Date.now() });
+  res.status(202).json({ jobId });
+
+  void (async () => {
+    const setStage = (stage: string) => {
+      const j = fineJobs.get(jobId);
+      if (j && j.status === 'running') j.stage = stage;
+    };
+    const startedAt = fineJobs.get(jobId)?.startedAt ?? Date.now();
+    try {
+      const { detail } = await runFineScan(artifacts.videoPath, artifacts.roughScanPath, videoId, blockId, artifacts.workDir, setStage);
+      fineJobs.set(jobId, { status: 'done', segmentIndex, detail, startedAt, finishedAt: Date.now() });
+    } catch (error) {
+      fineJobs.set(jobId, { status: 'error', segmentIndex, error: errorMessage(error), startedAt, finishedAt: Date.now() });
+    }
+  })();
+});
+
+structRouter.get('/scan/fine/:jobId', (req, res) => {
+  const job = fineJobs.get(req.params.jobId);
+  if (!job) {
+    res.status(404).json({ error: 'fine scan job not found（任务可能已过期）' });
+    return;
+  }
+  const elapsedSec = Math.round(((job.finishedAt ?? Date.now()) - job.startedAt) / 1000);
+  res.json({
+    status: job.status,
+    stage: job.stage,
+    segmentIndex: job.segmentIndex,
+    detail: job.detail,
     error: job.error,
     elapsedSec,
   });

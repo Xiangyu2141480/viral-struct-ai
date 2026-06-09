@@ -20,6 +20,79 @@ import {
   Toast,
 } from './components';
 import { AbstractStructureBand, ConcreteFilmStrip, MigrationFlow, SyncRails } from './viz';
+import type { FineBlockDetail } from './api/scan';
+
+/* ─── Fine-scan deep detail for one segment ───────────────────────────── */
+const FineDetailView = ({ fine }: { fine: FineBlockDetail }) => {
+  const rc = fine.roleConfirmation;
+  const overlays = fine.textOverlayBehavior?.textElements ?? [];
+  const beats = fine.actionBeats ?? [];
+  const motifs = fine.transferableMotifs ?? [];
+  const assets = fine.requiredAssetType ?? [];
+  const peaks = fine.peakDetectionStats;
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div className="eyebrow" style={{ marginBottom: 8 }}>精扫描明细 · FINE SCAN</div>
+      <dl className="kv">
+        {rc?.role && (
+          <><dt>确认角色</dt><dd>{rc.role}{rc.confidence != null && ` · 置信度 ${Math.round(rc.confidence * 100)}%`}{rc.correctionFromCoarse && rc.coarseRoleWas ? `（由粗扫 ${rc.coarseRoleWas} 修正）` : ''}</dd></>
+        )}
+        {fine.dominantTone && <><dt>主导情绪</dt><dd>{fine.dominantTone}</dd></>}
+        {fine.transitionOut?.type && (
+          <><dt>转场出</dt><dd>{fine.transitionOut.type}{fine.transitionOut.incomingHintForNextBlock ? ` → ${fine.transitionOut.incomingHintForNextBlock}` : ''}</dd></>
+        )}
+      </dl>
+      {overlays.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <div className="eyebrow" style={{ marginBottom: 6 }}>字幕 / 文字行为</div>
+          {overlays.map((t, i) => (
+            <div key={i} className="mono" style={{ fontSize: 11.5, color: 'var(--text-2)', marginBottom: 3 }}>
+              「{t.content}」 <span className="dim">· {t.type}{t.animationIn ? ` · ${t.animationIn}` : ''}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {beats.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <div className="eyebrow" style={{ marginBottom: 6 }}>动作节拍 · {beats.length}</div>
+          {beats.map((b, i) => (
+            <div key={b.beatId || i} style={{ fontSize: 12, marginBottom: 6, lineHeight: 1.55 }}>
+              <span style={{ color: 'var(--accent)' }}>▸</span> {b.semanticAction}
+              {(b.beforeState || b.afterState) && (
+                <div className="mono dim" style={{ fontSize: 10.5, marginLeft: 14 }}>{b.beforeState} → {b.afterState}</div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {motifs.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <div className="eyebrow" style={{ marginBottom: 6 }}>可迁移母题</div>
+          {motifs.map((m, i) => (
+            <div key={i} style={{ fontSize: 12, marginBottom: 5, lineHeight: 1.55 }}>
+              <span className="tag" style={{ fontSize: 10, marginRight: 6 }}>{m.motifType}</span>{m.description}
+            </div>
+          ))}
+        </div>
+      )}
+      {assets.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <div className="eyebrow" style={{ marginBottom: 6 }}>所需素材</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {assets.map((a, i) => (
+              <span key={i} className="tag" style={{ fontSize: 10.5 }}>{a.assetType}{a.criticality ? ` · ${a.criticality}` : ''}</span>
+            ))}
+          </div>
+        </div>
+      )}
+      {peaks && (
+        <div className="mono dim" style={{ fontSize: 10.5, marginTop: 10 }}>
+          视觉峰值：候选 {peaks.candidatePeakCount ?? '—'} · 采用 {peaks.selectedPeakCount ?? '—'} · 硬切 {peaks.hardCutCount ?? '—'}
+        </div>
+      )}
+    </div>
+  );
+};
 
 /* ============================================================
    屏 1 · 样例结构拆解 (Source)
@@ -32,6 +105,10 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
   const scanning = useProjectStore((s) => s.scanning);
   const scanStage = useProjectStore((s) => s.scanStage);
   const scanSample = useProjectStore((s) => s.scanSample);
+  const fineScanningSegId = useProjectStore((s) => s.fineScanningSegId);
+  const fineScanStage = useProjectStore((s) => s.fineScanStage);
+  const segmentDetails = useProjectStore((s) => s.segmentDetails);
+  const fineScanSegment = useProjectStore((s) => s.fineScanSegment);
   const runDemo = useProjectStore((s) => s.runDemo);
   const loadingDemo = useProjectStore((s) => s.loadingDemo);
   const T = v.duration;
@@ -264,6 +341,8 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
           ?? v.segments[0];
         const idx = v.segments.indexOf(seg);
         const dur = (seg.end ?? 0) - (seg.start ?? 0);
+        const fine = seg.id ? segmentDetails[seg.id] : undefined;
+        const isFineScanning = fineScanningSegId === seg.id;
         return (
           <div className="panel">
             <div className="panel-head">
@@ -283,11 +362,20 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
                 <dt>镜头内容</dt><dd style={{ lineHeight: 1.65 }}>{seg.caption || '—'}</dd>
                 <dt>迁移规则</dt><dd style={{ lineHeight: 1.65 }}>{seg.shot || '—'}</dd>
               </dl>
-              <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                <button className="btn" disabled style={{ opacity: 0.55 }}>
-                  <Icon name="sparkle" size={12} /> 深度分析 · 精扫描此段
-                </button>
-                <span className="mono dim" style={{ fontSize: 10.5 }}>逐峰值动作 / 字幕行为 / 转场 / 可迁移母题（fine scan，即将上线）</span>
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <button
+                    className="btn primary"
+                    disabled={isFineScanning}
+                    onClick={() => { if (seg.id) void fineScanSegment(idx, seg.id).catch(() => {}); }}
+                  >
+                    <Icon name="sparkle" size={12} /> {isFineScanning ? (fineScanStage || '精扫描中…') : fine ? '重新精扫描此段' : '深度分析 · 精扫描此段'}
+                  </button>
+                  {!fine && !isFineScanning && (
+                    <span className="mono dim" style={{ fontSize: 10.5 }}>视觉峰值 + 逐峰 VLM · 字幕行为 / 动作节拍 / 转场 / 可迁移母题（约 30–60 秒）</span>
+                  )}
+                </div>
+                {fine && <FineDetailView fine={fine} />}
               </div>
             </div>
           </div>

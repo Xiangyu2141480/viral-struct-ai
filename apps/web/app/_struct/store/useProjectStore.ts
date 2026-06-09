@@ -24,7 +24,7 @@ import { compile as compileApi, exportVideo as exportApi, nlEdit as nlEditApi } 
 import { applyStrategy as applyStrategyApi, diagnose as diagnoseApi } from '../api/diagnose';
 import { matchMaterials as matchMaterialsApi, uploadMaterials as uploadMaterialsApi } from '../api/materials';
 import { analyzeSample as analyzeSampleApi } from '../api/sample';
-import { getScanStatus, startScan } from '../api/scan';
+import { getFineScanStatus, getScanStatus, startFineScan, startScan, type FineBlockDetail } from '../api/scan';
 import {
   type InsightRequest,
   checkSafety as checkSafetyApi,
@@ -74,6 +74,12 @@ interface ProjectState {
   scanning: boolean;
   /** Human-readable rough-scan progress label (stage + elapsed). */
   scanStage: string;
+  /** Segment id currently being fine-scanned (null = none). */
+  fineScanningSegId: string | null;
+  /** Human-readable fine-scan progress label. */
+  fineScanStage: string;
+  /** Per-segment deep detail from fine scan, keyed by UI segment id. */
+  segmentDetails: Record<string, FineBlockDetail>;
   uploading: boolean;
   matching: boolean;
   diagnosing: boolean;
@@ -97,6 +103,7 @@ interface ProjectState {
   refreshAssetManagerCoverage: () => Promise<void>;
   analyzeSample: (input: { file?: File; sampleId?: string }) => Promise<void>;
   scanSample: (file: File) => Promise<void>;
+  fineScanSegment: (segmentIndex: number, segmentId: string) => Promise<void>;
   addMaterials: (files: File[]) => Promise<void>;
   setSlot: (materialId: string, slot: string | null) => void;
   applyAssignments: (assignments: Record<string, string | null>) => Promise<void>;
@@ -171,6 +178,9 @@ const initialState = {
   analyzing: false,
   scanning: false,
   scanStage: '',
+  fineScanningSegId: null,
+  fineScanStage: '',
+  segmentDetails: {} as Record<string, FineBlockDetail>,
   uploading: false,
   matching: false,
   diagnosing: false,
@@ -248,13 +258,38 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         }
         if (s.status === 'error') throw new Error(s.error || '粗扫描失败');
         if (!s.sourceVideo) throw new Error('扫描完成但未返回结构');
-        set({ sourceVideo: s.sourceVideo, mode: 'live', warnings: s.warnings ?? [], scanning: false, scanStage: '' });
+        set({ sourceVideo: s.sourceVideo, mode: 'live', warnings: s.warnings ?? [], scanning: false, scanStage: '', segmentDetails: {} });
         void get().refreshAssetManagerCoverage();
         return;
       }
       throw new Error('粗扫描超时（>5 分钟）');
     } catch (e) {
       set({ scanning: false, scanStage: '', lastError: '粗扫描失败 · ' + errMsg(e) });
+      throw e;
+    }
+  },
+
+  fineScanSegment: async (segmentIndex, segmentId) => {
+    // Deep per-segment analysis: visual peak detection + per-peak VLM on the raw video.
+    set({ fineScanningSegId: segmentId, fineScanStage: '排队中', lastError: null });
+    try {
+      const { jobId } = await startFineScan(get().sourceVideo.id, segmentIndex);
+      for (let i = 0; i < 180; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        const s = await getFineScanStatus(jobId);
+        if (s.status === 'running') {
+          set({ fineScanStage: (s.stage ?? '精扫描中') + (s.elapsedSec ? ` · ${s.elapsedSec}s` : '') });
+          continue;
+        }
+        if (s.status === 'error') throw new Error(s.error || '精扫描失败');
+        if (!s.detail) throw new Error('精扫描完成但未返回明细');
+        const detail = s.detail;
+        set((st) => ({ segmentDetails: { ...st.segmentDetails, [segmentId]: detail }, fineScanningSegId: null, fineScanStage: '' }));
+        return;
+      }
+      throw new Error('精扫描超时（>6 分钟）');
+    } catch (e) {
+      set({ fineScanningSegId: null, fineScanStage: '', lastError: '精扫描失败 · ' + errMsg(e) });
       throw e;
     }
   },
