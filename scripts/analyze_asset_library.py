@@ -218,14 +218,18 @@ def probe_media(clip_path: Path, media_type: str) -> dict[str, Any]:
     return info
 
 
+# Provider constraint: preprocess_configs[video][fps] must be in (0.20, 5.00).
+PROVIDER_MAX_FPS = 4.9
+PROVIDER_MIN_FPS = 0.25
+
+
 def resolve_upload_fps(base_fps: float, duration_sec: float | None) -> float:
-    """Short clips get a higher sampling fps so brief actions (cap open, sip) aren't skipped."""
-    if duration_sec and duration_sec > 0:
-        if duration_sec < 6:
-            return max(base_fps, 10.0)
-        if duration_sec < 12:
-            return max(base_fps, 8.0)
-    return base_fps
+    """Pick a server-side sampling fps inside the provider's (0.20, 5.00) window.
+    Short clips use the highest allowed fps so brief actions (cap open, sip) aren't skipped."""
+    fps = base_fps
+    if duration_sec and duration_sec > 0 and duration_sec < 8:
+        fps = PROVIDER_MAX_FPS
+    return max(PROVIDER_MIN_FPS, min(fps, PROVIDER_MAX_FPS))
 
 
 def extract_keyframe(ffmpeg_path: str, clip_path: Path, time_sec: float, out_path: Path) -> bool:
@@ -875,7 +879,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--api-key")
     p.add_argument("--model")
     p.add_argument("--ffmpeg", default="ffmpeg", help="ffmpeg binary for keyframe extraction.")
-    p.add_argument("--upload-fps", type=float, default=5, help="Base sampling fps for video uploads (short clips auto-raise).")
+    p.add_argument("--upload-fps", type=float, default=4.0, help="Base server-side sampling fps for video (clamped to provider's (0.20,5.00); short clips use 4.9).")
     p.add_argument("--max-frames", type=int, default=6, help="Max key-moment thumbnails per video.")
     p.add_argument("--poll-interval", type=float, default=5)
     p.add_argument("--max-wait-seconds", type=float, default=300)

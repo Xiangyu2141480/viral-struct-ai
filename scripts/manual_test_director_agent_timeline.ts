@@ -27,6 +27,7 @@ import { buildAssetSupplyContext } from '../apps/api/src/services/assetManager/a
 import { buildDeterministicPreset } from '../apps/api/src/services/motifs/categoryPresetProvider';
 import { SOURCE_SPECIFIC_TERMS } from '../apps/api/src/services/motifs/motionGrammarSanitizer';
 import { runDirectorAgent } from '../apps/api/src/services/directorAgent/index';
+import { authorTimelineOptions } from '../apps/api/src/services/directorAgent/authorTimelineOptions';
 import { orchestratedToAuthored } from '../apps/api/src/services/videoAgent/orchestratedToAuthored';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -73,7 +74,7 @@ async function main(): Promise<void> {
   });
 
   // Director Agent → OrchestratedTimeline (rule-based matching; LLM is opt-in and not used here).
-  const timeline = await runDirectorAgent({
+  let timeline = await runDirectorAgent({
     projectId: 'director_agent_kangshifu',
     structureGraph,
     assetCards,
@@ -82,6 +83,14 @@ async function main(): Promise<void> {
     categoryPreset,
     options: { useLlmMatcher: true }
   });
+
+  // Optional LLM channel authoring (AUTHOR_OPTIONS=true): one shared neutral intent → three
+  // capability-bounded prompts (reshoot real-filmable / hyperframes edit-only / aigc surreal).
+  if (process.env.AUTHOR_OPTIONS === 'true') {
+    const authoredOptions = await authorTimelineOptions(timeline, { contentBrief: beverageBrief, enabled: true });
+    timeline = authoredOptions.timeline;
+    console.log(`- option authoring: ${authoredOptions.authoredSlots} slot(s) re-authored; ${authoredOptions.warnings.length} channel warning(s)`);
+  }
 
   // Handoff: map to the Video Agent's AuthoredTimeline (a TIMELINE — never rendered here).
   const authored = orchestratedToAuthored(timeline, { assetCards });
