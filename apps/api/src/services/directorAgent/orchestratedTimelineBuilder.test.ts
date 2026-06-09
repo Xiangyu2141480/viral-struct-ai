@@ -39,7 +39,7 @@ test('produces exactly one OrchestratedSlot per shotSlot, in time order, schema-
   }
 });
 
-test('degradation ladder: strong=matched, weak=partial+non-AIGC options, missing=gap+3 options', async () => {
+test('degradation ladder: every tier carries 3 channels; recommendation differs (matched/partial→hyperframes, gap→aigc)', async () => {
   const timeline = await buildOrchestratedTimeline({
     projectId: 'p1',
     structureGraph: makeGraph(),
@@ -54,7 +54,9 @@ test('degradation ladder: strong=matched, weak=partial+non-AIGC options, missing
   if (open.kind === 'matched') {
     assert.equal(open.status, 'matched');
     assert.equal(open.assetId, 'asset_open');
-    assert.equal(open.options, undefined); // matched needs no enhancement
+    // covered beat now carries all three channels as ALTERNATIVES; real asset stays primary (status:matched).
+    assert.deepEqual(open.options?.map((option) => option.id).sort(), ['aigc', 'hyperframes', 'reshoot']);
+    assert.equal(open.recommendedOptionId, 'hyperframes');
   }
 
   const usage = timeline.slots.find((s) => s.slotId === 'slot_usage')!.fill;
@@ -62,7 +64,7 @@ test('degradation ladder: strong=matched, weak=partial+non-AIGC options, missing
   if (usage.kind === 'matched') {
     assert.equal(usage.status, 'partial');
     assert.equal(usage.assetId, 'asset_usage'); // asset is still filled in
-    assert.deepEqual(usage.options?.map((option) => option.id).sort(), ['hyperframes', 'reshoot']);
+    assert.deepEqual(usage.options?.map((option) => option.id).sort(), ['aigc', 'hyperframes', 'reshoot']);
     assert.equal(usage.recommendedOptionId, 'hyperframes'); // §6.4: partial → hyperframes
   }
 
@@ -473,7 +475,7 @@ test('weak kinetic assembly motif is not treated as fully matched and carries mo
   assert.equal(slot.fill.kind, 'matched');
   if (slot.fill.kind === 'matched') {
     assert.equal(slot.fill.status, 'partial');
-    assert.deepEqual(slot.fill.options?.map((option) => option.id).sort(), ['hyperframes', 'reshoot']);
+    assert.deepEqual(slot.fill.options?.map((option) => option.id).sort(), ['aigc', 'hyperframes', 'reshoot']);
     const positiveText = JSON.stringify(slot.fill.options);
     assert.match(positiveText, /冰块|柠檬|茶滴|冷雾/);
     assert.match(positiveText, /CTA|收口|锁定/);

@@ -17,25 +17,34 @@ import { splitRejectIfForTransfer } from '@viral-struct/shared';
 import { DEFAULT_ASPECT_RATIO, SAFE_NEGATIVE_PROMPT_ZH } from './constants';
 import { containsSourceSpecificTerm } from '../motifs/motionGrammarSanitizer';
 import { inferSourceSpecificTransferSubtype } from './sourceSpecificAbstraction';
+import { CASCADE_MOTION_TOKENS } from './structuralCompressionPlanner';
 
 /**
- * P2 (§6) — partial/gap slots get honest resolution options: reshoot + HyperFrames by default, and AIGC
- * only for true missing/generation slots. Existing asset support should not be presented as "needs AIGC".
+ * P2 (§6) — EVERY beat (matched / partial / gap) gets all three honest resolution channels: reshoot +
+ * HyperFrames + AIGC. For a **matched/covered** beat the three are ALTERNATIVES (替代/增强选项) to the
+ * placed real asset; for partial they augment a structurally-incomplete real asset; for gap they fill a
+ * true hole. The real-vs-alternative distinction is carried by the beat's `fillStatus`, not by withholding
+ * channels — so the downstream editor always has the full menu (and an AIGC job-card prompt) on hand.
  *
  * Output language: **Chinese**. The Asset Manager's per-slot MissingMaterialBrief is English, and §12
  * forbids rewriting ②, so the Director authors the human-readable prose (guidanceNL / editingGuidanceNL /
  * prompt / mustCapture / avoid) itself in Chinese from a role template + the content brief, while still
  * reusing ②'s **structured** signals where they are language-neutral: referenced asset ids, durations,
- * providerHint, card type and channel eligibility. When no brief exists (the rare gate-blocked-but-covered
- * slot) the role template alone produces the three options.
+ * providerHint, card type and channel eligibility. When no brief exists (e.g. a covered slot) the role
+ * template alone produces the three options.
  *
- * Recommendation follows the degradation ladder (§6.4, 方案二): partial → `hyperframes` (edit the usable
- * asset — cheapest + IP-safe); gap → `aigc` only when it is eligible, otherwise `hyperframes`. `reshoot`
- * is always offered, never auto.
+ * Recommendation follows the degradation ladder (§6.4, 方案二): matched/partial → `hyperframes` (edit/
+ * augment the real asset — cheapest + IP-safe, never auto-replaces it); gap → `aigc` when it is eligible,
+ * otherwise `hyperframes`. AIGC is always *offered* as a job-card option; eligibility only governs whether
+ * AIGC may be the *recommended* channel for a gap. `reshoot` is always offered, never auto.
  */
 export interface BuildGapResolutionOptionsArgs {
   slot: ShotSlotNode;
-  tier: 'partial' | 'gap';
+  /**
+   * matched = covered by a real asset (the three options are alternatives/enhancements);
+   * partial = real asset placed but structurally incomplete; gap = no usable real asset.
+   */
+  tier: 'matched' | 'partial' | 'gap';
   coverage?: ContextualSlotCoverage;
   missingBrief?: MissingMaterialBrief;
   assetSupplyContext?: AssetSupplyContext;
@@ -47,6 +56,12 @@ export interface BuildGapResolutionOptionsArgs {
   motionTokens?: string[];
   fillStatus?: DirectorFillStatus;
   motif?: ViralMotifAnnotation;
+  /**
+   * When true (a compressed beat that does NOT own the sensory-cascade reveal), strip the cascade/assembly
+   * source grammar (由散到聚/汇聚/组装) and suppress the kinetic-assembly spec so this beat expresses its own
+   * target function instead of reusing the convergence reveal. See beatOwnsSensoryCascade.
+   */
+  gateSourceCascade?: boolean;
 }
 
 export interface GapResolutionOptionsResult {
@@ -102,14 +117,13 @@ export function buildGapResolutionOptions(args: BuildGapResolutionOptionsArgs): 
   const reshoot = buildReshootOption(spec, context, product, brief);
   const hyperframes = buildHyperframesOption(args, spec, context, product, brief);
   const aigc = buildAigcOption(args, spec, context, product, brief);
-  const options: GapResolutionOption[] = [reshoot, hyperframes];
-  if (shouldOfferAigc(args, brief, aigc)) {
-    options.push(aigc);
-  }
+  // Every beat carries all three channels. For a matched/covered beat these are alternatives to the placed
+  // real asset; `recommend` + the beat's fillStatus tell the handoff which channel (if any) to reach for.
+  const options: GapResolutionOption[] = [reshoot, hyperframes, aigc];
 
   return {
     options,
-    recommendedOptionId: recommend(args, brief, aigc, options)
+    recommendedOptionId: recommend(args, brief, aigc)
   };
 }
 
@@ -118,24 +132,14 @@ export function buildGapResolutionOptions(args: BuildGapResolutionOptionsArgs): 
 function recommend(
   args: BuildGapResolutionOptionsArgs,
   brief: MissingMaterialBrief | undefined,
-  aigc: AigcOption,
-  options: GapResolutionOption[]
-): GapResolutionOptionId {
-  if (args.tier === 'partial') {
-    return 'hyperframes';
-  }
-  return options.some((option) => option.id === 'aigc') && isAigcEligible(brief, aigc) ? 'aigc' : 'hyperframes';
-}
-
-function shouldOfferAigc(
-  args: BuildGapResolutionOptionsArgs,
-  brief: MissingMaterialBrief | undefined,
   aigc: AigcOption
-): boolean {
-  if (args.tier !== 'gap') {
-    return false;
+): GapResolutionOptionId {
+  // gap → AIGC when eligible (cheapest path to net-new material), else HyperFrames.
+  // matched/partial → HyperFrames: edit/augment the real asset (cheapest + IP-safe), never auto-replace it.
+  if (args.tier === 'gap') {
+    return isAigcEligible(brief, aigc) ? 'aigc' : 'hyperframes';
   }
-  return isAigcEligible(brief, aigc);
+  return 'hyperframes';
 }
 
 function isAigcEligible(brief: MissingMaterialBrief | undefined, aigc: AigcOption): boolean {
@@ -248,7 +252,10 @@ function buildAigcOption(
   // Per-slot abstract transfer (Q3): the source motion grammar (motifTokens) is what makes each slot's
   // prompt distinct and carries the "keep the grammar, swap the objects" intent — rendered in Chinese,
   // so no two slots with different grammar get the same prompt, and no source object leaks.
-  const grammar = (args.motionTokens ?? []).map((token) => MOTION_TOKEN_ZH[token] ?? token).filter(Boolean);
+  const gatedTokens = args.gateSourceCascade
+    ? (args.motionTokens ?? []).filter((token) => !CASCADE_MOTION_TOKENS.has(token))
+    : (args.motionTokens ?? []);
+  const grammar = gatedTokens.map((token) => MOTION_TOKEN_ZH[token] ?? token).filter(Boolean);
   const variableLine = context.transferVariables.length
     ? `迁移变量：${context.transferVariables.map((entry) => `${entry.name}→${zhList(entry.targetValue ? [entry.targetValue] : entry.allowedTargetValues ?? [])}`).join('；')}。`
     : '';
@@ -507,7 +514,7 @@ function buildDirectorPromptContext(
       ? '源片里的源品类限制只作为动作语法提示，迁移时不直接否决目标品类素材。'
       : undefined,
     targetEquivalentExplanation: spec.motifLine,
-    motifType: args.motif?.motifType ?? brief?.motifContext?.motifType,
+    motifType: gatedMotifType(args, brief),
     motionTokens: args.motionTokens ?? args.motif?.motionTokens ?? brief?.motifContext?.motionTokens ?? [],
     transferVariables,
     targetCategoryMapping: {
@@ -723,8 +730,18 @@ function translateEquivalent(value: string): string {
 }
 
 function isKineticAssemblyContext(args: BuildGapResolutionOptionsArgs, brief?: MissingMaterialBrief): boolean {
+  // A gated (non-cascade-owner) beat must not adopt the kinetic 由散到聚 assembly spec, even if its source
+  // slot carried that motif — it should express its own target function instead.
+  if (args.gateSourceCascade) return false;
   const motifType = args.motif?.motifType ?? brief?.motifContext?.motifType;
   return motifType === 'kinetic_assembly_reveal';
+}
+
+/** Drop a kinetic-assembly motifType for gated beats so downstream cascade branches (steps/bridge) don't fire. */
+function gatedMotifType(args: BuildGapResolutionOptionsArgs, brief?: MissingMaterialBrief): string | undefined {
+  const motifType = args.motif?.motifType ?? brief?.motifContext?.motifType;
+  if (args.gateSourceCascade && motifType === 'kinetic_assembly_reveal') return undefined;
+  return motifType;
 }
 
 function buildSourceSpecificSpec(base: ZhRoleSpec, subtype: SourceSpecificTransferSubtype): ZhRoleSpec {

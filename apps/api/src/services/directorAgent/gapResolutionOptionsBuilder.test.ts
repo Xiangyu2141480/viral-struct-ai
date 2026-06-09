@@ -77,7 +77,7 @@ test('gap tier can offer three options: reshoot / hyperframes / aigc', () => {
   assert.deepEqual(options.map((o) => o.id).sort(), ['aigc', 'hyperframes', 'reshoot']);
 });
 
-test('partial tier with existing asset support recommends hyperframes and does not offer AIGC', () => {
+test('partial tier offers all three channels and still recommends hyperframes', () => {
   const { options, recommendedOptionId } = buildGapResolutionOptions({
     slot: makeSlot(),
     tier: 'partial',
@@ -87,8 +87,23 @@ test('partial tier with existing asset support recommends hyperframes and does n
     chosenAssetId: 'asset_usage',
     fillStatus: 'partial_asset_support'
   });
+  assert.equal(recommendedOptionId, 'hyperframes'); // §6.4: edit the real asset, don't auto-replace it
+  assert.deepEqual(options.map((o) => o.id).sort(), ['aigc', 'hyperframes', 'reshoot']);
+});
+
+test('matched/covered tier offers all three channels as alternatives and recommends hyperframes', () => {
+  const { options, recommendedOptionId } = buildGapResolutionOptions({
+    slot: makeSlot(),
+    tier: 'matched',
+    missingBrief: makeBrief(),
+    contentBrief: makeContentBrief(),
+    referenceAssetIds: ['asset_usage'],
+    chosenAssetId: 'asset_usage',
+    fillStatus: 'matched'
+  });
+  assert.deepEqual(options.map((o) => o.id).sort(), ['aigc', 'hyperframes', 'reshoot']);
+  // covered → the channels are alternatives; HyperFrames (edit the placed asset) is the safe default.
   assert.equal(recommendedOptionId, 'hyperframes');
-  assert.deepEqual(options.map((o) => o.id).sort(), ['hyperframes', 'reshoot']);
 });
 
 test('gap tier recommends aigc, but falls back to hyperframes when aigc is not eligible', () => {
@@ -191,7 +206,8 @@ test('收敛: options reference only the single chosen asset, not a pool', () =>
   });
   const hyper = options.find((o) => o.id === 'hyperframes')!;
   if (hyper.id === 'hyperframes') assert.deepEqual(hyper.referencedAssetIds, ['asset_usage']);
-  assert.equal(options.some((option) => option.id === 'aigc'), false);
+  const aigc = options.find((o) => o.id === 'aigc')!;
+  if (aigc.id === 'aigc') assert.deepEqual(aigc.referenceAssetIds, ['asset_usage']);
 });
 
 test('aigc option is job-card only', () => {
@@ -207,7 +223,7 @@ test('aigc option is job-card only', () => {
   assert.equal(aigc.ownership, 'external_generation_job_card_only');
 });
 
-test('synthesizes non-AIGC options when no brief exists for a covered/partial slot', () => {
+test('synthesizes all three options from the role template when no brief exists', () => {
   const { options, recommendedOptionId } = buildGapResolutionOptions({
     slot: makeSlot(),
     tier: 'partial',
@@ -216,7 +232,7 @@ test('synthesizes non-AIGC options when no brief exists for a covered/partial sl
     chosenAssetId: 'asset_usage',
     fillStatus: 'needs_hyperframes_enhancement'
   });
-  assert.deepEqual(options.map((o) => o.id).sort(), ['hyperframes', 'reshoot']);
+  assert.deepEqual(options.map((o) => o.id).sort(), ['aigc', 'hyperframes', 'reshoot']);
   assert.equal(recommendedOptionId, 'hyperframes');
 });
 

@@ -23,7 +23,7 @@ import type {
   ViralStructureGraph
 } from '@viral-struct/shared';
 import { OrchestratedTimelineSchema } from '@viral-struct/shared';
-import { planStructuralCompression, type CompressionSlotTiming } from './structuralCompressionPlanner';
+import { planStructuralCompression, beatOwnsSensoryCascade, type CompressionSlotTiming } from './structuralCompressionPlanner';
 import { matchSlots, matchSlotsWithFallback, type MatchSlotsResultWithSource } from '../slotMatcher';
 import { buildAssetSupplyContext } from '../assetManager/assetSupplyContextBuilder';
 import { extractViralMotifAnnotation } from '../motifs/viralMotifExtractor';
@@ -161,7 +161,8 @@ export async function buildOrchestratedTimeline(input: BuildOrchestratedTimeline
       motionTokens,
       evidence,
       fillStatus,
-      motif
+      motif,
+      compressionBeat
     });
 
     return {
@@ -353,13 +354,35 @@ interface BuildFillArgs {
   evidence: OrchestratedSlotEvidence;
   fillStatus: DirectorFillStatus;
   motif?: ViralMotifAnnotation;
+  compressionBeat?: StructuralCompressionBeat;
 }
 
 function buildFill(args: BuildFillArgs): SlotFillMatched | SlotFillGap {
   const roleLabel = humanRole(args.slot.role);
+  // 由散到聚 / 汇聚 / 组装 belongs ONLY to the single beat that owns the sensory-cascade reveal. For every
+  // other compressed beat, gate the source cascade grammar out of the prompts so it does not bleed across
+  // the whole video (the hook / benefit / usage / cta beats then express their own target function).
+  const gateSourceCascade = Boolean(args.compressionBeat) && !beatOwnsSensoryCascade(args.compressionBeat);
 
   if (args.tier === 'matched') {
     const assetId = args.slotMatch?.assetId as string;
+    // A covered beat still carries all three channels as ALTERNATIVES (替代/增强方案): use the real asset
+    // by default, but hand the editor reshoot / HyperFrames / AIGC job-card options should they want to
+    // re-shoot, polish, or regenerate the beat. status:'matched' keeps the real asset primary downstream.
+    const { options, recommendedOptionId } = buildGapResolutionOptions({
+      slot: args.slot,
+      tier: 'matched',
+      coverage: args.coverage,
+      missingBrief: args.brief,
+      assetSupplyContext: args.assetSupplyContext,
+      contentBrief: args.contentBrief,
+      referenceAssetIds: args.referenceAssetIds,
+      chosenAssetId: args.slotMatch?.assetId,
+      motionTokens: args.motionTokens,
+      fillStatus: args.fillStatus,
+      motif: args.motif,
+      gateSourceCascade
+    });
     return {
       kind: 'matched',
       assetId,
@@ -367,7 +390,11 @@ function buildFill(args: BuildFillArgs): SlotFillMatched | SlotFillGap {
       matchedCriteria: args.slotMatch?.matchedCriteria ?? [],
       treatmentSpec: toTreatmentSpec(args.slotMatch),
       status: 'matched',
-      videoEngineInstruction: `直接使用素材 ${assetId} 承接「${roleLabel}」槽位${treatmentSummary(args.slotMatch)}；保持原素材真实画面，不声明外部生成。`,
+      videoEngineInstruction:
+        `直接使用素材 ${assetId} 承接「${roleLabel}」槽位${treatmentSummary(args.slotMatch)}；保持原素材真实画面，不声明外部生成。`
+        + `如需替代或增强，可选「${recommendedOptionId}」等方案（补拍 / HyperFrames / AIGC 任务卡），默认仍用原素材。`,
+      options,
+      recommendedOptionId,
       evidence: args.evidence
     };
   }
@@ -385,7 +412,8 @@ function buildFill(args: BuildFillArgs): SlotFillMatched | SlotFillGap {
       chosenAssetId: args.slotMatch?.assetId,
       motionTokens: args.motionTokens,
       fillStatus: args.fillStatus,
-      motif: args.motif
+      motif: args.motif,
+      gateSourceCascade
     });
     const missing = args.slotMatch?.missingDescription;
     return {
@@ -415,7 +443,8 @@ function buildFill(args: BuildFillArgs): SlotFillMatched | SlotFillGap {
     referenceAssetIds: args.referenceAssetIds,
     motionTokens: args.motionTokens,
     fillStatus: args.fillStatus,
-    motif: args.motif
+    motif: args.motif,
+    gateSourceCascade
   });
   return {
     kind: 'gap',

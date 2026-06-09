@@ -7,6 +7,7 @@ import {
   type AuthoringChannel,
   type SharedChannelIntent
 } from './channelBriefAuthor';
+import { beatOwnsSensoryCascade, gateMotionTokensForBeat } from './structuralCompressionPlanner';
 
 /**
  * Post-Director option authoring stage (option-2 design).
@@ -88,6 +89,12 @@ function buildIntent(
     ? reshoot.durationSec
     : Math.max(2, Math.round((slot.endMs - slot.startMs) / 1000));
   const beat = slot.compressionBeat;
+  // The cascade reveal (由散到聚/汇聚/组装) belongs to exactly one beat. For every other compressed beat,
+  // gate the source cascade grammar + kinetic motif out of the authoring intent so the LLM expresses THIS
+  // beat's own target function (from targetEquivalentBeat) instead of reusing the convergence reveal.
+  const gatedMotifType = beat && !beatOwnsSensoryCascade(beat) && slot.motifType === 'kinetic_assembly_reveal'
+    ? undefined
+    : slot.motifType;
   return {
     slotId: slot.slotId,
     role: slot.role,
@@ -96,8 +103,8 @@ function buildIntent(
     sellingPoints: contentBrief.sellingPoints,
     // P1: prefer the compression beat's neutral target-equivalent NL as the abstract intent.
     transferableIntent: beat?.targetEquivalentBeat ?? slot.transferableIntent,
-    motionTokens: slot.motionTokens ?? [],
-    motifType: slot.motifType,
+    motionTokens: gateMotionTokensForBeat(slot.motionTokens ?? [], beat),
+    motifType: gatedMotifType,
     fillStatus: slot.fillStatus ?? (slot.fill.kind === 'gap' ? 'missing_generation_required' : slot.fill.status),
     referenceAssetIds: collectReferenceAssetIds(slot, options),
     assetEvidence: collectAssetEvidence(slot),

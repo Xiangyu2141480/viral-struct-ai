@@ -27,6 +27,40 @@ import type {
  * future option. See docs/product-intelligence-optimization-plan.md §3 (P0-B).
  */
 
+/**
+ * The source motion-grammar tokens that mean "scatter → converge / assemble" — i.e. the 由散到聚 cascade.
+ * They ride along on a representative source slot, but the cascade reveal belongs to exactly ONE target
+ * beat; see {@link beatOwnsSensoryCascade}.
+ */
+export const CASCADE_MOTION_TOKENS: ReadonlySet<string> = new Set([
+  'component_cascade',
+  'chaos_to_order',
+  'assembly_completion',
+  'assembly_reveal',
+  'spectacle_burst',
+  'morph'
+]);
+
+/**
+ * Exactly one beat per arc owns the 由散到聚 sensory-convergence reveal: the feature/benefit beat the
+ * planner mapped to the `sensory_cascade` family. Every other beat (hook / benefit enumeration / usage /
+ * cta) must express ITS OWN function even if its representative source slot happened to carry assembly
+ * grammar — otherwise "汇聚/组装" bleeds across the entire video (the cascade over-propagation bug).
+ */
+export function beatOwnsSensoryCascade(beat: StructuralCompressionBeat | undefined): boolean {
+  return (
+    beat !== undefined
+    && beat.targetEquivalentFamily === 'sensory_cascade'
+    && beat.preservedStructureFunction === 'feature_or_benefit_proof'
+  );
+}
+
+/** Strip cascade/assembly source tokens from any compressed beat that does NOT own the cascade reveal. */
+export function gateMotionTokensForBeat(tokens: string[], beat: StructuralCompressionBeat | undefined): string[] {
+  if (!beat || beatOwnsSensoryCascade(beat)) return tokens;
+  return tokens.filter((token) => !CASCADE_MOTION_TOKENS.has(token));
+}
+
 export interface CompressionSlotTiming {
   sourceStartMs: number;
   sourceEndMs: number;
@@ -352,6 +386,7 @@ function buildBeatNL(func: PreservedStructureFunction, family: TargetEquivalentF
   const cascadeNL = `把"由散到聚"的结构动势迁移成 ${name} 的感官汇聚：${sensory.join('、') || '感官元素'}围绕产品高速掠入并收束成一次冷冽利落的 reveal`;
   const benefitNL = `用感官化方式归纳核心利益：${benefits.join('、') || '核心卖点'}`;
   const ritualNL = `真人完成 ${name} 的真实使用激活：${rituals.join('、') || '开盖、使用'}`;
+  const usageBenefitNL = `把使用过程收束成利益证明：${name} 入口后 ${benefits.slice(0, 2).join('、') || '即时满足'} 的即时获得感，用"喝完之后"的结果而不是再演一遍开盖动作来说话`;
   const socialNL = `${social.join('、') || '日常使用'}的社交场景，${name} 作为共享中心`;
 
   switch (func) {
@@ -364,7 +399,7 @@ function buildBeatNL(func: PreservedStructureFunction, family: TargetEquivalentF
     case 'feature_or_benefit_proof':
       return family === 'sensory_cascade' ? cascadeNL : family === 'feature_demo' ? `演示 ${name} 的关键功能与价值点：${benefits.join('、') || '核心卖点'}` : benefitNL;
     case 'usage_or_ritual':
-      return family === 'social_scene' ? socialNL : ritualNL;
+      return family === 'social_scene' ? socialNL : family === 'benefit_proof' ? usageBenefitNL : ritualNL;
     case 'social_or_trust_proof':
       return family === 'trust_scene' ? `用可信证据（资质/口碑/真实评价）强化 ${name} 的信任感` : socialNL;
     case 'emotional_payoff':

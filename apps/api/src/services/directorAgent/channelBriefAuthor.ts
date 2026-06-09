@@ -100,6 +100,7 @@ const RESHOOT_SYSTEM_PROMPT = `你是真人短视频「补拍」导演。给定�
 1. 只能是物理世界里真人/真物真实可拍的动作、构图、光线、场景。
 2. 严禁任何超现实或后期特效内容：悬浮、凭空出现、级联飞入、配料自动汇聚、形变、粒子、爆发、炸开、冷雾炸裂、物体自动组装、镜头穿越物体等，一律不许写。把抽象的"结构动机"落地成真实可执行的人手动作（如：开盖、倒入杯中、举起瓶子旋转展示标签、把多瓶依次摆好、喝一口）。
 3. 不得出现具体品牌名/型号/源产品物体；不得出现明星或公众人物；不得写价格、促销、医疗或功效宣称。
+4. 紧扣给定的「本拍核心功能」来设计动作：不同功能的镜头要拍出不同内容（钩子=强冲击亮相、利益点=结果化呈现、使用=真实使用、CTA=收口定格），不要每个镜头都写成"拿起瓶子拧盖喝一口"。
 
 只输出 JSON：{"title": "≤14字镜头名", "guidanceNL": "一段可执行的补拍说明，讲清拍什么动作、怎么拍", "framing": "竖屏景别与构图", "mustCapture": ["必须拍到的真实要素"], "avoid": ["要避免的内容"]}`;
 
@@ -109,14 +110,16 @@ const HYPERFRAMES_SYSTEM_PROMPT = `你是使用 HyperFrames 做「基于已有�
 1. 只能描述对「已有真实素材帧」的剪辑操作（裁切、推近/拉远、卡点、定格、循环、转场擦除）和 2D 图层动画（文字卡、卖点卡、CTA 卡、箭头/高亮/进度点）。必须围绕给定的参考素材来编排。
 2. 严禁描述任何需要重新生成的写实新画面或 VFX：不要写"冰块飞入""冷雾爆发""配料级联汇聚""产品形变"等——那是 AIGC 的活，不是剪辑能做的。
 3. 不得出现具体品牌名/型号/源产品物体、明星、价格、医疗或功效宣称。
+4. 紧扣给定的「本拍核心功能」编排剪辑：不同功能的镜头要有不同的卡片类型与节奏，不要写成雷同的剪辑步骤。
 
 只输出 JSON：{"title": "≤14字", "editingGuidanceNL": "剪辑步骤 + 大致时间轴，说明如何用已有素材+图层完成", "cardType": "卡片类型英文蛇形命名", "copy": {"headline": "可选主文案", "subline": "可选副文案", "bullets": ["可选要点"], "cta": "可选行动号召"}}`;
 
-const AIGC_SYSTEM_PROMPT = `你是 AIGC 视频生成提示词工程师。给定抽象镜头意图，写一条可交给视频生成模型执行的提示词（仅为提示词，不是成片）。
+const AIGC_SYSTEM_PROMPT = `你是 AIGC 视频生成提示词工程师。给定本拍的核心功能，写一条可交给视频生成模型执行的提示词（仅为提示词，不是成片）。
 
 能力与边界：
-1. 这里允许超现实的结构迁移效果（级联、汇聚、激活、爆发、形变），但必须用目标品类的等价元素来演绎（饮料语境：冰块、柠檬片、红茶水滴、冷雾、开盖、倒茶、CTA 收口）。
-2. 保留源片的抽象运动语法，但严禁照搬源产品/源场景的具体物体；不得出现具体品牌名/型号、明星、价格、医疗或功效宣称。
+1. 以 targetEquivalentBeat 描述的本拍功能为第一优先级来设计画面与运镜；可以使用超现实效果，但必须服务于该功能，并用目标品类等价元素演绎（饮料语境：冰块、柠檬片、红茶水滴、冷雾、开盖、倒茶、CTA 收口）。
+2. "由散到聚 / 汇聚 / 组装 / 级联"这类汇聚型结构动势，只属于明确是"感官汇聚 reveal"的那一拍；钩子、利益点归纳、使用演示、CTA 等镜头要各自用自己的结构动作表达，不要套用汇聚组装。
+3. 严禁照搬源产品/源场景的具体物体；不得出现具体品牌名/型号、明星、价格、医疗或功效宣称。
 
 只输出 JSON：{"prompt": "竖屏 9:16 生成提示词正文", "negativePrompt": "负向提示词（要规避的内容）"}`;
 
@@ -127,31 +130,35 @@ function systemPromptFor(channel: AuthoringChannel): string {
 }
 
 function buildUserPrompt(channel: AuthoringChannel, intent: SharedChannelIntent): string {
-  const shared = {
+  // PRIMARY: what THIS beat must accomplish (its target function). The brief MUST be built from this; two
+  // beats with different functions must not come out near-identical.
+  const beatSpec = {
     role: intent.role,
     product: intent.productName,
     category: intent.category,
     sellingPoints: intent.sellingPoints,
-    abstractIntent: intent.transferableIntent,
-    motionGrammar: intent.motionTokens,
-    motifType: intent.motifType,
-    durationSec: intent.durationSec,
-    // P1: structural-function + target-equivalent context so the brief carries WHY this beat exists.
-    preservedStructureFunction: intent.preservedStructureFunction,
-    targetEquivalentBeat: intent.targetEquivalentBeat,
+    targetEquivalentBeat: intent.targetEquivalentBeat ?? intent.transferableIntent,
     targetEquivalentFamily: intent.targetEquivalentFamily,
+    preservedStructureFunction: intent.preservedStructureFunction,
     proofTypes: intent.proofTypes,
-    productComplexity: intent.productComplexity
+    productComplexity: intent.productComplexity,
+    durationSec: intent.durationSec
   };
+  // SUBORDINATE: an optional motion-grammar hint (already gated upstream so cascade tokens only reach the
+  // beat that owns the reveal). Use it only if it serves the beat's function.
+  const motionHint = (intent.motionTokens ?? []).length ? intent.motionTokens : undefined;
   const assetContext = channel === 'hyperframes'
-    ? { referenceAssetIds: intent.referenceAssetIds, assetEvidence: intent.assetEvidence }
-    : {};
+    ? `\n\n可用的真实参考素材（剪辑必须基于它们）：\n${JSON.stringify({ referenceAssetIds: intent.referenceAssetIds, assetEvidence: intent.assetEvidence }, null, 2)}`
+    : '';
   const claimBlock = intent.forbiddenClaims && intent.forbiddenClaims.length
     ? `\n\n禁止宣称（合规边界，必须全部遵守）：\n${intent.forbiddenClaims.map((c) => `- ${c}`).join('\n')}`
     : '';
-  return `抽象镜头意图（中性，不要照抄成超现实，请按本渠道能力渲染）：
+  return `本拍的核心功能（最高优先级，必须据此创作；不同功能的镜头不要写成雷同内容）：
 
-${JSON.stringify({ ...shared, ...assetContext }, null, 2)}${claimBlock}
+${JSON.stringify(beatSpec, null, 2)}
+
+可选运动手法提示（次要参考，仅当它服务于上面的核心功能时才用；与本拍功能无关就忽略，绝不要给非"感官汇聚 reveal"的镜头套用"由散到聚/汇聚/组装/级联"）：
+${motionHint ? JSON.stringify(motionHint) : '（无）'}${assetContext}${claimBlock}
 
 请只输出本渠道要求的 JSON 本体。`;
 }

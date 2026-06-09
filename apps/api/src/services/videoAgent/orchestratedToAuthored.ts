@@ -103,7 +103,11 @@ function buildBeat(
   };
 }
 
-/** Re-shape the slot's resolution options into the handoff's enhancement briefs (partial + gap beats). */
+/**
+ * Re-shape the slot's resolution options into the handoff's enhancement briefs. Present on EVERY beat that
+ * carries options — matched/covered beats included (there the channels are alternatives, signalled by
+ * `fillStatus: 'matched'`); only a beat with no authored options at all yields `undefined`.
+ */
 function buildEnhancement(slot: OrchestratedSlot): BeatEnhancement | undefined {
   const options = slot.fill.options;
   if (!options || options.length === 0) return undefined;

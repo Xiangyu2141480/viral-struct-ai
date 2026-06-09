@@ -192,11 +192,12 @@ export type BeatTransitionSpec = z.infer<typeof BeatTransitionSpecSchema>;
 // ---- Enhancement briefs (carried to the Video Agent for partial/gap beats) ----
 
 /**
- * For a beat whose real asset only PARTIALLY fits (or is a true gap), the Director already authored the
- * channel-specific resolution briefs (reshoot / hyperframes / aigc). They must travel with the handoff so
- * the Video Agent / HyperFrames executor knows HOW to enhance the placed media — not just which asset to
- * place. Natural-language guidance (the HyperFrames executor consumes it); the deterministic ffmpeg
- * renderer ignores it. Absent on fully-`matched` beats (nothing to enhance).
+ * The Director authors channel-specific resolution briefs (reshoot / hyperframes / aigc) for EVERY beat and
+ * they travel with the handoff so the Video Agent / HyperFrames executor knows HOW to enhance the placed
+ * media — not just which asset to place. On a partial/gap beat they resolve the missing material; on a
+ * fully-`matched` (covered) beat they are ALTERNATIVES — re-shoot, polish, or regenerate the beat — with
+ * `fillStatus: 'matched'` marking the real asset as primary. Natural-language guidance (the HyperFrames
+ * executor consumes it); the deterministic ffmpeg renderer ignores it.
  */
 export const BeatEnhancementChannelSchema = z.enum(['reshoot', 'hyperframes', 'aigc']);
 export type BeatEnhancementChannel = z.infer<typeof BeatEnhancementChannelSchema>;
