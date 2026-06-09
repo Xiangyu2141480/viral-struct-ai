@@ -324,7 +324,7 @@ function scoreAcceptanceCriteriaMatch(slot: ShotSlotNode, asset: AssetCard): num
 }
 
 function applyHardRequirementPenalty(score: number, slot: ShotSlotNode, asset: AssetCard): number {
-  if (asset.analysis?.safety.status === 'blocked') return 0;
+  // Safety scoring removed from the chain: a 'blocked' safety status no longer zeroes the match.
   if (isLowQuality(asset)) return Math.min(score, 49);
   if (slot.humanRequirement?.required && !asset.humanPresence?.hasHuman) return Math.min(score, 49);
   if (slot.humanRequirement?.action && slot.humanRequirement.action !== 'none' && !asset.humanPresence?.actions?.includes(slot.humanRequirement.action)) {

@@ -1,15 +1,17 @@
 import { Router } from 'express';
-import type { AssetCard, ContentBrief, GapRepair, QualityReport, SlotMatch, TimelineItem } from '@viral-struct/shared';
+import path from 'node:path';
+import { nanoid } from 'nanoid';
+import type { AssetCard, ContentBrief, MaterialGap, QualityReport, SlotMatch, TimelineItem } from '@viral-struct/shared';
+import type { GapFillPlan } from '@viral-struct/video-agent';
 import { analyzeAssetsMock } from '../services/assetAnalyzer';
 import { loadAssetLibrary } from '../services/assetLibraryLoader';
 import { type DemoShowcase, getDemoShowcase } from '../services/demoShowcase';
-import { planGapRepairsWithFallback } from '../services/gapRepairPlanner';
 import { evaluateQuality } from '../services/qualityEvaluator';
 import { matchSlotsWithFallback } from '../services/slotMatcher';
 import { type StructureExtractionResult, extractStructureFromVideoAnalysis } from '../services/structureExtractor';
-import { generateTimelineWithFallback } from '../services/timelineGenerator';
 import { analyzeVideoFile, getSeedVideoPath } from '../services/videoAnalyzer';
-import { renderTimeline } from '../services/renderService';
+import { renderAuthoredTimeline, runVideoAgentPipeline } from '../services/videoAgent/runVideoAgentPipeline';
+import { getRenderDir } from '../services/videoPaths';
 
 export const demoRouter = Router();
 
@@ -59,51 +61,45 @@ demoRouter.post('/run', async (_req, res) => {
     const structure = await extractStructureFromVideoAnalysis(videoAnalysis);
     const boundaries = structure.structureGraph.boundaries;
     const assetLoad = await loadDemoAssetCards(showcase);
+
+    // ① shared slot matcher (KEPT) → slotMatches + materialGaps that the ③ pipeline consumes.
     const slotResult = await matchSlotsWithFallback({
       graph: structure.structureGraph,
       assets: assetLoad.assetCards,
       boundaries
     });
-    const repairResult = await planGapRepairsWithFallback({
-      gaps: slotResult.gaps,
-      assets: assetLoad.assetCards,
-      newContent: contentBrief,
-      graph: structure.structureGraph,
-      boundaries
-    });
-    const generation = await generateTimelineWithFallback({
+
+    // ③ video-agent pipeline replaces ①'s gap planner + timeline generator + render service.
+    const pipeline = await runVideoAgentPipeline({
       structureGraph: structure.structureGraph,
-      newContent: contentBrief,
-      matches: slotResult.matches,
-      repairs: repairResult.repairs,
-      assets: assetLoad.assetCards,
-      variant: 'high_click',
-      boundaries
+      assetCards: assetLoad.assetCards,
+      contentBrief,
+      boundaries,
+      match: { matches: slotResult.matches, gaps: slotResult.gaps }
     });
+
     const qualityReport = evaluateQuality({
       matches: slotResult.matches,
-      timeline: generation.timeline,
+      timeline: pipeline.timelineItems,
       boundaries,
       contentBrief,
       assets: assetLoad.assetCards
     });
 
-    const llmWarnings = [slotResult.warning, repairResult.warning, generation.warning].filter(
-      (w): w is string => Boolean(w)
-    );
+    const warnings = [slotResult.warning].filter((w): w is string => Boolean(w));
 
-    // Best-effort render of the migrated timeline into a real MP4. A render failure must never break the
+    // Best-effort render of the authored timeline into a real MP4. A render failure must never break the
     // analysis demo, so it is wrapped and surfaced as a warning instead.
     let renderMediaUrl: string | null = null;
-    let renderManifest: Awaited<ReturnType<typeof renderTimeline>>['render'] | null = null;
-    let renderDurationCheck: Awaited<ReturnType<typeof renderTimeline>>['durationCheck'] = null;
+    let renderManifest: Awaited<ReturnType<typeof renderAuthoredTimeline>> | null = null;
     try {
-      const rendered = await renderTimeline({ timeline: generation.timeline });
-      renderMediaUrl = rendered.mediaUrl;
-      renderManifest = rendered.render;
-      renderDurationCheck = rendered.durationCheck;
+      const outputPath = path.join(getRenderDir(), `render_${nanoid(10)}.mp4`);
+      renderManifest = await renderAuthoredTimeline({ timeline: pipeline.authoredTimeline, outputPath });
+      renderMediaUrl = renderManifest.rendered && renderManifest.outputPath
+        ? `/media/renders/${path.basename(renderManifest.outputPath)}`
+        : null;
     } catch (error) {
-      llmWarnings.push(`render skipped: ${error instanceof Error ? error.message : String(error)}`);
+      warnings.push(`render skipped: ${error instanceof Error ? error.message : String(error)}`);
     }
 
     res.json({
@@ -119,31 +115,27 @@ demoRouter.post('/run', async (_req, res) => {
       },
       slotMatches: slotResult.matches,
       materialGaps: slotResult.gaps,
-      repairs: repairResult.repairs,
-      script: generation.script,
-      storyboard: generation.storyboard,
-      timeline: generation.timeline,
+      gapFills: pipeline.gapFills,
+      authoredTimeline: pipeline.authoredTimeline,
+      timeline: pipeline.timelineItems,
       qualityReport,
       renderMediaUrl,
       renderManifest,
-      renderDurationCheck,
-      llmStageSources: {
+      engineStageSources: {
         alignment: slotResult.alignmentSource,
-        gapSpec: repairResult.gapSpecSource,
-        script: generation.scriptSource
+        author: pipeline.authorSource
       },
-      llmWarnings,
+      warnings,
       evidenceTrace: buildEvidenceTrace({
         showcase,
         structure,
         assetLoad,
         matches: slotResult.matches,
-        repairs: repairResult.repairs,
-        timeline: generation.timeline,
+        gapFills: pipeline.gapFills,
+        timeline: pipeline.timelineItems,
         qualityReport,
         alignmentSource: slotResult.alignmentSource,
-        gapSpecSource: repairResult.gapSpecSource,
-        scriptSource: generation.scriptSource
+        authorSource: pipeline.authorSource
       })
     });
   } catch (error) {
@@ -180,23 +172,21 @@ function buildEvidenceTrace({
   structure,
   assetLoad,
   matches,
-  repairs,
+  gapFills,
   timeline,
   qualityReport,
   alignmentSource,
-  gapSpecSource,
-  scriptSource
+  authorSource
 }: {
   showcase: DemoShowcase;
   structure: StructureExtractionResult;
   assetLoad: DemoAssetLoadResult;
   matches: SlotMatch[];
-  repairs: GapRepair[];
+  gapFills: GapFillPlan[];
   timeline: TimelineItem[];
   qualityReport: QualityReport;
   alignmentSource: 'llm_judge' | 'rule_based';
-  gapSpecSource: 'llm_generated' | 'rule_based';
-  scriptSource: 'llm_generated' | 'template';
+  authorSource: 'llm' | 'mock';
 }): DemoEvidenceTraceItem[] {
   const analysisId = showcase.case.seedFilename.replace(/\.[^.]+$/, '');
   const matchedCount = matches.filter((match) => match.status === 'matched').length;
@@ -204,6 +194,7 @@ function buildEvidenceTrace({
   const migrationContractCount = structure.structureGraph.shotSlots.filter(
     (slot) => slot.intent && slot.sourceInstance && slot.acceptanceCriteria
   ).length;
+  const unresolvedFills = gapFills.filter((plan) => plan.resolutionStatus === 'unresolved').length;
   const transitionFidelity =
     qualityReport.transitionFidelity === undefined
       ? '转场保真 n/a'
@@ -235,18 +226,18 @@ function buildEvidenceTrace({
       judgeBenefit: '证明新素材适配使用队友 AssetCard 协议结果，而不是只看文件名。'
     },
     {
-      id: 'slot_gap_repair',
-      label: 'Slot Match / Gap Repair',
-      source: `${alignmentSource} + ${gapSpecSource}`,
-      detail: `${matchedCount} 个 matched，${partialOrMissingCount} 个 partial/missing，${repairs.length} 个补全策略；对齐来源 ${alignmentSource}；拍摄规格来源 ${gapSpecSource}`,
-      judgeBenefit: '把结构槽位、素材能力和缺口补全串成可解释迁移链路，并标注每一段是 LLM 真判断还是规则降级。'
+      id: 'slot_gap_fill',
+      label: 'Slot Match / Gap Fill (video-agent)',
+      source: `${alignmentSource} + video_agent`,
+      detail: `${matchedCount} 个 matched，${partialOrMissingCount} 个 partial/missing，${gapFills.length} 个 video-agent 补全计划（${unresolvedFills} 个诚实兜底）；对齐来源 ${alignmentSource}`,
+      judgeBenefit: '把结构槽位、素材能力和缺口补全串成可解释迁移链路；补全由 video-agent 规划，缺真实证据时诚实降级而非伪造。'
     },
     {
-      id: 'timeline_quality',
-      label: 'Timeline / Quality',
-      source: scriptSource,
-      detail: `${timeline.length} 个时间线 item，结构匹配 ${qualityReport.structureMatch.toFixed(2)}，素材覆盖 ${qualityReport.slotCoverage.toFixed(2)}，${transitionFidelity}；脚本来源 ${scriptSource}`,
-      judgeBenefit: '把评审要求的脚本、分镜、时间线和结果可验证性集中输出，并标注脚本是 LLM 写的还是模板降级。'
+      id: 'authored_timeline_quality',
+      label: 'Authored Timeline / Quality (video-agent)',
+      source: authorSource,
+      detail: `${timeline.length} 个 beat（按段落编排），结构匹配 ${qualityReport.structureMatch.toFixed(2)}，素材覆盖 ${qualityReport.slotCoverage.toFixed(2)}，${transitionFidelity}；成片编排来源 ${authorSource}`,
+      judgeBenefit: '由 video-agent 直接编排成片时间线（真素材合成 + 诚实替代卡），并集中输出可验证的结果质量。'
     }
   ];
 }
