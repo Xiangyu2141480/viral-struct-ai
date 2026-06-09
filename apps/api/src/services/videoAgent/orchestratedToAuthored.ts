@@ -147,15 +147,32 @@ function mediaType(asset: AssetCard | undefined): MediaSourceKind {
 }
 
 function toTransitionSpec(transition: OrchestratedTransition): BeatTransitionSpec {
-  const kind: BeatTransitionSpec['kind'] =
-    transition.mode === 'cut' || transition.mode === 'match_cut'
-      ? 'cut'
-      : transition.mode === 'aigc_frame_bridge'
-        ? 'fade'
-        : 'slide';
+  const kind: BeatTransitionSpec['kind'] = authoredTransitionKind(transition);
   const requested =
     transition.hyperframes?.durationMs ?? transition.aigcFrameBridge?.durationMs ?? (kind === 'cut' ? 0 : 300);
   return { kind, durationMs: Math.min(2000, Math.max(0, Math.round(requested))) };
+}
+
+function authoredTransitionKind(transition: OrchestratedTransition): BeatTransitionSpec['kind'] {
+  switch (transition.mode) {
+    case 'cut':
+    case 'match_cut':
+    case 'graphic_match':
+    case 'eyeline_bridge':
+      return 'cut';
+    case 'aigc_frame_bridge':
+    case 'aigc_job_card':
+    case 'particle_bridge':
+      return 'fade';
+    case 'object_wipe':
+    case 'motion_bridge':
+    case 'split_edit_j_cut':
+    case 'split_edit_l_cut':
+    case 'card_animation':
+    case 'hyperframes':
+    default:
+      return 'slide';
+  }
 }
 
 function buildAuthorIntent(slot: OrchestratedSlot): AuthoredComposition['authorIntent'] | undefined {

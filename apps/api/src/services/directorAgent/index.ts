@@ -12,4 +12,9 @@ export {
   buildOrchestratedTransitions,
   type BuildOrchestratedTransitionsArgs
 } from './transitionOrchestrator';
+export {
+  planTransition,
+  collectTransitionAnchors,
+  type TransitionPlanningContext
+} from './transitionPlanner';
 export { evaluateSourceSpecificGate, type SourceSpecificGateResult } from './sourceSpecificGate';

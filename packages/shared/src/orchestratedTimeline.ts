@@ -272,8 +272,84 @@ export type OrchestratedSlot = z.infer<typeof OrchestratedSlotSchema>;
 
 // ---- Transitions (one per adjacent slot pair) ----
 
-export const OrchestratedTransitionModeSchema = z.enum(['hyperframes', 'aigc_frame_bridge', 'cut', 'match_cut']);
+export const OrchestratedTransitionModeSchema = z.enum([
+  'cut',
+  'match_cut',
+  'graphic_match',
+  'eyeline_bridge',
+  'object_wipe',
+  'motion_bridge',
+  'split_edit_j_cut',
+  'split_edit_l_cut',
+  'card_animation',
+  'particle_bridge',
+  'hyperframes',
+  'aigc_job_card',
+  // Legacy mode kept for older fixtures and handoff consumers.
+  'aigc_frame_bridge'
+]);
 export type OrchestratedTransitionMode = z.infer<typeof OrchestratedTransitionModeSchema>;
+
+export const TransitionAssetSupportSchema = z
+  .object({
+    status: z.enum(['covered', 'partial', 'gap', 'reference_only']),
+    supportedByAssetIds: z.array(z.string()),
+    requiredEvidence: z.array(z.string()),
+    matchedEvidence: z.array(z.string()),
+    missingEvidence: z.array(z.string()),
+    missingTransitionAssets: z.array(z.string()),
+    reuseFirst: z.boolean()
+  })
+  .strict();
+export type TransitionAssetSupport = z.infer<typeof TransitionAssetSupportSchema>;
+
+export const TransitionSafetyResultSchema = z
+  .object({
+    passed: z.boolean(),
+    sourceLeakageRisk: z.enum(['none', 'needs_rewrite', 'blocked']),
+    ipRisk: z.enum(['none', 'needs_review', 'blocked']),
+    claimRisk: z.enum(['none', 'needs_review', 'blocked']),
+    policyFlags: z.array(z.string()),
+    requiredRewrites: z.array(z.string())
+  })
+  .strict();
+export type TransitionSafetyResult = z.infer<typeof TransitionSafetyResultSchema>;
+
+export const TransitionWhyNotSchema = z
+  .object({
+    mode: OrchestratedTransitionModeSchema,
+    reason: z.string()
+  })
+  .strict();
+export type TransitionWhyNot = z.infer<typeof TransitionWhyNotSchema>;
+
+export const TransitionLlmEnhancementSchema = z
+  .object({
+    enabled: z.boolean(),
+    provider: z.string().optional(),
+    model: z.string().optional(),
+    confidence: z.number().min(0).max(1).optional(),
+    semanticBridgeText: z.string().optional(),
+    compactPrompt: z.string().optional(),
+    rewrittenCategoryNativeEquivalent: z.string().optional(),
+    audioCueText: z.string().optional(),
+    failedReason: z.string().optional()
+  })
+  .strict();
+export type TransitionLlmEnhancement = z.infer<typeof TransitionLlmEnhancementSchema>;
+
+export const TransitionAigcJobCardSchema = z
+  .object({
+    id: z.string(),
+    providerHint: z.enum(['seedance', 'gemini', 'generic']),
+    prompt: z.string(),
+    negativePrompt: z.string(),
+    referenceAssetIds: z.array(z.string()),
+    ownership: z.literal('external_generation_job_card_only'),
+    planOnly: z.literal(true)
+  })
+  .strict();
+export type TransitionAigcJobCard = z.infer<typeof TransitionAigcJobCardSchema>;
 
 export const OrchestratedTransitionSchema = z
   .object({
@@ -281,9 +357,25 @@ export const OrchestratedTransitionSchema = z
     fromSlotId: z.string(),
     toSlotId: z.string(),
     mode: OrchestratedTransitionModeSchema,
+    implementationMode: OrchestratedTransitionModeSchema.optional(),
+    transitionType: OrchestratedTransitionModeSchema.optional(),
     transitionFunction: z.string().optional(),
     preferredImplementation: z.enum(['hyperframes', 'video_engine', 'external_generation']),
     reason: z.string(),
+    semanticBridgeExplanation: z.string().optional(),
+    visualAction: z.string().optional(),
+    assetSupport: TransitionAssetSupportSchema.optional(),
+    missingTransitionAssets: z.array(z.string()).optional(),
+    fallbackStrategy: z.string().optional(),
+    hyperframesGuidance: z.string().optional(),
+    optionalAigcJobCardId: z.string().optional(),
+    optionalAIGCJobCard: TransitionAigcJobCardSchema.optional(),
+    audioCueHandoff: z.string().optional(),
+    safetyResult: TransitionSafetyResultSchema.optional(),
+    llmEnhancement: TransitionLlmEnhancementSchema.nullable().optional(),
+    confidence: z.number().min(0).max(1).optional(),
+    whyThisMode: z.string().optional(),
+    whyNot: z.array(TransitionWhyNotSchema).optional(),
     hyperframes: z
       .object({
         editingGuidanceNL: z.string(),

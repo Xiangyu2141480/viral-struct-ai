@@ -59,50 +59,52 @@ test('emits exactly slots.length - 1 transitions', () => {
   assert.equal(transitions.length, 2);
 });
 
-test('two plain matched slots (no strong motion) default to a hyperframes transition with NL guidance', () => {
+test('two plain matched slots with no bridge evidence use a safe cut with explanation', () => {
   const slots = [
     slot('a', 'opening_attention', 0, matchedFill('asset_open')),
     slot('b', 'usage_demo', 1, matchedFill('asset_usage'))
   ];
   const [t] = buildOrchestratedTransitions({ slots, ...base });
-  assert.equal(t.mode, 'hyperframes');
-  assert.ok(t.hyperframes);
-  assert.ok((t.hyperframes?.editingGuidanceNL.length ?? 0) > 0);
+  assert.equal(t.mode, 'cut');
+  assert.ok(t.whyThisMode);
+  assert.ok(t.whyNot?.some((entry) => entry.mode === 'hyperframes'));
 });
 
-test('both-matched + strong motif → aigc_frame_bridge (plan/job-card only, with frame placeholders)', () => {
+test('both-matched + strong motif avoids AIGC and uses a plan-only particle bridge when real bridge assets are absent', () => {
   const slots = [
     slot('a', 'opening_attention', 0, matchedFill('asset_open'), ['component_cascade']),
     slot('b', 'usage_demo', 1, matchedFill('asset_usage'))
   ];
   const [t] = buildOrchestratedTransitions({ slots, ...base });
-  assert.equal(t.mode, 'aigc_frame_bridge');
-  assert.equal(t.preferredImplementation, 'external_generation');
-  assert.equal(t.aigcFrameBridge?.ownership, 'external_generation_job_card_only');
-  assert.match(t.aigcFrameBridge?.fromTailFrameRef ?? '', /extract tail frame/);
+  assert.equal(t.mode, 'particle_bridge');
+  assert.notEqual(t.mode, 'aigc_job_card');
+  assert.equal(t.optionalAIGCJobCard?.ownership, 'external_generation_job_card_only');
+  assert.equal(t.optionalAIGCJobCard?.planOnly, true);
 });
 
-test('hyperframesWeight >= 1 forces hyperframes even for strong pairs', () => {
+test('legacy hyperframesWeight parameter no longer overrides evidence-aware mode selection', () => {
   const slots = [
     slot('a', 'opening_attention', 0, matchedFill('asset_open'), ['component_cascade']),
     slot('b', 'usage_demo', 1, matchedFill('asset_usage'))
   ];
   const [t] = buildOrchestratedTransitions({ slots, ...base, hyperframesWeight: 1 });
-  assert.equal(t.mode, 'hyperframes');
+  assert.equal(t.mode, 'particle_bridge');
+  assert.ok(t.whyThisMode);
 });
 
-test('a gap on either side becomes a cut and never requires frame extraction', () => {
+test('a very short gap on either side becomes a cut and never claims generated media', () => {
   const slots = [
-    slot('b', 'usage_demo', 0, matchedFill('asset_usage')),
-    slot('c', 'cta_visual', 1, gapFill())
+    { ...slot('b', 'usage_demo', 0, matchedFill('asset_usage')), startMs: 0, endMs: 300 },
+    { ...slot('c', 'cta_visual', 1, gapFill()), startMs: 300, endMs: 600 }
   ];
   const [t] = buildOrchestratedTransitions({ slots, ...base });
   assert.equal(t.mode, 'cut');
-  assert.equal(t.aigcFrameBridge, undefined);
-  assert.ok(t.missingAssets.includes('c asset'));
+  assert.equal(t.optionalAIGCJobCard?.ownership, 'external_generation_job_card_only');
+  assert.ok(t.missingAssets.length > 0);
+  assert.doesNotMatch(JSON.stringify(t), /generated media|rendered video|already generated/i);
 });
 
-test('infers diverse semantic transition functions with Chinese execution guidance', () => {
+test('infers diverse semantic transition functions and carries planner explanations', () => {
   const slots = [
     slot('opening', 'opening_attention', 0, matchedFill('asset_open')),
     slot('product', 'product_closeup', 1, matchedFill('asset_open')),
@@ -115,15 +117,14 @@ test('infers diverse semantic transition functions with Chinese execution guidan
   const transitions = buildOrchestratedTransitions({ slots, ...base, hyperframesWeight: 1 });
   const functions = new Set(transitions.map((transition) => transition.transitionFunction));
 
-  assert.ok(functions.has('opening_to_product'));
-  assert.ok(functions.has('motif_assembly_bridge'));
-  assert.ok(functions.has('usage_to_benefit'));
-  assert.ok(functions.has('benefit_to_usage'));
+  assert.ok(functions.has('problem_to_solution'));
+  assert.ok(functions.has('chaos_to_order'));
   assert.ok(functions.has('product_to_cta'));
-  assert.ok(functions.size >= 4);
+  assert.ok(functions.size >= 3);
 
-  const guidance = transitions.map((transition) => transition.hyperframes?.editingGuidanceNL ?? transition.aigcFrameBridge?.prompt ?? '').join('\n');
-  assert.match(guidance, /冰块|柠檬|茶滴|冷雾|开盖|CTA/);
-  assert.match(guidance, /转场|承接|擦除|收口|汇聚/);
+  assert.ok(transitions.every((transition) => transition.whyThisMode));
+  assert.ok(transitions.every((transition) => (transition.whyNot?.length ?? 0) > 0));
+  const guidance = transitions.map((transition) => transition.visualAction ?? transition.hyperframes?.editingGuidanceNL ?? transition.aigcFrameBridge?.prompt ?? '').join('\n');
+  assert.match(guidance, /切换|承接|桥接|卡片|动作|图形|目标品类/);
   assert.doesNotMatch(guidance, /MacBook|keyboard|laptop|touchpad|rocket|hardware|键盘|笔记本|触控板|火箭|硬件/);
 });

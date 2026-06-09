@@ -195,9 +195,11 @@ export async function buildOrchestratedTimeline(input: BuildOrchestratedTimeline
   });
 
   const transitions = buildOrchestratedTransitions({
+    projectId: input.projectId,
     slots,
     assetCards,
     contentBrief,
+    targetCategory,
     hyperframesWeight: input.hyperframesTransitionWeight ?? DEFAULT_HYPERFRAMES_TRANSITION_WEIGHT
   });
 

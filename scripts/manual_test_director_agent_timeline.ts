@@ -492,13 +492,30 @@ function buildReport(
     '## 8. Transition Plan',
     '',
     markdownTable(
-      ['id', 'from → to', 'function', 'mode', '中文剪辑指导'],
+      ['id', 'from → to', 'function', 'mode', 'assetSupport', 'confidence', 'whyThisMode', 'whyNot', 'missingTransitionAssets'],
       timeline.transitions.map((t) => [
         t.id,
         `${t.fromSlotId} → ${t.toSlotId}`,
         t.transitionFunction ?? '-',
-        t.mode,
-        t.hyperframes?.editingGuidanceNL ?? t.aigcFrameBridge?.prompt ?? t.reason
+        t.implementationMode ?? t.mode,
+        t.assetSupport?.status ?? '-',
+        t.confidence?.toFixed(2) ?? '-',
+        (t.whyThisMode ?? t.reason).slice(0, 120),
+        (t.whyNot ?? []).slice(0, 2).map((entry) => `${entry.mode}: ${entry.reason}`).join(' / ') || '-',
+        (t.missingTransitionAssets ?? t.missingAssets).join('、') || '-'
+      ])
+    ),
+    '',
+    '### Transition execution notes',
+    '',
+    markdownTable(
+      ['id', 'visualAction', 'audioCueHandoff', 'fallback', 'plan boundary'],
+      timeline.transitions.map((t) => [
+        t.id,
+        (t.visualAction ?? t.hyperframes?.editingGuidanceNL ?? t.aigcFrameBridge?.prompt ?? '-').slice(0, 140),
+        t.audioCueHandoff ?? '-',
+        t.fallbackStrategy ?? '-',
+        (t.riskNotes ?? []).join(' / ').slice(0, 160)
       ])
     ),
     '',
