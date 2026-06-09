@@ -17,8 +17,8 @@ const ResequencedBand = ({ structure, height = 38 }: { structure: LabStructure; 
   return (
     <div className="sband" style={{ height }}>
       {structure.sequence.map((role, i) => {
-        const dur = structure.durations[i];
-        const w = (dur / T) * 100;
+        const dur = structure.durations[i] ?? 0;
+        const w = T > 0 ? (dur / T) * 100 : 0;
         return (
           <div
             key={i}
@@ -140,7 +140,7 @@ const LabMetric = ({ label, value, max = 50, color = 'var(--accent)' }: {
   <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
     <span style={{ width: 56, color: 'var(--text-dim)' }}>{label}</span>
     <div style={{ flex: 1, height: 5, background: 'var(--bg-2)', borderRadius: 3, overflow: 'hidden' }}>
-      <div style={{ height: '100%', width: `${(value / max) * 100}%`, background: color, opacity: 0.85 }} />
+      <div style={{ height: '100%', width: `${max > 0 ? (Math.min(value, max) / max) * 100 : 0}%`, background: color, opacity: 0.85 }} />
     </div>
     <span className="mono" style={{ width: 38, textAlign: 'right', color: 'var(--text-2)' }}>{value}%</span>
   </div>
@@ -259,7 +259,7 @@ const LabDirectionB = () => (
               <tr key={row}>
                 <td className="mono" style={{ color: 'var(--text-mute)' }}>{row}</td>
                 {LAB_STRUCTURES.map(s => (
-                  <td key={s.id} style={{ color: 'var(--text-2)' }}>{s.sig[row]}</td>
+                  <td key={s.id} style={{ color: 'var(--text-2)' }}>{s.sig[row] ?? '—'}</td>
                 ))}
               </tr>
             ))}
@@ -440,6 +440,7 @@ export const ScreenLab = () => {
               key={d.id}
               onClick={() => setDir(d.id)}
               className="btn"
+              aria-pressed={dir === d.id}
               style={{
                 padding: '6px 10px',
                 fontSize: 11.5,
