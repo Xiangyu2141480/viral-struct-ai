@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { AuthoredTimelineSchema, beatIsUnresolved } from '@viral-struct/shared';
 import type { VideoEditContext } from '../context/VideoEditContext';
 import { deterministicMockAuthor } from './deterministicMockAuthor';
-import { canonicalizeAuthoredTimeline } from './canonicalizer';
+import { canonicalizeAuthoredTimeline, clampSourceRange } from './canonicalizer';
 import { authorTimeline } from './timelineAuthor';
 import type { LLMAuthor } from './llmAuthor';
 
@@ -177,4 +177,105 @@ test('canonicalizer drops empty-assetId layers (blank slots) leaving a legitimat
   const beat = timeline.beats[0]!;
   assert.equal(beat.mediaLayers.length, 0);
   assert.equal(beatIsUnresolved(beat), false);
+});
+
+// --- Source sub-range trimming (clip/sourceRange seam) ---
+
+// A context whose single matched asset is a VIDEO with a known full duration.
+function makeVideoContext(durationSec = 20): VideoEditContext {
+  const ctx = makeContext();
+  return {
+    ...ctx,
+    assetCards: [
+      {
+        id: 'v1',
+        type: 'video',
+        url: '/tmp/v1.mp4',
+        detectedObjects: ['product'],
+        suitableSlots: [],
+        qualityScore: 0.8,
+        analysis: { media: { kind: 'video', durationSec, keyframes: [] } }
+      }
+    ],
+    slotMatches: [{ slotId: 'slot1', assetId: 'v1', status: 'matched', score: 0.9, reason: 'matched' }]
+    // Partial AssetCard.analysis (only media.durationSec matters here) → cast through unknown for the fixture.
+  } as unknown as VideoEditContext;
+}
+
+test('clampSourceRange: no inputs / start=0 with no end → no trim ({})', () => {
+  assert.deepEqual(clampSourceRange(undefined, undefined, 20), {});
+  assert.deepEqual(clampSourceRange(0, undefined, 20), {});
+});
+
+test('clampSourceRange: a valid in/out within duration is kept', () => {
+  assert.deepEqual(clampSourceRange(8, 12, 20), { startSec: 8, endSec: 12 });
+});
+
+test('clampSourceRange: clamps an out-point past the asset duration', () => {
+  assert.deepEqual(clampSourceRange(5, 30, 20), { startSec: 5, endSec: 20 });
+});
+
+test('clampSourceRange: drops an out-point at/below the in-point (play to natural end)', () => {
+  assert.deepEqual(clampSourceRange(5, 5, 20), { startSec: 5, endSec: undefined });
+  assert.deepEqual(clampSourceRange(5, 3, 20), { startSec: 5, endSec: undefined });
+});
+
+test('clampSourceRange: NaN/negative start is treated as 0; pins start below duration', () => {
+  assert.deepEqual(clampSourceRange(Number.NaN, 5, 20), { startSec: 0, endSec: 5 });
+  assert.deepEqual(clampSourceRange(25, 30, 20), { startSec: 19.9, endSec: 20 });
+});
+
+test('mock author trims a long video asset to a centered window the length of the beat', () => {
+  const timeline = deterministicMockAuthor(makeVideoContext(20));
+  assert.equal(AuthoredTimelineSchema.safeParse(timeline).success, true);
+  const hook = timeline.beats[0]!; // seg1, duration 4
+  const media = hook.mediaLayers[0]!.media;
+  assert.equal(media.type, 'video');
+  // centered window: start = (20 - 4) / 2 = 8, end = 12
+  assert.equal(media.startSec, 8);
+  assert.equal(media.endSec, 12);
+});
+
+test('mock author leaves a short video (≤ beat) untrimmed (plays whole)', () => {
+  const timeline = deterministicMockAuthor(makeVideoContext(3)); // 3s < 4s beat
+  const media = timeline.beats[0]!.mediaLayers[0]!.media;
+  assert.equal(media.startSec, undefined);
+  assert.equal(media.endSec, undefined);
+});
+
+test('canonicalizer threads an LLM video in/out onto the layer, clamped to the asset duration', () => {
+  const raw = {
+    segments: [
+      {
+        segmentRole: 'hook',
+        startSeconds: 0,
+        endSeconds: 4,
+        mediaLayers: [{ media: { assetId: 'v1', type: 'video', startSec: 6, endSec: 25 }, evidence: { tier: 'real' } }],
+        textElements: [{ type: 'headline', content: ['hi'] }]
+      }
+    ]
+  };
+  const { timeline } = canonicalizeAuthoredTimeline(raw, makeVideoContext(20));
+  const media = timeline.beats[0]!.mediaLayers[0]!.media;
+  assert.equal(media.startSec, 6);
+  assert.equal(media.endSec, 20); // 25 clamped to the 20s asset
+});
+
+test('canonicalizer never puts a source range on an image layer', () => {
+  const raw = {
+    segments: [
+      {
+        segmentRole: 'hook',
+        startSeconds: 0,
+        endSeconds: 4,
+        mediaLayers: [{ media: { assetId: 'a1', type: 'image', startSec: 3, endSec: 5 }, evidence: { tier: 'real' } }],
+        textElements: [{ type: 'headline', content: ['hi'] }]
+      }
+    ]
+  };
+  const { timeline } = canonicalizeAuthoredTimeline(raw, makeContext());
+  const media = timeline.beats[0]!.mediaLayers[0]!.media;
+  assert.equal(media.type, 'image');
+  assert.equal(media.startSec, undefined);
+  assert.equal(media.endSec, undefined);
 });

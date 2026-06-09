@@ -124,6 +124,18 @@ function canonicalizeLayer(
     media.disclosureText = '【AI 生成动画】';
   }
   media.type = type;
+  // Source sub-range (video only): clamp the author's chosen [startSec, endSec) to the asset's real duration so
+  // a bad in/out can't over-read the file. Images never carry a range.
+  if (type === 'video') {
+    const range = clampSourceRange(media.startSec, media.endSec, card?.analysis?.media?.durationSec);
+    if (range.startSec != null) media.startSec = range.startSec;
+    else delete media.startSec;
+    if (range.endSec != null) media.endSec = range.endSec;
+    else delete media.endSec;
+  } else {
+    delete media.startSec;
+    delete media.endSec;
+  }
   if (typeof media.id !== 'string' || !media.id) media.id = `asset_${assetId ?? `${beatId}_${j}`}`;
   if (typeof media.assetId !== 'string' || !media.assetId) media.assetId = assetId ?? `${beatId}_${j}`;
   if (typeof evidence.tier !== 'string') evidence.tier = media.resolvedPath ? 'real' : 'unresolved';
@@ -146,6 +158,27 @@ function canonicalizeLayer(
   const motion = canonicalizeMotion(rawLayer.motion);
   if (motion) layer.motion = motion;
   return layer;
+}
+
+/**
+ * Clamp an author-proposed source sub-range to the asset's real [0, durationSec]. Returns {} for "no trim"
+ * (start at 0, play whole). An out-point at/below the in-point is dropped (play to the natural end).
+ */
+export function clampSourceRange(
+  rawStart: unknown,
+  rawEnd: unknown,
+  durationSec: number | undefined
+): { startSec?: number; endSec?: number } {
+  let start = typeof rawStart === 'number' && Number.isFinite(rawStart) && rawStart > 0 ? rawStart : 0;
+  let end = typeof rawEnd === 'number' && Number.isFinite(rawEnd) && rawEnd > 0 ? rawEnd : undefined;
+  const dur = typeof durationSec === 'number' && durationSec > 0 ? durationSec : undefined;
+  if (dur != null) {
+    start = Math.min(start, Math.max(0, dur - 0.1));
+    if (end != null) end = Math.min(end, dur);
+  }
+  if (end != null && end <= start) end = undefined;
+  if (start <= 0 && end == null) return {};
+  return { startSec: Number(start.toFixed(3)), endSec: end != null ? Number(end.toFixed(3)) : undefined };
 }
 
 function canonicalizeMotion(rawMotion: unknown): Record<string, unknown> | null {
