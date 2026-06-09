@@ -29,6 +29,9 @@ importers:
       '@viral-struct/shared':
         specifier: workspace:*
         version: link:../../packages/shared
+      '@viral-struct/video-agent':
+        specifier: workspace:*
+        version: link:../../packages/video-agent
       cors:
         specifier: ^2.8.5
         version: 2.8.6

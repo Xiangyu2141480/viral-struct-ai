@@ -145,24 +145,38 @@ function scoreComponents(role: AssetManagerRole, asset: AssetCard, contentBrief?
     qualityFit: toPercent(asset.analysis?.quality.overallScore ?? asset.qualityScore),
     formatFit: scoreFormatFit(role, asset),
     editabilityFit: scoreEditabilityFit(role, asset),
-    safetyFit: scoreSafetyFit(asset)
+    // Safety scoring is removed from the whole chain. The field is kept neutral (constant, weight 0)
+    // only to satisfy RoleAffordanceComponentsSchema, which still requires it.
+    safetyFit: 100
   };
 }
 
 function weightedRoleScore(components: RoleAffordanceComponents): number {
+  // No safety term: the former 0.05 safety weight is folded into semanticFit (0.25 -> 0.30).
   return roundScore(
-    0.25 * components.semanticFit
+    0.30 * components.semanticFit
     + 0.20 * components.visualSignalFit
     + 0.15 * components.productVisibilityFit
     + 0.15 * components.qualityFit
     + 0.10 * components.formatFit
     + 0.10 * components.editabilityFit
-    + 0.05 * components.safetyFit
   );
 }
 
 function scoreSemanticFit(role: AssetManagerRole, asset: AssetCard, contentBrief?: ContentBrief): number {
   const directSlot = ROLE_TO_SLOT[role];
+  // Trust the VLM's own per-slot-role judgement first when it exists. candidateSlotRoles[].confidence
+  // is the extractor's direct estimate that this asset can serve `directSlot`, so it is the most
+  // faithful semantic signal we have. A caveat (the VLM flagging its own uncertainty) trims it.
+  if (directSlot) {
+    const candidate = asset.candidateSlotRoles?.find((entry) => entry.role === directSlot);
+    if (candidate) {
+      const base = roundScore(candidate.confidence * 100);
+      return candidate.caveat ? roundScore(base * 0.9) : base;
+    }
+  }
+  // Fallbacks for cards without VLM candidateSlotRoles (mock/deterministic/legacy) and for the
+  // asset-manager roles that have no direct ShotSlotRole mapping (background/lifestyle/packaging/cover).
   if (directSlot && asset.suitableSlots.includes(directSlot)) return 92;
   if (asset.analysis?.roleAffordance?.some((score) => score.role === role && score.score >= 75)) return 85;
   const profileText = buildSearchText(asset, contentBrief);
@@ -250,21 +264,16 @@ function scoreEditabilityFit(role: AssetManagerRole, asset: AssetCard): number {
   return editability.canExtendWithCards || editability.canCropZoom ? 78 : 46;
 }
 
-function scoreSafetyFit(asset: AssetCard): number {
-  const status = asset.analysis?.safety.status;
-  if (status === 'blocked') return 0;
-  if (status === 'needs_review') return 55;
-  return 100;
-}
-
 function buildRationale(
   role: AssetManagerRole,
   asset: AssetCard,
   components: RoleAffordanceComponents,
   score: number
 ): string {
-  const strongest = Object.entries(components).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'semanticFit';
-  const weakest = Object.entries(components).sort((a, b) => a[1] - b[1])[0]?.[0] ?? 'semanticFit';
+  // safetyFit is a neutral constant (weight 0); exclude it so it never reports as strongest/weakest.
+  const scored = Object.entries(components).filter(([key]) => key !== 'safetyFit');
+  const strongest = [...scored].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'semanticFit';
+  const weakest = [...scored].sort((a, b) => a[1] - b[1])[0]?.[0] ?? 'semanticFit';
   return `${asset.id} scores ${score} for ${role}; strongest=${strongest}, weakest=${weakest}.`;
 }
 

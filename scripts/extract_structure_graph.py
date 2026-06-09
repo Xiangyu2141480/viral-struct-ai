@@ -744,9 +744,92 @@ def _extract_migration_contract(fine_block: dict | None) -> dict:
                 if isinstance(reject_if, list) and all(isinstance(r, str) for r in reject_if):
                     if reject_if:
                         kept_acceptance["rejectIf"] = reject_if
+                        hard_reject_if, source_specific_reject_if = _split_reject_if_for_transfer(reject_if)
+                        if hard_reject_if:
+                            kept_acceptance["hardRejectIf"] = hard_reject_if
+                        if source_specific_reject_if:
+                            kept_acceptance["sourceSpecificRejectIf"] = source_specific_reject_if
+                hard_reject_if = acceptance.get("hardRejectIf")
+                if isinstance(hard_reject_if, list) and all(isinstance(r, str) for r in hard_reject_if) and hard_reject_if:
+                    kept_acceptance["hardRejectIf"] = hard_reject_if
+                source_specific_reject_if = acceptance.get("sourceSpecificRejectIf")
+                if (
+                    isinstance(source_specific_reject_if, list)
+                    and all(isinstance(r, str) for r in source_specific_reject_if)
+                    and source_specific_reject_if
+                ):
+                    kept_acceptance["sourceSpecificRejectIf"] = source_specific_reject_if
                 result["acceptanceCriteria"] = kept_acceptance
 
     return result
+
+
+_SOURCE_SPECIFIC_REJECT_TERMS = (
+    "macbook",
+    "apple",
+    "laptop",
+    "keyboard",
+    "trackpad",
+    "touchpad",
+    "screen",
+    "port",
+    "camera",
+    "hinge",
+    "chassis",
+    "hardware",
+    "rocket",
+    "purchase window",
+    "笔记本",
+    "键盘",
+    "触控板",
+    "屏幕",
+    "接口",
+    "摄像头",
+    "机身",
+    "硬件",
+    "火箭",
+    "购买窗口",
+    "开合结构",
+    "固定无开合",
+    "无开合结构",
+)
+
+_HARD_REJECT_TERMS = (
+    "背景杂乱",
+    "产品被遮挡",
+    "遮挡",
+    "严重失焦",
+    "失焦",
+    "画面太暗",
+    "过暗",
+    "其它品牌",
+    "其他品牌",
+    "未经证实",
+    "价格",
+    "促销",
+    "医疗",
+    "功效保证",
+    "安全",
+    "版权",
+    "明星",
+    "公众人物",
+)
+
+
+def _split_reject_if_for_transfer(reject_if: list[str]) -> tuple[list[str], list[str]]:
+    hard: list[str] = []
+    source_specific: list[str] = []
+    for item in reject_if:
+        lowered = item.lower()
+        if any(term in lowered for term in _SOURCE_SPECIFIC_REJECT_TERMS if term.isascii()) or any(
+            term in item for term in _SOURCE_SPECIFIC_REJECT_TERMS if not term.isascii()
+        ):
+            source_specific.append(item)
+        elif any(term in item for term in _HARD_REJECT_TERMS):
+            hard.append(item)
+        else:
+            hard.append(item)
+    return hard, source_specific
 
 
 def _build_slot_from_required_asset(

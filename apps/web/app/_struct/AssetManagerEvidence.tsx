@@ -121,28 +121,28 @@ export function AssetManagerEvidencePanel({
 
 const TRANSITION_SONIC_CARDS = [
   {
-    title: 'Transition Plan',
-    label: 'transition grammar',
-    body: '热浪破碎、冰块雨、柠檬 match cut、开盖爆点把结构段落连接起来。',
-    boundary: 'plan only · no rendered effect',
+    title: '转场计划',
+    label: '转场语法',
+    body: '用热浪破碎、冰块雨、柠檬切片匹配切和开盖爆点，把相邻结构段落自然连接起来。',
+    boundary: '仅计划 · 不代表已渲染转场效果',
   },
   {
-    title: 'Sonic Plan',
-    label: 'sonic grammar',
-    body: 'heat ambience、silence dip、ice hits、cap pop、CTA pop 和 logo sting 强化节奏记忆点。',
-    boundary: 'plan only · no audio mix',
+    title: '声音计划',
+    label: '声音语法',
+    body: '用热浪环境音、静音停顿、冰块撞击、开盖声、CTA 提示音和品牌收尾音强化节奏记忆点。',
+    boundary: '仅计划 · 未生成或混入真实音频',
   },
   {
-    title: 'Missing Transition Assets',
-    label: 'job-card handoff',
-    body: '缺少冰块雨、开盖、冷雾或 CTA lock-up 画面时，只输出拍摄/AIGC/HyperFrames handoff。',
-    boundary: 'job card only · no external generation',
+    title: '缺失转场素材',
+    label: '任务卡交接',
+    body: '缺少冰块雨、开盖、冷雾或 CTA 收尾画面时，只输出拍摄、AIGC 或 HyperFrames 交接需求。',
+    boundary: '仅任务卡 · 不调用外部生成',
   },
   {
-    title: 'Audio Warnings',
-    label: 'safety boundary',
-    body: '没有已审核音频素材时保持静音或 cue label；所有分数均是 offline diagnostics，不是假 CTR。',
-    boundary: 'no fake CTR · no copyrighted BGM claim',
+    title: '音频边界提醒',
+    label: '安全边界',
+    body: '没有已审核音频素材时保持静音或显示节拍提示；所有分数只作离线诊断，不代表真实 CTR。',
+    boundary: '不伪造 CTR · 不声称版权 BGM 可用',
   },
 ] as const;
 

@@ -19,8 +19,8 @@ import { normalizeAssetCards } from '../apps/api/src/services/assetManager/asset
 import { buildDeterministicPreset, type CategoryPreset } from '../apps/api/src/services/motifs/categoryPresetProvider';
 import { buildMotifContext, extractViralMotifAnnotation } from '../apps/api/src/services/motifs/viralMotifExtractor';
 import { matchSlots } from '../apps/api/src/services/slotMatcher';
-import { planGapRepairs } from '../apps/api/src/services/gapRepairPlanner';
-import { generateTimelineMock } from '../apps/api/src/services/timelineGenerator';
+import { runVideoAgentPipeline } from '../apps/api/src/services/videoAgent/runVideoAgentPipeline';
+import type { GapFillPlan } from '../packages/video-agent/src/gap-fill/GapFillPlan';
 import { generateTransitionRecipes } from '../apps/api/src/services/transitions/transitionRecipeGenerator';
 import { generateAudioPlan } from '../apps/api/src/services/audio/audioPlanGenerator';
 
@@ -58,7 +58,7 @@ interface ScenarioOutput {
   matches: SlotMatch[];
   materialGaps: MaterialGap[];
   missingMaterialBriefs: NonNullable<AssetSupplyContext['missingMaterialBriefs']>;
-  gapRepairs: GapRepair[];
+  gapFills: GapFillPlan[];
   timeline: TimelineItem[];
   transitionRecipes: TransitionRecipe[];
   audioCues: AudioCue[];
@@ -94,7 +94,7 @@ async function main(): Promise<void> {
       `- ${scenario.scenarioId}:`,
       `coverage=${scenario.coverage}`,
       `missingBriefs=${scenario.missingMaterialBriefs.length}`,
-      `gapRepairs=${scenario.gapRepairs.length}`,
+      `gapFills=${scenario.gapFills.length}`,
       `transitions=${scenario.transitionRecipes.length}`,
       `audioCues=${scenario.audioCues.length}`,
       `evidenceRows=${scenario.evidenceRows.length}`,
@@ -180,17 +180,17 @@ async function runScenario(input: {
   });
   const matchResult = matchSlots(input.structureGraph, assetSupplyContext.assets);
   const materialGaps = mergeGapMotifContext(matchResult.gaps, assetSupplyContext);
-  const gapRepairs = planGapRepairs(materialGaps, assetSupplyContext.assets, input.contentBrief);
-  const generated = await generateTimelineMock({
+  // ③ video-agent pipeline replaces ①'s planGapRepairs + generateTimelineMock.
+  const pipeline = await runVideoAgentPipeline({
     structureGraph: input.structureGraph,
-    newContent: input.contentBrief,
-    matches: matchResult.matches,
-    repairs: gapRepairs,
-    variant: input.scenarioId === 'beverage_motif_transfer' ? 'high_click' : 'high_conversion'
+    assetCards: assetSupplyContext.assets,
+    contentBrief: input.contentBrief,
+    match: { matches: matchResult.matches, gaps: materialGaps }
   });
+  const timeline = pipeline.timelineItems;
   const slotBlock004Context = findCoverageMotifContext(assetSupplyContext, 'slot_block_004_asset_001');
   const transitionRecipes = generateTransitionRecipes({
-    timeline: generated.timeline,
+    timeline,
     motifContext: slotBlock004Context,
     assetSupplyContext,
     targetCategory: input.categoryPreset.category,
@@ -198,14 +198,14 @@ async function runScenario(input: {
     variant: input.scenarioId === 'beverage_motif_transfer' ? 'high_click' : 'high_conversion'
   });
   const audio = generateAudioPlan({
-    timeline: generated.timeline,
+    timeline,
     transitionRecipes,
     targetCategory: input.categoryPreset.category,
     productBrief: input.contentBrief,
     variant: input.scenarioId === 'beverage_motif_transfer' ? 'high_click' : 'high_conversion',
     durationSec: 15
   });
-  const evidenceRows = buildEvidenceRows(assetSupplyContext, materialGaps, gapRepairs, generated.timeline, transitionRecipes, audio.cues);
+  const evidenceRows = buildEvidenceRows(assetSupplyContext, materialGaps, pipeline.gapFills, timeline, transitionRecipes, audio.cues);
   const warnings = Array.from(new Set([
     ...assetSupplyContext.warnings,
     ...audio.warnings,
@@ -222,8 +222,8 @@ async function runScenario(input: {
     matches: matchResult.matches,
     materialGaps,
     missingMaterialBriefs: assetSupplyContext.missingMaterialBriefs ?? [],
-    gapRepairs,
-    timeline: generated.timeline,
+    gapFills: pipeline.gapFills,
+    timeline,
     transitionRecipes,
     audioCues: audio.cues,
     evidenceRows,
@@ -257,7 +257,8 @@ function buildSlotBlock004Trace(
     : undefined;
   const motifContext = motifAnnotation ? buildMotifContext(motifAnnotation) : undefined;
   const missingMaterialBrief = scenario.missingMaterialBriefs.find((brief) => brief.affectedSlotId === 'slot_block_004_asset_001');
-  const gapRepairEvidence = scenario.gapRepairs.find((repair) => repair.slotId === 'slot_block_004_asset_001');
+  const gapFillEvidence = scenario.gapFills.find((plan) => plan.slotId === 'slot_block_004_asset_001');
+  // ③ authors per-segment beats, so there is no per-slot timeline item for this slot id (granularity change).
   const timelineItem = scenario.timeline.find((item) => item.slotId === 'slot_block_004_asset_001');
   const transitionRecipe = scenario.transitionRecipes.find((recipe) =>
     recipe.beforeShotId === timelineItem?.id || recipe.afterShotId === timelineItem?.id
@@ -284,7 +285,7 @@ function buildSlotBlock004Trace(
       motifEquivalents: categoryPreset.motifEquivalents.kinetic_assembly_reveal
     },
     missingMaterialBrief,
-    gapRepairEvidence,
+    gapFillEvidence,
     timelineItem: timelineItem
       ? {
           ...timelineItem,
@@ -307,7 +308,7 @@ function buildSlotBlock004Trace(
 function buildEvidenceRows(
   context: AssetSupplyContext,
   gaps: MaterialGap[],
-  repairs: GapRepair[],
+  gapFills: GapFillPlan[],
   timeline: TimelineItem[],
   transitions: TransitionRecipe[],
   audioCues: AudioCue[]
@@ -315,7 +316,7 @@ function buildEvidenceRows(
   return (context.contextualCoverage?.slotCoverages ?? []).map((coverage) => {
     const missingBrief = context.missingMaterialBriefs?.find((brief) => brief.affectedSlotId === coverage.slotId);
     const gap = gaps.find((entry) => entry.slotId === coverage.slotId);
-    const repair = repairs.find((entry) => entry.slotId === coverage.slotId);
+    const gapFill = gapFills.find((entry) => entry.slotId === coverage.slotId);
     const item = timeline.find((entry) => entry.slotId === coverage.slotId);
     const transition = transitions.find((entry) => entry.beforeShotId === item?.id || entry.afterShotId === item?.id);
     return {
@@ -336,8 +337,8 @@ function buildEvidenceRows(
       materialGap: gap
         ? { severity: gap.severity, reason: gap.reason, motifType: gap.motifContext?.motifType }
         : undefined,
-      gapRepairEvidence: repair
-        ? { strategy: repair.strategy, explanation: repair.explanation }
+      gapFillEvidence: gapFill
+        ? { method: gapFill.method, reason: gapFill.reason, resolutionStatus: gapFill.resolutionStatus }
         : undefined,
       timelineItem: item
         ? { id: item.id, visualAction: item.visualAction, repair: item.repair?.strategy }
@@ -372,12 +373,12 @@ function buildMarkdownReport(result: FullPipelineE2EOutput): string {
     '## 1. Scenario Summary',
     '',
     markdownTable(
-      ['scenario', 'coverage', 'missingBriefs', 'gapRepairs', 'transitions', 'audioCues', 'evidenceRows', 'verdict'],
+      ['scenario', 'coverage', 'missingBriefs', 'gapFills', 'transitions', 'audioCues', 'evidenceRows', 'verdict'],
       result.scenarios.map((scenario) => [
         scenario.scenarioId,
         String(scenario.coverage),
         String(scenario.missingMaterialBriefs.length),
-        String(scenario.gapRepairs.length),
+        String(scenario.gapFills.length),
         String(scenario.transitionRecipes.length),
         String(scenario.audioCues.length),
         String(scenario.evidenceRows.length),
@@ -387,11 +388,11 @@ function buildMarkdownReport(result: FullPipelineE2EOutput): string {
     '',
     '## 2. slot_block_004 Trace',
     '',
-    '- sourceSlot -> motifAnnotation -> categoryPreset -> missingMaterialBrief -> gapRepairEvidence -> timelineItem -> transitionRecipe -> audioPlan -> migrationEvidenceRow',
+    '- sourceSlot -> motifAnnotation -> categoryPreset -> missingMaterialBrief -> gapFillEvidence -> authoredBeats -> transitionRecipe -> audioPlan -> migrationEvidenceRow',
     `- motifType: ${valueAt(result.slotBlock004Trace, 'motifAnnotation.motifType')}`,
     `- motionTokens: ${(valueAt(result.slotBlock004Trace, 'motifAnnotation.motionTokens') as string[] | undefined)?.join(', ') ?? 'n/a'}`,
     `- target mapping: ${(valueAt(result.slotBlock004Trace, 'categoryPreset.motifEquivalents') as string[] | undefined)?.join(', ') ?? 'n/a'}`,
-    `- gap repair: ${valueAt(result.slotBlock004Trace, 'gapRepairEvidence.explanation') ?? 'n/a'}`,
+    `- gap fill: ${valueAt(result.slotBlock004Trace, 'gapFillEvidence.reason') ?? 'n/a'}`,
     `- timeline visual action: ${valueAt(result.slotBlock004Trace, 'timelineItem.motifAwareVisualAction') ?? 'n/a'}`,
     `- transition recipe: ${valueAt(result.slotBlock004Trace, 'transitionRecipe.name') ?? 'n/a'}`,
     `- audio cues: ${((result.slotBlock004Trace['audioCues'] as AudioCue[] | undefined) ?? []).map((cue) => cue.soundDescription).join(' / ') || 'n/a'}`,
