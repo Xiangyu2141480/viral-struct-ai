@@ -131,20 +131,20 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
               <SvgHookShape />
               <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, transparent 40%, rgba(0,0,0,0.6))' }} />
               <div style={{ position: 'absolute', bottom: 6, left: 6, right: 6, fontSize: 9, color: '#fff', fontFamily: 'var(--ff-mono)' }}>
-                28.4s · 9:16
+                {v.duration}s · 9:16
               </div>
               <Icon name="play" size={18} />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 2 }}>{v.title}</div>
               <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-mute)', marginBottom: 10 }}>
-                {v.platform} · douyin_{v.id.split('_')[1]}
+                {v.platform || '—'} · {v.id}
               </div>
               <dl className="kv">
-                <dt>时长</dt><dd><b>{v.duration}s</b> · 7 段落</dd>
-                <dt>播放</dt><dd><b>{v.views}</b> 播放</dd>
-                <dt>离线点击潜力</dt><dd><b>8.1</b> · 完播潜力 42</dd>
-                <dt>BGM</dt><dd>{v.rhythm.bgm_bpm} BPM · 钢琴慢板</dd>
+                <dt>时长</dt><dd><b>{v.duration}s</b> · {v.segments.length} 段落</dd>
+                <dt>播放</dt><dd><b>{v.views || '—'}</b> 播放</dd>
+                <dt>平均镜头</dt><dd><b>{v.rhythm.avg_shot}s</b></dd>
+                <dt>BGM</dt><dd>{v.rhythm.bgm_bpm ? `${v.rhythm.bgm_bpm} BPM` : '节拍未检测'}</dd>
               </dl>
             </div>
           </div>
@@ -157,8 +157,8 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
           </div>
           <div className="panel-body">
             <dl className="kv">
-              <dt>段落数</dt><dd><b>7</b> <span className="dim">· 角色覆盖率 100%</span></dd>
-              <dt>平均镜头</dt><dd><b>{v.rhythm.avg_shot}s</b> <span className="dim">· 17 个剪切点</span></dd>
+              <dt>段落数</dt><dd><b>{v.segments.length}</b> <span className="dim">· 角色 {new Set(v.segments.map(s => s.role)).size} 类</span></dd>
+              <dt>平均镜头</dt><dd><b>{v.rhythm.avg_shot}s</b> <span className="dim">· {v.rhythm.cuts} 个剪切点</span></dd>
               <dt>字幕风格</dt><dd>{v.packaging.captions}</dd>
               <dt>BGM</dt><dd>{v.packaging.bgm}</dd>
               <dt>封面</dt><dd>{v.packaging.cover}</dd>
@@ -173,7 +173,7 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
         <div className="panel-head">
           <h4>上下对位 · 抽象结构 ↔ 真实时间线</h4>
           <span className="mono" style={{ fontSize: 11, color: 'var(--text-dim)' }}>
-            sequence = <span style={{ color: 'var(--accent)' }}>[HOOK → PROBLEM → EMPATHY → SOLUTION → VALUE → TRUST → CTA]</span>
+            sequence = <span style={{ color: 'var(--accent)' }}>[{v.segments.map(s => s.role.toUpperCase()).join(' → ')}]</span>
             <span style={{ marginLeft: 10, color: 'var(--text-faint)' }}>· {v.protocol_version}</span>
           </span>
         </div>
@@ -262,7 +262,7 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
         );
       })()}
       <ScreenFooter
-        status="样例已解析 · 7 段角色 + 节奏 + 包装"
+        status={`样例已解析 · ${v.segments.length} 段角色 + 节奏 + 包装`}
         statusTone="ok"
         primary={{ label: '进入素材输入', onClick: onNext }}
       />
