@@ -12,9 +12,12 @@
 
 import { Router } from 'express';
 import multer from 'multer';
+import { randomUUID } from 'node:crypto';
+import { unlink } from 'node:fs/promises';
 import type { Request } from 'express';
 import { analyzeVideoFile, getSeedVideoPath, getUploadedVideoPath, listSeedVideos } from '../services/videoAnalyzer';
 import { extractStructureFromVideoAnalysis } from '../services/structureExtractor';
+import { runRoughScan } from '../services/roughScanRunner';
 import { analyzeAssetsWithFallbackResult } from '../services/assetAnalyzer';
 import { matchSlotsWithFallback } from '../services/slotMatcher';
 import { planGapRepairsWithFallback } from '../services/gapRepairPlanner';
@@ -132,6 +135,90 @@ structRouter.post('/sample/analyze', upload.single('video'), async (req, res) =>
   } catch (error) {
     res.status(500).json({ error: errorMessage(error) });
   }
+});
+
+/* ─── POST /api/struct/scan — REAL rough scan as an async job ──────────────────
+   Upload a video → run the actual Python rough scan (ffmpeg preview → rough_scan.py
+   VLM → structure graph) → poll GET /scan/:jobId for the real timeline. Async
+   because the VLM scan takes ~30s–2min. */
+
+type ScanJobStatus = 'running' | 'done' | 'error';
+interface ScanJob {
+  status: ScanJobStatus;
+  stage?: string;
+  sourceVideo?: SourceVideo;
+  warnings?: string[];
+  error?: string;
+  startedAt: number;
+  finishedAt?: number;
+}
+const scanJobs = new Map<string, ScanJob>();
+
+function sweepScanJobs(): void {
+  const now = Date.now();
+  for (const [id, job] of scanJobs) {
+    if (job.finishedAt && now - job.finishedAt > 30 * 60_000) scanJobs.delete(id);
+  }
+}
+
+structRouter.post('/scan', upload.single('video'), (req, res) => {
+  if (!req.file) {
+    res.status(400).json({ error: '请上传一个视频文件。' });
+    return;
+  }
+  sweepScanJobs();
+  const videoId = req.file.filename;
+  const filePath = req.file.path;
+  const title = req.file.originalname.replace(/\.[^.]+$/, '');
+  const jobId = randomUUID();
+  scanJobs.set(jobId, { status: 'running', stage: '排队中', startedAt: Date.now() });
+  res.status(202).json({ jobId });
+
+  void (async () => {
+    const setStage = (stage: string) => {
+      const j = scanJobs.get(jobId);
+      if (j && j.status === 'running') j.stage = stage;
+    };
+    const startedAt = scanJobs.get(jobId)?.startedAt ?? Date.now();
+    try {
+      setStage('读取视频信息');
+      const analysis = await analyzeVideoFile({ videoId, filePath });
+      const { graph, warnings } = await runRoughScan(filePath, videoId, analysis.metadata.duration, setStage);
+      const sourceVideo = graphToSourceVideo(graph, { videoId, title });
+      scanJobs.set(jobId, {
+        status: 'done',
+        sourceVideo,
+        warnings: [
+          ...warnings,
+          '结构来自真实 rough scan（VLM 逐镜头解析），非启发式模板',
+          '播放数据（点击率/完播/点赞）非真实测量',
+        ],
+        startedAt,
+        finishedAt: Date.now(),
+      });
+    } catch (error) {
+      scanJobs.set(jobId, { status: 'error', error: errorMessage(error), startedAt, finishedAt: Date.now() });
+    } finally {
+      void unlink(filePath).catch(() => {});
+    }
+  })();
+});
+
+structRouter.get('/scan/:jobId', (req, res) => {
+  const job = scanJobs.get(req.params.jobId);
+  if (!job) {
+    res.status(404).json({ error: 'scan job not found（任务可能已过期）' });
+    return;
+  }
+  const elapsedSec = Math.round(((job.finishedAt ?? Date.now()) - job.startedAt) / 1000);
+  res.json({
+    status: job.status,
+    stage: job.stage,
+    sourceVideo: job.sourceVideo,
+    warnings: job.warnings,
+    error: job.error,
+    elapsedSec,
+  });
 });
 
 /* ─── POST /api/struct/materials/upload — assets → Material[] ─── */

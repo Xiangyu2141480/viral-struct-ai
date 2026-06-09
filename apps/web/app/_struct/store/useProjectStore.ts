@@ -24,6 +24,7 @@ import { compile as compileApi, exportVideo as exportApi, nlEdit as nlEditApi } 
 import { applyStrategy as applyStrategyApi, diagnose as diagnoseApi } from '../api/diagnose';
 import { matchMaterials as matchMaterialsApi, uploadMaterials as uploadMaterialsApi } from '../api/materials';
 import { analyzeSample as analyzeSampleApi } from '../api/sample';
+import { getScanStatus, startScan } from '../api/scan';
 import {
   type InsightRequest,
   checkSafety as checkSafetyApi,
@@ -69,6 +70,10 @@ interface ProjectState {
   // ── status ────────────────────────────────────────────────
   mode: ApiMode;
   analyzing: boolean;
+  /** Real rough scan in progress (upload → VLM structure scan). */
+  scanning: boolean;
+  /** Human-readable rough-scan progress label (stage + elapsed). */
+  scanStage: string;
   uploading: boolean;
   matching: boolean;
   diagnosing: boolean;
@@ -91,6 +96,7 @@ interface ProjectState {
   dismissWarnings: () => void;
   refreshAssetManagerCoverage: () => Promise<void>;
   analyzeSample: (input: { file?: File; sampleId?: string }) => Promise<void>;
+  scanSample: (file: File) => Promise<void>;
   addMaterials: (files: File[]) => Promise<void>;
   setSlot: (materialId: string, slot: string | null) => void;
   applyAssignments: (assignments: Record<string, string | null>) => Promise<void>;
@@ -163,6 +169,8 @@ const initialState = {
   materialJobs: null as MissingMaterialGenerationJob[] | null,
   mode: 'mock' as ApiMode,
   analyzing: false,
+  scanning: false,
+  scanStage: '',
   uploading: false,
   matching: false,
   diagnosing: false,
@@ -223,6 +231,31 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       throw e;
     } finally {
       set({ analyzing: false });
+    }
+  },
+
+  scanSample: async (file) => {
+    // Real rough scan: upload → async VLM job → poll → real structure timeline.
+    set({ scanning: true, scanStage: '上传视频…', lastError: null });
+    try {
+      const { jobId } = await startScan(file);
+      for (let i = 0; i < 150; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        const s = await getScanStatus(jobId);
+        if (s.status === 'running') {
+          set({ scanStage: (s.stage ?? '扫描中') + (s.elapsedSec ? ` · ${s.elapsedSec}s` : '') });
+          continue;
+        }
+        if (s.status === 'error') throw new Error(s.error || '粗扫描失败');
+        if (!s.sourceVideo) throw new Error('扫描完成但未返回结构');
+        set({ sourceVideo: s.sourceVideo, mode: 'live', warnings: s.warnings ?? [], scanning: false, scanStage: '' });
+        void get().refreshAssetManagerCoverage();
+        return;
+      }
+      throw new Error('粗扫描超时（>5 分钟）');
+    } catch (e) {
+      set({ scanning: false, scanStage: '', lastError: '粗扫描失败 · ' + errMsg(e) });
+      throw e;
     }
   },
 

@@ -29,7 +29,9 @@ import { AbstractStructureBand, ConcreteFilmStrip, MigrationFlow, SyncRails } fr
 export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
   const v = useProjectStore((s) => s.sourceVideo);
   const analyzing = useProjectStore((s) => s.analyzing);
-  const analyzeSample = useProjectStore((s) => s.analyzeSample);
+  const scanning = useProjectStore((s) => s.scanning);
+  const scanStage = useProjectStore((s) => s.scanStage);
+  const scanSample = useProjectStore((s) => s.scanSample);
   const runDemo = useProjectStore((s) => s.runDemo);
   const loadingDemo = useProjectStore((s) => s.loadingDemo);
   const T = v.duration;
@@ -51,8 +53,8 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
         multiple={false}
         onFiles={(files) => {
           setUploadOpen(false);
-          showToast(`样例视频已上传: ${files[0].name} · 解析中…`);
-          void analyzeSample({ file: files[0] }).catch(() => {});
+          showToast(`样例视频已上传: ${files[0].name} · 开始粗扫描…`);
+          void scanSample(files[0]).catch(() => {});
         }}
         label="拖拽视频到此处，或点击选择"
       />
@@ -61,6 +63,22 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
       </div>
     </Modal>
   );
+
+  // Rough scan running → live progress (real VLM shot-by-shot analysis).
+  if (scanning) {
+    return (
+      <>
+        <EmptyState
+          icon="diagnose"
+          eyebrow="01 · 样例解析 / SOURCE"
+          title="正在粗扫描 · Rough Scan"
+          hint={scanStage || 'VLM 正在逐镜头解析视频结构，通常 30–90 秒'}
+        />
+        {uploadModal}
+        <Toast message={toastMsg} visible={toastVisible} />
+      </>
+    );
+  }
 
   // No real sample yet → no mock data; prompt the user to upload or run the real demo.
   if (v.segments.length === 0) {
