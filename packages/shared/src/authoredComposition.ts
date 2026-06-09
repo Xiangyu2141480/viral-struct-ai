@@ -189,6 +189,39 @@ export const BeatTransitionSpecSchema = z
   .strict();
 export type BeatTransitionSpec = z.infer<typeof BeatTransitionSpecSchema>;
 
+// ---- Enhancement briefs (carried to the Video Agent for partial/gap beats) ----
+
+/**
+ * For a beat whose real asset only PARTIALLY fits (or is a true gap), the Director already authored the
+ * channel-specific resolution briefs (reshoot / hyperframes / aigc). They must travel with the handoff so
+ * the Video Agent / HyperFrames executor knows HOW to enhance the placed media — not just which asset to
+ * place. Natural-language guidance (the HyperFrames executor consumes it); the deterministic ffmpeg
+ * renderer ignores it. Absent on fully-`matched` beats (nothing to enhance).
+ */
+export const BeatEnhancementChannelSchema = z.enum(['reshoot', 'hyperframes', 'aigc']);
+export type BeatEnhancementChannel = z.infer<typeof BeatEnhancementChannelSchema>;
+
+export const BeatEnhancementOptionSchema = z
+  .object({
+    channel: BeatEnhancementChannelSchema,
+    title: z.string().optional(),
+    /** NL brief: hyperframes = editing steps; reshoot = shooting brief; aigc = generation prompt (job card only). */
+    guidance: z.string(),
+    recommended: z.boolean().default(false)
+  })
+  .strict();
+export type BeatEnhancementOption = z.infer<typeof BeatEnhancementOptionSchema>;
+
+export const BeatEnhancementSchema = z
+  .object({
+    /** The beat's fine-grained fill status (e.g. partial_asset_support, needs_hyperframes_enhancement). */
+    fillStatus: z.string(),
+    recommendedChannel: BeatEnhancementChannelSchema.optional(),
+    options: z.array(BeatEnhancementOptionSchema).min(1)
+  })
+  .strict();
+export type BeatEnhancement = z.infer<typeof BeatEnhancementSchema>;
+
 // ---- Beat + timeline ----
 
 export const AuthoredSegmentRoleSchema = z.enum([
@@ -220,6 +253,8 @@ export const AuthoredCompositionSchema = z
     transitionOut: BeatTransitionSpecSchema.optional(),
     /** Set by the author/verifier when a real-evidence slot could not be filled → forces honest substitute. */
     unresolvedReason: z.string().optional(),
+    /** Channel-specific enhancement briefs for a partial/gap beat (reshoot / hyperframes / aigc). */
+    enhancement: BeatEnhancementSchema.optional(),
     /** House-style palette (ThemeId) the renderer resolves defaults from; the author may override per element. */
     paletteHint: ThemeIdSchema.optional(),
     /** Audit/reflection only — does not affect rendering (powers the editor + explainability). */

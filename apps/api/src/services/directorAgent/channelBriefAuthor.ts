@@ -40,6 +40,19 @@ export interface SharedChannelIntent {
   /** Visible evidence from the matched/reference asset (keyframe captions, semantic summary). */
   assetEvidence: string[];
   durationSec: number;
+  // ---- P1 (SlotPromptContext enrichment): product-intelligence + compression-beat context ----
+  /** PI complexity (e.g. low_complexity_impulse_product) — sets how feature-heavy the beat may be. */
+  productComplexity?: string;
+  /** PI recommended proof types (sensory/usage/social/feature/...). */
+  proofTypes?: string[];
+  /** The structural function this beat preserves from the source arc. */
+  preservedStructureFunction?: string;
+  /** Target-category equivalent family this beat should be expressed as. */
+  targetEquivalentFamily?: string;
+  /** Neutral NL of what the target beat should achieve (from the compression planner). */
+  targetEquivalentBeat?: string;
+  /** Product-claim boundaries that every channel must NOT violate (compliance). */
+  forbiddenClaims?: string[];
 }
 
 export interface AuthoredReshoot {
@@ -122,14 +135,23 @@ function buildUserPrompt(channel: AuthoringChannel, intent: SharedChannelIntent)
     abstractIntent: intent.transferableIntent,
     motionGrammar: intent.motionTokens,
     motifType: intent.motifType,
-    durationSec: intent.durationSec
+    durationSec: intent.durationSec,
+    // P1: structural-function + target-equivalent context so the brief carries WHY this beat exists.
+    preservedStructureFunction: intent.preservedStructureFunction,
+    targetEquivalentBeat: intent.targetEquivalentBeat,
+    targetEquivalentFamily: intent.targetEquivalentFamily,
+    proofTypes: intent.proofTypes,
+    productComplexity: intent.productComplexity
   };
   const assetContext = channel === 'hyperframes'
     ? { referenceAssetIds: intent.referenceAssetIds, assetEvidence: intent.assetEvidence }
     : {};
+  const claimBlock = intent.forbiddenClaims && intent.forbiddenClaims.length
+    ? `\n\n禁止宣称（合规边界，必须全部遵守）：\n${intent.forbiddenClaims.map((c) => `- ${c}`).join('\n')}`
+    : '';
   return `抽象镜头意图（中性，不要照抄成超现实，请按本渠道能力渲染）：
 
-${JSON.stringify({ ...shared, ...assetContext }, null, 2)}
+${JSON.stringify({ ...shared, ...assetContext }, null, 2)}${claimBlock}
 
 请只输出本渠道要求的 JSON 本体。`;
 }

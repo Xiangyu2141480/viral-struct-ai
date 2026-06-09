@@ -10,17 +10,20 @@ import type {
   OrchestratedSlotEvidence,
   OrchestratedTimeline,
   OrchestratedTreatmentSpec,
+  ProductIntelligence,
   ReusableAssetPackPlan,
   SegmentNode,
   ShotSlotNode,
   SlotFillGap,
   SlotFillMatched,
   SlotMatch,
+  StructuralCompressionBeat,
   TargetDurationMode,
   ViralMotifAnnotation,
   ViralStructureGraph
 } from '@viral-struct/shared';
 import { OrchestratedTimelineSchema } from '@viral-struct/shared';
+import { planStructuralCompression, type CompressionSlotTiming } from './structuralCompressionPlanner';
 import { matchSlots, matchSlotsWithFallback, type MatchSlotsResultWithSource } from '../slotMatcher';
 import { buildAssetSupplyContext } from '../assetManager/assetSupplyContextBuilder';
 import { extractViralMotifAnnotation } from '../motifs/viralMotifExtractor';
@@ -50,6 +53,12 @@ export interface BuildOrchestratedTimelineInput {
   boundaries?: Boundary[];
   hyperframesTransitionWeight?: number;
   targetDurationMode?: TargetDurationMode;
+  /**
+   * P0-B (opt-in): when provided, re-budget the source's functional skeleton into a small canonical
+   * target arc (~6-8 beats) instead of mapping every source slot 1:1. Default (omitted) keeps the
+   * legacy proportional per-slot timing so existing behavior/tests are unchanged.
+   */
+  structuralCompression?: { productIntelligence: ProductIntelligence };
   /** When false, skip the LLM judge and use the deterministic rule-based matcher directly. */
   useLlmMatcher?: boolean;
   /** Injected for tests / mock LLM; falls back to the real OpenAI-compatible client otherwise. */
@@ -66,17 +75,32 @@ export interface BuildOrchestratedTimelineInput {
 export async function buildOrchestratedTimeline(input: BuildOrchestratedTimelineInput): Promise<OrchestratedTimeline> {
   const { structureGraph, assetCards, contentBrief } = input;
   const targetCategory = inferTargetCategory(contentBrief, input.categoryPreset);
+  const targetDurationMode = input.targetDurationMode ?? DEFAULT_TARGET_DURATION_MODE;
+
+  // P0-B (opt-in): re-budget the functional skeleton into ~6-8 canonical beats. When enabled we run the
+  // whole pipeline on the rewritten (K representative slot) graph + a budgeted timing plan; otherwise we
+  // keep the legacy 1:1 proportional timing on the original 27 slots.
+  const compression = input.structuralCompression
+    ? planStructuralCompression({
+        structureGraph,
+        productIntelligence: input.structuralCompression.productIntelligence,
+        targetDurationMode
+      })
+    : undefined;
+  const workingGraph = compression?.graph ?? structureGraph;
+  const beatBySlotId = compression?.beatBySlotId ?? new Map<string, StructuralCompressionBeat>();
 
   const assetSupplyContext =
-    input.assetSupplyContext
-    ?? buildAssetSupplyContext({
-      structureGraph,
-      assetCards,
-      contentBrief,
-      categoryPreset: input.categoryPreset
-    });
+    (!compression && input.assetSupplyContext)
+      ? input.assetSupplyContext
+      : buildAssetSupplyContext({
+          structureGraph: workingGraph,
+          assetCards,
+          contentBrief,
+          categoryPreset: input.categoryPreset
+        });
 
-  const match = await runMatch(input);
+  const match = await runMatch(input, workingGraph);
   const matchBySlot = new Map(match.matches.map((entry) => [entry.slotId, entry]));
   const coverageBySlot = new Map(
     (assetSupplyContext.contextualCoverage?.slotCoverages ?? []).map((coverage) => [coverage.slotId, coverage])
@@ -84,12 +108,14 @@ export async function buildOrchestratedTimeline(input: BuildOrchestratedTimeline
   const briefBySlot = new Map(
     (assetSupplyContext.missingMaterialBriefs ?? []).map((brief) => [brief.affectedSlotId, brief])
   );
-  const timingPlan = computeSlotTimings(structureGraph, input.targetDurationMode ?? DEFAULT_TARGET_DURATION_MODE);
-  const timings = timingPlan.bySlot;
+  const legacyTimingPlan = compression ? undefined : computeSlotTimings(structureGraph, targetDurationMode);
+  const timings: Map<string, CompressionSlotTiming> = compression ? compression.timingBySlot : legacyTimingPlan!.bySlot;
+  const sourceDurationMs = compression?.sourceDurationMs ?? legacyTimingPlan!.sourceDurationMs;
+  const targetDurationMs = compression?.targetDurationMs ?? legacyTimingPlan!.targetDurationMs;
 
   const warnings = match.warning ? [match.warning] : [];
 
-  const slots: OrchestratedSlot[] = structureGraph.shotSlots.map((slot) => {
+  const slots: OrchestratedSlot[] = workingGraph.shotSlots.map((slot) => {
     const slotMatch = matchBySlot.get(slot.id);
     const coverage = coverageBySlot.get(slot.id);
     const brief = briefBySlot.get(slot.id);
@@ -100,7 +126,8 @@ export async function buildOrchestratedTimeline(input: BuildOrchestratedTimeline
       targetEndMs: 1000
     };
     const motif = findMotif(slot, targetCategory, input.categoryPreset);
-    const gate = evaluateSourceSpecificGate({ slot, structureGraph, motif });
+    const gate = evaluateSourceSpecificGate({ slot, structureGraph: workingGraph, motif });
+    const compressionBeat = beatBySlotId.get(slot.id);
     const fillStatus = decideFillStatus({
       slot,
       match: slotMatch,
@@ -156,6 +183,7 @@ export async function buildOrchestratedTimeline(input: BuildOrchestratedTimeline
       sourceAbstraction,
       motifType: motif?.motifType,
       motionTokens: motionTokens.length > 0 ? motionTokens : undefined,
+      compressionBeat,
       fill
     } satisfies OrchestratedSlot;
   });
@@ -184,9 +212,9 @@ export async function buildOrchestratedTimeline(input: BuildOrchestratedTimeline
       targetCategory,
       matchSource: match.alignmentSource,
       generatedAt: '1970-01-01T00:00:00.000Z',
-      sourceDurationMs: timingPlan.sourceDurationMs,
-      targetDurationMs: timingPlan.targetDurationMs,
-      targetDurationMode: timingPlan.targetDurationMode,
+      sourceDurationMs,
+      targetDurationMs,
+      targetDurationMode,
       planOnly: true
     },
     warnings
@@ -197,9 +225,9 @@ export async function buildOrchestratedTimeline(input: BuildOrchestratedTimeline
 
 // --- matching ---------------------------------------------------------------
 
-async function runMatch(input: BuildOrchestratedTimelineInput): Promise<MatchSlotsResultWithSource> {
+async function runMatch(input: BuildOrchestratedTimelineInput, graph: ViralStructureGraph): Promise<MatchSlotsResultWithSource> {
   if (input.useLlmMatcher === false) {
-    const result = matchSlots(input.structureGraph, input.assetCards, input.boundaries);
+    const result = matchSlots(graph, input.assetCards, input.boundaries);
     return {
       matches: result.matches.map((entry) => ({ ...entry, alignmentSource: 'rule_based' as const })),
       gaps: result.gaps,
@@ -207,7 +235,7 @@ async function runMatch(input: BuildOrchestratedTimelineInput): Promise<MatchSlo
     };
   }
   return matchSlotsWithFallback({
-    graph: input.structureGraph,
+    graph,
     assets: input.assetCards,
     boundaries: input.boundaries,
     clientFactory: input.clientFactory,

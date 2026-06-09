@@ -28,7 +28,9 @@ import { buildDeterministicPreset } from '../apps/api/src/services/motifs/catego
 import { SOURCE_SPECIFIC_TERMS } from '../apps/api/src/services/motifs/motionGrammarSanitizer';
 import { runDirectorAgent } from '../apps/api/src/services/directorAgent/index';
 import { authorTimelineOptions } from '../apps/api/src/services/directorAgent/authorTimelineOptions';
+import { analyzeProductIntelligence } from '../apps/api/src/services/productIntelligence/productIntelligenceAnalyzer';
 import { orchestratedToAuthored } from '../apps/api/src/services/videoAgent/orchestratedToAuthored';
+import type { ProductIntelligence } from '../packages/shared/src/index';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 // The script runs with cwd = apps/api, so load the repo-root .env (LLM_MODEL/BASE_URL/API_KEY) ourselves.
@@ -63,6 +65,21 @@ async function main(): Promise<void> {
   const assetCards = normalizeAssetCards(readJson<AssetCard[]>(INPUTS.plainAssetCards));
   const categoryPreset = buildDeterministicPreset({ category: 'beverage', availableAssets: assetCards.map((a) => a.id) });
 
+  // P0-A: understand the TARGET product first (text brief authoritative, assets corroborate, LLM fills
+  // world knowledge). Drives compression budget (P0-B), duration选档 and prompt context (P1).
+  const piResult = await analyzeProductIntelligence({
+    contentBrief: beverageBrief,
+    assetCards,
+    useLlm: process.env.PI_LLM !== 'false'
+  });
+  const productIntelligence = piResult.productIntelligence;
+  console.log(
+    `- product intelligence: complexity=${productIntelligence.complexity} proofRegime=${productIntelligence.proofRegime}`
+    + ` proofTypes=${productIntelligence.recommendedProofTypes.join('/')} duration=${productIntelligence.targetDurationRecommendation.preferred}`
+    + ` source=${productIntelligence.analysisSource}`
+  );
+  piResult.warnings.forEach((w) => console.log(`  · PI: ${w}`));
+
   // ② kept: produce the supply-context evidence the Director consumes read-only.
   const assetSupplyContext = buildAssetSupplyContext({
     structureGraph,
@@ -73,7 +90,11 @@ async function main(): Promise<void> {
     options: { userCanGenerate: false }
   });
 
-  // Director Agent → OrchestratedTimeline (rule-based matching; LLM is opt-in and not used here).
+  // P0-B (default on here; STRUCTURAL_COMPRESSION=false to compare): re-budget 27 source slots into a
+  // canonical ~6-8 beat target arc. P1: duration auto-selected from PI.targetDurationRecommendation.
+  const useCompression = process.env.STRUCTURAL_COMPRESSION !== 'false';
+
+  // Director Agent → OrchestratedTimeline (LLM judge opt-in).
   let timeline = await runDirectorAgent({
     projectId: 'director_agent_kangshifu',
     structureGraph,
@@ -81,13 +102,21 @@ async function main(): Promise<void> {
     assetSupplyContext,
     contentBrief: beverageBrief,
     categoryPreset,
-    options: { useLlmMatcher: true }
+    options: {
+      useLlmMatcher: true,
+      targetDurationMode: productIntelligence.targetDurationRecommendation.preferred,
+      structuralCompression: useCompression ? { productIntelligence } : undefined
+    }
   });
 
   // Optional LLM channel authoring (AUTHOR_OPTIONS=true): one shared neutral intent → three
   // capability-bounded prompts (reshoot real-filmable / hyperframes edit-only / aigc surreal).
   if (process.env.AUTHOR_OPTIONS === 'true') {
-    const authoredOptions = await authorTimelineOptions(timeline, { contentBrief: beverageBrief, enabled: true });
+    const authoredOptions = await authorTimelineOptions(timeline, {
+      contentBrief: beverageBrief,
+      productIntelligence,
+      enabled: true
+    });
     timeline = authoredOptions.timeline;
     console.log(`- option authoring: ${authoredOptions.authoredSlots} slot(s) re-authored; ${authoredOptions.warnings.length} channel warning(s)`);
   }
@@ -99,7 +128,7 @@ async function main(): Promise<void> {
 
   writeText(OUTPUTS.timelineJson, `${JSON.stringify(timeline, null, 2)}\n`);
   writeText(OUTPUTS.authoredJson, `${JSON.stringify(authored, null, 2)}\n`);
-  writeText(OUTPUTS.report, buildReport(timeline, authored, leakage));
+  writeText(OUTPUTS.report, buildReport(timeline, authored, leakage, productIntelligence));
 
   const counts = countFills(timeline);
   console.log('Director Agent orchestrated-timeline manual test complete.');
@@ -171,10 +200,19 @@ function countModes(timeline: OrchestratedTimeline): Record<string, number> {
   return out;
 }
 
+function countMergedSourceSlots(timeline: OrchestratedTimeline): number {
+  const ids = new Set<string>();
+  for (const slot of timeline.slots) {
+    for (const id of slot.compressionBeat?.mergedSourceSlotIds ?? []) ids.add(id);
+  }
+  return ids.size;
+}
+
 function buildReport(
   timeline: OrchestratedTimeline,
   authored: ReturnType<typeof orchestratedToAuthored>,
-  leakage: LeakageResult
+  leakage: LeakageResult,
+  productIntelligence: ProductIntelligence
 ): string {
   const counts = countFills(timeline);
   const modes = countModes(timeline);
@@ -237,6 +275,42 @@ function buildReport(
         ['source leakage check', leakage.passed ? 'PASS' : `FAIL (${leakage.hits.join(', ')})`]
       ]
     ),
+    '',
+    '## Product Intelligence (P0-A)',
+    '',
+    markdownTable(
+      ['field', 'value'],
+      [
+        ['product', productIntelligence.productName],
+        ['category', `${productIntelligence.category.value} (conf ${productIntelligence.category.confidence})`],
+        ['complexity', productIntelligence.complexity],
+        ['proof regime', productIntelligence.proofRegime],
+        ['recommended proof types', productIntelligence.recommendedProofTypes.join(', ')],
+        ['core benefits', productIntelligence.coreBenefits.map((f) => f.value).join(' / ')],
+        ['sensory cues', productIntelligence.sensoryCues.map((f) => f.value).join(' / ')],
+        ['usage rituals', productIntelligence.usageRituals.map((f) => f.value).join(' / ')],
+        ['social contexts', productIntelligence.socialContexts.map((f) => f.value).join(' / ')],
+        ['forbidden claims', productIntelligence.forbiddenClaims.map((c) => c.risk).join(', ')],
+        ['recommended duration', `${productIntelligence.targetDurationRecommendation.preferred} (${productIntelligence.targetDurationRecommendation.reason})`],
+        ['analysis source', productIntelligence.analysisSource]
+      ]
+    ),
+    '',
+    '## Source Function Compression (P0-B)',
+    '',
+    `Re-budgeted ${countMergedSourceSlots(timeline)} source slot(s) → ${timeline.slots.filter((s) => s.compressionBeat).length} functional target beat(s).`,
+    '',
+    timeline.slots.some((s) => s.compressionBeat)
+      ? markdownTable(
+          ['#', 'beat', 'preserved function', 'target family', 'decision', 'merged src slots', 'target equivalent'],
+          timeline.slots.map((slot, i) => {
+            const b = slot.compressionBeat;
+            return b
+              ? [String(i), b.beatId, b.preservedStructureFunction, b.targetEquivalentFamily, b.compressionDecision, String(b.mergedSourceSlotIds.length), b.targetEquivalentBeat.slice(0, 80)]
+              : [String(i), '-', '-', '-', 'legacy_1to1', '1', '-'];
+          })
+        )
+      : '_Structural compression disabled (legacy 1:1 slot mapping)._',
     '',
     '## 2. RejectIf Transfer Filtering',
     '',

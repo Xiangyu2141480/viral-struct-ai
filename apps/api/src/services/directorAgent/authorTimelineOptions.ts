@@ -1,4 +1,4 @@
-import type { ContentBrief, GapResolutionOption, OrchestratedSlot, OrchestratedTimeline } from '@viral-struct/shared';
+import type { ContentBrief, GapResolutionOption, OrchestratedSlot, OrchestratedTimeline, ProductIntelligence } from '@viral-struct/shared';
 import { OrchestratedTimelineSchema } from '@viral-struct/shared';
 import { createOpenAICompatibleClient } from '../llmProvider';
 import {
@@ -23,6 +23,8 @@ type Client = ReturnType<typeof createOpenAICompatibleClient>;
 
 export interface AuthorTimelineOptionsConfig {
   contentBrief: ContentBrief;
+  /** P1: PI feeds proof types + claim boundaries into each channel's prompt context. */
+  productIntelligence?: ProductIntelligence;
   enabled?: boolean;
   clientFactory?: () => Client;
   model?: string;
@@ -59,7 +61,7 @@ export async function authorTimelineOptions(
       .filter((id): id is AuthoringChannel => id === 'reshoot' || id === 'hyperframes' || id === 'aigc');
 
     const authored = await authorChannelBriefs({
-      intent: buildIntent(slot, config.contentBrief, options),
+      intent: buildIntent(slot, config.contentBrief, options, config.productIntelligence),
       channels,
       clientFactory: config.clientFactory,
       model: config.model
@@ -78,25 +80,34 @@ export async function authorTimelineOptions(
 function buildIntent(
   slot: OrchestratedSlot,
   contentBrief: ContentBrief,
-  options: GapResolutionOption[]
+  options: GapResolutionOption[],
+  productIntelligence?: ProductIntelligence
 ): SharedChannelIntent {
   const reshoot = options.find((o) => o.id === 'reshoot');
   const durationSec = reshoot && reshoot.id === 'reshoot'
     ? reshoot.durationSec
     : Math.max(2, Math.round((slot.endMs - slot.startMs) / 1000));
+  const beat = slot.compressionBeat;
   return {
     slotId: slot.slotId,
     role: slot.role,
     productName: contentBrief.productName,
     category: contentBrief.category ?? 'generic',
     sellingPoints: contentBrief.sellingPoints,
-    transferableIntent: slot.transferableIntent,
+    // P1: prefer the compression beat's neutral target-equivalent NL as the abstract intent.
+    transferableIntent: beat?.targetEquivalentBeat ?? slot.transferableIntent,
     motionTokens: slot.motionTokens ?? [],
     motifType: slot.motifType,
     fillStatus: slot.fillStatus ?? (slot.fill.kind === 'gap' ? 'missing_generation_required' : slot.fill.status),
     referenceAssetIds: collectReferenceAssetIds(slot, options),
     assetEvidence: collectAssetEvidence(slot),
-    durationSec
+    durationSec,
+    productComplexity: productIntelligence?.complexity,
+    proofTypes: productIntelligence?.recommendedProofTypes,
+    preservedStructureFunction: beat?.preservedStructureFunction,
+    targetEquivalentFamily: beat?.targetEquivalentFamily,
+    targetEquivalentBeat: beat?.targetEquivalentBeat,
+    forbiddenClaims: productIntelligence?.forbiddenClaims.map((c) => c.rule)
   };
 }
 

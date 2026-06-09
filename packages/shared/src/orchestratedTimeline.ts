@@ -186,6 +186,56 @@ export type SlotFillGap = z.infer<typeof SlotFillGapSchema>;
 export const SlotFillSchema = z.discriminatedUnion('kind', [SlotFillMatchedSchema, SlotFillGapSchema]);
 export type SlotFill = z.infer<typeof SlotFillSchema>;
 
+// ---- Structural compression beat (P0-B): one functional beat re-budgeted from ≥1 source slots ----
+
+export const StructuralCompressionDecisionSchema = z.enum(['keep', 'compress', 'merge', 'replace', 'drop']);
+export type StructuralCompressionDecision = z.infer<typeof StructuralCompressionDecisionSchema>;
+
+export const PreservedStructureFunctionSchema = z.enum([
+  'attention_hook',
+  'context_setup',
+  'product_reveal',
+  'feature_or_benefit_proof',
+  'usage_or_ritual',
+  'social_or_trust_proof',
+  'emotional_payoff',
+  'cta_lockup'
+]);
+export type PreservedStructureFunction = z.infer<typeof PreservedStructureFunctionSchema>;
+
+export const TargetEquivalentFamilySchema = z.enum([
+  'sensory_cascade',
+  'ritual_activation',
+  'feature_demo',
+  'benefit_proof',
+  'social_scene',
+  'trust_scene',
+  'burst_payoff',
+  'cta_lockup'
+]);
+export type TargetEquivalentFamily = z.infer<typeof TargetEquivalentFamilySchema>;
+
+export const StructuralCompressionBeatSchema = z
+  .object({
+    beatId: z.string(),
+    /** What structural job this beat preserves from the source arc (function, not surface content). */
+    preservedStructureFunction: PreservedStructureFunctionSchema,
+    /** The source functional family this beat came from (e.g. selling_point/usage). */
+    sourceFunctionFamily: z.string(),
+    /** The target-category equivalent the beat should be expressed as. */
+    targetEquivalentFamily: TargetEquivalentFamilySchema,
+    /** Neutral NL describing what the target beat should achieve (feeds prompt context). */
+    targetEquivalentBeat: z.string(),
+    compressionDecision: StructuralCompressionDecisionSchema,
+    compressionReason: z.string(),
+    proofType: z.string().optional(),
+    /** Source segments/slots merged into this single target beat (provenance). */
+    mergedSourceSegmentIds: z.array(z.string()),
+    mergedSourceSlotIds: z.array(z.string())
+  })
+  .strict();
+export type StructuralCompressionBeat = z.infer<typeof StructuralCompressionBeatSchema>;
+
 // ---- Orchestrated slot (one per shotSlot, in time order) ----
 
 export const OrchestratedSlotSchema = z
@@ -208,6 +258,8 @@ export const OrchestratedSlotSchema = z
     sourceAbstraction: SourceAbstractionSchema.optional(),
     motifType: z.string().optional(),
     motionTokens: z.array(z.string()).optional(),
+    /** P0-B: present when this slot is a re-budgeted functional beat (≥1 source slots merged). */
+    compressionBeat: StructuralCompressionBeatSchema.optional(),
     fill: SlotFillSchema
   })
   .strict()

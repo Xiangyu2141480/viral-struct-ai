@@ -367,10 +367,35 @@ const TreatmentSpecResponseSchema = z.object({
   captionOverlay: z.string().nullable().optional()
 });
 
+/**
+ * The judge is told to return matchedCriteria as strings, but LLMs often return richer objects
+ * (e.g. {criterion, met}). Coerce each item to a string so one stylistic deviation doesn't drop the
+ * whole alignment to the rule-based fallback. String items are unchanged.
+ */
+function coerceCriterion(item: unknown): string {
+  if (typeof item === 'string') return item.trim();
+  if (item && typeof item === 'object') {
+    const obj = item as Record<string, unknown>;
+    for (const key of ['criterion', 'text', 'name', 'description', 'motionType', 'compositionType', 'label', 'value']) {
+      const value = obj[key];
+      if (typeof value === 'string' && value.trim()) return value.trim();
+    }
+    const strings = Object.values(obj).filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+    if (strings.length) return strings.join(' / ');
+    return JSON.stringify(item);
+  }
+  return String(item ?? '').trim();
+}
+
+const MatchedCriteriaSchema = z.preprocess(
+  (value) => (Array.isArray(value) ? value.map(coerceCriterion).filter((s) => s.length > 0) : []),
+  z.array(z.string())
+);
+
 const SlotAlignmentResultSchema = z.object({
   assetId: z.string().nullable(),
   quality: z.number().min(0).max(1),
-  matchedCriteria: z.array(z.string()).default([]),
+  matchedCriteria: MatchedCriteriaSchema,
   missing: z.string().default(''),
   treatmentSpec: TreatmentSpecResponseSchema.default({})
 });

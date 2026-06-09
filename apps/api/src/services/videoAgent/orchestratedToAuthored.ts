@@ -3,7 +3,10 @@ import type {
   AuthoredComposition,
   AuthoredSegmentRole,
   AuthoredTimeline,
+  BeatEnhancement,
+  BeatEnhancementOption,
   BeatTransitionSpec,
+  GapResolutionOption,
   MediaLayer,
   MediaSourceKind,
   OrchestratedSlot,
@@ -75,6 +78,7 @@ function buildBeat(
   assetById: Map<string, AssetCard>
 ): AuthoredComposition {
   const authorIntent = buildAuthorIntent(slot);
+  const enhancement = buildEnhancement(slot);
   const beat: AuthoredComposition = {
     id: slot.slotId,
     segmentRole: toAuthoredSegmentRole(slot.role),
@@ -83,7 +87,9 @@ function buildBeat(
     mediaLayers: [],
     textElements: [],
     ...(transition ? { transitionOut: toTransitionSpec(transition) } : {}),
-    ...(authorIntent ? { authorIntent } : {})
+    ...(authorIntent ? { authorIntent } : {}),
+    // Carry the channel briefs (reshoot/hyperframes/aigc) so the Video Agent knows HOW to enhance the beat.
+    ...(enhancement ? { enhancement } : {})
   };
 
   if (slot.fill.kind === 'matched') {
@@ -95,6 +101,25 @@ function buildBeat(
     ...beat,
     unresolvedReason: `gap: ${slot.fill.missing} (recommended option: ${slot.fill.recommendedOptionId})`
   };
+}
+
+/** Re-shape the slot's resolution options into the handoff's enhancement briefs (partial + gap beats). */
+function buildEnhancement(slot: OrchestratedSlot): BeatEnhancement | undefined {
+  const options = slot.fill.options;
+  if (!options || options.length === 0) return undefined;
+  const recommendedId = slot.fill.recommendedOptionId;
+  const fillStatus = slot.fillStatus ?? (slot.fill.kind === 'gap' ? 'missing_generation_required' : slot.fill.status);
+  return {
+    fillStatus,
+    ...(recommendedId ? { recommendedChannel: recommendedId } : {}),
+    options: options.map((option) => toEnhancementOption(option, option.id === recommendedId))
+  };
+}
+
+function toEnhancementOption(option: GapResolutionOption, recommended: boolean): BeatEnhancementOption {
+  if (option.id === 'reshoot') return { channel: 'reshoot', title: option.title, guidance: option.guidanceNL, recommended };
+  if (option.id === 'hyperframes') return { channel: 'hyperframes', title: option.title, guidance: option.editingGuidanceNL, recommended };
+  return { channel: 'aigc', guidance: option.prompt, recommended };
 }
 
 function buildMediaLayer(slot: OrchestratedSlot, assetId: string, asset: AssetCard | undefined): MediaLayer {

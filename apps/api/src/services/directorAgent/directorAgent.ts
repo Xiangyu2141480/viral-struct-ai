@@ -4,6 +4,8 @@ import type {
   Boundary,
   ContentBrief,
   OrchestratedTimeline,
+  ProductIntelligence,
+  TargetDurationMode,
   ViralStructureGraph
 } from '@viral-struct/shared';
 import type { CategoryPreset } from '../motifs/categoryPresetProvider';
@@ -30,6 +32,9 @@ export interface RunDirectorAgentInput {
   boundaries?: Boundary[];
   options?: {
     hyperframesTransitionWeight?: number;
+    targetDurationMode?: TargetDurationMode;
+    /** P0-B (opt-in): re-budget the source into a canonical ~6-8 beat target arc using this PI. */
+    structuralCompression?: { productIntelligence: ProductIntelligence };
     useLlmMatcher?: boolean;
     /** Injected for tests / mock LLM. */
     clientFactory?: () => LlmClient;
@@ -47,6 +52,8 @@ export async function runDirectorAgent(input: RunDirectorAgentInput): Promise<Or
     categoryPreset: input.categoryPreset,
     boundaries: input.boundaries,
     hyperframesTransitionWeight: input.options?.hyperframesTransitionWeight,
+    targetDurationMode: input.options?.targetDurationMode,
+    structuralCompression: input.options?.structuralCompression,
     useLlmMatcher: input.options?.useLlmMatcher,
     clientFactory: input.options?.clientFactory,
     model: input.options?.model
