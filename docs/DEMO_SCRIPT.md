@@ -4,16 +4,12 @@
 
 Show that Viral Struct AI can learn a transferable short-video structure from a sample, adapt it to a new product, diagnose missing materials, repair the gaps, generate a timeline, and support human edits.
 
-Main route:
+Main entry: a single page at route `/` with a 一键演示 (one-click demo) button that loads `GET /api/struct/demo`.
+
+Standard product flow (all on the same page `/`, switched via the left-side step navigation):
 
 ```txt
-/demo
-```
-
-Secondary product route:
-
-```txt
-/analyze -> /graph -> /adapt -> /gaps -> /result
+01 Sample → 02 Materials → 03 Diagnose → 04 Compile（同一页面 / 路由 `/`，左侧步骤导航切换）
 ```
 
 ## 0:00 - 0:30 Opening
@@ -24,7 +20,7 @@ Say:
 
 Show:
 
-- README or `/demo` page.
+- README or the single page at `/` (use the 一键演示 one-click demo button).
 - Mention the main demo case: macbook_neo sample structure to 康师傅冰红茶.
 
 ## 0:30 - 1:10 Main Demo Chain
@@ -32,12 +28,12 @@ Show:
 Open:
 
 ```txt
-http://localhost:3000/demo
+http://localhost:3000/
 ```
 
 Action:
 
-- Run the demo.
+- Click the 一键演示 (one-click demo) button to run the demo.
 - Point to the evidence trace.
 
 Say:
@@ -53,14 +49,14 @@ Show:
 
 ## 1:10 - 1:50 Standard Workflow
 
-Open pages in order:
+Walk through the steps in order on the same page `/` (switch via the left-side step navigation):
 
 ```txt
-/analyze
-/graph
-/adapt
-/gaps
-/result
+01 Sample
+01 Sample (structure graph lives in the same step)
+02 Materials
+03 Diagnose
+04 Compile
 ```
 
 Say:
@@ -69,17 +65,17 @@ Say:
 
 Show:
 
-- `/analyze`: video metadata/keyframes.
-- `/graph`: structure graph and migration contract.
-- `/adapt`: product brief and AssetCard material library. Asset Manager backend now provides deterministic analysis, quality scores, slot affordance, contextual coverage, and material coverage observations for the UI to consume.
-- `/gaps`: matching/gap/repair source badges.
+- 01 Sample: video metadata/keyframes.
+- 01 Sample: structure graph and migration contract (shown inside the same 样例 step).
+- 02 Materials: product brief and AssetCard material library. Asset Manager backend now provides deterministic analysis, quality scores, slot affordance, contextual coverage, and material coverage observations for the UI to consume.
+- 03 Diagnose: matching/gap/repair source badges.
 
 ## 1:50 - 2:40 Migration Evidence
 
 Open:
 
 ```txt
-/result
+04 Compile
 ```
 
 Say:
@@ -134,7 +130,7 @@ Show:
 
 ## 3:20 - 4:10 Natural Language Edit
 
-In `/result`, enter one or more instructions:
+In 04 Compile, enter one or more instructions:
 
 ```txt
 开头更抓人
@@ -181,4 +177,4 @@ Say:
 
 End on:
 
-- `/result` Migration Evidence or `/demo` full evidence chain.
+- 04 Compile Migration Evidence or the 一键演示 (one-click demo) full evidence chain.

@@ -77,7 +77,7 @@ creativeIngredients 不是颜值识别，不允许做 beauty_score、美女程�
 系统识别的是中性的画面创作条件、人物出镜方式、动作方式、场景风格和信任建立方式。
 ```
 
-这些要素必须参与 ShotSlotNode 的素材要求、AssetCard 的素材理解、SlotMatch 的匹配评分、MaterialGap 的缺口识别、GapRepair 的补全策略，以及 `/graph` 和 `/gaps` 的可视化展示。
+这些要素必须参与 ShotSlotNode 的素材要求、AssetCard 的素材理解、SlotMatch 的匹配评分、MaterialGap 的缺口识别、GapRepair 的补全策略，以及 步骤 01 · 样例解析 和 步骤 03 · 缺口诊断 的可视化展示。
 
 ## 4. 必须优先覆盖的评分点
 
