@@ -419,7 +419,7 @@ function buildDirectorSpec(args: BuildGapResolutionOptionsArgs, brief?: MissingM
   };
 
   if (isKineticAssemblyContext(args, brief)) {
-    const kinetic = args.vocab.bySubtype.kinetic_assembly_reveal;
+    const kinetic = args.vocab.bySubtype.kinetic_assembly_reveal!;
     return {
       ...base,
       label: kinetic.label,

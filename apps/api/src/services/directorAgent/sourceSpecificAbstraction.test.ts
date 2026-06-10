@@ -30,10 +30,9 @@ function makeMotif(motifType: ViralMotifAnnotation['motifType'], targetCategory 
     bannedSourceTerms: [],
     targetCategoryMapping: {
       targetCategory,
-      mappingConfidence: 0.9,
-      allowedTargetValues: [],
-      targetValue: targetCategory,
-      notes: undefined
+      preferredEquivalents: [],
+      rejectedEquivalents: [],
+      rationale: 'test'
     },
     evidence: [],
     confidence: 0.9
