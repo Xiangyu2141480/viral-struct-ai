@@ -27,10 +27,10 @@ Recommended documentation set:
 Primary review route:
 
 ```txt
-http://localhost:3000/demo
+http://localhost:3000/
 ```
 
-The `/demo` route is the safest path for judges because it uses a fixed case and checked-in evidence:
+Open `/` and click 一键演示 (one-click demo). The 一键演示 button (which loads `GET /api/struct/demo`) is the safest path for judges because it uses a fixed case and checked-in evidence:
 
 ```txt
 macbook_neo sample structure
@@ -45,7 +45,7 @@ macbook_neo sample structure
 Secondary route:
 
 ```txt
-/analyze -> /graph -> /adapt -> /gaps -> /result
+01 Sample → 02 Materials → 03 Diagnose → 04 Compile (same page / route `/`, switch via the left-side step navigation)
 ```
 
 Use this route to show the product form:
@@ -61,11 +61,11 @@ Use this route to show the product form:
 | Capability | Status | Evidence |
 |---|---|---|
 | Standard strong chain | Complete | slots/gaps/timeline fallback-capable routes |
-| Generation Trace | Complete | `/gaps`, `/result` |
-| Migration Evidence | Complete | `/result` |
-| Variant Diff | Complete | `/result` |
+| Generation Trace | Complete | 03 Diagnose, 04 Compile |
+| Migration Evidence | Complete | 04 Compile |
+| Variant Diff | Complete | 04 Compile |
 | Natural Language Edit Patch | Complete as rule-based patch | `/api/timeline/apply-edit`, Edit Summary |
-| Quality metrics | Complete | `/api/quality/evaluate`, `/demo` |
+| Quality metrics | Complete | `/api/quality/evaluate`, 一键演示 (one-click demo) |
 | Asset Manager data contract | Complete for backend/data handoff | `AssetAnalysisProfile`, `AssetLibraryReport`, `SlotCoverageMatrix`, `AssetSupplyContext` |
 | Asset supply context | Complete for contract/API handoff | `/api/assets/manager/asset-supply-context`, `docs/examples/asset-supply-context.sample.json`; legacy `/video-agent-bundle` returns the same `asset-supply-v1` response |
 | Asset Manager scenario support | Complete for backend/data handoff | `MaterialScenarioProfile`, `MissingMaterialBrief`, scenario sample JSON, manual scenario script |
@@ -77,7 +77,7 @@ Use this route to show the product form:
 | Optional VLM asset analyzer | Available but disabled by default | deterministic fallback, `ASSET_VLM_ENABLED=false` |
 | LLM fallback | Complete | source fields and warnings |
 | Deterministic fallback without key | Complete | tests and demo-safe flow |
-| Web visual preview | Complete | `/result` |
+| Web visual preview | Complete | 04 Compile |
 | MP4 export | Not claimed | Remotion package remains placeholder |
 
 ## 5. Pre-Submission Commands
@@ -99,9 +99,9 @@ Expected:
 
 ## 6. Recording Checklist
 
-- Start on `/demo`.
+- Open `/` and click 一键演示 (one-click demo).
 - Run the demo and show evidence trace.
-- Open `/result` and show:
+- Go to step 04 Compile and show:
 - Generation Trace
 - Migration Evidence
 - Asset Evidence if UI handoff fields are being shown
@@ -143,5 +143,5 @@ Before submission, have one teammate run the full demo from a clean terminal and
 - commands used
 - browser path
 - any fallback warnings
-- screenshots of `/demo`, `/gaps`, `/result`
+- screenshots of 一键演示 (one-click demo), 03 Diagnose, 04 Compile
 - final secret scan result

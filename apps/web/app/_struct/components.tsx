@@ -10,6 +10,7 @@ import {
   STEPS,
   LIBRARY_VIDEOS,
   HISTORY_RECORDS,
+  LAB_STRUCTURES,
   type Material,
   type Seg,
   type StateKey,
@@ -47,6 +48,42 @@ export const Icon = ({ name, size = 18 }: { name: string; size?: number }) => {
     <svg width={size} height={size} viewBox="0 0 24 24">{paths[name] || null}</svg>
   );
 };
+
+/* ─── EmptyState: shown when a screen has no real data yet (no mock seeded) ──── */
+
+export const EmptyState = ({
+  icon = 'upload',
+  eyebrow,
+  title,
+  hint,
+  children,
+}: {
+  icon?: string;
+  eyebrow?: string;
+  title: string;
+  hint?: string;
+  children?: ReactNode;
+}) => (
+  <div className="screen">
+    <div style={{ display: 'grid', placeItems: 'center', minHeight: '62vh', padding: 24 }}>
+      <div style={{ maxWidth: 480, textAlign: 'center' }}>
+        <div style={{
+          width: 64, height: 64, margin: '0 auto 18px', borderRadius: 16,
+          display: 'grid', placeItems: 'center',
+          background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--text-dim)',
+        }}>
+          <Icon name={icon} size={26} />
+        </div>
+        {eyebrow && <div className="eyebrow" style={{ marginBottom: 8 }}>{eyebrow}</div>}
+        <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>{title}</h2>
+        {hint && <p style={{ color: 'var(--text-dim)', fontSize: 13, lineHeight: 1.65, marginBottom: 18 }}>{hint}</p>}
+        {children && (
+          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>{children}</div>
+        )}
+      </div>
+    </div>
+  </div>
+);
 
 /* ─── Spine: top compact progress (Sidebar drives main nav now) ──────── */
 
@@ -191,6 +228,12 @@ export const Sidebar = ({
         <Icon name="layers" size={14} />
         <span>历史版本</span>
         <span className="side-tool-tag">{HISTORY_RECORDS.length}</span>
+      </button>
+      <button className={`side-tool ${isToolActive('lab') ? 'active' : ''}`}
+        onClick={() => setToolView && setToolView(isToolActive('lab') ? null : 'lab')}>
+        <Icon name="lab" size={14} />
+        <span>结构实验室</span>
+        <span className="side-tool-tag">{LAB_STRUCTURES.length}</span>
       </button>
 
       <div style={{ flex: 1 }} />

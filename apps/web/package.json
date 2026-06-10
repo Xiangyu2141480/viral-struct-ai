@@ -6,8 +6,7 @@
     "dev": "next dev -p 3000",
     "build": "next build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "next lint || true",
-    "mock:struct": "node mock/struct-mock-server.mjs"
+    "lint": "next lint || true"
   },
   "dependencies": {
     "@viral-struct/shared": "workspace:*",

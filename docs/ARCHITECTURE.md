@@ -31,16 +31,18 @@ Sample video / seed artifact
 
 ## 3. Frontend
 
-Key pages:
+The app is now a single page at route `/` (`apps/web/app/page.tsx` -> `_struct/App.tsx`) with left-side step navigation. The old multi-page routes were removed; `/demo` now permanently redirects to `/`.
 
-| Page | Main component | Purpose |
+Key steps (single-page flow at `/`):
+
+| Step | Main component | Purpose |
 |---|---|---|
-| `/demo` | `DemoShowcasePanel` | Main review demo: one-click structure migration showcase |
-| `/analyze` | `VideoAnalysisPanel` | Seed/upload video parsing and metadata display |
-| `/graph` | structure graph page | Structure extraction and graph artifact display |
-| `/adapt` | adapt page | Product brief and AssetCard library input |
-| `/gaps` | `GapBoard` | Slot matching, material gaps, repairs, source badges |
-| `/result` | `TimelineView` | Timeline, visual preview, trace, migration evidence, variants, natural language edit |
+| 一键演示 (one-click demo) | `DemoShowcasePanel` | Main review demo: one-click structure migration showcase |
+| 01 Sample | `VideoAnalysisPanel` | Seed/upload video parsing and metadata display |
+| 01 Sample | structure graph page | Structure extraction and graph artifact display |
+| 02 Materials | adapt page | Product brief and AssetCard library input |
+| 03 Diagnose | `GapBoard` | Slot matching, material gaps, repairs, source badges |
+| 04 Compile | `TimelineView` | Timeline, visual preview, trace, migration evidence, variants, natural language edit |
 
 Frontend state is centralized in `apps/web/lib/workflowStore.ts`. The store keeps:
 

@@ -22,6 +22,7 @@ if str(SCRIPT_DIR) not in sys.path:
 
 from llm_client import (  # noqa: E402
     create_response,
+    delete_file,
     env_value,
     extract_json_object,
     configure_http_semaphore,
@@ -1006,6 +1007,28 @@ def run_fine_scan(args: argparse.Namespace) -> int:
     return 0
 
 
+def _best_effort_delete_file(
+    file_id: str | None,
+    *,
+    args: argparse.Namespace,
+    base_url: str,
+    api_key: str,
+    logger: "BlockLogger",
+) -> None:
+    """Release Ark file-storage quota once a clip/window has been scanned.
+
+    Best-effort: a failed (or skipped via --keep-uploads) delete must NEVER fail
+    the scan it belongs to. Without this the pipeline leaks ~150 files/run and
+    eventually hits HTTP 403 OperationDenied.FileQuotaExceeded.
+    """
+    if not file_id or getattr(args, "keep_uploads", False):
+        return
+    try:
+        gated_call(delete_file, base_url=base_url, api_key=api_key, file_id=file_id)
+    except Exception as exc:  # noqa: BLE001 — cleanup is best-effort by design
+        logger.log(f"   [warn] file cleanup failed for {file_id}: {exc}")
+
+
 def _process_one_candidate(
     candidate: dict[str, Any],
     *,
@@ -1080,6 +1103,7 @@ def _process_one_candidate(
             logger.log(f"   [WARN] {candidate_id} window-clip cut failed: {exc}")
             return visual_peak_record, None, {"peakId": candidate_id, "error": f"window_cut_failed: {exc}"}, timing
 
+    file_id: str | None = None
     try:
         peak_vars = {
             "peakId": candidate_id,
@@ -1096,6 +1120,7 @@ def _process_one_candidate(
                 video_path=window_clip, fps=args.peak_upload_fps,
                 semaphore=get_upload_semaphore(),
             )
+        file_id = pf["id"]
         with StageTimer(timing, "candidate_wait", candidateId=candidate_id):
             wait_for_file(
                 base_url=base_url, api_key=api_key, file_id=pf["id"],
@@ -1121,6 +1146,10 @@ def _process_one_candidate(
     except Exception as exc:
         logger.log(f"   [WARN] {candidate_id} peak_micro failed: {exc}")
         return visual_peak_record, None, {"peakId": candidate_id, "error": str(exc)}, timing
+    finally:
+        _best_effort_delete_file(
+            file_id, args=args, base_url=base_url, api_key=api_key, logger=logger
+        )
 
 
 def _process_block_metadata(
@@ -1152,6 +1181,7 @@ def _process_block_metadata(
     # time, and inference frames. fps=0 is the escape hatch back to provider default.
     block_upload_fps = args.block_upload_fps if args.block_upload_fps and args.block_upload_fps > 0 else None
     logger.log(f"   [{block_id}] uploading block clip for fine_structure_scan (fps={block_upload_fps})...")
+    file_id: str | None = None
     try:
         with StageTimer(timing, "block_upload"):
             block_file_info = gated_call(
@@ -1159,6 +1189,7 @@ def _process_block_metadata(
                 base_url=base_url, api_key=api_key, video_path=clip_path, fps=block_upload_fps,
                 semaphore=get_upload_semaphore(),
             )
+        file_id = block_file_info["id"]
         with StageTimer(timing, "block_wait"):
             wait_for_file(
                 base_url=base_url, api_key=api_key, file_id=block_file_info["id"],
@@ -1182,6 +1213,10 @@ def _process_block_metadata(
     except Exception as exc:
         logger.log(f"   [ERROR] [{block_id}] block-level fine_structure_scan failed: {exc}")
         return None, {"blockId": block_id, "stage": "fine_structure_scan", "error": str(exc)}, timing
+    finally:
+        _best_effort_delete_file(
+            file_id, args=args, base_url=base_url, api_key=api_key, logger=logger
+        )
 
 
 def process_block_with_peak_micro(
@@ -1578,6 +1613,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-http-pool", dest="http_pool", action="store_false",
                         help="Disable the keepalive connection pool; every call spawns "
                              "a fresh curl (legacy behaviour).")
+    parser.add_argument("--keep-uploads", action="store_true",
+                        help="Do NOT delete uploaded clips/windows after scanning them. "
+                             "By default each file is deleted (best-effort) once its "
+                             "block/peak is scanned, to release Ark file-storage quota — "
+                             "the pipeline uploads ~150 files/run and would otherwise "
+                             "exhaust the account (HTTP 403 FileQuotaExceeded). Use this "
+                             "to keep files for debugging.")
     parser.add_argument("--env", default=".env")
     parser.add_argument("--base-url", default="")
     parser.add_argument("--api-key", default="")

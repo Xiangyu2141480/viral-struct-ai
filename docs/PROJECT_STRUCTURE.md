@@ -66,7 +66,7 @@ structure_graph.json  ← ViralStructureGraph (v1)
    ④ qualityEvaluator 质量自检
    │
    ▼  【前端 · apps/web/】
-/demo 一键证据链  或  /analyze→/graph→/adapt→/gaps→/result 标准流程
+一键演示 证据链  或  01 样例解析 → 02 素材输入 → 03 缺口诊断 → 04 成片编译（同一页面 / 路由 `/`，左侧步骤导航切换） 标准流程
 ```
 
 **核心分界**：Python（stage1，离线，深度 VLM 理解）和 TS（stage2，在线，迁移生成）是**两套独立运行的东西**，通过 `structure_graph.json`（force-add 进 git 的产物）衔接。
@@ -126,7 +126,7 @@ structure_graph.json  ← ViralStructureGraph (v1)
 
 | 服务 | 作用 |
 |---|---|
-| **videoAnalyzer.ts** | `/analyze` 核心：ffprobe 元信息 + ffmpeg 抽 5 关键帧 + 均匀切镜头(占位) + 手动字幕(无 ASR) |
+| **videoAnalyzer.ts** | 01 样例解析 核心：ffprobe 元信息 + ffmpeg 抽 5 关键帧 + 均匀切镜头(占位) + 手动字幕(无 ASR) |
 | **structureExtractor.ts** | 结构来源三选一优先级：**预计算 artifact(我的 stage1) > 规则抽取 > mock** |
 | scanStructureGraphLoader.ts | 加载 + Zod 校验 stage1 的 structure_graph.json |
 | **assetAnalyzer.ts** | 素材多模态分类 + `analyzeAssetsWithFallback`（LLM→文件名规则降级） |
@@ -145,13 +145,13 @@ structure_graph.json  ← ViralStructureGraph (v1)
 
 | 页面 | 路由 | 用户做什么 |
 |---|---|---|
-| page.tsx | `/` | 首页：两条路径入口 |
-| demo/ | `/demo` | **一键评审演示**（全预置，点一个按钮看完整证据链） |
-| analyze/ | `/analyze` | 步骤1：选 seed / **上传视频** + 粘字幕 → 真实解析 |
-| graph/ | `/graph` | 步骤2：结构图谱（段落/槽位/节奏/包装） |
-| adapt/ | `/adapt` | 步骤3：改商品 brief + **上传图片素材** |
-| gaps/ | `/gaps` | 步骤4：槽位匹配 + 缺口板 |
-| result/ | `/result` | 步骤5：时间线 + 多版本 + 自然语言改片 + 质量 |
+| page.tsx | `/` | 首页：单页应用入口（左侧步骤导航切换） |
+| 一键演示 | 一键演示（按钮，URL `/demo` 永久重定向到 `/`） | **一键评审演示**（全预置，点一个按钮看完整证据链） |
+| 步骤 01 · 样例解析 | 01 样例解析 | 步骤1：选 seed / **上传视频** + 粘字幕 → 真实解析 |
+| 步骤 01 · 样例解析 | 01 样例解析（结构图/上下对位在同一步内） | 步骤2：结构图谱（段落/槽位/节奏/包装） |
+| 步骤 02 · 素材输入 | 02 素材输入 | 步骤3：改商品 brief + **上传图片素材** |
+| 步骤 03 · 缺口诊断 | 03 缺口诊断 | 步骤4：槽位匹配 + 缺口板 |
+| 步骤 04 · 成片编译 | 04 成片编译 | 步骤5：时间线 + 多版本 + 自然语言改片 + 质量 |
 
 **组件** `components/`：VideoAnalysisPanel · StructureGraphMock · AssetAdaptPanel · GapBoard · TimelineView · QualityReportPanel · VisualTimelinePreview · DemoShowcasePanel · ScoreMap
 
@@ -184,7 +184,7 @@ seed_assets/
 
 ## 5. 两条用户路径
 
-| | `/demo` 一键路径 | 标准 5 步路径 |
+| | 一键演示 路径 | 标准 5 步路径 |
 |---|---|---|
 | 受众 | 评委演示 | 展示产品形态 |
 | 输入 | 几乎零（全预置康师傅+macbook） | 可上传自己的视频/素材 |
@@ -195,7 +195,7 @@ seed_assets/
 
 ## 6. 关键架构设计
 
-1. **Python 离线 vs TS 在线的双层**：深度 VLM 理解（stage1，Python）跑得慢、离线、只对预处理样例；轻量技术解析（`/analyze`，TS ffmpeg）实时、对任意上传。两者通过 `structure_graph.json` 衔接，`structureExtractor` 优先用 stage1 深产物。
+1. **Python 离线 vs TS 在线的双层**：深度 VLM 理解（stage1，Python）跑得慢、离线、只对预处理样例；轻量技术解析（01 样例解析，TS ffmpeg）实时、对任意上传。两者通过 `structure_graph.json` 衔接，`structureExtractor` 优先用 stage1 深产物。
 2. **迁移协议 migrationContract**：每个 shotSlot 带 `intent`(KEEP 可迁移意图,禁产品名) / `sourceInstance`(SWAP 源片实例) / `acceptanceCriteria`(可接受替代)。这是"迁移结构方法而非复制画面"的协议载体。
 3. **全链路 fallback**：每个 LLM 阶段都有 `xxxWithFallback`（LLM 失败降级规则/模板），并标注 source（`llm_judge` / `rule_based` / `template`）。**无 key 也能完整演示**。
 4. **HTTP 传输用 curl**：Python stage1 的 Doubao 调用走 curl（Schannel TLS），绕过 Windows OpenSSL 大上传 SSL-EOF。
@@ -205,9 +205,9 @@ seed_assets/
 
 ## 7. 真实 vs 演示边界（答辩诚实清单）
 
-**🟢 真实**：ffprobe 元信息 + ffmpeg 关键帧（`/analyze`）· Doubao 图片多模态分类（`/adapt`）· stage1 structure_graph + 27 迁移契约 · ASR（Volcengine，离线验证 0-error）
+**🟢 真实**：ffprobe 元信息 + ffmpeg 关键帧（01 样例解析）· Doubao 图片多模态分类（02 素材输入）· stage1 structure_graph + 27 迁移契约 · ASR（Volcengine，离线验证 0-error）
 
-**🔴 占位/降级**：`/analyze` 镜头分段（均匀切模板）· 字幕（无在线 ASR，手动粘）· 自然语言改片（前端 3 关键词字符串匹配）· 多版本（无并排 diff）· main 上 slot/gap/timeline（规则版，PR #38 升级 LLM）· 视频素材上传（只看文件名）
+**🔴 占位/降级**：01 样例解析 镜头分段（均匀切模板）· 字幕（无在线 ASR，手动粘）· 自然语言改片（前端 3 关键词字符串匹配）· 多版本（无并排 diff）· main 上 slot/gap/timeline（规则版，PR #38 升级 LLM）· 视频素材上传（只看文件名）
 
 **不 claim**：MP4 导出 · 完整 ASR 主流程 · 完整智能剪辑器 · Seedance/GPT Image 真接入 · 真实点击率/转化率数据
 
@@ -221,7 +221,7 @@ seed_assets/
 | 迁移协议定义 | `packages/shared/src/types.ts`（ViralStructureGraph） |
 | stage1 → stage2 桥接 | `scripts/extract_structure_graph.py` |
 | 一键 demo 怎么编排 | `apps/api/src/routes/demo.ts` |
-| `/analyze` 怎么解析 | `apps/api/src/services/videoAnalyzer.ts` |
+| 01 样例解析 怎么解析 | `apps/api/src/services/videoAnalyzer.ts` |
 | 结构来源优先级 | `apps/api/src/services/structureExtractor.ts` |
 | 前端流程状态 | `apps/web/lib/workflowStore.ts` |
 | 评分映射 | `docs/scoring-map.md` |

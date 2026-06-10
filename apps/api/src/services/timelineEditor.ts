@@ -400,7 +400,7 @@ ${JSON.stringify(timelineView, null, 2)}
       { role: 'user', content: userPrompt }
     ],
     temperature: 0.3,
-    response_format: { type: 'json_object' }
+    // no response_format: this Ark/Doubao endpoint 400s on json_object; prompt + JSON parser handle it.
   });
   const raw = response.choices[0]?.message?.content ?? '';
   const parsed = JSON.parse(stripFence(raw));
