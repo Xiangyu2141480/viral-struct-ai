@@ -10,7 +10,7 @@ function makeIntent(): SharedChannelIntent {
     category: 'beverage',
     sellingPoints: ['冰爽解腻'],
     transferableIntent: 'transfer assembly grammar into beverage-native motion',
-    motionTokens: ['assembly_completion', 'pour_flow'],
+    motionTokens: ['assembly_completion', 'flow_motion'],
     motifType: 'kinetic_assembly_reveal',
     fillStatus: 'needs_hyperframes_enhancement',
     referenceAssetIds: ['asset_003'],

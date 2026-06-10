@@ -33,7 +33,7 @@ export const EARPHONE_VOCAB_FIXTURE: CategoryEquivalentVocabulary = {
     chaos_to_order: '由散到聚',
     assembly_completion: '完成定格',
     cta_reveal: 'CTA 收口',
-    bottle_rotation: '产品旋转',
+    object_rotation: '产品旋转',
     clean_hold: '干净定格'
   },
   connective: { afterUseResult: '戴上之后即时的安静与沉浸', productHero: '耳机产品 hero 定格' }

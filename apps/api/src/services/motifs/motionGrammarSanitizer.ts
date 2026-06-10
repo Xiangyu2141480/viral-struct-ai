@@ -94,18 +94,18 @@ const TOKEN_RULES: TokenRule[] = [
     patterns: [/activat/i, /lights? up/i, /turns? on/i, /powers? on/i, /点亮/, /激活/, /启动/, /亮起/]
   },
   {
-    token: 'pour_flow',
-    canonicalPhrase: 'pour flow',
+    token: 'flow_motion',
+    canonicalPhrase: 'flow motion',
     patterns: [/pour/i, /\bflow(s|ing)?\b/i, /倒入/, /倾倒/, /注入/, /流出/, /流入/]
   },
   {
-    token: 'drink_action',
-    canonicalPhrase: 'drink action',
+    token: 'consume_action',
+    canonicalPhrase: 'consume action',
     patterns: [/drink/i, /\bsip\b/i, /喝/, /饮(用|一口)/, /品尝/, /一口/]
   },
   {
-    token: 'bottle_rotation',
-    canonicalPhrase: 'bottle rotation',
+    token: 'object_rotation',
+    canonicalPhrase: 'object rotation',
     patterns: [/rotat/i, /\bspin/i, /turns? around/i, /旋转/, /转动/, /翻转/, /环绕/]
   },
   {

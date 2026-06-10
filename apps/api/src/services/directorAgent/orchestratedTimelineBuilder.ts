@@ -885,7 +885,7 @@ function tokenToPackAction(token: string): string {
     spectacle_burst: '爆发瞬间',
     cta_reveal: 'CTA 收口',
     snap_open: '开启动作',
-    bottle_rotation: '产品旋转',
+    object_rotation: '产品旋转',
     lineup_sweep: '阵列扫过',
     card_drop: '卡片落下',
     clean_hold: '干净定格'
