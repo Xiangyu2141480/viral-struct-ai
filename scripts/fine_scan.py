@@ -7,7 +7,6 @@ import argparse
 import hashlib
 import io
 import json
-import os
 import subprocess
 import sys
 import threading
@@ -730,48 +729,6 @@ def resolve_prompt_path(args: argparse.Namespace) -> str:
     return PROMPT_BY_VERSION[args.prompt_version]
 
 
-# Auto-scaling concurrency defaults (derived from interleaved A/B on
-# project_example_1). The two levers are COUPLED: parallelizing more blocks
-# raises simultaneous LLM demand, which only pays off if the http cap follows.
-#   bw=8/cap=40 -> bw=11/cap=40 = +16% (kills the block-worker tail)
-#   bw=11/cap=40 -> bw=11/cap=80 = +24% more (cap now binds) => +40% total
-# NOTE: PR #50 split the old single lane into a light lane (--max-concurrent-http,
-# polls + /responses, what max_http below caps) and a heavy upload lane
-# (--max-concurrent-upload). These constants were measured on the OLD combined
-# lane, so they now govern the LIGHT lane and deserve a fresh A/B re-tune.
-AUTO_BLOCK_WORKERS_MAX = 12  # parallelize all blocks, bounded (I/O-dominated work)
-AUTO_HTTP_FLOOR = 40         # the +30% sweet spot (A/B: 25->40)
-AUTO_HTTP_CEILING = 80       # measured-safe max; W2-B guardrail (50 timed out on
-                             # large uploads) — auto never exceeds this.
-
-
-def resolve_concurrency(
-    n_blocks: int,
-    candidate_workers: int,
-    block_workers_arg: int | None,
-    max_http_arg: int | None,
-) -> tuple[int, int]:
-    """Resolve (block_workers, max_http) from explicit args or auto-scale.
-
-    Auto mode (arg is None): block_workers parallelizes every block up to
-    AUTO_BLOCK_WORKERS_MAX; the light-lane http cap then scales WITH that
-    realized parallelism (block_workers × candidate_workers) clamped to
-    [AUTO_HTTP_FLOOR, AUTO_HTTP_CEILING]. Explicit args always win and are only
-    sanity-clamped (block_workers to [1, n_blocks]; cap to >= 1).
-    """
-    n_blocks = max(1, int(n_blocks))
-    if block_workers_arg is not None:
-        block_workers = max(1, min(int(block_workers_arg), n_blocks))
-    else:
-        block_workers = min(n_blocks, AUTO_BLOCK_WORKERS_MAX)
-    if max_http_arg is not None:
-        max_http = max(1, int(max_http_arg))
-    else:
-        demand = block_workers * max(1, int(candidate_workers))
-        max_http = min(AUTO_HTTP_CEILING, max(AUTO_HTTP_FLOOR, demand))
-    return block_workers, max_http
-
-
 def build_scan_config_fingerprint(
     block: dict[str, Any],
     args: argparse.Namespace,
@@ -910,16 +867,33 @@ def run_fine_scan(args: argparse.Namespace) -> int:
     if missing and not llm_free_mode:
         raise SystemExit(f"Missing required config: {', '.join(missing)}")
 
+    # Initialize global HTTP semaphore from CLI before any worker is spawned.
+    # Explicit configure_* (not lazy get_*) — cap mismatch now raises rather
+    # than being silently ignored (PR #24 review H1).
+    configure_http_semaphore(int(args.max_concurrent_http))
     # C: heavy multipart uploads get their own narrow lane so the light poll/
     # response calls don't queue behind them. A: keepalive connection pool for
-    # the light calls (no-op for the curl-only multipart uploads). Neither
-    # depends on block count, so they're configured here.
+    # the light calls (no-op for the curl-only multipart uploads).
     configure_upload_semaphore(int(args.max_concurrent_upload))
     enable_connection_pool(bool(args.http_pool))
 
-    # NOTE: the light-lane HTTP semaphore is configured *after* block loading
-    # (below), because auto-scaling --block-workers/--max-concurrent-http needs
-    # the block count. See resolve_concurrency().
+    # PR #24 review H2 / PR #44 (perf): --max-concurrent-http is the *binding*
+    # concurrency cap; --block-workers and --candidate-workers only set the upper
+    # bound on threads. By design (PR #44 fine-scan-speedups) block_workers
+    # defaults high so every block's candidates interleave into the shared HTTP
+    # pipe instead of running in serial waves — the semaphore still enforces the
+    # real API cap, so extra threads simply park on it. That's intentional and
+    # only costs a little memory. We only emit an INFO when the thread bound is
+    # *far* above the cap (>4×), where idle-thread memory starts to matter.
+    outer_upper = int(args.block_workers) * (int(args.candidate_workers) + 1)
+    if outer_upper > 4 * int(args.max_concurrent_http):
+        print(
+            f"[INFO] outer-thread upper bound = {outer_upper}"
+            f" (block_workers={args.block_workers} × (candidate_workers={args.candidate_workers} + 1))"
+            f" is > 4× http cap ({args.max_concurrent_http})."
+            f" Threads beyond the cap park on the semaphore (API cap still honored);"
+            f" lower --candidate-workers if idle-thread memory is a concern."
+        )
 
     rough_scan_path = Path(args.rough_scan)
     if not rough_scan_path.exists():
@@ -960,45 +934,11 @@ def run_fine_scan(args: argparse.Namespace) -> int:
         else:
             blocks_to_process.append(block)
 
-    # Resolve concurrency from explicit args or auto-scale to the block count
-    # (the two levers are coupled — see resolve_concurrency). max_http is the
-    # LIGHT lane (polls + /responses); heavy uploads use their own lane
-    # (configured above). Configure the light-lane semaphore here, before any
-    # worker spawns. Explicit configure_* (not lazy get_*) — cap mismatch raises.
-    block_workers, max_http = resolve_concurrency(
-        len(blocks),
-        int(args.candidate_workers),
-        args.block_workers,
-        args.max_concurrent_http,
-    )
-    configure_http_semaphore(max_http)
-    _bw_src = "explicit" if args.block_workers is not None else "auto"
-    _cap_src = "explicit" if args.max_concurrent_http is not None else "auto"
-    print(
-        f"[concurrency] block_workers={block_workers} ({_bw_src}) "
-        f"max_http={max_http} ({_cap_src}) "
-        f"blocks={len(blocks)} candidate_workers={args.candidate_workers}"
-    )
-    # INFO only when the outer thread bound is *far* above the cap (>4×), where
-    # idle-thread memory starts to matter; extra threads just park on the
-    # semaphore (the light-lane API cap is still honored).
-    outer_upper = block_workers * (int(args.candidate_workers) + 1)
-    if outer_upper > 4 * max_http:
-        print(
-            f"[INFO] outer-thread upper bound = {outer_upper}"
-            f" (block_workers={block_workers} × (candidate_workers={args.candidate_workers} + 1))"
-            f" is > 4× http cap ({max_http})."
-            f" Threads beyond the cap park on the semaphore (API cap still honored);"
-            f" lower --candidate-workers if idle-thread memory is a concern."
-        )
-
     # L2: cross-block ThreadPoolExecutor. Multiple blocks process in parallel.
     # All HTTP calls inside still go through the global semaphore + retry layer,
     # so concurrency cap is enforced regardless of block_workers × candidate_workers.
     if blocks_to_process:
-        # block_workers was resolved (auto/explicit) against the full block list;
-        # re-clamp to the resume-filtered count so we don't spawn idle workers.
-        block_workers = max(1, min(block_workers, len(blocks_to_process)))
+        block_workers = max(1, min(int(args.block_workers), len(blocks_to_process)))
         with ThreadPoolExecutor(max_workers=block_workers, thread_name_prefix="block") as block_pool:
             block_futures = {
                 block_pool.submit(
@@ -1183,7 +1123,7 @@ def _process_one_candidate(
         file_id = pf["id"]
         with StageTimer(timing, "candidate_wait", candidateId=candidate_id):
             wait_for_file(
-                base_url=base_url, api_key=api_key, file_id=file_id,
+                base_url=base_url, api_key=api_key, file_id=pf["id"],
                 poll_interval=args.poll_interval, max_wait_seconds=args.max_wait_seconds,
                 poll_backoff=args.poll_backoff, poll_max_interval=args.poll_max_interval,
             )
@@ -1192,7 +1132,7 @@ def _process_one_candidate(
                 create_response,
                 base_url=base_url, api_key=api_key,
                 payload=build_responses_payload(
-                    model=model, file_id=file_id,
+                    model=model, file_id=pf["id"],
                     prompt_text=peak_text, instructions=peak_instructions, store=True,
                 ),
                 timeout=args.response_timeout,
@@ -1252,7 +1192,7 @@ def _process_block_metadata(
         file_id = block_file_info["id"]
         with StageTimer(timing, "block_wait"):
             wait_for_file(
-                base_url=base_url, api_key=api_key, file_id=file_id,
+                base_url=base_url, api_key=api_key, file_id=block_file_info["id"],
                 poll_interval=args.poll_interval, max_wait_seconds=args.max_wait_seconds,
                 poll_backoff=args.poll_backoff, poll_max_interval=args.poll_max_interval,
             )
@@ -1261,7 +1201,7 @@ def _process_block_metadata(
                 create_response,
                 base_url=base_url, api_key=api_key,
                 payload=build_responses_payload(
-                    model=model, file_id=file_id,
+                    model=model, file_id=block_file_info["id"],
                     prompt_text=block_prompt_text, instructions=block_instructions, store=True,
                 ),
                 timeout=args.response_timeout,
@@ -1642,24 +1582,19 @@ def build_parser() -> argparse.ArgumentParser:
     # Concurrency controls (W1.3 + W1.4)
     parser.add_argument("--candidate-workers", type=int, default=10,
                         help="Concurrent peak_micro_scan calls per block. Default 10.")
-    parser.add_argument("--block-workers", type=int, default=None,
-                        help="Concurrent blocks processed simultaneously. Default: AUTO "
-                             "— parallelize every block up to %d (resolve_concurrency). "
-                             "A/B showed running all blocks at once (vs 8) removes the "
-                             "tail-serialization and is +16%%; the coupled --max-concurrent-http "
-                             "then follows the realized parallelism. Pass an explicit value to "
-                             "override (clamped to block count)." % AUTO_BLOCK_WORKERS_MAX)
-    parser.add_argument("--max-concurrent-http", type=int, default=None,
-                        help="Light-lane semaphore cap on simultaneous LLM/VLM API calls "
-                             "(file-status polls + /responses; heavy uploads use the "
-                             "separate --max-concurrent-upload lane). Default: AUTO — scales "
-                             "with block parallelism (block_workers × candidate_workers) "
-                             "clamped to [%d, %d] (resolve_concurrency). Evidence: A/B 25->40 "
-                             "= +30%%; at high block_workers the cap binds and 40->80 adds "
-                             "more; the %d ceiling is the W2-B guardrail. NOTE: measured on "
-                             "the old combined lane — re-tune for the light lane. Pass an "
-                             "explicit value to override."
-                             % (AUTO_HTTP_FLOOR, AUTO_HTTP_CEILING, AUTO_HTTP_CEILING))
+    parser.add_argument("--block-workers", type=int, default=8,
+                        help="Concurrent blocks processed simultaneously. Default 8 "
+                             "(PR #44; auto-capped to block count at runtime). The global "
+                             "--max-concurrent-http semaphore stays the binding API cap, so a "
+                             "higher block_workers just flattens the wave structure — N blocks "
+                             "interleave candidates into the shared HTTP pipe instead of "
+                             "running in ceil(N/3) serial waves.")
+    parser.add_argument("--max-concurrent-http", type=int, default=25,
+                        help="Global semaphore cap on simultaneous light LLM/VLM API "
+                             "calls (file-status polls + /responses). Default 25. "
+                             "Heavy multipart uploads have their own lane "
+                             "(--max-concurrent-upload), so this can run wider than "
+                             "the old combined lane without risking upload write timeouts.")
     parser.add_argument("--max-concurrent-upload", type=int, default=20,
                         help="Separate semaphore cap for heavy multipart file uploads "
                              "(block clips + peak windows). Default 20 — this pipeline "

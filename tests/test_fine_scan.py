@@ -636,16 +636,13 @@ class FineScanTests(unittest.TestCase):
                 "upload_file": self.module.upload_file,
                 "wait_for_file": self.module.wait_for_file,
                 "create_response": self.module.create_response,
-                "delete_file": self.module.delete_file,
             }
             upload_calls = []
-            delete_calls = []
             try:
                 self.module.prepare_block_clip = lambda *args, **kwargs: ROOT / "seed_assets" / "raw_videos" / "TVC.mp4"
                 self.module.upload_file = lambda **kwargs: upload_calls.append(kwargs) or {"id": "file-test"}
                 self.module.wait_for_file = lambda **kwargs: {"status": "processed"}
                 self.module.create_response = lambda **kwargs: {"output_text": "not json"}
-                self.module.delete_file = lambda **kwargs: delete_calls.append(kwargs) or {"deleted": True}
 
                 result = self.module.run_fine_scan(args)
             finally:
@@ -663,10 +660,6 @@ class FineScanTests(unittest.TestCase):
             # default. Block is 1.0s < min_block_seconds and --no-hard-cut, so no
             # candidate uploads precede it — upload_calls[0] is the block upload.
             self.assertEqual(upload_calls[0]["fps"], 1.0)
-            # Quota hygiene: the uploaded block clip must be deleted even though
-            # the block FAILED (cleanup runs in `finally`), so failures don't leak
-            # Ark file-storage quota.
-            self.assertIn("file-test", [c.get("file_id") for c in delete_calls])
 
     def test_scan_config_fingerprint_tracks_prompt_video_block_and_candidate_config(self):
         block = {
@@ -1227,141 +1220,6 @@ class PromptVersionResolutionTests(unittest.TestCase):
     def test_prompt_version_rejects_unknown_value(self):
         with self.assertRaises(SystemExit):
             self.module.build_parser().parse_args(["--prompt-version", "v2"])
-
-
-class ResolveConcurrencyTests(unittest.TestCase):
-    """Auto-scaling of block_workers + http cap (A/B-derived, PR-perf).
-
-    Auto mode (arg is None): parallelize all blocks up to AUTO_BLOCK_WORKERS_MAX,
-    and scale the http cap WITH the realized block parallelism (coupled levers)
-    between AUTO_HTTP_FLOOR (40, the +30% sweet spot) and AUTO_HTTP_CEILING (80,
-    the measured-safe max / W2-B guardrail). Explicit args always win.
-    """
-
-    def setUp(self):
-        self.module = load_module()
-
-    def test_auto_eleven_blocks_parallelizes_all_and_lifts_cap_to_ceiling(self):
-        # 11 blocks: bw=min(11,12)=11; demand=11*10=110 -> cap clamped to 80.
-        self.assertEqual(
-            self.module.resolve_concurrency(11, 10, None, None), (11, 80)
-        )
-
-    def test_auto_many_blocks_bounded_by_block_workers_max(self):
-        # 30 blocks: bw bounded to AUTO_BLOCK_WORKERS_MAX (12); cap at ceiling.
-        self.assertEqual(
-            self.module.resolve_concurrency(30, 10, None, None), (12, 80)
-        )
-
-    def test_auto_few_blocks_keeps_cap_at_floor(self):
-        # 4 blocks: bw=4; demand=40 -> cap=max(40,40)=40 (floor).
-        self.assertEqual(
-            self.module.resolve_concurrency(4, 10, None, None), (4, 40)
-        )
-
-    def test_auto_mid_blocks_scales_cap_between_floor_and_ceiling(self):
-        # 6 blocks: bw=6; demand=60 -> cap=60.
-        self.assertEqual(
-            self.module.resolve_concurrency(6, 10, None, None), (6, 60)
-        )
-
-    def test_auto_single_block_uses_floor_cap(self):
-        self.assertEqual(
-            self.module.resolve_concurrency(1, 10, None, None), (1, 40)
-        )
-
-    def test_explicit_block_workers_overrides_auto(self):
-        # Explicit bw=8 honored (not auto 11); cap still auto.
-        self.assertEqual(
-            self.module.resolve_concurrency(11, 10, 8, None), (8, 80)
-        )
-
-    def test_explicit_block_workers_clamped_to_block_count(self):
-        # Asking for more workers than blocks clamps to block count.
-        self.assertEqual(
-            self.module.resolve_concurrency(11, 10, 25, None), (11, 80)
-        )
-
-    def test_explicit_cap_overrides_auto(self):
-        # Explicit --max-concurrent-http 25 honored even with auto block_workers.
-        self.assertEqual(
-            self.module.resolve_concurrency(11, 10, None, 25), (11, 25)
-        )
-
-    def test_explicit_both_are_honored(self):
-        self.assertEqual(
-            self.module.resolve_concurrency(11, 10, 8, 25), (8, 25)
-        )
-
-
-class FileCleanupTests(unittest.TestCase):
-    """Best-effort upload cleanup that releases Ark file-storage quota."""
-
-    def setUp(self):
-        self.module = load_module()
-
-    def _logger(self):
-        return self.module.BlockLogger("block_cleanup")
-
-    def _args(self, *extra):
-        return self.module.build_parser().parse_args(list(extra))
-
-    def test_keep_uploads_defaults_false(self):
-        self.assertFalse(self._args().keep_uploads)
-
-    def test_keep_uploads_flag_sets_true(self):
-        self.assertTrue(self._args("--keep-uploads").keep_uploads)
-
-    def test_delete_called_for_uploaded_file(self):
-        calls = []
-        orig = self.module.delete_file
-        try:
-            self.module.delete_file = lambda **kw: calls.append(kw) or {"deleted": True}
-            self.module._best_effort_delete_file(
-                "file-xyz", args=self._args(), base_url="b", api_key="k", logger=self._logger()
-            )
-        finally:
-            self.module.delete_file = orig
-        self.assertEqual([c.get("file_id") for c in calls], ["file-xyz"])
-
-    def test_none_file_id_skips_delete(self):
-        calls = []
-        orig = self.module.delete_file
-        try:
-            self.module.delete_file = lambda **kw: calls.append(kw)
-            self.module._best_effort_delete_file(
-                None, args=self._args(), base_url="b", api_key="k", logger=self._logger()
-            )
-        finally:
-            self.module.delete_file = orig
-        self.assertEqual(calls, [])
-
-    def test_keep_uploads_skips_delete(self):
-        calls = []
-        orig = self.module.delete_file
-        try:
-            self.module.delete_file = lambda **kw: calls.append(kw)
-            self.module._best_effort_delete_file(
-                "file-xyz", args=self._args("--keep-uploads"),
-                base_url="b", api_key="k", logger=self._logger()
-            )
-        finally:
-            self.module.delete_file = orig
-        self.assertEqual(calls, [])
-
-    def test_delete_failure_is_swallowed(self):
-        def boom(**kw):
-            raise RuntimeError("delete boom")
-
-        orig = self.module.delete_file
-        try:
-            self.module.delete_file = boom
-            # Must NOT raise — cleanup is best-effort.
-            self.module._best_effort_delete_file(
-                "file-xyz", args=self._args(), base_url="b", api_key="k", logger=self._logger()
-            )
-        finally:
-            self.module.delete_file = orig
 
 
 if __name__ == "__main__":
