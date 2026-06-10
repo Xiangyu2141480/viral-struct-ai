@@ -4,6 +4,7 @@ import { OrchestratedTimelineSchema, type AssetSupplyContext, type CreativeIngre
 import { buildAssetSupplyContext } from '../assetManager/assetSupplyContextBuilder';
 import { buildOrchestratedTimeline } from './orchestratedTimelineBuilder';
 import { makeAssets, makeContentBrief, makeFakeClient, makeGraph } from './testFixtures';
+import { EARPHONE_VOCAB_FIXTURE } from './vocabularyFixture';
 
 const MODEL = 'fake-model';
 
@@ -23,7 +24,8 @@ test('produces exactly one OrchestratedSlot per shotSlot, in time order, schema-
     assetCards: makeAssets(),
     contentBrief: makeContentBrief(),
     clientFactory: makeFakeClient(happyAlignments()),
-    model: MODEL
+    model: MODEL,
+    vocabulary: EARPHONE_VOCAB_FIXTURE
   });
 
   assert.equal(timeline.slots.length, graph.shotSlots.length);
@@ -46,7 +48,8 @@ test('degradation ladder: every tier carries 3 channels; recommendation differs 
     assetCards: makeAssets(),
     contentBrief: makeContentBrief(),
     clientFactory: makeFakeClient(happyAlignments()),
-    model: MODEL
+    model: MODEL,
+    vocabulary: EARPHONE_VOCAB_FIXTURE
   });
 
   const open = timeline.slots.find((s) => s.slotId === 'slot_open')!.fill;
@@ -104,7 +107,8 @@ test('source-specific gate downgrades a high-score match to partial (never match
       slot_usage: { assetId: 'asset_usage', quality: 0.6 },
       slot_cta: { assetId: null, quality: 0.2 }
     }),
-    model: MODEL
+    model: MODEL,
+    vocabulary: EARPHONE_VOCAB_FIXTURE
   });
 
   const open = timeline.slots.find((s) => s.slotId === 'slot_open')!.fill;
@@ -151,7 +155,8 @@ test('source-specific gate is evaluated before asset presence and quality so it 
     clientFactory: makeFakeClient({
       slot_source_specific_no_asset: { assetId: null, quality: 0.1, missing: 'no matching asset' }
     }),
-    model: MODEL
+    model: MODEL,
+    vocabulary: EARPHONE_VOCAB_FIXTURE
   });
 
   assert.equal(timeline.slots[0].fillStatus, 'source_specific_not_transferable');
@@ -166,7 +171,8 @@ test('falls back to rule-based matching and still emits a complete timeline when
     clientFactory: () => {
       throw new Error('LLM unreachable');
     },
-    model: MODEL
+    model: MODEL,
+    vocabulary: EARPHONE_VOCAB_FIXTURE
   });
 
   assert.equal(timeline.meta.matchSource, 'rule_based');
@@ -184,7 +190,8 @@ test('useLlmMatcher:false uses the rule-based matcher without touching the LLM',
     useLlmMatcher: false,
     clientFactory: () => {
       throw new Error('should not be called');
-    }
+    },
+    vocabulary: EARPHONE_VOCAB_FIXTURE
   });
   assert.equal(timeline.meta.matchSource, 'rule_based');
 });
@@ -202,7 +209,8 @@ test('does not mutate the Asset Manager output it consumes', async () => {
     assetSupplyContext: supply,
     contentBrief: makeContentBrief(),
     clientFactory: makeFakeClient(happyAlignments()),
-    model: MODEL
+    model: MODEL,
+    vocabulary: EARPHONE_VOCAB_FIXTURE
   });
 
   assert.equal(JSON.stringify(supply), before);
@@ -230,7 +238,8 @@ test('no source-product term leaks into any POSITIVE prompt/instruction even fro
     assetCards: makeAssets(),
     contentBrief: makeContentBrief(),
     clientFactory: makeFakeClient(happyAlignments()),
-    model: MODEL
+    model: MODEL,
+    vocabulary: EARPHONE_VOCAB_FIXTURE
   });
 
   // Negative-direction fields legitimately name banned terms as guardrails ("no MacBook"); the leak we
@@ -466,7 +475,8 @@ test('weak kinetic assembly motif is not treated as fully matched and carries mo
     clientFactory: makeFakeClient({
       slot_block_004_asset_001: { assetId: 'plain_002_hand_pickup', quality: 0.94, matchedCriteria: ['product visible'] }
     }),
-    model: MODEL
+    model: MODEL,
+    vocabulary: EARPHONE_VOCAB_FIXTURE
   });
 
   const slot = timeline.slots[0];
@@ -477,13 +487,13 @@ test('weak kinetic assembly motif is not treated as fully matched and carries mo
     assert.equal(slot.fill.status, 'partial');
     assert.deepEqual(slot.fill.options?.map((option) => option.id).sort(), ['aigc', 'hyperframes', 'reshoot']);
     const positiveText = JSON.stringify(slot.fill.options);
-    assert.match(positiveText, /冰块|柠檬|茶滴|冷雾/);
+    assert.match(positiveText, /零件由散到聚|单元入仓|降噪激活/);
     assert.match(positiveText, /CTA|收口|锁定/);
     assert.doesNotMatch(positiveText, /MacBook|keyboard|laptop|touchpad|rocket|hardware|键盘|笔记本|触控板|火箭|硬件/);
   }
 });
 
-test('source-specific hardware semantics are downgraded and rewritten to beverage equivalents', async () => {
+test('source-specific hardware semantics are downgraded and rewritten to target-category equivalents', async () => {
   const graph = makeGraph();
   graph.shotSlots[0] = {
     ...graph.shotSlots[0],
@@ -513,7 +523,8 @@ test('source-specific hardware semantics are downgraded and rewritten to beverag
     clientFactory: makeFakeClient({
       slot_hardware_interface: { assetId: 'asset_open', quality: 0.93, matchedCriteria: ['clear product closeup'] }
     }),
-    model: MODEL
+    model: MODEL,
+    vocabulary: EARPHONE_VOCAB_FIXTURE
   });
 
   const slot = timeline.slots[0];
@@ -522,7 +533,7 @@ test('source-specific hardware semantics are downgraded and rewritten to beverag
   if (slot.fill.kind === 'matched') {
     assert.equal(slot.fill.status, 'partial');
     const text = JSON.stringify(slot.fill.options);
-    assert.match(text, /瓶身标签|冷凝水|茶色流动|开盖|倒入杯中|多瓶陈列/);
+    assert.match(text, /充电仓特写|腔体材质扫光|logo 微距|接缝工艺细节/);
     assert.doesNotMatch(text, /MacBook|keyboard|laptop|touchpad|rocket|hardware|键盘|笔记本|触控板|火箭|硬件/);
   }
 });
@@ -572,7 +583,8 @@ test('source-specific slots expose an explicit abstraction layer for Video Agent
     structureGraph: graph,
     assetCards: makeAssets(),
     contentBrief: makeContentBrief(),
-    useLlmMatcher: false
+    useLlmMatcher: false,
+    vocabulary: EARPHONE_VOCAB_FIXTURE
   });
 
   const abstractions = new Map(timeline.slots.map((slot) => [slot.slotId, slot.sourceAbstraction]));
@@ -582,8 +594,8 @@ test('source-specific slots expose an explicit abstraction layer for Video Agent
   assert.equal(abstractions.get('slot_ui_sequence')?.subtype, 'ui_sequence');
 
   const text = JSON.stringify([...abstractions.values()]);
-  assert.match(text, /瓶身细节扫光|卖点场景卡连跳/);
-  assert.match(text, /source structure|abstract grammar|target beverage equivalent|源结构|抽象/);
+  assert.match(text, /充电仓特写|腔体材质扫光|卖点卡连跳|场景卡切换/);
+  assert.match(text, /source structure|abstract grammar|target .* equivalent|源结构|抽象/);
   assert.doesNotMatch(text, /MacBook|keyboard|laptop|touchpad|rocket|hardware|键盘|笔记本|触控板|火箭|硬件/);
 });
 
@@ -597,7 +609,8 @@ test('default Director Agent timing compresses source timeline into a high-conve
     clientFactory: makeFakeClient({
       slot_block_004_asset_001: { assetId: 'plain_002_hand_pickup', quality: 0.94 }
     }),
-    model: MODEL
+    model: MODEL,
+    vocabulary: EARPHONE_VOCAB_FIXTURE
   });
 
   assert.equal(timeline.meta.targetDurationMode, 'high_conversion_20s');
@@ -621,7 +634,8 @@ test('Director Agent emits a reusable asset-pack plan for Video Agent handoff', 
     clientFactory: makeFakeClient({
       slot_block_004_asset_001: { assetId: 'plain_002_hand_pickup', quality: 0.94 }
     }),
-    model: MODEL
+    model: MODEL,
+    vocabulary: EARPHONE_VOCAB_FIXTURE
   });
 
   const reusableAssetPacks = timeline.reusableAssetPacks ?? [];
@@ -635,4 +649,5 @@ test('Director Agent emits a reusable asset-pack plan for Video Agent handoff', 
   assert.ok(packTypes.includes('motif_assembly_reveal'));
   assert.ok(packTypes.includes('cta_lockup'));
   assert.ok(reusableAssetPacks.every((pack) => /[\u4e00-\u9fff]/.test(pack.promptSummary)));
+  assert.doesNotMatch(JSON.stringify(timeline), /\u51b0\u5757|\u67e0\u6aac\u7247|\u7ea2\u8336\u6c34\u6ef4|\u5012\u8336|\u559d\u4e00\u53e3/);
 });
