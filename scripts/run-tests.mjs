@@ -7,6 +7,8 @@ runPnpm(['--filter', '@viral-struct/api', 'exec', 'node', '--import', 'tsx', '..
 // video-agent (③) has no tsx of its own; run its tests through the api package's tsx, mirroring the
 // cross-package web test above. node:test auto-runs the registered tests when the file executes.
 runPnpm(['--filter', '@viral-struct/api', 'exec', 'node', '--import', 'tsx', '--test', '../../packages/video-agent/src/authoring/authoring.test.ts']);
+// AIGC helper (beat → Wan2.7 model routing) — pure, also run through the api package's tsx.
+runPnpm(['--filter', '@viral-struct/api', 'exec', 'node', '--import', 'tsx', '--test', '../../packages/video-agent/src/aigc/aigcHelper.test.ts']);
 // shared (the OrchestratedTimeline contract) has no tsx of its own either; run its schema test
 // through the api package's tsx the same way.
 runPnpm(['--filter', '@viral-struct/api', 'exec', 'node', '--import', 'tsx', '--test', '../../packages/shared/src/orchestratedTimeline.test.ts']);
