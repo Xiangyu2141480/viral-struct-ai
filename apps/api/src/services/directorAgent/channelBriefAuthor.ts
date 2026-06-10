@@ -88,6 +88,8 @@ export interface AuthorChannelBriefsOptions {
   channels: AuthoringChannel[];
   clientFactory?: () => Client;
   model?: string;
+  /** Source-product-specific terms (derived from the scanned source graph) the authored text must not leak. */
+  sourceBannedTerms?: readonly string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -179,27 +181,27 @@ function containsAny(text: string, terms: string[]): string | undefined {
   return terms.find((t) => lower.includes(t.toLowerCase()));
 }
 
-function assertReshootFilmable(r: AuthoredReshoot): void {
+function assertReshootFilmable(r: AuthoredReshoot, sourceBannedTerms: readonly string[]): void {
   const blob = [r.guidanceNL, r.framing, ...r.mustCapture].join(' ');
   const hit = containsAny(blob, SURREAL_TERMS);
   if (hit) throw new Error(`reshoot brief contains non-filmable/surreal term "${hit}"`);
-  assertNoSourceLeak(blob);
+  assertNoSourceLeak(blob, sourceBannedTerms);
 }
 
-function assertHyperframesEditable(h: AuthoredHyperframes): void {
+function assertHyperframesEditable(h: AuthoredHyperframes, sourceBannedTerms: readonly string[]): void {
   const blob = [h.editingGuidanceNL, h.cardType ?? '', JSON.stringify(h.copy ?? {})].join(' ');
   const hit = containsAny(blob, SURREAL_TERMS);
   if (hit) throw new Error(`hyperframes brief describes generation/VFX term "${hit}" (not an editing op)`);
-  assertNoSourceLeak(blob);
+  assertNoSourceLeak(blob, sourceBannedTerms);
 }
 
-function assertAigcSafe(a: AuthoredAigc): void {
+function assertAigcSafe(a: AuthoredAigc, sourceBannedTerms: readonly string[]): void {
   // aigc MAY be surreal; it must only stay free of source-product leakage in the POSITIVE prompt.
-  assertNoSourceLeak(a.prompt);
+  assertNoSourceLeak(a.prompt, sourceBannedTerms);
 }
 
-function assertNoSourceLeak(text: string): void {
-  if (containsSourceSpecificTerm(text)) {
+function assertNoSourceLeak(text: string, sourceBannedTerms: readonly string[]): void {
+  if (containsSourceSpecificTerm(text, sourceBannedTerms)) {
     throw new Error('authored text leaked a source-specific product term');
   }
 }
@@ -320,15 +322,15 @@ export async function authorChannelBriefs(opts: AuthorChannelBriefsOptions): Pro
       const raw = await callChannel(client, model, channel, opts.intent);
       if (channel === 'reshoot') {
         const r = parseReshoot(raw);
-        assertReshootFilmable(r);
+        assertReshootFilmable(r, opts.sourceBannedTerms ?? []);
         result.reshoot = r;
       } else if (channel === 'hyperframes') {
         const h = parseHyperframes(raw);
-        assertHyperframesEditable(h);
+        assertHyperframesEditable(h, opts.sourceBannedTerms ?? []);
         result.hyperframes = h;
       } else {
         const a = parseAigc(raw);
-        assertAigcSafe(a);
+        assertAigcSafe(a, opts.sourceBannedTerms ?? []);
         result.aigc = a;
       }
     } catch (err) {

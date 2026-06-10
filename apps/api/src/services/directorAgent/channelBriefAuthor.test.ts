@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { authorChannelBriefs, type AuthoringChannel, type SharedChannelIntent } from './channelBriefAuthor';
+import { MACBOOK_SOURCE_BANNED_TERMS } from './vocabularyFixture';
 
 function makeIntent(): SharedChannelIntent {
   return {
@@ -43,7 +44,8 @@ const opts = (client: unknown, channels: AuthoringChannel[]) => ({
   channels,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   clientFactory: () => client as any,
-  model: 'fake-model'
+  model: 'fake-model',
+  sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS
 });
 
 test('reshoot: a filmable brief is accepted', async () => {

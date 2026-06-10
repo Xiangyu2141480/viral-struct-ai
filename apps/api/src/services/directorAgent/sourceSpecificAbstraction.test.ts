@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { ShotSlotNode, ViralMotifAnnotation } from '@viral-struct/shared';
 import { buildSourceAbstraction, inferSourceSpecificTransferSubtype, sourceSpecificProfile } from './sourceSpecificAbstraction';
-import { EARPHONE_VOCAB_FIXTURE } from './vocabularyFixture';
+import { EARPHONE_VOCAB_FIXTURE, MACBOOK_SOURCE_BANNED_TERMS } from './vocabularyFixture';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -109,7 +109,7 @@ test('sourceSpecificProfile(kinetic_assembly_reveal) returns correct abstractGra
 
 test('buildSourceAbstraction returns undefined for a generic slot without source-specific terms', () => {
   const slot = makeSlot('产品特写镜头');
-  const result = buildSourceAbstraction({ slot, vocab: EARPHONE_VOCAB_FIXTURE });
+  const result = buildSourceAbstraction({ slot, vocab: EARPHONE_VOCAB_FIXTURE, sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS });
   assert.equal(result, undefined);
 });
 
@@ -118,7 +118,7 @@ test('buildSourceAbstraction returns undefined for a generic slot without source
 test('buildSourceAbstraction: source-specific slot reads label/actions from injected vocab (not beverage)', () => {
   const slot = makeSlot('MacBook opening screen color transform reveal');
   const motif = makeMotif('dynamic_entry');
-  const abstraction = buildSourceAbstraction({ slot, motif, targetCategory: 'generic', vocab: EARPHONE_VOCAB_FIXTURE });
+  const abstraction = buildSourceAbstraction({ slot, motif, targetCategory: 'generic', vocab: EARPHONE_VOCAB_FIXTURE, sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS });
   assert.ok(abstraction, 'should produce an abstraction');
   assert.equal(abstraction!.sourceSpecific, true);
   assert.ok(abstraction!.subtype.length > 0);
@@ -132,7 +132,7 @@ test('buildSourceAbstraction: source-specific slot reads label/actions from inje
 test('buildSourceAbstraction: kinetic_assembly_reveal motif reads vocab actions (not beverage)', () => {
   const slot = makeSlot('product assembly parts');
   const motif = makeMotif('kinetic_assembly_reveal');
-  const abstraction = buildSourceAbstraction({ slot, motif, targetCategory: 'generic', vocab: EARPHONE_VOCAB_FIXTURE });
+  const abstraction = buildSourceAbstraction({ slot, motif, targetCategory: 'generic', vocab: EARPHONE_VOCAB_FIXTURE, sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS });
   assert.ok(abstraction);
   assert.equal(abstraction!.subtype, 'kinetic_assembly_reveal');
   assert.deepEqual(abstraction!.targetEquivalentActions, EARPHONE_VOCAB_FIXTURE.bySubtype['kinetic_assembly_reveal']!.actions);
@@ -142,7 +142,7 @@ test('buildSourceAbstraction: kinetic_assembly_reveal motif reads vocab actions 
 test('buildSourceAbstraction: rationale contains vocab product name and subtype', () => {
   const slot = makeSlot('side port camera lens module detail');
   const motif = makeMotif('dynamic_entry');
-  const abstraction = buildSourceAbstraction({ slot, motif, vocab: EARPHONE_VOCAB_FIXTURE });
+  const abstraction = buildSourceAbstraction({ slot, motif, vocab: EARPHONE_VOCAB_FIXTURE, sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS });
   assert.ok(abstraction);
   assert.match(abstraction!.rationale, /interface_detail/);
   assert.match(abstraction!.rationale, /无线蓝牙耳机/);
@@ -151,7 +151,7 @@ test('buildSourceAbstraction: rationale contains vocab product name and subtype'
 test('buildSourceAbstraction: structural fields come from PROFILES (not vocab)', () => {
   const slot = makeSlot('MacBook opening screen color transform reveal');
   const motif = makeMotif('dynamic_entry');
-  const abstraction = buildSourceAbstraction({ slot, motif, vocab: EARPHONE_VOCAB_FIXTURE });
+  const abstraction = buildSourceAbstraction({ slot, motif, vocab: EARPHONE_VOCAB_FIXTURE, sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS });
   assert.ok(abstraction);
   const profile = sourceSpecificProfile(abstraction!.subtype);
   assert.equal(abstraction!.sourcePattern, profile.sourcePattern);
@@ -161,7 +161,7 @@ test('buildSourceAbstraction: structural fields come from PROFILES (not vocab)',
 test('buildSourceAbstraction: targetCategory falls back to motif targetCategory when not provided', () => {
   const slot = makeSlot('side port camera lens module detail');
   const motif = makeMotif('dynamic_entry', 'earphone');
-  const abstraction = buildSourceAbstraction({ slot, motif, vocab: EARPHONE_VOCAB_FIXTURE });
+  const abstraction = buildSourceAbstraction({ slot, motif, vocab: EARPHONE_VOCAB_FIXTURE, sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS });
   assert.ok(abstraction);
   assert.match(abstraction!.rationale, /earphone/);
 });

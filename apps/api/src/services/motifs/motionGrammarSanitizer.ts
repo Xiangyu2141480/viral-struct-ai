@@ -1,20 +1,5 @@
 import type { MotionToken } from '@viral-struct/shared';
 
-export const SOURCE_SPECIFIC_TERMS = [
-  'keyboard',
-  'laptop',
-  'touchpad',
-  'rocket',
-  'hardware',
-  'macbook',
-  'apple',
-  '键盘',
-  '笔记本',
-  '触控板',
-  '火箭',
-  '硬件功能'
-];
-
 export interface MotionGrammarSanitizerResult {
   sanitizedIntent: string;
   motionTokens: MotionToken[];
@@ -145,7 +130,7 @@ const TOKEN_RULES: TokenRule[] = [
   }
 ];
 
-export function sanitizeMotionGrammarText(text: string): MotionGrammarSanitizerResult {
+export function sanitizeMotionGrammarText(text: string, sourceBannedTerms: readonly string[] = []): MotionGrammarSanitizerResult {
   const normalized = text.toLowerCase();
   const motionTokens = TOKEN_RULES
     .filter((rule) => rule.patterns.some((pattern) => pattern.test(text) || pattern.test(normalized)))
@@ -166,14 +151,15 @@ export function sanitizeMotionGrammarText(text: string): MotionGrammarSanitizerR
   return {
     sanitizedIntent,
     motionTokens: unique(motionTokens),
-    bannedSourceTerms: SOURCE_SPECIFIC_TERMS,
+    bannedSourceTerms: [...sourceBannedTerms],
     evidence
   };
 }
 
-export function containsSourceSpecificTerm(text: string): boolean {
+export function containsSourceSpecificTerm(text: string, sourceBannedTerms: readonly string[]): boolean {
+  if (sourceBannedTerms.length === 0) return false;
   const lower = text.toLowerCase();
-  return SOURCE_SPECIFIC_TERMS.some((term) => lower.includes(term.toLowerCase()));
+  return sourceBannedTerms.some((term) => term && lower.includes(term.toLowerCase()));
 }
 
 function joinHumanReadable(values: string[]): string {

@@ -41,6 +41,8 @@ import { inferSourceSpecificTransferSubtype } from './sourceSpecificAbstraction'
  */
 export interface BuildGapResolutionOptionsArgs {
   slot: ShotSlotNode;
+  /** Source-product-specific terms (derived from the scanned source graph) to keep out of target prompts. */
+  sourceBannedTerms: readonly string[];
   /**
    * matched = covered by a real asset (the three options are alternatives/enhancements);
    * partial = real asset placed but structurally incomplete; gap = no usable real asset.
@@ -86,6 +88,7 @@ function roleToVocabKey(role: string): VocabularyRoleKey {
 export interface DirectorPromptContext {
   slotId: string;
   role: string;
+  sourceBannedTerms: readonly string[];
   slotIntent?: string;
   acceptanceExamples: string[];
   acceptanceMotionTypes: string[];
@@ -430,7 +433,7 @@ function buildDirectorSpec(args: BuildGapResolutionOptionsArgs, brief?: MissingM
     };
   }
 
-  if (!containsDirectorSourceSpecificTerm(buildSlotText(args.slot))) {
+  if (!containsDirectorSourceSpecificTerm(buildSlotText(args.slot), args.sourceBannedTerms)) {
     return base;
   }
 
@@ -445,10 +448,11 @@ function buildDirectorPromptContext(
   const split = splitRejectIfForTransfer({
     ...args.slot.acceptanceCriteria,
     slotText: buildSlotText(args.slot),
-    targetCategory: args.contentBrief.category
+    targetCategory: args.contentBrief.category,
+    sourceBannedTerms: args.sourceBannedTerms
   });
   const acceptanceExamples =
-    args.slot.acceptanceCriteria?.anyOf.flatMap((entry) => entry.examples).filter((entry) => !containsSourceSpecificTerm(entry)) ?? [];
+    args.slot.acceptanceCriteria?.anyOf.flatMap((entry) => entry.examples).filter((entry) => !containsSourceSpecificTerm(entry, args.sourceBannedTerms)) ?? [];
   const acceptanceMotionTypes =
     args.slot.acceptanceCriteria?.anyOf.map((entry) => entry.motionType).filter((entry): entry is string => Boolean(entry)) ?? [];
   const transferVariables = args.motif?.transferVariables.map((entry) => ({
@@ -466,9 +470,10 @@ function buildDirectorPromptContext(
   return {
     slotId: args.slot.id,
     role: args.slot.role,
-    slotIntent: targetSafeSlotIntent(args.slot, spec),
-    acceptanceExamples: acceptanceExamples.map(safePromptText).filter((entry): entry is string => Boolean(entry)),
-    acceptanceMotionTypes: acceptanceMotionTypes.map(safePromptText).filter((entry): entry is string => Boolean(entry)),
+    sourceBannedTerms: args.sourceBannedTerms,
+    slotIntent: targetSafeSlotIntent(args.slot, spec, args.sourceBannedTerms),
+    acceptanceExamples: acceptanceExamples.map((entry) => safePromptText(entry, args.sourceBannedTerms)).filter((entry): entry is string => Boolean(entry)),
+    acceptanceMotionTypes: acceptanceMotionTypes.map((entry) => safePromptText(entry, args.sourceBannedTerms)).filter((entry): entry is string => Boolean(entry)),
     hardRejectIf: split.hardRejectIf,
     sourceSpecificRejectIf: split.sourceSpecificRejectIf,
     sourceSpecificMeaning: split.sourceSpecificRejectIf.length
@@ -532,7 +537,7 @@ function targetActionLine(context: DirectorPromptContext, spec: ZhRoleSpec): str
     ...preferred
   ].filter((entry): entry is string => Boolean(entry));
   const resolved = uniqueNonEmpty(values).slice(0, 8);
-  return zhList(resolved.length ? resolved : spec.animationHints);
+  return zhList(resolved.length ? resolved : spec.animationHints, context.sourceBannedTerms);
 }
 
 function buildLayerLine(context: DirectorPromptContext, spec: ZhRoleSpec): string {
@@ -576,40 +581,43 @@ function buildAigcActionSteps(context: DirectorPromptContext, spec: ZhRoleSpec):
   ].join(' → ');
 }
 
-function safePromptText(text: string | undefined): string | undefined {
+function safePromptText(text: string | undefined, sourceBannedTerms: readonly string[]): string | undefined {
   if (!text) return undefined;
-  if (!containsDirectorSourceSpecificTerm(text)) return text;
-  const sanitized = sanitizeSourceSpecificText(text);
+  if (!containsDirectorSourceSpecificTerm(text, sourceBannedTerms)) return text;
+  const sanitized = sanitizeSourceSpecificText(text, sourceBannedTerms);
   return sanitized.length > 0 ? sanitized : undefined;
 }
 
-function targetSafeSlotIntent(slot: ShotSlotNode, spec: ZhRoleSpec): string | undefined {
+function targetSafeSlotIntent(slot: ShotSlotNode, spec: ZhRoleSpec, sourceBannedTerms: readonly string[]): string | undefined {
   const raw = slot.intent?.purpose;
   if (!raw) {
     return `围绕「${spec.label}」完成该镜头的核心画面表达`;
   }
-  if (!containsDirectorSourceSpecificTerm(raw)) {
+  if (!containsDirectorSourceSpecificTerm(raw, sourceBannedTerms)) {
     return raw;
   }
-  const sanitized = sanitizeSourceSpecificText(raw);
-  if (sanitized && !containsDirectorSourceSpecificTerm(sanitized)) {
+  const sanitized = sanitizeSourceSpecificText(raw, sourceBannedTerms);
+  if (sanitized && !containsDirectorSourceSpecificTerm(sanitized, sourceBannedTerms)) {
     return sanitized;
   }
   return `围绕「${spec.label}」完成该镜头的核心画面表达`;
 }
 
-function sanitizeSourceSpecificText(text: string): string {
-  return text
-    .replace(/MacBook|Apple|laptop|keyboard|trackpad|touchpad|screen|port|interface|camera|hinge|chassis|rocket|hardware|purchase window|multi[-_\s]?window|system interaction/gi, '目标品类等价动作')
-    .replace(/笔记本|苹果|键盘|触控板|屏幕|接口|摄像头|机身|火箭|购买窗口|硬件功能|硬件|开合结构|闭合|按键|功能部件|多窗口|系统交互|侧边/g, '目标品类等价动作')
-    .replace(/\s+/g, ' ')
-    .trim();
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function containsDirectorSourceSpecificTerm(text: string): boolean {
-  return containsSourceSpecificTerm(text)
-    || /MacBook|Apple|laptop|keyboard|trackpad|touchpad|screen|port|interface|camera|hinge|chassis|rocket|hardware|purchase window|multi[-_\s]?window|system interaction/i.test(text)
-    || /笔记本|苹果|键盘|触控板|屏幕|接口|摄像头|机身|火箭|购买窗口|硬件功能|硬件|开合结构|闭合|按键|功能部件|多窗口|系统交互|侧边/.test(text);
+function sanitizeSourceSpecificText(text: string, sourceBannedTerms: readonly string[]): string {
+  let out = text;
+  for (const term of sourceBannedTerms) {
+    if (!term) continue;
+    out = out.replace(new RegExp(escapeRegExp(term), 'gi'), '目标品类等价动作');
+  }
+  return out.replace(/\s+/g, ' ').trim();
+}
+
+function containsDirectorSourceSpecificTerm(text: string, sourceBannedTerms: readonly string[]): boolean {
+  return containsSourceSpecificTerm(text, sourceBannedTerms);
 }
 
 function coverageSemanticSummary(coverage?: ContextualSlotCoverage): string | undefined {
@@ -629,10 +637,10 @@ function candidateConstraintNotes(constraints: ContextualSlotCoverage['candidate
     .map(([key, value]) => value === true ? key : `${key}: ${value}`);
 }
 
-function zhList(values: string[]): string {
+function zhList(values: string[], sourceBannedTerms: readonly string[]): string {
   const translated = values
     .map(translateEquivalent)
-    .filter((value) => value.length > 0 && !containsSourceSpecificTerm(value));
+    .filter((value) => value.length > 0 && !containsSourceSpecificTerm(value, sourceBannedTerms));
   return uniqueNonEmpty(translated).join('、');
 }
 

@@ -159,7 +159,7 @@
     "motionGrammar": {
       "id": "beverage_lemon_slice_match_cut_motion_grammar",
       "name": "Lemon Slice Match Cut grammar",
-      "motionTokens": ["match_cut", "bottle_rotation", "clean_hold"],
+      "motionTokens": ["match_cut", "object_rotation", "clean_hold"],
       "objectContinuity": "lemon slice -> bottle label -> cup rim",
       "cameraContinuity": "Match circular shapes across the cut.",
       "rhythm": "match_cut",

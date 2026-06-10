@@ -37,6 +37,7 @@ import { buildOrchestratedTransitions } from './transitionOrchestrator';
 import { buildSourceAbstraction } from './sourceSpecificAbstraction';
 import { DEFAULT_ASPECT_RATIO, DEFAULT_HYPERFRAMES_TRANSITION_WEIGHT } from './constants';
 import { translateCategoryEquivalents } from './categoryEquivalentTranslator';
+import { deriveSourceIdentityBanlist } from './sourceIdentityBanlist';
 
 type LlmClient = ReturnType<typeof createOpenAICompatibleClient>;
 
@@ -68,6 +69,11 @@ export interface BuildOrchestratedTimelineInput {
   model?: string;
   /** Injected for tests; when omitted, the translator is CALLED (mandatory LLM, no fallback). */
   vocabulary?: CategoryEquivalentVocabulary;
+  /**
+   * Source-product-specific terms to keep out of target output, derived from the SCANNED source graph.
+   * Injected for tests; when omitted, deriveSourceIdentityBanlist is CALLED (mandatory LLM, no fallback).
+   */
+  sourceBannedTerms?: readonly string[];
 }
 
 /**
@@ -88,6 +94,13 @@ export async function buildOrchestratedTimeline(input: BuildOrchestratedTimeline
     clientFactory: input.clientFactory,
     model: input.model
   });
+
+  // Source-leak guardrails follow whatever source was actually scanned (no hardcoded MacBook list).
+  const sourceBannedTerms = input.sourceBannedTerms ?? (await deriveSourceIdentityBanlist({
+    structureGraph,
+    clientFactory: input.clientFactory,
+    model: input.model
+  })).terms;
 
   // P0-B (opt-in): re-budget the functional skeleton into ~6-8 canonical beats. When enabled we run the
   // whole pipeline on the rewritten (K representative slot) graph + a budgeted timing plan; otherwise we
@@ -113,7 +126,7 @@ export async function buildOrchestratedTimeline(input: BuildOrchestratedTimeline
           categoryPreset: input.categoryPreset
         });
 
-  const match = await runMatch(input, workingGraph);
+  const match = await runMatch(input, workingGraph, sourceBannedTerms);
   const matchBySlot = new Map(match.matches.map((entry) => [entry.slotId, entry]));
   const coverageBySlot = new Map(
     (assetSupplyContext.contextualCoverage?.slotCoverages ?? []).map((coverage) => [coverage.slotId, coverage])
@@ -151,7 +164,7 @@ export async function buildOrchestratedTimeline(input: BuildOrchestratedTimeline
     });
     const tier = fillStatusToTier(fillStatus, slotMatch);
     const referenceAssetIds = selectReferenceAssetIds(slotMatch, coverage, assetCards);
-    const evidence = buildEvidence(coverage, slotMatch, gate.reasons);
+    const evidence = buildEvidence(coverage, slotMatch, gate.reasons, sourceBannedTerms);
     const motionTokens = sanitizeMotionGrammarText(buildSlotText(slot)).motionTokens;
     const transferableIntent = motionTokens.length > 0
       ? sanitizeMotionGrammarText(slot.intent?.purpose ?? buildSlotText(slot)).sanitizedIntent
@@ -160,7 +173,8 @@ export async function buildOrchestratedTimeline(input: BuildOrchestratedTimeline
       slot,
       motif,
       targetCategory,
-      vocab
+      vocab,
+      sourceBannedTerms
     });
 
     const fill = buildFill({
@@ -177,7 +191,8 @@ export async function buildOrchestratedTimeline(input: BuildOrchestratedTimeline
       fillStatus,
       motif,
       compressionBeat,
-      vocab
+      vocab,
+      sourceBannedTerms
     });
 
     return {
@@ -194,7 +209,7 @@ export async function buildOrchestratedTimeline(input: BuildOrchestratedTimeline
       fillStatus,
       // sourceIntent is provenance only; drop it whenever it carries source-product-specific semantics
       // so the raw source intent can never leak through the handoff (§12; mirrors the PR #60 leak fix).
-      sourceIntent: safeSourceIntent(slot.intent?.purpose),
+      sourceIntent: safeSourceIntent(slot.intent?.purpose, sourceBannedTerms),
       transferableIntent,
       sourceAbstraction,
       motifType: motif?.motifType,
@@ -223,7 +238,7 @@ export async function buildOrchestratedTimeline(input: BuildOrchestratedTimeline
     renderProfile: buildRenderProfile(structureGraph),
     slots,
     transitions,
-    reusableAssetPacks: buildReusableAssetPacks({ slots, contentBrief, vocab }),
+    reusableAssetPacks: buildReusableAssetPacks({ slots, contentBrief, vocab, sourceBannedTerms }),
     meta: {
       productName: contentBrief.productName,
       targetCategory,
@@ -242,7 +257,7 @@ export async function buildOrchestratedTimeline(input: BuildOrchestratedTimeline
 
 // --- matching ---------------------------------------------------------------
 
-async function runMatch(input: BuildOrchestratedTimelineInput, graph: ViralStructureGraph): Promise<MatchSlotsResultWithSource> {
+async function runMatch(input: BuildOrchestratedTimelineInput, graph: ViralStructureGraph, sourceBannedTerms: readonly string[]): Promise<MatchSlotsResultWithSource> {
   if (input.useLlmMatcher === false) {
     const result = matchSlots(graph, input.assetCards, input.boundaries);
     return {
@@ -256,7 +271,8 @@ async function runMatch(input: BuildOrchestratedTimelineInput, graph: ViralStruc
     assets: input.assetCards,
     boundaries: input.boundaries,
     clientFactory: input.clientFactory,
-    model: input.model
+    model: input.model,
+    sourceBannedTerms
   });
 }
 
@@ -372,6 +388,7 @@ interface BuildFillArgs {
   motif?: ViralMotifAnnotation;
   compressionBeat?: StructuralCompressionBeat;
   vocab: CategoryEquivalentVocabulary;
+  sourceBannedTerms: readonly string[];
 }
 
 function buildFill(args: BuildFillArgs): SlotFillMatched | SlotFillGap {
@@ -399,7 +416,8 @@ function buildFill(args: BuildFillArgs): SlotFillMatched | SlotFillGap {
       fillStatus: args.fillStatus,
       motif: args.motif,
       gateSourceCascade,
-      vocab: args.vocab
+      vocab: args.vocab,
+      sourceBannedTerms: args.sourceBannedTerms
     });
     return {
       kind: 'matched',
@@ -432,7 +450,8 @@ function buildFill(args: BuildFillArgs): SlotFillMatched | SlotFillGap {
       fillStatus: args.fillStatus,
       motif: args.motif,
       gateSourceCascade,
-      vocab: args.vocab
+      vocab: args.vocab,
+      sourceBannedTerms: args.sourceBannedTerms
     });
     const missing = args.slotMatch?.missingDescription;
     return {
@@ -464,7 +483,8 @@ function buildFill(args: BuildFillArgs): SlotFillMatched | SlotFillGap {
     fillStatus: args.fillStatus,
     motif: args.motif,
     gateSourceCascade,
-    vocab: args.vocab
+    vocab: args.vocab,
+    sourceBannedTerms: args.sourceBannedTerms
   });
   return {
     kind: 'gap',
@@ -501,7 +521,8 @@ function treatmentSummary(match: SlotMatch | undefined): string {
 function buildEvidence(
   coverage: ContextualSlotCoverage | undefined,
   match: SlotMatch | undefined,
-  gateReasons: string[]
+  gateReasons: string[],
+  sourceBannedTerms: readonly string[]
 ): OrchestratedSlotEvidence {
   // Evidence is a downstream-facing field, so its labels must be leak-safe too: a raw ingredient label
   // can be the source caption ("MacBook Neo / From $599 ..."). Drop leaky matched criteria; replace a
@@ -509,10 +530,10 @@ function buildEvidence(
   const matchedIngredients = unique([
     ...(coverage?.availableIngredients?.map((entry) => entry.requiredIngredientId) ?? []),
     ...(match?.matchedCriteria ?? [])
-  ]).filter((label) => !containsSourceSpecificTerm(label));
+  ]).filter((label) => !containsSourceSpecificTerm(label, sourceBannedTerms));
   const missingIngredients = unique([
-    ...(coverage?.missingIngredients?.map((entry) => safeLabel(entry.label, entry.requiredIngredientId)) ?? []),
-    ...(coverage?.weakIngredients?.map((entry) => safeLabel(entry.label, entry.requiredIngredientId)) ?? [])
+    ...(coverage?.missingIngredients?.map((entry) => safeLabel(entry.label, entry.requiredIngredientId, sourceBannedTerms)) ?? []),
+    ...(coverage?.weakIngredients?.map((entry) => safeLabel(entry.label, entry.requiredIngredientId, sourceBannedTerms)) ?? [])
   ]);
   return {
     coverageStatus: coverage?.coverageStatus,
@@ -522,8 +543,8 @@ function buildEvidence(
   };
 }
 
-function safeLabel(label: string, fallback: string): string {
-  return containsSourceSpecificTerm(label) ? fallback : label;
+function safeLabel(label: string, fallback: string, sourceBannedTerms: readonly string[]): string {
+  return containsSourceSpecificTerm(label, sourceBannedTerms) ? fallback : label;
 }
 
 // --- references -------------------------------------------------------------
@@ -670,15 +691,9 @@ function inferTargetCategory(brief: ContentBrief, categoryPreset?: CategoryPrese
 
 // --- helpers ----------------------------------------------------------------
 
-function safeSourceIntent(purpose: string | undefined): string | undefined {
+function safeSourceIntent(purpose: string | undefined, sourceBannedTerms: readonly string[]): string | undefined {
   if (!purpose) return undefined;
-  return containsDirectorSourceSpecificTerm(purpose) ? undefined : purpose;
-}
-
-function containsDirectorSourceSpecificTerm(text: string): boolean {
-  return containsSourceSpecificTerm(text)
-    || /MacBook|Apple|laptop|keyboard|trackpad|touchpad|screen|port|interface|camera|hinge|chassis|rocket|hardware|purchase window|multi[-_\s]?window|system interaction/i.test(text)
-    || /笔记本|苹果|键盘|触控板|屏幕|接口|摄像头|机身|火箭|购买窗口|硬件功能|硬件|开合结构|闭合|按键|功能部件|多窗口|系统交互|侧边/.test(text);
+  return containsSourceSpecificTerm(purpose, sourceBannedTerms) ? undefined : purpose;
 }
 
 function buildSlotText(slot: ShotSlotNode): string {
@@ -708,6 +723,7 @@ function buildReusableAssetPacks(args: {
   slots: OrchestratedSlot[];
   contentBrief: ContentBrief;
   vocab: CategoryEquivalentVocabulary;
+  sourceBannedTerms: readonly string[];
 }): ReusableAssetPackPlan[] {
   const slotIdsByPredicate = (predicate: (slot: OrchestratedSlot) => boolean): string[] => {
     const ids = args.slots.filter(predicate).map((slot) => slot.slotId);
@@ -716,7 +732,7 @@ function buildReusableAssetPacks(args: {
   const slotIdsByRole = (roles: string[]): string[] => slotIdsByPredicate((slot) => roles.includes(slot.role));
   const actionsByPredicate = (predicate: (slot: OrchestratedSlot) => boolean, fallback: string): string => {
     const matchingSlots = args.slots.filter(predicate);
-    const vocabulary = packActionVocabulary(matchingSlots.length ? matchingSlots : args.slots);
+    const vocabulary = packActionVocabulary(matchingSlots.length ? matchingSlots : args.slots, args.sourceBannedTerms);
     return vocabulary.slice(0, 5).join('、') || fallback;
   };
   const motifSlotIds = slotIdsByPredicate((slot) =>
@@ -863,7 +879,7 @@ function buildReusableAssetPacks(args: {
   return packs;
 }
 
-function packActionVocabulary(slots: OrchestratedSlot[]): string[] {
+function packActionVocabulary(slots: OrchestratedSlot[], sourceBannedTerms: readonly string[]): string[] {
   return unique(
     slots.flatMap((slot) => [
       ...(slot.sourceAbstraction?.targetEquivalentActions ?? []),
@@ -871,7 +887,7 @@ function packActionVocabulary(slots: OrchestratedSlot[]): string[] {
       slot.sourceAbstraction?.targetEquivalentLabel
     ])
       .filter((value): value is string => Boolean(value))
-      .filter((value) => !containsSourceSpecificTerm(value))
+      .filter((value) => !containsSourceSpecificTerm(value, sourceBannedTerms))
   );
 }
 

@@ -38,3 +38,14 @@ export const EARPHONE_VOCAB_FIXTURE: CategoryEquivalentVocabulary = {
   },
   connective: { afterUseResult: '戴上之后即时的安静与沉浸', productHero: '耳机产品 hero 定格' }
 };
+
+/**
+ * Source-identity banlist fixture representing "the scanned source video is the MacBook ad". Mirrors what
+ * deriveSourceIdentityBanlist would return for that source, so unit tests can exercise the source-leak
+ * guardrails with an explicit banlist (production derives this from the actual scanned source graph).
+ */
+export const MACBOOK_SOURCE_BANNED_TERMS: readonly string[] = [
+  'macbook', 'apple', '苹果', 'laptop', '笔记本', 'keyboard', '键盘', 'trackpad', 'touchpad', '触控板',
+  'screen', '屏幕', 'port', '接口', 'camera', '摄像头', 'hinge', 'chassis', '机身', 'hardware', '硬件',
+  'rocket', '火箭', 'purchase window', '购买窗口', '开合结构'
+];

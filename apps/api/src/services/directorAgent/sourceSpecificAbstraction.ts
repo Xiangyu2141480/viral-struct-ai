@@ -6,6 +6,7 @@ interface SourceSpecificAbstractionInput {
   motif?: ViralMotifAnnotation;
   targetCategory?: string;
   vocab: CategoryEquivalentVocabulary;
+  sourceBannedTerms: readonly string[];
 }
 
 interface SubtypeProfile {
@@ -76,7 +77,7 @@ export function inferSourceSpecificTransferSubtype(slot: ShotSlotNode, motif?: V
 }
 
 export function buildSourceAbstraction(input: SourceSpecificAbstractionInput): SourceAbstraction | undefined {
-  if (!input.motif && !containsSourceSpecificTerm(buildSlotText(input.slot))) {
+  if (!input.motif && !containsSourceSpecificTerm(buildSlotText(input.slot), input.sourceBannedTerms)) {
     return undefined;
   }
   const subtype = inferSourceSpecificTransferSubtype(input.slot, input.motif);

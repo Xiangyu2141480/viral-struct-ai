@@ -4,7 +4,7 @@ import { OrchestratedTimelineSchema, type AssetSupplyContext, type CreativeIngre
 import { buildAssetSupplyContext } from '../assetManager/assetSupplyContextBuilder';
 import { buildOrchestratedTimeline } from './orchestratedTimelineBuilder';
 import { makeAssets, makeContentBrief, makeFakeClient, makeGraph } from './testFixtures';
-import { EARPHONE_VOCAB_FIXTURE } from './vocabularyFixture';
+import { EARPHONE_VOCAB_FIXTURE, MACBOOK_SOURCE_BANNED_TERMS } from './vocabularyFixture';
 
 const MODEL = 'fake-model';
 
@@ -25,7 +25,8 @@ test('produces exactly one OrchestratedSlot per shotSlot, in time order, schema-
     contentBrief: makeContentBrief(),
     clientFactory: makeFakeClient(happyAlignments()),
     model: MODEL,
-    vocabulary: EARPHONE_VOCAB_FIXTURE
+    vocabulary: EARPHONE_VOCAB_FIXTURE,
+    sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS
   });
 
   assert.equal(timeline.slots.length, graph.shotSlots.length);
@@ -49,7 +50,8 @@ test('degradation ladder: every tier carries 3 channels; recommendation differs 
     contentBrief: makeContentBrief(),
     clientFactory: makeFakeClient(happyAlignments()),
     model: MODEL,
-    vocabulary: EARPHONE_VOCAB_FIXTURE
+    vocabulary: EARPHONE_VOCAB_FIXTURE,
+    sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS
   });
 
   const open = timeline.slots.find((s) => s.slotId === 'slot_open')!.fill;
@@ -108,7 +110,8 @@ test('source-specific gate downgrades a high-score match to partial (never match
       slot_cta: { assetId: null, quality: 0.2 }
     }),
     model: MODEL,
-    vocabulary: EARPHONE_VOCAB_FIXTURE
+    vocabulary: EARPHONE_VOCAB_FIXTURE,
+    sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS
   });
 
   const open = timeline.slots.find((s) => s.slotId === 'slot_open')!.fill;
@@ -156,7 +159,8 @@ test('source-specific gate is evaluated before asset presence and quality so it 
       slot_source_specific_no_asset: { assetId: null, quality: 0.1, missing: 'no matching asset' }
     }),
     model: MODEL,
-    vocabulary: EARPHONE_VOCAB_FIXTURE
+    vocabulary: EARPHONE_VOCAB_FIXTURE,
+    sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS
   });
 
   assert.equal(timeline.slots[0].fillStatus, 'source_specific_not_transferable');
@@ -172,7 +176,8 @@ test('falls back to rule-based matching and still emits a complete timeline when
       throw new Error('LLM unreachable');
     },
     model: MODEL,
-    vocabulary: EARPHONE_VOCAB_FIXTURE
+    vocabulary: EARPHONE_VOCAB_FIXTURE,
+    sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS
   });
 
   assert.equal(timeline.meta.matchSource, 'rule_based');
@@ -191,7 +196,8 @@ test('useLlmMatcher:false uses the rule-based matcher without touching the LLM',
     clientFactory: () => {
       throw new Error('should not be called');
     },
-    vocabulary: EARPHONE_VOCAB_FIXTURE
+    vocabulary: EARPHONE_VOCAB_FIXTURE,
+    sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS
   });
   assert.equal(timeline.meta.matchSource, 'rule_based');
 });
@@ -210,7 +216,8 @@ test('does not mutate the Asset Manager output it consumes', async () => {
     contentBrief: makeContentBrief(),
     clientFactory: makeFakeClient(happyAlignments()),
     model: MODEL,
-    vocabulary: EARPHONE_VOCAB_FIXTURE
+    vocabulary: EARPHONE_VOCAB_FIXTURE,
+    sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS
   });
 
   assert.equal(JSON.stringify(supply), before);
@@ -239,7 +246,8 @@ test('no source-product term leaks into any POSITIVE prompt/instruction even fro
     contentBrief: makeContentBrief(),
     clientFactory: makeFakeClient(happyAlignments()),
     model: MODEL,
-    vocabulary: EARPHONE_VOCAB_FIXTURE
+    vocabulary: EARPHONE_VOCAB_FIXTURE,
+    sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS
   });
 
   // Negative-direction fields legitimately name banned terms as guardrails ("no MacBook"); the leak we
@@ -476,7 +484,8 @@ test('weak kinetic assembly motif is not treated as fully matched and carries mo
       slot_block_004_asset_001: { assetId: 'plain_002_hand_pickup', quality: 0.94, matchedCriteria: ['product visible'] }
     }),
     model: MODEL,
-    vocabulary: EARPHONE_VOCAB_FIXTURE
+    vocabulary: EARPHONE_VOCAB_FIXTURE,
+    sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS
   });
 
   const slot = timeline.slots[0];
@@ -524,7 +533,8 @@ test('source-specific hardware semantics are downgraded and rewritten to target-
       slot_hardware_interface: { assetId: 'asset_open', quality: 0.93, matchedCriteria: ['clear product closeup'] }
     }),
     model: MODEL,
-    vocabulary: EARPHONE_VOCAB_FIXTURE
+    vocabulary: EARPHONE_VOCAB_FIXTURE,
+    sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS
   });
 
   const slot = timeline.slots[0];
@@ -584,7 +594,8 @@ test('source-specific slots expose an explicit abstraction layer for Video Agent
     assetCards: makeAssets(),
     contentBrief: makeContentBrief(),
     useLlmMatcher: false,
-    vocabulary: EARPHONE_VOCAB_FIXTURE
+    vocabulary: EARPHONE_VOCAB_FIXTURE,
+    sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS
   });
 
   const abstractions = new Map(timeline.slots.map((slot) => [slot.slotId, slot.sourceAbstraction]));
@@ -610,7 +621,8 @@ test('default Director Agent timing compresses source timeline into a high-conve
       slot_block_004_asset_001: { assetId: 'plain_002_hand_pickup', quality: 0.94 }
     }),
     model: MODEL,
-    vocabulary: EARPHONE_VOCAB_FIXTURE
+    vocabulary: EARPHONE_VOCAB_FIXTURE,
+    sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS
   });
 
   assert.equal(timeline.meta.targetDurationMode, 'high_conversion_20s');
@@ -635,7 +647,8 @@ test('Director Agent emits a reusable asset-pack plan for Video Agent handoff', 
       slot_block_004_asset_001: { assetId: 'plain_002_hand_pickup', quality: 0.94 }
     }),
     model: MODEL,
-    vocabulary: EARPHONE_VOCAB_FIXTURE
+    vocabulary: EARPHONE_VOCAB_FIXTURE,
+    sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS
   });
 
   const reusableAssetPacks = timeline.reusableAssetPacks ?? [];

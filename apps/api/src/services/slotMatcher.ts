@@ -444,12 +444,13 @@ interface AssetSummary {
   };
 }
 
-function summarizeSlot(slot: ViralStructureGraph['shotSlots'][number]): SlotSummary {
+function summarizeSlot(slot: ViralStructureGraph['shotSlots'][number], sourceBannedTerms: readonly string[]): SlotSummary {
   const acceptanceCriteria = slot.acceptanceCriteria
     ? {
         anyOf: slot.acceptanceCriteria.anyOf,
         ...splitRejectIfForTransfer({
           ...slot.acceptanceCriteria,
+          sourceBannedTerms,
           slotText: [
             slot.intent?.purpose,
             slot.intent?.motionPattern,
@@ -618,11 +619,13 @@ function reasonFromAlignment(result: AlignmentResult, status: SlotMatch['status'
 function buildLLMMatch(
   slot: ViralStructureGraph['shotSlots'][number],
   result: AlignmentResult,
+  sourceBannedTerms: readonly string[],
   asset?: AssetCard
 ): SlotMatch {
   const assetId = result.assetId ?? undefined;
   const sourceSplit = splitRejectIfForTransfer({
     ...slot.acceptanceCriteria,
+    sourceBannedTerms,
     slotText: `${slot.intent?.purpose ?? ''}\n${slot.sourceInstance?.specificAction ?? ''}`
   });
   const hardRejectTriggered = sourceSplit.hardRejectIf.some((item) => result.missing.includes(item));
@@ -667,17 +670,19 @@ export interface MatchSlotsLLMOptions {
   boundaries?: Boundary[];
   clientFactory?: () => Client;
   model?: string;
+  /** Source-product-specific terms (derived from the scanned source graph) used to classify source-specific rejects. */
+  sourceBannedTerms?: readonly string[];
 }
 
 export async function matchSlotsLLM(opts: MatchSlotsLLMOptions): Promise<{ matches: SlotMatch[]; gaps: MaterialGap[] }> {
-  const { graph, assets, clientFactory, model } = opts;
+  const { graph, assets, clientFactory, model, sourceBannedTerms = [] } = opts;
   const client = (clientFactory ?? createOpenAICompatibleClient)();
   const modelId = model ?? process.env.LLM_MODEL;
   if (!modelId) {
     throw new Error('LLM_MODEL is required for matchSlotsLLM.');
   }
 
-  const slotSummaries = graph.shotSlots.map(summarizeSlot);
+  const slotSummaries = graph.shotSlots.map((slot) => summarizeSlot(slot, sourceBannedTerms));
   const assetSummaries = assets.map(summarizeAsset);
 
   const messages = [
@@ -721,7 +726,7 @@ export async function matchSlotsLLM(opts: MatchSlotsLLMOptions): Promise<{ match
     if (aligned.assetId && !knownAssetIds.has(aligned.assetId)) {
       throw new Error(`LLM returned unknown assetId ${aligned.assetId} for slot ${slot.id}`);
     }
-    return buildLLMMatch(slot, aligned, aligned.assetId ? assetById.get(aligned.assetId) : undefined);
+    return buildLLMMatch(slot, aligned, sourceBannedTerms, aligned.assetId ? assetById.get(aligned.assetId) : undefined);
   });
 
   const gaps: MaterialGap[] = matches
