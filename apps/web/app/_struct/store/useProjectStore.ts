@@ -77,6 +77,8 @@ type ApiMode = 'mock' | 'live';
 interface ProjectState {
   // ── data ──────────────────────────────────────────────────
   sourceVideo: SourceVideo;
+  /** Object URL of the just-uploaded sample video — drives its first-frame cover. */
+  sourceVideoPreviewUrl: string | null;
   rawProductDescription: string;
   product: TargetProduct;
   contentBrief: ContentBrief | null;
@@ -274,6 +276,7 @@ const BLANK_PRODUCT: TargetProduct = { name: '', category: '', price: '', stock:
 
 const initialState = {
   sourceVideo: EMPTY_SOURCE,
+  sourceVideoPreviewUrl: null as string | null,
   rawProductDescription: '',
   product: BLANK_PRODUCT,
   contentBrief: null as ContentBrief | null,
@@ -362,6 +365,11 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   },
 
   analyzeSample: async (input) => {
+    if (input.file) {
+      const prevPreview = get().sourceVideoPreviewUrl;
+      if (prevPreview) URL.revokeObjectURL(prevPreview);
+      set({ sourceVideoPreviewUrl: URL.createObjectURL(input.file) });
+    }
     set({ analyzing: true, lastError: null });
     try {
       const { sourceVideo, warnings } = await analyzeSampleApi(input);
@@ -377,7 +385,11 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
 
   scanSample: async (file) => {
     // Real rough scan: upload → async VLM job → poll → real structure timeline.
-    set({ scanning: true, scanStage: '上传视频…', lastError: null });
+    // Keep a local object URL of the uploaded file so its first frame can be shown
+    // as the sample-video cover immediately (no wait for a server-rendered poster).
+    const prevPreview = get().sourceVideoPreviewUrl;
+    if (prevPreview) URL.revokeObjectURL(prevPreview);
+    set({ scanning: true, scanStage: '上传视频…', lastError: null, sourceVideoPreviewUrl: URL.createObjectURL(file) });
     try {
       const { jobId } = await startScan(file);
       for (let i = 0; i < 150; i++) {

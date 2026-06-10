@@ -19,6 +19,7 @@ import {
   SvgHookShape,
   TimeRuler,
   Toast,
+  VideoFirstFrame,
 } from './components';
 import { AbstractStructureBand, ConcreteFilmStrip, MigrationFlow, SyncRails } from './viz';
 import type { FineBlockDetail } from './api/scan';
@@ -102,6 +103,7 @@ const FineDetailView = ({ fine }: { fine: FineBlockDetail }) => {
 
 export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
   const v = useProjectStore((s) => s.sourceVideo);
+  const sourceVideoPreviewUrl = useProjectStore((s) => s.sourceVideoPreviewUrl);
   const analyzing = useProjectStore((s) => s.analyzing);
   const scanning = useProjectStore((s) => s.scanning);
   const scanStage = useProjectStore((s) => s.scanStage);
@@ -238,12 +240,15 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
               borderRadius: 4, position: 'relative', overflow: 'hidden',
               display: 'grid', placeItems: 'center',
             }}>
-              <SvgHookShape />
+              {/* Cover = the uploaded video's own first frame; abstract glyph only as fallback. */}
+              {sourceVideoPreviewUrl ? <VideoFirstFrame url={sourceVideoPreviewUrl} /> : <SvgHookShape />}
               <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, transparent 40%, rgba(0,0,0,0.6))' }} />
-              <div style={{ position: 'absolute', bottom: 6, left: 6, right: 6, fontSize: 9, color: '#fff', fontFamily: 'var(--ff-mono)' }}>
+              <div style={{ position: 'absolute', bottom: 6, left: 6, right: 6, fontSize: 9, color: '#fff', fontFamily: 'var(--ff-mono)', zIndex: 1 }}>
                 {v.duration}s · 9:16
               </div>
-              <Icon name="play" size={18} />
+              <span style={{ position: 'relative', zIndex: 1, color: '#fff', display: 'grid', placeItems: 'center' }}>
+                <Icon name="play" size={18} />
+              </span>
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 2 }}>{v.title}</div>

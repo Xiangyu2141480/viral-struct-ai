@@ -89,7 +89,7 @@ export async function analyzeVideoFile(input: AnalyzeVideoFileInput): Promise<Vi
     const metadata = await readVideoMetadata(input.videoId, input.filePath);
     const stem = safeFileStem(input.videoId);
     const keyframes = await extractKeyframes(input.filePath, stem, metadata.duration);
-    const cover = await extractCover(input.filePath, stem, metadata.duration);
+    const cover = await extractCover(input.filePath, stem);
     const transcript = buildTranscript(input.manualTranscript, metadata.duration, false);
     const warnings = input.manualTranscript?.trim()
       ? []
@@ -179,11 +179,12 @@ async function readVideoMetadata(videoId: string, filePath: string): Promise<Vid
   };
 }
 
-async function extractCover(filePath: string, stem: string, duration: number): Promise<Keyframe> {
+async function extractCover(filePath: string, stem: string): Promise<Keyframe> {
   const coverDir = getCoverDir();
   await mkdir(coverDir, { recursive: true });
 
-  const time = round(Math.min(Math.max(duration * 0.1, 0), 1));
+  // Cover = the video's very first frame (time 0), extracted directly from the source.
+  const time = 0;
   const filename = `${stem}_cover.jpg`;
   const outputPath = path.join(coverDir, filename);
   await extractFrame(filePath, outputPath, time);
@@ -191,7 +192,7 @@ async function extractCover(filePath: string, stem: string, duration: number): P
   return {
     time,
     url: `/media/covers/${filename}`,
-    description: '真实视频封面帧'
+    description: '真实视频首帧封面'
   };
 }
 

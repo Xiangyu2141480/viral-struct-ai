@@ -12,6 +12,7 @@ import {
   type Transition,
   type TransitionTypeKey,
 } from './data';
+import { VideoFirstFrame } from './components';
 import { useProjectStore } from './store/useProjectStore';
 
 /* ============================================================
@@ -236,16 +237,18 @@ export const MigrationFlow = () => {
           const y = matCy(i) - MAT_H / 2;
           return (
             <div key={m.id} className="mat-vessel" style={{ top: y, height: MAT_H }}>
-              <div className="mat-vessel-thumb" style={{ background: m.color || 'var(--surface-3)' }}>
-                {m.kind === 'text' ?
-                <span className="mono" style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)' }}>TXT</span> :
-
-                <svg viewBox="0 0 24 24" width="14" height="14">
+              <div className="mat-vessel-thumb" style={{ background: m.color || 'var(--surface-3)', position: 'relative', overflow: 'hidden' }}>
+                {m.kind === 'video' && typeof m.url === 'string' && m.url && !/\.(png|jpe?g|gif|webp|avif)$/i.test(m.url) ? (
+                  <VideoFirstFrame url={m.url} />
+                ) : m.kind === 'text' ? (
+                  <span className="mono" style={{ fontSize: 11, color: 'rgba(255,255,255,0.7)' }}>TXT</span>
+                ) : (
+                  <svg viewBox="0 0 24 24" width="14" height="14">
                     <rect x="3" y="4" width="18" height="16" rx="1" fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth="1.5" />
                     <circle cx="9" cy="10" r="1.5" fill="rgba(255,255,255,0.55)" />
                     <path d="M21 16l-5-5-10 9" fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth="1.5" />
                   </svg>
-                }
+                )}
               </div>
               <div className="mat-vessel-body">
                 <div className="mat-vessel-name">{m.subject}</div>

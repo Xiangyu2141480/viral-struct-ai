@@ -440,6 +440,43 @@ const fmtRange = (start?: number, end?: number): string | null => {
   return `${start.toFixed(1)}–${end.toFixed(1)}s`;
 };
 
+/* ─── Video first-frame cover ───────────────────────────────
+   Show a real video's own first decoded frame as its still cover — no generated
+   poster image and no backend ffmpeg. A `#t=0.1` media fragment plus an explicit
+   seek makes the browser paint frame ~0 instead of a black box. Safe across
+   origins: a <video> element renders cross-origin sources fine (only a <canvas>
+   pixel readback would taint). */
+
+/** A url that is already a still image (use it directly, no frame extraction). */
+const isImageUrl = (url?: string): url is string =>
+  typeof url === 'string' && /\.(png|jpe?g|gif|webp|avif)$/i.test(url);
+
+/** Append a tiny media fragment so the first frame paints as the cover. */
+export const firstFrameSrc = (url: string): string => (url.includes('#t=') ? url : `${url}#t=0.1`);
+
+/** Force the first frame to render even when only metadata was preloaded. */
+export const paintFirstFrame = (el: HTMLVideoElement): void => {
+  try {
+    if (!el.currentTime) el.currentTime = 0.1;
+  } catch {
+    /* element not seekable yet — the media fragment still drives the still */
+  }
+};
+
+/** Muted, non-interactive <video> that fills its parent and shows frame 0 as the cover. */
+export const VideoFirstFrame = ({ url, style }: { url: string; style?: CSSProperties }) => (
+  <video
+    src={firstFrameSrc(url)}
+    muted
+    playsInline
+    preload="metadata"
+    tabIndex={-1}
+    aria-hidden
+    onLoadedMetadata={(e) => paintFirstFrame(e.currentTarget)}
+    style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', ...style }}
+  />
+);
+
 export const MatThumb = ({ mat }: { mat: Material }) => {
   if (mat.kind === 'text') {
     return (
@@ -455,18 +492,22 @@ export const MatThumb = ({ mat }: { mat: Material }) => {
     const range = fmtRange(mat.startSec, mat.endSec);
     const dur = typeof mat.durationSec === 'number' ? `${mat.durationSec.toFixed(1)}s` : null;
     const badge = range ?? (dur ? `· ${dur}` : null);
-    const hasImage = typeof mat.url === 'string' && /\.(png|jpe?g|gif|webp|avif)$/i.test(mat.url);
+    // Cover priority: an explicit image still → the video's own first frame → abstract placeholder.
+    const imageUrl = isImageUrl(mat.url) ? mat.url : null;
+    const videoUrl = !imageUrl && typeof mat.url === 'string' && mat.url ? mat.url : null;
     return (
       <div className="mat-thumb" style={{
-        backgroundColor: hasImage ? 'var(--surface-3)' : (mat.color || 'var(--surface-3)'),
-        backgroundImage: hasImage
-          ? `linear-gradient(180deg, rgba(0,0,0,0.10) 0%, rgba(0,0,0,0.45) 100%), url("${mat.url}")`
+        overflow: 'hidden',
+        backgroundColor: imageUrl ? 'var(--surface-3)' : (mat.color || 'var(--surface-3)'),
+        backgroundImage: imageUrl
+          ? `linear-gradient(180deg, rgba(0,0,0,0.10) 0%, rgba(0,0,0,0.45) 100%), url("${imageUrl}")`
           : 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(0,0,0,0.22) 100%)',
         backgroundSize: 'cover',
         backgroundPosition: 'center',
       }}>
-        <span className="mat-thumb-tag">CLIP · {mat.id.toUpperCase()}</span>
-        {!hasImage && (
+        {videoUrl && <VideoFirstFrame url={videoUrl} />}
+        <span className="mat-thumb-tag" style={{ zIndex: 1 }}>CLIP · {mat.id.toUpperCase()}</span>
+        {!imageUrl && !videoUrl && (
           <svg viewBox="0 0 24 24" width="30" height="30" style={{ opacity: 0.45 }}>
             <rect x="3" y="5" width="18" height="14" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
             <path d="M3 9h18M7 5v14M17 5v14" stroke="currentColor" strokeWidth="1.2" />
@@ -475,7 +516,7 @@ export const MatThumb = ({ mat }: { mat: Material }) => {
         )}
         {badge && (
           <span style={{
-            position: 'absolute', bottom: 6, right: 6,
+            position: 'absolute', bottom: 6, right: 6, zIndex: 1,
             fontFamily: 'var(--ff-mono)', fontSize: 9,
             color: 'rgba(255,255,255,0.92)', background: 'rgba(0,0,0,0.6)',
             padding: '1px 5px', borderRadius: 3, letterSpacing: '0.03em',

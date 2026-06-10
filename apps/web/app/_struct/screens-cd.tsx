@@ -19,6 +19,8 @@ import { InsightsPanel } from './InsightsPanel';
 import {
   EmptyState,
   FramePlaceholder,
+  firstFrameSrc,
+  paintFirstFrame,
   Icon,
   Modal,
   SatisfactionRing,
@@ -347,9 +349,11 @@ const GapFillStudio = ({
               {hfPreview && !hfRendering && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <video
-                    src={hfPreview.url}
+                    src={firstFrameSrc(hfPreview.url)}
                     controls
                     playsInline
+                    preload="metadata"
+                    onLoadedMetadata={(e) => paintFirstFrame(e.currentTarget)}
                     style={{ width: '100%', maxHeight: 360, borderRadius: 6, background: '#000', aspectRatio: '9 / 16' }}
                   />
                   <div className="mono dim" style={{ fontSize: 10 }}>
@@ -571,9 +575,11 @@ const TransitionFillStudio = ({
             {hfPreview && !hfRendering ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <video
-                  src={hfPreview.url}
+                  src={firstFrameSrc(hfPreview.url)}
                   controls
                   playsInline
+                  preload="metadata"
+                  onLoadedMetadata={(e) => paintFirstFrame(e.currentTarget)}
                   style={{ width: '100%', maxHeight: 320, borderRadius: 6, background: '#000', aspectRatio: '9 / 16' }}
                 />
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
