@@ -2,7 +2,7 @@
 // Upload a video → POST /scan returns a jobId → poll GET /scan/:jobId until the
 // VLM rough scan finishes and returns the real structure (sourceVideo).
 
-import { structGet, structPost, structPostForm } from './client';
+import { StructApiError, structGet, structPost, structPostForm } from './client';
 import type { AnalyzeSampleResponse } from './types';
 
 export interface ScanStartResponse {
@@ -76,6 +76,12 @@ export async function startScan(file: File): Promise<ScanStartResponse> {
       form.append('video', file);
       return await structPostForm<ScanStartResponse>('/api/struct/scan', form);
     } catch (e) {
+      // Deterministic client errors (HTTP 4xx, e.g. 413 file-too-large / 400 bad
+      // upload) won't succeed on retry — re-throw immediately instead of wasting
+      // the full backoff. Only retry network failures (status null) and 5xx.
+      if (e instanceof StructApiError && e.status !== null && e.status >= 400 && e.status < 500) {
+        throw e;
+      }
       lastError = e;
     }
   }

@@ -502,9 +502,24 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       });
       // Poll every ~3s. Wan2.7 generation takes minutes → ceiling of 200 polls (~10min).
       const maxPolls = 200;
+      // Tolerate transient status-poll failures: a network blip shouldn't kill a
+      // ~10-min job. Only abort after 3 CONSECUTIVE failures (reset on any success).
+      const maxConsecutiveErrors = 3;
+      let consecutiveErrors = 0;
       for (let i = 0; i < maxPolls; i++) {
+        // Cancellation: anything that sets producing:false (reset / new run / navigate
+        // away) stops this loop so it can't clobber later exportResult/mode/produceStage.
+        if (!get().producing) return;
         await new Promise((resolve) => setTimeout(resolve, 3000));
-        const s = await getProduceStatusApi(jobId);
+        let s: Awaited<ReturnType<typeof getProduceStatusApi>>;
+        try {
+          s = await getProduceStatusApi(jobId);
+          consecutiveErrors = 0;
+        } catch (pollError) {
+          consecutiveErrors += 1;
+          if (consecutiveErrors >= maxConsecutiveErrors) throw pollError;
+          continue;
+        }
         if (s.status === 'running') {
           set({ produceStage: (s.stage ?? '生成中') + (s.elapsedSec ? ` · ${s.elapsedSec}s` : '') });
           continue;

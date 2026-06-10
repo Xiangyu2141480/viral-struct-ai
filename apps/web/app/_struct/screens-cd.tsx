@@ -618,6 +618,21 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
   const transFilled = v.transitions.filter(t => t.state === 'filled').length;
   const transWeakly = v.transitions.filter(t => t.state === 'weakly').length;
 
+  // Real per-method slot counts for the 「建议补全策略」 overview — derived from each
+  // non-filled slot's chosen/recommended/strategy channel (no hardcoded count).
+  const strategyCounts = Object.values(diagnosis).reduce<Record<ResolutionMethod, number>>(
+    (acc, d) => {
+      if (d.state === 'filled') return acc;
+      const method: ResolutionMethod | null =
+        d.chosenMethod ??
+        d.recommended ??
+        (d.strategy === 'aigc' || d.strategy === 'hyperframes' || d.strategy === 'reshoot' ? d.strategy : null);
+      if (method) acc[method] += 1;
+      return acc;
+    },
+    { reshoot: 0, hyperframes: 0, aigc: 0 },
+  );
+
   // No source/diagnosis yet → nothing to diagnose; no mock data shown.
   if (v.segments.length === 0 || Object.keys(diagnosis).length === 0) {
     return (
@@ -702,11 +717,11 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                       <StrategyTag kind="aigc" />
-                      <span className="mono" style={{ fontSize: 11, color: 'var(--text-mute)', whiteSpace: 'nowrap' }}>2 槽位</span>
+                      <span className="mono" style={{ fontSize: 11, color: 'var(--text-mute)', whiteSpace: 'nowrap' }}>{strategyCounts.aigc} 槽位</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                       <StrategyTag kind="hyperframes" />
-                      <span className="mono" style={{ fontSize: 11, color: 'var(--text-mute)', whiteSpace: 'nowrap' }}>2 槽位</span>
+                      <span className="mono" style={{ fontSize: 11, color: 'var(--text-mute)', whiteSpace: 'nowrap' }}>{strategyCounts.hyperframes} 槽位</span>
                     </div>
                   </div>
 
@@ -736,6 +751,7 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
           <div className="sband" style={{ height: 38 }}>
             {v.segments.map(seg => {
               const d = diagnosis[seg.id];
+              if (!d) return null;
               const dur = seg.end - seg.start;
               const w = (dur / T) * 100;
               const stateColor = {
@@ -806,6 +822,7 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
                 <tbody>
                   {v.segments.map(seg => {
                     const d = diagnosis[seg.id];
+                    if (!d) return null;
                     return (
                       <tr key={seg.id} onClick={() => setSelected(seg.id)} style={{ cursor: 'pointer', background: selected === seg.id ? 'var(--accent-dim)' : 'transparent' }}>
                         <td>
@@ -964,6 +981,7 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
             const seg = v.segments.find(s => s.id === selected);
             if (!seg) return null;
             const d = diagnosis[selected];
+            if (!d) return null;
             const role = ROLES[seg.role];
             return (
               <div className="panel slot-detail-panel">
@@ -1099,6 +1117,7 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
           const seg = v.segments.find(s => s.id === previewSlot);
           if (!seg) return null;
           const d = diagnosis[previewSlot];
+          if (!d) return null;
           const SVG_BY_ROLE: Record<string, ReactElement> = {
             hook: <SvgHookShape />, pain: <SvgPainShape />, emotion: <SvgEmotionShape />,
             product: <SvgProductShape />, compare: <SvgCompareShape />, social: <SvgSocialShape />, cta: <SvgCtaShape />,

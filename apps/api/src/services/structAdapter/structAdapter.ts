@@ -519,7 +519,7 @@ function resolutionMethodLabel(id: GapResolutionOptionId): string {
 
 /** One-line human summary of the recommended option for the diagnosis `fix.desc`. */
 function resolutionOptionSummary(option: GapResolutionOption): string {
-  if (option.id === 'reshoot') return option.guidanceNL;
+  if (option.id === 'reshoot') return option.guidanceNL || option.title || '补拍该槽位';
   if (option.id === 'hyperframes') return option.editingGuidanceNL;
   return option.prompt;
 }
@@ -546,7 +546,9 @@ function optionsToDiagnosisFill(
     reshoot: reshoot
       ? {
           guide: reshoot.guidanceNL,
-          shots: reshoot.mustCapture.length ? reshoot.mustCapture : base.reshoot.shots,
+          // ALWAYS use the real Director array — never leak synthesized base shots over
+          // real data, even when mustCapture is empty (an empty list is the honest truth).
+          shots: reshoot.mustCapture,
           guidanceNL: reshoot.guidanceNL,
           framing: reshoot.framing,
           durationSec: reshoot.durationSec,

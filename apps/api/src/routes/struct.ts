@@ -114,6 +114,20 @@ function getAssetSessionDir(sessionId: string): string {
   return path.join(getUploadDir(), 'struct_assets', sessionId);
 }
 
+/** Uploaded asset session dirs awaiting cleanup, keyed by dir path. Swept after ~2h
+ *  so the stable per-session copies created in /materials/upload don't leak on disk. */
+const assetSessionDirs = new Map<string, { dir: string; createdAt: number }>();
+
+function sweepAssetSessionDirs(): void {
+  const now = Date.now();
+  for (const [dir, entry] of assetSessionDirs) {
+    if (now - entry.createdAt > 2 * 60 * 60_000) {
+      assetSessionDirs.delete(dir);
+      void rm(entry.dir, { recursive: true, force: true }).catch(() => {});
+    }
+  }
+}
+
 function stubProduct(sourceVideo: SourceVideo, materials: Material[]): TargetProduct {
   return {
     name: sourceVideo.title,
@@ -401,8 +415,11 @@ structRouter.post('/materials/upload', withUploadGuard(upload.array('assets')), 
     // each Material.url that points at an uploaded temp path to the stable copy.
     const pathRewrites = new Map<string, string>();
     if (files.length) {
+      sweepAssetSessionDirs();
       const sessionDir = getAssetSessionDir(randomUUID());
       mkdirSync(sessionDir, { recursive: true });
+      // Track this dir so it can be swept ~2h later (free disk: stable asset copies).
+      assetSessionDirs.set(sessionDir, { dir: sessionDir, createdAt: Date.now() });
       for (const file of files) {
         const ext = path.extname(file.originalname) || path.extname(file.path);
         const stablePath = path.join(sessionDir, `${path.basename(file.path)}${ext}`);
@@ -481,15 +498,25 @@ structRouter.post('/diagnose', async (req, res) => {
 
     const matchResult = await matchSlotsWithFallback({ graph, assets: assetCards, boundaries: graph.boundaries });
 
+    const warnings: string[] = [];
+
     // Real per-gap 3-option resolution (T1): for each slot derive its tier
     // (matched/partial/gap) and ask the Director Agent for the full
-    // reshoot + HyperFrames + AIGC menu (with a recommendation).
-    const slotResolutions = buildSlotResolutions({
-      graph,
-      matches: matchResult.matches,
-      assetCards,
-      contentBrief,
-    });
+    // reshoot + HyperFrames + AIGC menu (with a recommendation). A throw from one
+    // slot's option builder must NOT 500 the whole diagnosis — fall back to the base
+    // synthesized fill (toDiagnosisRecord handles an absent slotResolutions).
+    let slotResolutions: Record<string, SlotGapResolution> | undefined;
+    try {
+      slotResolutions = buildSlotResolutions({
+        graph,
+        matches: matchResult.matches,
+        assetCards,
+        contentBrief,
+      });
+    } catch (resolutionError) {
+      slotResolutions = undefined;
+      warnings.push(`3-option 方案生成失败，已回退到基础诊断：${errorMessage(resolutionError)}`);
+    }
 
     const diagnosis = toDiagnosisRecord({
       sourceVideo,
@@ -500,7 +527,6 @@ structRouter.post('/diagnose', async (req, res) => {
       slotResolutions,
     });
 
-    const warnings: string[] = [];
     if (matchResult.warning) warnings.push(matchResult.warning);
     if (matchResult.alignmentSource === 'rule_based') warnings.push('槽位对齐使用规则降级（非 LLM judge）');
 
@@ -797,9 +823,18 @@ interface ProduceJob {
 const produceJobs = new Map<string, ProduceJob>();
 
 function sweepProduceJobs(): void {
+  // Piggyback the uploaded-asset-dir cleanup on the produce sweep cadence.
+  sweepAssetSessionDirs();
   const now = Date.now();
   for (const [id, job] of produceJobs) {
-    if (job.finishedAt && now - job.finishedAt > 60 * 60_000) produceJobs.delete(id);
+    if (job.finishedAt && now - job.finishedAt > 60 * 60_000) {
+      produceJobs.delete(id);
+      // Also delete this job's render artifacts so finished produce files/beat dirs
+      // don't leak on disk after the in-memory job is evicted.
+      const renderDir = getRenderDir();
+      void rm(path.join(renderDir, `produce_${id}.mp4`), { force: true }).catch(() => {});
+      void rm(path.join(renderDir, `produce_${id}_beats`), { recursive: true, force: true }).catch(() => {});
+    }
   }
 }
 
@@ -1195,12 +1230,20 @@ structRouter.get('/demo', async (_req, res) => {
     const cards = materialsToAssetCards(materials, sourceVideo, product);
     const contentBrief = buildContentBrief(product, sourceVideo);
     const matchResult = await matchSlotsWithFallback({ graph, assets: cards, boundaries: graph.boundaries });
-    const slotResolutions = buildSlotResolutions({
-      graph,
-      matches: matchResult.matches,
-      assetCards: cards,
-      contentBrief,
-    });
+    // A throw from one slot's option builder must NOT 500 the whole demo — fall back
+    // to the base synthesized fill (toDiagnosisRecord handles an absent slotResolutions).
+    let slotResolutions: Record<string, SlotGapResolution> | undefined;
+    try {
+      slotResolutions = buildSlotResolutions({
+        graph,
+        matches: matchResult.matches,
+        assetCards: cards,
+        contentBrief,
+      });
+    } catch (resolutionError) {
+      slotResolutions = undefined;
+      warnings.push(`3-option 方案生成失败，已回退到基础诊断：${errorMessage(resolutionError)}`);
+    }
     const diagnosis = toDiagnosisRecord({
       sourceVideo, matches: matchResult.matches, gaps: matchResult.gaps, repairs: [], materials, slotResolutions,
     });
