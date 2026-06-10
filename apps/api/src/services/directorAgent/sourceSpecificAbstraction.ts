@@ -63,14 +63,14 @@ const PROFILES: Record<SourceSpecificTransferSubtype, SubtypeProfile> = {
     abstractGrammar: 'abstract grammar: cascade, chaos-to-order, activation, spectacle burst, CTA lock-up',
     targetEquivalentLabel: '冰爽级联组装揭示',
     targetEquivalentActions: ['冰块级联', '柠檬片扫过', '红茶水滴汇聚', '开盖/倒茶激活', '冷雾爆发', 'CTA 收口'],
-    rationale: 'target beverage equivalent: keep the kinetic assembly grammar, replace source objects with cold-refresh materials and a safe CTA end frame.'
+    rationale: 'target beverage equivalent: keep the kinetic assembly grammar, replace source objects with cold-refresh materials and a clean CTA end frame.'
   },
   generic_source_specific: {
     sourcePattern: 'source structure: category-specific feature demonstration',
-    abstractGrammar: 'abstract grammar: feature evidence, product-safe reveal, category-native action',
+    abstractGrammar: 'abstract grammar: feature evidence, clean product reveal, category-native action',
     targetEquivalentLabel: '饮料动作等价镜头',
     targetEquivalentActions: ['瓶身标签高光', '冷凝水擦除', '开盖动作', '倒入杯中', '产品陈列'],
-    rationale: 'target beverage equivalent: keep only the structural intent, use beverage-native product proof and safe packaging motion.'
+    rationale: 'target beverage equivalent: keep only the structural intent, use beverage-native product proof and clean packaging motion.'
   }
 };
 

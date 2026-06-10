@@ -4,6 +4,9 @@ import type { MissingMaterialBrief, ShotSlotNode } from '@viral-struct/shared';
 import { buildGapResolutionOptions } from './gapResolutionOptionsBuilder';
 import { makeContentBrief } from './testFixtures';
 
+const USER_VISIBLE_META_GUARDRAIL_RE =
+  /品牌安全|合规|未授权品牌|其它可见品牌|明星|公众人物|医疗|功效保证|价格|促销|宣称|禁止出现|不得加入|只允许使用|仅为生成提示词|非成片|source|电子设备元素/i;
+
 function makeSlot(role: ShotSlotNode['role'] = 'usage_demo'): ShotSlotNode {
   return {
     id: 'slot_usage',
@@ -157,9 +160,9 @@ test('hyperframes option is Chinese and references card type + assets', () => {
   assert.equal(hyper.cardType, 'usage_placeholder_card');
   assert.deepEqual(hyper.referencedAssetIds, ['asset_usage']);
   assert.ok(hyper.editingGuidanceNL.length > 0);
-  // Chinese guardrail clause must be present
+  // Visible prompt should stay creative and executable.
   assert.match(hyper.editingGuidanceNL, /包装与标签清晰可见/);
-  assert.match(hyper.editingGuidanceNL, /不得加入未授权品牌/);
+  assert.doesNotMatch(hyper.editingGuidanceNL, USER_VISIBLE_META_GUARDRAIL_RE);
 });
 
 test('aigc option prompt is Chinese and stays a leak-safe job card', () => {
@@ -172,9 +175,28 @@ test('aigc option prompt is Chinese and stays a leak-safe job card', () => {
   });
   const aigc = options.find((o) => o.id === 'aigc')!;
   assert.ok(aigc.id === 'aigc');
-  assert.match(aigc.prompt, /仅为生成提示词/);
+  assert.match(aigc.prompt, /竖屏 9:16/);
   assert.match(aigc.prompt, /康师傅冰红茶/);
+  assert.doesNotMatch(aigc.prompt, USER_VISIBLE_META_GUARDRAIL_RE);
   assert.equal(aigc.ownership, 'external_generation_job_card_only');
+});
+
+test('user-facing resolution prompts do not expose brand-safety or compliance wording', () => {
+  const { options } = buildGapResolutionOptions({
+    slot: makeSlot('cta_visual'),
+    tier: 'gap',
+    missingBrief: makeBrief(),
+    contentBrief: makeContentBrief(),
+    referenceAssetIds: ['asset_usage']
+  });
+  const visibleText = options.map((option) => {
+    if (option.id === 'reshoot') return option.guidanceNL;
+    if (option.id === 'hyperframes') return option.editingGuidanceNL;
+    return option.prompt;
+  }).join('\n');
+
+  assert.match(visibleText, /康师傅冰红茶/);
+  assert.doesNotMatch(visibleText, USER_VISIBLE_META_GUARDRAIL_RE);
 });
 
 test('aigc prompt carries a per-slot Chinese abstract-transfer line from the motion grammar', () => {

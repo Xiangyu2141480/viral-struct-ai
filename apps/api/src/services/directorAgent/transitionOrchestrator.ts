@@ -28,6 +28,14 @@ export interface BuildOrchestratedTransitionsArgs {
   hyperframesWeight?: number;
 }
 
+export interface PlanTransitionArgs {
+  id: string;
+  from: OrchestratedSlot;
+  to: OrchestratedSlot;
+  productName: string;
+  hyperframesWeight?: number;
+}
+
 const STRONG_BRIDGE_FUNCTIONS = new Set(['motif_assembly_bridge', 'chaos_to_order', 'ingredient_to_product']);
 const STRONG_BRIDGE_TOKENS = new Set([
   'component_cascade',
@@ -44,86 +52,115 @@ export function buildOrchestratedTransitions(args: BuildOrchestratedTransitionsA
   }
 
   const weight = args.hyperframesWeight ?? DEFAULT_HYPERFRAMES_TRANSITION_WEIGHT;
-  const productName = args.contentBrief.productName;
-  const transitions: OrchestratedTransition[] = [];
+  return slots.slice(0, -1).map((from, index) => planTransition({
+    id: `transition_${String(index + 1).padStart(3, '0')}`,
+    from,
+    to: slots[index + 1],
+    productName: args.contentBrief.productName,
+    hyperframesWeight: weight
+  }));
+}
 
-  for (let index = 0; index < slots.length - 1; index += 1) {
-    const from = slots[index];
-    const to = slots[index + 1];
-    const id = `transition_${String(index + 1).padStart(3, '0')}`;
-    const transitionFunction = inferTransitionFunction(from, to);
-    const requiredAssets = [matchedAssetId(from), matchedAssetId(to)].filter((value): value is string => Boolean(value));
-    const missingAssets = [from, to].filter(isGap).map((slot) => `${slot.slotId} asset`);
+export function planTransition(args: PlanTransitionArgs): OrchestratedTransition {
+  const { id, from, to, productName } = args;
+  const weight = args.hyperframesWeight ?? DEFAULT_HYPERFRAMES_TRANSITION_WEIGHT;
+  const transitionFunction = inferTransitionFunction(from, to);
+  const requiredAssets = [matchedAssetId(from), matchedAssetId(to)].filter((value): value is string => Boolean(value));
+  const missingAssets = [from, to].filter(isGap).map((slot) => `${slot.slotId} asset`);
+  const assetSupport = classifyAssetSupport(from, to);
 
-    if (isGap(from) || isGap(to)) {
-      // No real frames on one side → a clean cut into the next slot (still executable via hyperframes card).
-      transitions.push({
-        id,
-        fromSlotId: from.slotId,
-        toSlotId: to.slotId,
-        mode: 'cut',
-        transitionFunction,
-        preferredImplementation: 'hyperframes',
-        reason: '一侧仍是缺口，因此用干净切换进入下一槽位，不做真实帧桥接。',
-        requiredAssets,
-        missingAssets,
-        riskNotes: ['Plan-only transition; one side is a gap pending resolution.']
-      });
-      continue;
-    }
-
-    // §7 rule 3: a real frame bridge needs BOTH sides to be real `matched` footage (not partial),
-    // AND a motif that needs frame continuity. Everything else stays on the hyperframes default.
-    if (allowsFrameBridge(weight) && isRealMatched(from) && isRealMatched(to) && needsRealFrameBridge(from, to, transitionFunction)) {
-      transitions.push({
-        id,
-        fromSlotId: from.slotId,
-        toSlotId: to.slotId,
-        mode: 'aigc_frame_bridge',
-        transitionFunction,
-        preferredImplementation: 'external_generation',
-        reason: 'Both sides are matched and the motif needs real-frame continuity; bridge via an AIGC frame job card.',
-        aigcFrameBridge: {
-          fromTailFrameRef: `required: extract tail frame from ${from.slotId}`,
-          toHeadFrameRef: `required: extract head frame from ${to.slotId}`,
-          prompt:
-            `仅为生成提示词，非成片。为 ${productName} 生成衔接帧：${transitionPrompt(transitionFunction, from, to)}`
-            + '不得加入任何未授权品牌、价格承诺或医疗功效宣称。',
-          negativePrompt: SAFE_NEGATIVE_PROMPT_ZH,
-          durationMs: 500,
-          ownership: 'external_generation_job_card_only'
-        },
-        requiredAssets,
-        missingAssets,
-        riskNotes: [
-          'Plan-only frame bridge; no external model is called and no frames are really extracted yet.',
-          'Review brand, IP and source-copying risk before rendering.'
-        ]
-      });
-      continue;
-    }
-
-    // Default (high weight): a hyperframes card animation bridges the two shots.
-    transitions.push({
+  if (isGap(from) || isGap(to)) {
+    const visualAction = `用干净切换从「${zhRole(from.role)}」进入「${zhRole(to.role)}」，缺口段由后续补拍、AIGC 或 HyperFrames 方案补齐。`;
+    return {
       id,
       fromSlotId: from.slotId,
       toSlotId: to.slotId,
-      mode: 'hyperframes',
+      mode: 'cut',
+      implementationMode: 'cut_only',
+      assetSupport,
+      confidence: 0.62,
+      whyThisMode: '相邻槽位至少一侧还没有可用真实素材，直接帧桥接会误导，所以先用可执行的干净切换保住节奏。',
+      whyNot: ['不使用 AIGC frame bridge：缺少一侧真实首尾帧。', '不使用复杂转场：会掩盖当前素材缺口。'],
+      missingTransitionAssets: missingAssets,
+      visualAction,
+      fallbackStrategy: '若后续补齐缺口素材，可升级为 HyperFrames 衔接或 0.5 秒 frame bridge；当前保持 plan-only cut。',
       transitionFunction,
       preferredImplementation: 'hyperframes',
-      reason: `用语义转场把「${zhRole(from.role)}」承接到「${zhRole(to.role)}」，保留结构节奏但不复制源画面。`,
-      hyperframes: {
-        editingGuidanceNL: `${transitionGuidance(transitionFunction, productName, from, to)}保持产品标签清晰可见，不加任何未经证实的宣称。`,
-        durationMs: 400,
-        styleTokens: styleTokens(from, to, transitionFunction)
+      reason: '一侧仍是缺口，因此用干净切换进入下一槽位，不做真实帧桥接。',
+      requiredAssets,
+      missingAssets,
+      riskNotes: ['转场计划已生成；该段等待素材补齐后执行。']
+    };
+  }
+
+  // §7 rule 3: a real frame bridge needs BOTH sides to be real `matched` footage (not partial),
+  // AND a motif that needs frame continuity. Everything else stays on the hyperframes default.
+  if (allowsFrameBridge(weight) && isRealMatched(from) && isRealMatched(to) && needsRealFrameBridge(from, to, transitionFunction)) {
+    const visualAction = transitionPrompt(transitionFunction, from, to);
+    return {
+      id,
+      fromSlotId: from.slotId,
+      toSlotId: to.slotId,
+      mode: 'aigc_frame_bridge',
+      implementationMode: 'external_generation_job_card',
+      assetSupport,
+      confidence: 0.76,
+      whyThisMode: '两侧都是真实匹配素材，且运动语法需要连续帧承接，因此生成一个可选的转场衔接帧任务卡。',
+      whyNot: ['不直接渲染：当前 Director 只输出计划。', '不使用纯 cut：会削弱级联/由散到聚的运动连续性。'],
+      missingTransitionAssets: [],
+      visualAction,
+      fallbackStrategy: '如果外部转场帧不执行，回退为 HyperFrames 冷雾/擦除衔接。',
+      transitionFunction,
+      preferredImplementation: 'external_generation',
+      reason: '两侧都有真实素材，使用 0.5 秒冰爽衔接帧保持运动连续。',
+      aigcFrameBridge: {
+        fromTailFrameRef: `required: extract tail frame from ${from.slotId}`,
+        toHeadFrameRef: `required: extract head frame from ${to.slotId}`,
+        prompt:
+          `竖屏 9:16，0.5 秒转场衔接帧，主体产品：${productName}。${visualAction}`,
+        negativePrompt: SAFE_NEGATIVE_PROMPT_ZH,
+        durationMs: 500,
+        ownership: 'external_generation_job_card_only'
       },
       requiredAssets,
       missingAssets,
-      riskNotes: ['Plan-only transition; review brand/IP/claims before rendering.']
-    });
+      riskNotes: [
+        '转场衔接帧任务卡已生成；当前不执行外部生成。',
+        '渲染前需要抽取前后镜头首尾帧。'
+      ]
+    };
   }
 
-  return transitions;
+  const visualAction = `${transitionGuidance(transitionFunction, productName, from, to)}保持产品标签清晰可见，节奏干净。`;
+  const whyNot = ['不使用 AIGC frame bridge：该 pair 不同时满足两侧 fully matched + 强运动连续性。'];
+  if (hasPartialSupport(from) || hasPartialSupport(to)) {
+    whyNot.push('不标记为 fully satisfied：至少一侧仍需要卡片、字幕或动效增强。');
+  }
+  return {
+    id,
+    fromSlotId: from.slotId,
+    toSlotId: to.slotId,
+    mode: 'hyperframes',
+    implementationMode: 'hyperframes',
+    assetSupport,
+    confidence: hasPartialSupport(from) || hasPartialSupport(to) ? 0.72 : 0.84,
+    whyThisMode: '已有真实素材可作为主画面或参考，但转场仍需要标题卡、擦除、冷雾或卖点卡增强来承接结构。',
+    whyNot,
+    missingTransitionAssets: [],
+    visualAction,
+    fallbackStrategy: '若动效执行不可用，退化为 match cut / clean cut，同时保留字幕和卖点卡片。',
+    transitionFunction,
+    preferredImplementation: 'hyperframes',
+    reason: `用语义转场把「${zhRole(from.role)}」承接到「${zhRole(to.role)}」，保留结构节奏但不复制源画面。`,
+    hyperframes: {
+      editingGuidanceNL: visualAction,
+      durationMs: 400,
+      styleTokens: styleTokens(from, to, transitionFunction)
+    },
+    requiredAssets,
+    missingAssets,
+    riskNotes: ['转场计划已生成；实际渲染由后续执行层处理。']
+  };
 }
 
 function allowsFrameBridge(weight: number): boolean {
@@ -179,7 +216,7 @@ function transitionGuidance(functionName: string, productName: string, from: Orc
     case 'cta_lockup':
       return `保持产品轻微弹动后稳定在 CTA 尾帧，形成干净收口。`;
     case 'proof_to_cta':
-      return `从证明或对比段落用分屏合拢转场到 CTA 尾帧，避免未经证实的优劣宣称。`;
+      return `从证明或对比段落用分屏合拢转场到 CTA 尾帧，形成清晰收口。`;
     default:
       return `用干净切换或轻微擦除从「${zhRole(from.role)}」承接到「${zhRole(to.role)}」。`;
   }
@@ -219,6 +256,17 @@ function isGap(slot: OrchestratedSlot): boolean {
 /** Real matched footage (the strong tier) — partial assets are "差一点" and don't get a frame bridge. */
 function isRealMatched(slot: OrchestratedSlot): boolean {
   return slot.fill.kind === 'matched' && slot.fill.status === 'matched';
+}
+
+function hasPartialSupport(slot: OrchestratedSlot): boolean {
+  return slot.fill.kind === 'matched' && (slot.fill.status === 'partial' || slot.fillStatus !== 'matched');
+}
+
+function classifyAssetSupport(from: OrchestratedSlot, to: OrchestratedSlot): string {
+  if (isGap(from) || isGap(to)) return 'gap_or_missing_side';
+  if (isRealMatched(from) && isRealMatched(to)) return 'real_asset_primary';
+  if (hasPartialSupport(from) || hasPartialSupport(to)) return 'partial_asset_support';
+  return 'asset_support_uncertain';
 }
 
 function humanRole(role: string): string {

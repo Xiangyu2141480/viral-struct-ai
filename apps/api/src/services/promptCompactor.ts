@@ -48,7 +48,7 @@ export function compactMissingMaterialPrompt(
     sellingPoints ? `Benefits to express: ${appendSentence(sellingPoints)}` : undefined,
     motion,
     storyboardHint,
-    'Keep product packaging readable, clean lighting, natural motion, no other brands, no celebrity likeness, no medical or absolute claims.'
+    'Keep product packaging readable, clean lighting, natural motion, and a simple uncluttered background.'
   ].filter(Boolean).join(' ')), targetMaxCharacters);
 
   const compactNegativePrompt = compactNegative(input.negativePrompt);
@@ -99,7 +99,7 @@ function defaultGoalForGap(gap: MaterialGap): string {
     case 'missing_human_host':
       return 'Hands-only lifestyle demo shot with no identifiable face, product centered, simple CTA-friendly background';
     case 'missing_comparison':
-      return 'Simple side-by-side comparison setup using neutral props and clear product visibility, no exaggerated claims';
+      return 'Simple side-by-side comparison setup using neutral props and clear product visibility';
     case 'missing_cta_visual':
       return 'Clean final CTA product shot with bottle centered, readable label, and negative space for call-to-action text';
     default:

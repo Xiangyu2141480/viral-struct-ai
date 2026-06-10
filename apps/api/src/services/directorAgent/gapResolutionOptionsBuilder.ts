@@ -34,7 +34,7 @@ import { CASCADE_MOTION_TOKENS } from './structuralCompressionPlanner';
  * template alone produces the three options.
  *
  * Recommendation follows the degradation ladder (§6.4, 方案二): matched/partial → `hyperframes` (edit/
- * augment the real asset — cheapest + IP-safe, never auto-replaces it); gap → `aigc` when it is eligible,
+ * augment the real asset — cheapest, never auto-replaces it); gap → `aigc` when it is eligible,
  * otherwise `hyperframes`. AIGC is always *offered* as a job-card option; eligibility only governs whether
  * AIGC may be the *recommended* channel for a gap. `reshoot` is always offered, never auto.
  */
@@ -160,7 +160,6 @@ function buildReshootOption(
 ): ReshootOption {
   const durationSec = positive(brief?.manualShootBrief?.durationSec ?? spec.durationSec, spec.durationSec);
   const mustCapture = spec.mustCapture;
-  const avoid = AVOID_ZH;
   const guidanceNL =
     `补拍一个约 ${durationSec} 秒的竖屏「${spec.label}」镜头。`
     + `该槽位目标：${contextGoalLine(context, spec)}。`
@@ -170,8 +169,7 @@ function buildReshootOption(
     + `拍摄构图：${spec.framing}。`
     + `务必拍到：${mustCapture.join('、')}。`
     + `结构迁移作用：${structureSupportLine(context, spec)}。`
-    + `注意避免：${avoid.slice(0, 4).join('、')}。`
-    + `保持 ${product} 的包装与标签清晰可见、背景干净。`;
+    + `画面要求：${product} 的包装与标签清晰可见，背景干净，动作自然利落。`;
   return {
     id: 'reshoot',
     title: `补拍「${spec.label}」素材`,
@@ -179,7 +177,7 @@ function buildReshootOption(
     framing: spec.framing,
     durationSec,
     mustCapture,
-    avoid
+    avoid: AVOID_ZH
   };
 }
 
@@ -211,8 +209,7 @@ function buildHyperframesOption(
     + motifLine
     + `用${spec.animationHints.join('、')}等动效承接「${spec.label}」。`
     + refLine
-    + `文字安全区保留在画面上方或侧边，产品包装与标签清晰可见。`
-    + `不得加入未授权品牌、价格承诺或健康功效宣称，也不得加入源片电子设备元素。`;
+    + `文字留白区保留在画面上方或侧边，产品包装与标签清晰可见，节奏干净。`;
 
   const copy = buildCopy(args);
 
@@ -261,15 +258,14 @@ function buildAigcOption(
     : '';
   const targetMappingLine = targetActionLine(context, spec);
   const transferLine = grammar.length
-    ? `保留源片可迁移的动作语法（${grammar.join('、')}），用目标品类的等效动作重新演绎，不照搬源产品或源场景。`
+    ? `保留源片可迁移的动作语法（${grammar.join('、')}），用目标品类的等效动作重新演绎。`
     : '';
 
   const sellingPoints = args.contentBrief.sellingPoints ?? [];
-  const sellingLine = sellingPoints.length ? `卖点仅限：${sellingPoints.join('、')}。` : '';
+  const sellingLine = sellingPoints.length ? `卖点围绕：${sellingPoints.join('、')}。` : '';
 
   const prompt =
-    '仅为生成提示词，非成片。'
-    + `为 ${product} 生成一个竖屏 9:16、${expectedDurationSec} 秒、普通手机广告质感的「${spec.label}」镜头。`
+    `竖屏 9:16，${expectedDurationSec} 秒，普通手机广告质感的「${spec.label}」镜头。`
     + `主体产品：${product}，包装和标签必须保持清晰。`
     + `槽位目标：${contextGoalLine(context, spec)}。`
     + `目标品类等价动作：${targetMappingLine}。`
@@ -279,7 +275,7 @@ function buildAigcOption(
     + transferLine
     + variableLine
     + sellingLine
-    + '只允许使用 contentBrief 中的卖点，不得编造价格、促销、医疗功效、明星代言或其它品牌。禁止出现源片电子设备元素。';
+    + '整体画面真实自然，产品识别明确，收口干净。';
 
   return {
     id: 'aigc',
@@ -314,11 +310,11 @@ interface ZhRoleSpec {
 }
 
 const AVOID_ZH = [
-  '其它可见品牌或标识',
-  '明星或公众人物肖像',
-  '未经证实的价格或促销承诺',
-  '医疗或功效保证类宣称',
-  '直接照搬源视频的画面构图'
+  '画面杂乱',
+  '人物遮挡产品',
+  '标签失焦',
+  '背景过暗',
+  '动作拖沓'
 ];
 
 /** Source motion-grammar tokens → Chinese. These ARE the abstract transfer: keep the grammar, swap objects. */
@@ -352,7 +348,7 @@ const ZH_ROLE_SPECS: Record<string, ZhRoleSpec> = {
     label: '开场吸睛',
     reshootShot: '快速拿起或亮出产品，营造夏日清爽的强开场',
     mustCapture: ['产品快速入画', '标签或外形清晰', '有活力的动作'],
-    framing: '竖屏中近景，产品居中，上下留出文字安全区',
+    framing: '竖屏中近景，产品居中，上下留出文字留白区',
     durationSec: 3,
     hyperframesIntent: '用强开场动效抓住前 3 秒注意力',
     animationHints: ['快速推近', '冰感微光', '大标题揭示'],
@@ -383,24 +379,24 @@ const ZH_ROLE_SPECS: Record<string, ZhRoleSpec> = {
   },
   comparison: {
     label: '对比/陈列',
-    reshootShot: '拍摄并排陈列或前后对比关系，不做未经证实的优劣宣称',
+    reshootShot: '拍摄并排陈列或前后关系，用画面关系呈现差异',
     mustCapture: ['清晰的对比或陈列关系', '产品清晰可见'],
     framing: '竖屏中景或全景，左右关系清晰',
     durationSec: 3,
     hyperframesIntent: '用对比卡呈现差异',
     animationHints: ['分屏', '前后标签', '柔和滑动转场'],
-    aigcScene: '竖屏对比或陈列镜头，呈现简单清爽的对比，不做未证实宣称',
+    aigcScene: '竖屏对比或陈列镜头，呈现简单清爽的视觉关系',
     cardType: 'comparison_card'
   },
   benefit: {
     label: '卖点证明',
     reshootShot: '拍摄能支撑卖点的画面线索（如冰块、柠檬茶、分享场景）',
     mustCapture: ['产品可见', '卖点线索可见', '画面稳定可读'],
-    framing: '竖屏中景产品场景，留足文字安全区',
+    framing: '竖屏中景产品场景，留足文字留白区',
     durationSec: 3,
     hyperframesIntent: '把卖点做成简洁的利益点卡',
     animationHints: ['利益点徽章', '小幅产品抠像', '轻微动效'],
-    aigcScene: '竖屏卖点证明场景，视觉上支撑卖点，不新增任何宣称',
+    aigcScene: '竖屏卖点证明场景，用冰块、柠檬、茶色和使用氛围支撑卖点',
     cardType: 'benefit_card'
   },
   cta: {
@@ -457,7 +453,7 @@ function buildDirectorSpec(args: BuildGapResolutionOptionsArgs, brief?: MissingM
         '冷雾、水汽或茶滴爆发',
         '干净 CTA 收口画面'
       ],
-      framing: '竖屏产品居中，前半段留出级联运动空间，尾帧留出 CTA 文案安全区',
+      framing: '竖屏产品居中，前半段留出级联运动空间，尾帧留出 CTA 文案留白区',
       durationSec: positive(brief?.manualShootBrief?.durationSec ?? 4, 4),
       hyperframesIntent: '把源片的“部件级联 -> 由散到聚 -> 激活爆发 -> CTA 揭示”抽象成饮料语境的结构动效',
       animationHints: ['冰块雨', '柠檬片扫过', '红茶水滴汇聚', '冷雾爆发', 'CTA 锁定'],
@@ -592,7 +588,7 @@ function buildAnimationStepLine(durationMs: number, context: DirectorPromptConte
   const mid = Math.max(0.8, Number((totalSec * 0.45).toFixed(1)));
   const late = Math.max(mid + 0.6, Number((totalSec * 0.78).toFixed(1)));
   const actions = targetActionLine(context, spec).split('、');
-  return `动画步骤：0.0s-${mid}s ${actions[0] ?? spec.animationHints[0]}入场；${mid}s-${late}s ${actions[1] ?? spec.animationHints[1]}承接并形成节奏变化；${late}s-${totalSec}s 产品标签定格并收束到文案安全区。`;
+  return `动画步骤：0.0s-${mid}s ${actions[0] ?? spec.animationHints[0]}入场；${mid}s-${late}s ${actions[1] ?? spec.animationHints[1]}承接并形成节奏变化；${late}s-${totalSec}s 产品标签定格并收束到文案留白区。`;
 }
 
 function buildBridgeLine(context: DirectorPromptContext): string {
@@ -611,7 +607,7 @@ function buildAigcActionSteps(context: DirectorPromptContext, spec: ZhRoleSpec):
     actions[0] ?? spec.animationHints[0],
     actions[1] ?? spec.animationHints[1],
     actions[2] ?? '产品标签清晰定格',
-    '卖点或 CTA 安全收口'
+    '卖点或 CTA 干净收口'
   ].join(' → ');
 }
 
@@ -752,7 +748,7 @@ function buildSourceSpecificSpec(base: ZhRoleSpec, subtype: SourceSpecificTransf
         label: '冰爽英雄入场',
         reshootShot: '用热浪背景被冰块和瓶身入画破开，完成从夏日闷热到冰爽入场的英雄亮相',
         mustCapture: ['热浪或夏日场景铺垫', '产品快速入画形成冰爽入场', '标签清晰可见', '第一帧留出强 hook 标题区'],
-        framing: '竖屏中近景，产品从侧前方或中央进入，顶部留标题安全区',
+        framing: '竖屏中近景，产品从侧前方或中央进入，顶部留标题留白区',
         durationSec: base.durationSec,
         hyperframesIntent: '把开场变形亮相抽象成“热到冷”的第一秒冲击',
         animationHints: ['热浪破开', '冰块擦屏', '产品英雄亮相', '大标题定格'],
@@ -822,7 +818,7 @@ function buildSourceSpecificSpec(base: ZhRoleSpec, subtype: SourceSpecificTransf
         label: '多瓶阵列 CTA 尾帧',
         reshootShot: '拍摄多瓶阵列或单瓶定格，配合干净收口和购买引导空间，形成 CTA 尾帧',
         mustCapture: ['多瓶阵列或单瓶稳定定格', '标签清晰', 'CTA 尾帧留白', '购买引导区域干净'],
-        framing: '竖屏产品居中或阵列居中，底部/侧边留文案安全区',
+        framing: '竖屏产品居中或阵列居中，底部/侧边留文案留白区',
         durationSec: base.durationSec,
         hyperframesIntent: '把结尾锁定抽象成产品阵列、干净收口和明确行动引导',
         animationHints: ['多瓶阵列', 'CTA 尾帧', '购买引导弹出', '干净收口'],
@@ -840,7 +836,7 @@ function buildSourceSpecificSpec(base: ZhRoleSpec, subtype: SourceSpecificTransf
           '瓶身标签或包装清晰',
           '冷凝水/冰块/柠檬片等冰爽证据',
           '开盖、瓶身旋转、倒茶或陈列扫过中的一个饮料动作',
-          '画面留出卖点或 CTA 安全区'
+          '画面留出卖点或 CTA 留白区'
         ],
         framing: base.framing,
         durationSec: base.durationSec,
