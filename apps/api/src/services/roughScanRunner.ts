@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { ViralStructureGraph } from '@viral-struct/shared';
 import { ViralStructureGraphSchema } from '@viral-struct/shared';
+import { probeVideo } from './assetManager/mediaProbeService';
 
 /** Monorepo root (the API runs with cwd=apps/api; scripts + .venv live at the root). */
 const REPO_ROOT = process.env.SCAN_REPO_ROOT
@@ -99,7 +100,6 @@ export interface RoughScanResult {
 export async function runRoughScan(
   videoPath: string,
   videoId: string,
-  durationSec: number,
   onProgress?: ScanProgress
 ): Promise<RoughScanResult> {
   const python = resolvePython();
@@ -107,6 +107,12 @@ export async function runRoughScan(
   const workDir = path.join(getScanDataDir(), videoId);
   await mkdir(path.join(workDir, 'clips'), { recursive: true });
   const warnings: string[] = [];
+
+  // Duration is only a prompt hint for rough_scan.py. Probe it cheaply via ffprobe
+  // rather than running the full analyzeVideoFile (keyframe + cover extraction) pass
+  // just to read it — that was redundant ffmpeg work + an extra failure surface.
+  onProgress?.('读取视频信息');
+  const durationSec = (await probeVideo(videoPath)).media.durationSec ?? 0;
 
   // 1) Preprocess → 5fps / 720w preview (what rough_scan.py expects).
   onProgress?.('预处理视频（5fps 预览）');
@@ -160,8 +166,16 @@ export async function runRoughScan(
       '--duration', String(Math.max(1, Math.round(durationSec * 100) / 100)),
       '--env', '.env',
       '--out', roughOut,
+      // Keep debug dumps in THIS video's work dir. The script's defaults point at the
+      // canonical DEFAULT_VIDEO_ID analysis dir (computed at import time), so without
+      // these every uploaded scan would misfile its debug + overwrite the sample's.
+      '--raw-out', path.join(workDir, 'rough_raw_response.json'),
+      '--text-out', path.join(workDir, 'rough_response_text.txt'),
+      '--file-info-out', path.join(workDir, 'uploaded_file_info.json'),
     ],
-    { cwd: REPO_ROOT, timeoutMs: Number(process.env.SCAN_ROUGH_TIMEOUT_MS ?? 300_000), label: 'rough_scan.py' }
+    // Runner timeout must cover the script's own budget: file-preprocessing wait
+    // (≤300s) + Responses API (≤600s). The old 300s default SIGKILLed real scans.
+    { cwd: REPO_ROOT, timeoutMs: Number(process.env.SCAN_ROUGH_TIMEOUT_MS ?? 900_000), label: 'rough_scan.py' }
   );
 
   // 3) Bridge rough-only → ViralStructureGraph (no fine scan yet).

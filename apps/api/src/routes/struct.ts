@@ -339,9 +339,8 @@ structRouter.post('/scan', withUploadGuard(upload.single('video')), (req, res) =
     };
     const startedAt = scanJobs.get(jobId)?.startedAt ?? Date.now();
     try {
-      setStage('读取视频信息');
-      const analysis = await analyzeVideoFile({ videoId, filePath });
-      const { graph, warnings, roughScanPath, workDir } = await runRoughScan(filePath, videoId, analysis.metadata.duration, setStage);
+      // runRoughScan probes duration itself (ffprobe) — no full analyzeVideoFile pre-pass.
+      const { graph, warnings, roughScanPath, workDir } = await runRoughScan(filePath, videoId, setStage);
       const defaultedFields: string[] = [];
       const sourceVideo = graphToSourceVideo(graph, { videoId, title, defaultedFields });
       // Retain the raw video + rough output so a follow-up fine scan can reuse them.
