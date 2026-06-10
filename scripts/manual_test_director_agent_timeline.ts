@@ -474,18 +474,41 @@ function buildReport(
       ])
     ),
     '',
-    '## Per-beat resolution channels (covered ⇒ alternatives)',
+    '## 逐段详表：案例片段 → 匹配素材 → 三渠道完整指导',
     '',
-    '_Every beat now carries all three channels (reshoot / hyperframes / aigc). For a **covered** (matched) beat they are ALTERNATIVES to the placed real asset; for partial/gap they resolve the missing material. The recommended channel is starred._',
+    '_每个「段」对应案例视频的一个结构槽位。表头给出该段对应的案例片段（源片时间段 + 结构功能 + 源槽位）、匹配到的素材与匹配度、填充状态与成片位置；下表列出 补拍(reshoot) / hyperframes / aigc 三条**完整**指导（不截断），★ 为推荐渠道。matched 段的三条是已放置真实素材的备选；partial/gap 段的三条用于补足缺失内容。_',
     '',
-    optionSlots
-      .map((slot) => {
-        const options = slot.fill.options ?? [];
+    timeline.slots
+      .map((slot, i) => {
+        const options = slot.fill.kind === 'gap' ? slot.fill.options : (slot.fill.options ?? []);
         const recommended = slot.fill.recommendedOptionId;
         const status = slot.fillStatus ?? (slot.fill.kind === 'gap' ? 'missing_generation_required' : slot.fill.status);
-        const alt = status === 'matched' ? ' — covered, channels are alternatives' : '';
-        const lines = options.map((option) => `  - ${option.id === recommended ? '**' : ''}${option.id}${option.id === recommended ? '** (recommended)' : ''}: ${describeOption(option)}`);
-        return [`### ${slot.slotId} (${slot.role}) · ${status}${alt}`, ...lines].join('\n');
+        const matched = slot.fill.kind === 'matched';
+        const asset = matched ? slot.fill.assetId : '（缺口，无匹配素材，待生成）';
+        const quality = matched ? slot.fill.matchQuality.toFixed(2) : '—';
+        const beat = slot.compressionBeat;
+        const sourceSeg = `源片 ${slot.sourceStartMs ?? '-'}–${slot.sourceEndMs ?? '-'}ms`
+          + (beat ? `｜结构功能 ${beat.preservedStructureFunction}｜源槽位 ${beat.mergedSourceSlotIds.join('+') || slot.slotId}` : `｜源槽位 ${slot.slotId}`);
+        const cell = (id: string): string => {
+          const option = options.find((opt) => opt.id === id);
+          if (!option) return '—';
+          return (option.id === recommended ? '★ ' : '') + describeOptionFull(option);
+        };
+        const heading = `### 段 ${i + 1} · ${slot.role} · ${slot.slotId}`;
+        const meta = [
+          `- 对应案例片段：${sourceSeg}`,
+          `- 匹配素材：**${asset}**（匹配度 ${quality}）`,
+          `- 填充状态：${status}｜成片位置 ${slot.startMs}–${slot.endMs}ms`
+        ].join('\n');
+        const table = markdownTable(
+          ['渠道', '完整指导内容（★ = 推荐渠道）'],
+          [
+            ['补拍 reshoot', cell('reshoot')],
+            ['hyperframes', cell('hyperframes')],
+            ['aigc', cell('aigc')]
+          ]
+        );
+        return [heading, meta, '', table].join('\n');
       })
       .join('\n\n'),
     '',
@@ -553,6 +576,13 @@ function describeOption(option: GapResolutionOption): string {
   if (option.id === 'reshoot') return option.guidanceNL.slice(0, 160);
   if (option.id === 'hyperframes') return option.editingGuidanceNL.slice(0, 160);
   return `[${option.providerHint}] ${option.prompt.slice(0, 160)}`;
+}
+
+/** Full (untruncated) option text for the per-slot detail table — fixes the aigc-prompt-cut-off issue. */
+function describeOptionFull(option: GapResolutionOption): string {
+  if (option.id === 'reshoot') return option.guidanceNL;
+  if (option.id === 'hyperframes') return option.editingGuidanceNL;
+  return `[${option.providerHint}] ${option.prompt}`;
 }
 
 function firstOptionText(slot: OrchestratedTimeline['slots'][number]): string {
