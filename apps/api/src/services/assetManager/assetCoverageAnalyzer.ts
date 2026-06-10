@@ -13,6 +13,7 @@ import type {
   ViralStructureGraph
 } from '@viral-struct/shared';
 import { AssetCardSchema, AssetLibraryReportSchema, SlotCoverageMatrixSchema } from '@viral-struct/shared';
+import { filterMatchableAssetCards } from './assetCardFilters';
 import { normalizeAssetCard } from './assetNormalizer';
 import {
   ASSET_MANAGER_ROLES,
@@ -39,7 +40,9 @@ export interface AssetCoverageAnalysisResult {
 
 export function analyzeAssetCoverage(input: AnalyzeAssetCoverageInput): AssetCoverageAnalysisResult {
   const warnings: string[] = [];
-  const assetCards = enrichAssetsWithAffordance(input.assetCards, input.contentBrief);
+  const filtered = filterMatchableAssetCards(input.assetCards);
+  warnings.push(...filtered.warnings);
+  const assetCards = enrichAssetsWithAffordance(filtered.assetCards, input.contentBrief);
   if (assetCards.length === 0) {
     warnings.push('No assetCards were provided; every role and slot will be marked missing.');
   }

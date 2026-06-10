@@ -26,6 +26,7 @@ import { OrchestratedTimelineSchema } from '@viral-struct/shared';
 import { planStructuralCompression, beatOwnsSensoryCascade, type CompressionSlotTiming } from './structuralCompressionPlanner';
 import { matchSlots, matchSlotsWithFallback, type MatchSlotsResultWithSource } from '../slotMatcher';
 import { buildAssetSupplyContext } from '../assetManager/assetSupplyContextBuilder';
+import { filterMatchableAssetCards } from '../assetManager/assetCardFilters';
 import { extractViralMotifAnnotation } from '../motifs/viralMotifExtractor';
 import { containsSourceSpecificTerm, sanitizeMotionGrammarText } from '../motifs/motionGrammarSanitizer';
 import { normalizeCategory, type CategoryPreset } from '../motifs/categoryPresetProvider';
@@ -73,7 +74,9 @@ export interface BuildOrchestratedTimelineInput {
  * plan-only OrchestratedTimeline. No rendering, no external generation.
  */
 export async function buildOrchestratedTimeline(input: BuildOrchestratedTimelineInput): Promise<OrchestratedTimeline> {
-  const { structureGraph, assetCards, contentBrief } = input;
+  const { structureGraph, contentBrief } = input;
+  const filteredAssets = filterMatchableAssetCards(input.assetCards);
+  const assetCards = filteredAssets.assetCards;
   const targetCategory = inferTargetCategory(contentBrief, input.categoryPreset);
   const targetDurationMode = input.targetDurationMode ?? DEFAULT_TARGET_DURATION_MODE;
 
@@ -100,7 +103,7 @@ export async function buildOrchestratedTimeline(input: BuildOrchestratedTimeline
           categoryPreset: input.categoryPreset
         });
 
-  const match = await runMatch(input, workingGraph);
+  const match = await runMatch({ ...input, assetCards }, workingGraph);
   const matchBySlot = new Map(match.matches.map((entry) => [entry.slotId, entry]));
   const coverageBySlot = new Map(
     (assetSupplyContext.contextualCoverage?.slotCoverages ?? []).map((coverage) => [coverage.slotId, coverage])
@@ -113,7 +116,7 @@ export async function buildOrchestratedTimeline(input: BuildOrchestratedTimeline
   const sourceDurationMs = compression?.sourceDurationMs ?? legacyTimingPlan!.sourceDurationMs;
   const targetDurationMs = compression?.targetDurationMs ?? legacyTimingPlan!.targetDurationMs;
 
-  const warnings = match.warning ? [match.warning] : [];
+  const warnings = [...filteredAssets.warnings, ...(match.warning ? [match.warning] : [])];
 
   const slots: OrchestratedSlot[] = workingGraph.shotSlots.map((slot) => {
     const slotMatch = matchBySlot.get(slot.id);

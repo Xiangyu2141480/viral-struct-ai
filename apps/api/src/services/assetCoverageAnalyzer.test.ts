@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { ContentBrief, ViralStructureGraph } from '@viral-struct/shared';
+import type { AssetCard, ContentBrief, ViralStructureGraph } from '@viral-struct/shared';
 import { loadAssetLibrary } from './assetLibraryLoader';
 import { analyzeAssetCoverage } from './assetManager/assetCoverageAnalyzer';
 import { scoreSlotAffordance } from './assetManager/slotAffordanceScorer';
@@ -203,4 +203,66 @@ test('analyzeAssetCoverage falls back to role-level coverage when structureGraph
   assert.equal(result.matrix.totalSlotCount, 10);
   assert.ok(result.warnings.some((warning) => warning.includes('role-level coverage')));
   assert.ok(result.report.roleCoverage.product_closeup.status === 'covered');
+});
+
+test('analyzeAssetCoverage filters long-video parent cards before downstream coverage', () => {
+  const segment = {
+    id: 'long_video_seg_001',
+    type: 'video',
+    url: '/media/uploads/long.mp4',
+    spatialDescription: '手持瓶身开盖动作片段。',
+    temporalDescription: 'Segment 1 of long_video: 3s-7s.',
+    detectedObjects: ['beverage bottle', 'hand', 'product'],
+    suitableSlots: ['usage_demo', 'product_closeup'],
+    qualityScore: 0.78,
+    segmentSource: {
+      parentAssetId: 'long_video',
+      startSec: 3,
+      endSec: 7,
+      durationSec: 4,
+      segmentIndex: 0,
+      label: '开盖动作片段',
+      visualSummary: '手持瓶身完成开盖动作。',
+      roleHints: ['usage_demo', 'product_closeup'],
+      actionTags: ['open_cap', 'hand_operation'],
+      confidence: 0.82,
+      source: 'deterministic'
+    }
+  } satisfies AssetCard;
+  const parent = {
+    id: 'long_video',
+    type: 'video',
+    url: '/media/uploads/long.mp4',
+    spatialDescription: '父级长视频，仅作为媒体来源。',
+    detectedObjects: ['beverage bottle', 'product'],
+    suitableSlots: ['usage_demo', 'product_closeup', 'cta_visual'],
+    qualityScore: 0.8,
+    analysis: {
+      videoSegments: [{
+        id: 'long_video_seg_001',
+        parentAssetId: 'long_video',
+        startSec: 3,
+        endSec: 7,
+        durationSec: 4,
+        label: '开盖动作片段',
+        visualSummary: '手持瓶身完成开盖动作。',
+        roleHints: ['usage_demo', 'product_closeup'],
+        actionTags: ['open_cap', 'hand_operation'],
+        qualityScore: 0.78,
+        confidence: 0.82,
+        keyframeIds: [],
+        source: 'deterministic'
+      }]
+    }
+  } as unknown as AssetCard;
+
+  const result = analyzeAssetCoverage({
+    structureGraph: graph,
+    assetCards: [parent, segment],
+    contentBrief: brief
+  });
+
+  assert.equal(result.assetCards.some((asset) => asset.id === 'long_video'), false);
+  assert.equal(result.assetCards.some((asset) => asset.id === 'long_video_seg_001'), true);
+  assert.ok(result.warnings.some((warning) => warning.includes('long-video parent')));
 });

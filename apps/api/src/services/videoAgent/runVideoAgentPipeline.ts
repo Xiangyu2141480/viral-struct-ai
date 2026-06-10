@@ -20,6 +20,7 @@ import {
 } from '@viral-struct/video-agent';
 import { AuthoredFfmpegExecutor, type RenderResult } from '@viral-struct/render-executor';
 import { matchSlots } from '../slotMatcher';
+import { filterMatchableAssetCards } from '../assetManager/assetCardFilters';
 import { authoredTimelineToTimelineItems } from './authoredTimelineAdapter';
 
 // apps/api/src/services/videoAgent → repo root (../../../../..).
@@ -56,7 +57,8 @@ export interface RunVideoAgentPipelineResult {
  * step ({@link renderAuthoredTimeline}) so callers that only need the authored plan never touch ffmpeg.
  */
 export async function runVideoAgentPipeline(input: RunVideoAgentPipelineInput): Promise<RunVideoAgentPipelineResult> {
-  const match = input.match ?? matchSlots(input.structureGraph, input.assetCards, input.boundaries);
+  const matchableAssets = filterMatchableAssetCards(input.assetCards).assetCards;
+  const match = input.match ?? matchSlots(input.structureGraph, matchableAssets, input.boundaries);
 
   const constraints: EditConstraints = {
     aspectRatio: (input.structureGraph.meta?.aspectRatio as EditConstraints['aspectRatio']) ?? '9:16',
@@ -70,7 +72,7 @@ export async function runVideoAgentPipeline(input: RunVideoAgentPipelineInput): 
     projectId: `videoagent_${Date.now()}`,
     structureGraph: input.structureGraph,
     contentBrief: input.contentBrief,
-    assetCards: input.assetCards,
+    assetCards: matchableAssets,
     slotMatches: match.matches,
     materialGaps: match.gaps,
     userUnprovidableSlotIds: input.userUnprovidableSlotIds,
@@ -79,15 +81,58 @@ export async function runVideoAgentPipeline(input: RunVideoAgentPipelineInput): 
 
   const gapFills = planGapFills(context);
   const authored = await authorTimeline(context);
+  const authoredTimeline = applySegmentSourceRanges(authored.timeline, matchableAssets);
 
   return {
-    authoredTimeline: authored.timeline,
-    timelineItems: authoredTimelineToTimelineItems(authored.timeline),
+    authoredTimeline,
+    timelineItems: authoredTimelineToTimelineItems(authoredTimeline),
     matches: match.matches,
     materialGaps: match.gaps,
     gapFills,
     authorSource: authored.source
   };
+}
+
+function applySegmentSourceRanges(timeline: AuthoredTimeline, assetCards: AssetCard[]): AuthoredTimeline {
+  const segmentById = new Map(
+    assetCards
+      .filter((asset) => asset.segmentSource)
+      .map((asset) => [asset.id, asset.segmentSource!])
+  );
+  if (segmentById.size === 0) return timeline;
+
+  const beats = timeline.beats.map((beat) => ({
+    ...beat,
+    mediaLayers: beat.mediaLayers.map((layer) => {
+      const segment = segmentById.get(layer.media.assetId ?? '');
+      if (!segment || layer.media.type !== 'video') return layer;
+      const relativeStart = typeof layer.media.startSec === 'number'
+        ? clamp(layer.media.startSec, 0, segment.durationSec)
+        : 0;
+      const relativeEnd = typeof layer.media.endSec === 'number'
+        ? clamp(layer.media.endSec, relativeStart + 0.1, segment.durationSec)
+        : segment.durationSec;
+      return {
+        ...layer,
+        media: {
+          ...layer.media,
+          startSec: roundSec(segment.startSec + relativeStart),
+          endSec: roundSec(Math.min(segment.endSec, segment.startSec + relativeEnd))
+        }
+      };
+    })
+  }));
+
+  return { ...timeline, beats };
+}
+
+function clamp(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, value));
+}
+
+function roundSec(value: number): number {
+  return Number(value.toFixed(3));
 }
 
 export interface RenderAuthoredTimelineInput {

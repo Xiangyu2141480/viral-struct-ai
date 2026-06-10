@@ -14,6 +14,7 @@ import type {
 } from '@viral-struct/shared';
 import { splitRejectIfForTransfer } from '@viral-struct/shared';
 import { createOpenAICompatibleClient } from './llmProvider';
+import { isMatchableAssetCard } from './assetManager/assetCardFilters';
 import { buildMotifContext, extractViralMotifAnnotation } from './motifs/viralMotifExtractor';
 
 export function matchSlots(
@@ -21,7 +22,7 @@ export function matchSlots(
   assets: AssetCard[],
   boundaries?: Boundary[]
 ): { matches: SlotMatch[]; gaps: MaterialGap[] } {
-  const matchableAssets = assets.filter(isMatchableAsset);
+  const matchableAssets = assets.filter(isMatchableAssetCard);
   const matches: SlotMatch[] = graph.shotSlots.map((slot) => {
     const ranked = matchableAssets
       .map((asset) => {
@@ -130,14 +131,6 @@ export function matchSlots(
     });
 
   return { matches, gaps };
-}
-
-function isMatchableAsset(asset: AssetCard): boolean {
-  return !(
-    asset.type === 'video'
-    && !asset.segmentSource
-    && (asset.analysis?.videoSegments?.length ?? 0) > 0
-  );
 }
 
 function buildSlotMotifContext(slot: ViralStructureGraph['shotSlots'][number]): MaterialGap['motifContext'] {
@@ -707,7 +700,7 @@ export interface MatchSlotsLLMOptions {
 
 export async function matchSlotsLLM(opts: MatchSlotsLLMOptions): Promise<{ matches: SlotMatch[]; gaps: MaterialGap[] }> {
   const { graph, assets, clientFactory, model } = opts;
-  const matchableAssets = assets.filter(isMatchableAsset);
+  const matchableAssets = assets.filter(isMatchableAssetCard);
   const client = (clientFactory ?? createOpenAICompatibleClient)();
   const modelId = model ?? process.env.LLM_MODEL;
   if (!modelId) {
