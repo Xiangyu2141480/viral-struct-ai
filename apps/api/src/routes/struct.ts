@@ -789,6 +789,11 @@ structRouter.post('/compile', async (req, res) => {
       options: {
         targetDurationMode: variantToTargetDurationMode(versionIdToVariant(versionId)),
         useLlmMatcher: false,
+        // The UI-synthesized graph (buildStructureGraph) carries no borrowed-source identity
+        // — productInSource is a placeholder — so there is nothing to ban. Pass [] to skip the
+        // mandatory-LLM source-identity banlist (which would otherwise return empty and throw),
+        // mirroring /diagnose's buildSlotResolutions.
+        sourceBannedTerms: [],
       },
     });
     const authored = orchestratedToAuthored(orchestrated, { assetCards });
@@ -1064,6 +1069,9 @@ structRouter.post('/produce', (req, res) => {
         options: {
           targetDurationMode: variantToTargetDurationMode(versionIdToVariant(versionId)),
           useLlmMatcher: false,
+          // Synthesized UI graph carries no borrowed-source identity → skip the mandatory-LLM
+          // banlist (empty result would throw). See /compile for the full rationale.
+          sourceBannedTerms: [],
         },
       });
       warnings.push(...new Set(orchestrated.warnings));
@@ -1383,6 +1391,9 @@ async function composeSharedContext(body: {
       options: {
         targetDurationMode: variantToTargetDurationMode(versionIdToVariant(body.versionId)),
         useLlmMatcher: false,
+        // Synthesized UI graph carries no borrowed-source identity → skip the mandatory-LLM
+        // banlist (empty result would throw). See /compile for the full rationale.
+        sourceBannedTerms: [],
       },
     });
     const authored = orchestratedToAuthored(orchestrated, { assetCards });
@@ -1709,6 +1720,9 @@ structRouter.get('/demo', async (_req, res) => {
       options: {
         targetDurationMode: variantToTargetDurationMode('high_click'),
         useLlmMatcher: false,
+        // Synthesized UI graph carries no borrowed-source identity → skip the mandatory-LLM
+        // banlist (empty result would throw). See /compile for the full rationale.
+        sourceBannedTerms: [],
       },
     });
     const authored = orchestratedToAuthored(orchestrated, { assetCards: cards });
