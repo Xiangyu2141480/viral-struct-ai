@@ -328,13 +328,13 @@ export const ReusableAssetPackTypeSchema = z.enum([
   'product_hero_reveal',
   'product_closeup',
   'usage_demo',
-  'cap_open_usage',
-  'pour_or_drink_usage',
-  'cold_condensation_macro',
-  'cold_refresh_proof',
+  'usage_action_pack',
+  'continuous_usage_pack',
+  'texture_proof_macro',
+  'sensory_proof_pack',
   'motif_assembly_reveal',
   'transition_pack',
-  'transition_ice_lemon_pack',
+  'transition_element_pack',
   'cta_lockup',
   'lineup_social_proof'
 ]);

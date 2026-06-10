@@ -138,14 +138,14 @@ export function buildRuleProposalPrompt(records: RuleGapRecord[]): string {
  * whose token / phrase / patterns name a source-specific term is rejected, never
  * silently merged — the offline path obeys the same leakage guard as runtime.
  */
-export function parseRuleProposals(raw: string): RuleProposalResult {
+export function parseRuleProposals(raw: string, sourceBannedTerms: readonly string[] = []): RuleProposalResult {
   const parsed = RuleProposalsSchema.parse(JSON.parse(raw));
   const accepted: RuleProposal[] = [];
   const rejected: RuleProposalResult['rejected'] = [];
 
   for (const proposal of parsed.proposals) {
     const surface = [proposal.token, proposal.canonicalPhrase, ...proposal.patterns].join(' ');
-    if (containsSourceSpecificTerm(surface)) {
+    if (containsSourceSpecificTerm(surface, sourceBannedTerms)) {
       rejected.push({ proposal, reason: 'Proposal names a source-specific term; rejected by leakage guard.' });
       continue;
     }

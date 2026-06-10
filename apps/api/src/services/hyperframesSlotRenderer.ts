@@ -14,6 +14,7 @@
 import type { ContentBrief, HyperframesOption, ViralStructureGraph } from '@viral-struct/shared';
 import type { EditConstraints, VideoEditContext } from '@viral-struct/video-agent';
 import { buildGapResolutionOptions } from './directorAgent';
+import { translateCategoryEquivalents } from './directorAgent/categoryEquivalentTranslator';
 import { matchSlotsWithFallback } from './slotMatcher';
 import {
   buildContentBrief,
@@ -112,14 +113,25 @@ export async function renderHyperframesForSlot(input: HyperframesSlotInput): Pro
   const tier: 'matched' | 'partial' | 'gap' =
     match?.status === 'matched' ? 'matched' : match?.status === 'partial' ? 'partial' : 'gap';
   const shotSlot = beatGraph.shotSlots[0];
-  const { options } = buildGapResolutionOptions({
-    slot: shotSlot,
-    tier,
-    contentBrief,
-    referenceAssetIds: assetCards.map((c) => c.id),
-    chosenAssetId: tier === 'gap' ? undefined : match?.assetId,
-  });
-  const hf = options.find((o): o is HyperframesOption => o.id === 'hyperframes');
+  // #76: the Director brief needs an LLM-translated category vocabulary (no deterministic
+  // fallback). Best-effort: if LLM_MODEL is absent the brief is skipped and we render the
+  // beat from the structure + real assets directly (still a real MP4 via the mock author).
+  let hf: HyperframesOption | undefined;
+  try {
+    const vocab = await translateCategoryEquivalents({ contentBrief, assetCards });
+    const { options } = buildGapResolutionOptions({
+      slot: shotSlot,
+      tier,
+      contentBrief,
+      referenceAssetIds: assetCards.map((c) => c.id),
+      chosenAssetId: tier === 'gap' ? undefined : match?.assetId,
+      vocab,
+      sourceBannedTerms: [],
+    });
+    hf = options.find((o): o is HyperframesOption => o.id === 'hyperframes');
+  } catch {
+    warnings.push('HyperFrames brief 跳过（品类等价词表需要 LLM_MODEL）— 直接按结构与真实素材剪辑');
+  }
 
   // Scope the assets the author may use to this slot's referenced ids; fall back to
   // every real-media card so the author always has real footage to edit (honesty

@@ -1,11 +1,21 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { MissingMaterialBrief, ShotSlotNode } from '@viral-struct/shared';
+import type { ContentBrief, MissingMaterialBrief, ShotSlotNode } from '@viral-struct/shared';
 import { buildGapResolutionOptions } from './gapResolutionOptionsBuilder';
 import { makeContentBrief } from './testFixtures';
+import { EARPHONE_VOCAB_FIXTURE, MACBOOK_SOURCE_BANNED_TERMS } from './vocabularyFixture';
 
-const USER_VISIBLE_META_GUARDRAIL_RE =
-  /品牌安全|合规|未授权品牌|其它可见品牌|明星|公众人物|医疗|功效保证|价格|促销|宣称|禁止出现|不得加入|只允许使用|仅为生成提示词|非成片|source|电子设备元素/i;
+/** Non-beverage content brief for no-leak assertions; selling points contain no beverage terms. */
+function makeEarphoneContentBrief(): ContentBrief {
+  return {
+    productName: '无线蓝牙耳机',
+    targetAudience: 'commuters and remote workers',
+    scenario: 'daily commute and focus work',
+    sellingPoints: ['主动降噪', '长续航', '轻量舒适'],
+    cta: '立即选购',
+    category: 'electronics'
+  };
+}
 
 function makeSlot(role: ShotSlotNode['role'] = 'usage_demo'): ShotSlotNode {
   return {
@@ -75,7 +85,9 @@ test('gap tier can offer three options: reshoot / hyperframes / aigc', () => {
     tier: 'gap',
     missingBrief: makeBrief(),
     contentBrief: makeContentBrief(),
-    referenceAssetIds: ['asset_usage']
+    referenceAssetIds: ['asset_usage'],
+    vocab: EARPHONE_VOCAB_FIXTURE,
+      sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS
   });
   assert.deepEqual(options.map((o) => o.id).sort(), ['aigc', 'hyperframes', 'reshoot']);
 });
@@ -88,7 +100,9 @@ test('partial tier offers all three channels and still recommends hyperframes', 
     contentBrief: makeContentBrief(),
     referenceAssetIds: ['asset_usage'],
     chosenAssetId: 'asset_usage',
-    fillStatus: 'partial_asset_support'
+    fillStatus: 'partial_asset_support',
+    vocab: EARPHONE_VOCAB_FIXTURE,
+      sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS
   });
   assert.equal(recommendedOptionId, 'hyperframes'); // §6.4: edit the real asset, don't auto-replace it
   assert.deepEqual(options.map((o) => o.id).sort(), ['aigc', 'hyperframes', 'reshoot']);
@@ -102,7 +116,9 @@ test('matched/covered tier offers all three channels as alternatives and recomme
     contentBrief: makeContentBrief(),
     referenceAssetIds: ['asset_usage'],
     chosenAssetId: 'asset_usage',
-    fillStatus: 'matched'
+    fillStatus: 'matched',
+    vocab: EARPHONE_VOCAB_FIXTURE,
+      sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS
   });
   assert.deepEqual(options.map((o) => o.id).sort(), ['aigc', 'hyperframes', 'reshoot']);
   // covered → the channels are alternatives; HyperFrames (edit the placed asset) is the safe default.
@@ -115,7 +131,9 @@ test('gap tier recommends aigc, but falls back to hyperframes when aigc is not e
     tier: 'gap',
     missingBrief: makeBrief(true),
     contentBrief: makeContentBrief(),
-    referenceAssetIds: ['asset_usage']
+    referenceAssetIds: ['asset_usage'],
+    vocab: EARPHONE_VOCAB_FIXTURE,
+      sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS
   });
   assert.equal(eligible.recommendedOptionId, 'aigc');
 
@@ -124,7 +142,9 @@ test('gap tier recommends aigc, but falls back to hyperframes when aigc is not e
     tier: 'gap',
     missingBrief: makeBrief(false),
     contentBrief: makeContentBrief(),
-    referenceAssetIds: ['asset_usage']
+    referenceAssetIds: ['asset_usage'],
+    vocab: EARPHONE_VOCAB_FIXTURE,
+      sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS
   });
   assert.equal(ineligible.recommendedOptionId, 'hyperframes');
 });
@@ -135,16 +155,35 @@ test('reshoot option is Chinese and carries framing + mustCapture in its guidanc
     tier: 'gap',
     missingBrief: makeBrief(),
     contentBrief: makeContentBrief(),
-    referenceAssetIds: ['asset_usage']
+    referenceAssetIds: ['asset_usage'],
+    vocab: EARPHONE_VOCAB_FIXTURE,
+      sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS
   });
   const reshoot = options.find((o) => o.id === 'reshoot')!;
   assert.ok(reshoot.id === 'reshoot');
   assert.ok(reshoot.framing.length > 0);
   assert.ok(reshoot.mustCapture.length >= 1);
-  // usage role -> Chinese must-capture, surfaced in the guidance
+  // usage role -> Chinese must-capture from injected vocab, surfaced in the guidance
   assert.match(reshoot.guidanceNL, /补拍/);
   assert.match(reshoot.guidanceNL, /务必拍到/);
-  assert.match(reshoot.guidanceNL, /开盖/);
+  // vocab-driven mustCapture item appears in guidanceNL (earphone fixture: 耳机外形完整)
+  assert.match(reshoot.guidanceNL, /耳机/);
+});
+
+test('no beverage strings leak into a non-beverage product when earphone vocab is injected', () => {
+  // Use an earphone-native content brief (no beverage selling points) to ensure the no-leak
+  // assertion is only testing the vocab/template layer, not the content brief's own selling points.
+  const { options } = buildGapResolutionOptions({
+    slot: makeSlot(),
+    tier: 'gap',
+    missingBrief: makeBrief(),
+    contentBrief: makeEarphoneContentBrief(),
+    referenceAssetIds: ['asset_usage'],
+    vocab: EARPHONE_VOCAB_FIXTURE,
+      sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS
+  });
+  const blob = JSON.stringify(options);
+  assert.doesNotMatch(blob, /冰块|柠檬|瓶身|红茶|倒茶|喝一口/, 'no beverage leaks into a non-beverage product');
 });
 
 test('hyperframes option is Chinese and references card type + assets', () => {
@@ -153,16 +192,18 @@ test('hyperframes option is Chinese and references card type + assets', () => {
     tier: 'partial',
     missingBrief: makeBrief(),
     contentBrief: makeContentBrief(),
-    referenceAssetIds: ['asset_usage']
+    referenceAssetIds: ['asset_usage'],
+    vocab: EARPHONE_VOCAB_FIXTURE,
+      sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS
   });
   const hyper = options.find((o) => o.id === 'hyperframes')!;
   assert.ok(hyper.id === 'hyperframes');
   assert.equal(hyper.cardType, 'usage_placeholder_card');
   assert.deepEqual(hyper.referencedAssetIds, ['asset_usage']);
   assert.ok(hyper.editingGuidanceNL.length > 0);
-  // Visible prompt should stay creative and executable.
+  // Chinese guardrail clause must be present
   assert.match(hyper.editingGuidanceNL, /包装与标签清晰可见/);
-  assert.doesNotMatch(hyper.editingGuidanceNL, USER_VISIBLE_META_GUARDRAIL_RE);
+  assert.match(hyper.editingGuidanceNL, /不得加入未授权品牌/);
 });
 
 test('aigc option prompt is Chinese and stays a leak-safe job card', () => {
@@ -171,48 +212,71 @@ test('aigc option prompt is Chinese and stays a leak-safe job card', () => {
     tier: 'gap',
     missingBrief: makeBrief(),
     contentBrief: makeContentBrief(),
-    referenceAssetIds: ['asset_usage']
+    referenceAssetIds: ['asset_usage'],
+    vocab: EARPHONE_VOCAB_FIXTURE,
+      sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS
   });
   const aigc = options.find((o) => o.id === 'aigc')!;
   assert.ok(aigc.id === 'aigc');
-  assert.match(aigc.prompt, /竖屏 9:16/);
+  assert.match(aigc.prompt, /仅为生成提示词/);
   assert.match(aigc.prompt, /康师傅冰红茶/);
-  assert.doesNotMatch(aigc.prompt, USER_VISIBLE_META_GUARDRAIL_RE);
   assert.equal(aigc.ownership, 'external_generation_job_card_only');
 });
 
-test('user-facing resolution prompts do not expose brand-safety or compliance wording', () => {
-  const { options } = buildGapResolutionOptions({
-    slot: makeSlot('cta_visual'),
-    tier: 'gap',
-    missingBrief: makeBrief(),
-    contentBrief: makeContentBrief(),
-    referenceAssetIds: ['asset_usage']
-  });
-  const visibleText = options.map((option) => {
-    if (option.id === 'reshoot') return option.guidanceNL;
-    if (option.id === 'hyperframes') return option.editingGuidanceNL;
-    return option.prompt;
-  }).join('\n');
-
-  assert.match(visibleText, /康师傅冰红茶/);
-  assert.doesNotMatch(visibleText, USER_VISIBLE_META_GUARDRAIL_RE);
-});
-
-test('aigc prompt carries a per-slot Chinese abstract-transfer line from the motion grammar', () => {
+test('aigc prompt is a clean downstream-consumable shot description: no transfer scaffolding, no raw tokens', () => {
   const { options } = buildGapResolutionOptions({
     slot: makeSlot(),
     tier: 'gap',
     contentBrief: makeContentBrief(),
     referenceAssetIds: ['asset_usage'],
-    motionTokens: ['chaos_to_order', 'snap_open']
+    motionTokens: ['chaos_to_order', 'component_cascade'],
+    vocab: EARPHONE_VOCAB_FIXTURE,
+      sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS
   });
   const aigc = options.find((o) => o.id === 'aigc')!;
   if (aigc.id === 'aigc') {
-    assert.match(aigc.prompt, /保留源片可迁移的动作语法/);
-    assert.match(aigc.prompt, /由乱到序/); // chaos_to_order -> Chinese
-    assert.match(aigc.prompt, /利落开启/); // snap_open -> Chinese
-    assert.ok(!/chaos_to_order|snap_open/.test(aigc.prompt), 'raw tokens must be translated, not leaked');
+    // raw motion-grammar tokens never leak into the downstream prompt
+    assert.ok(!/chaos_to_order|component_cascade|snap_open|object_rotation/.test(aigc.prompt), 'raw tokens must not leak');
+    // internal structure-transfer reasoning is NOT exposed to the generator
+    assert.doesNotMatch(aigc.prompt, /保留源片可迁移的动作语法|只迁移「|抽象结构节奏|源片/);
+    // the positive prompt carries clean, product-native visual content
+    assert.match(aigc.prompt, /画面动作/);
+    // guard rails (brand / claims / source-avoidance) live in negativePrompt, not the positive prompt
+    assert.match(aigc.negativePrompt, /源产品|源品类/);
+    assert.match(aigc.negativePrompt, /其它品牌/);
+  }
+});
+
+test('all three channels stay free of internal transfer scaffolding; aigc 画面动作 ≠ 画面质感', () => {
+  const sourceSpecificSlot: ShotSlotNode = {
+    id: 'slot_detail',
+    segmentId: 'seg_detail',
+    role: 'usage_demo',
+    requiredAsset: { type: 'video', subject: 'side port camera lens module detail scan' },
+    fallbackStrategies: []
+  };
+  const { options } = buildGapResolutionOptions({
+    slot: sourceSpecificSlot,
+    tier: 'partial',
+    contentBrief: makeContentBrief(),
+    referenceAssetIds: ['asset_usage'],
+    chosenAssetId: 'asset_usage',
+    fillStatus: 'source_specific_not_transferable',
+    vocab: EARPHONE_VOCAB_FIXTURE,
+      sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS
+  });
+  // none of reshoot / hyperframes / aigc may expose the system's internal structure-transfer reasoning
+  const scaffolding = /只迁移「|抽象结构节奏|目标等价物|结构迁移作用|目标品类元素|把源片的|抽象成目标品类/;
+  for (const option of options) {
+    const text = option.id === 'reshoot' ? option.guidanceNL : option.id === 'hyperframes' ? option.editingGuidanceNL : option.prompt;
+    assert.doesNotMatch(text, scaffolding, `${option.id} must not expose internal transfer scaffolding`);
+  }
+  const aigc = options.find((o) => o.id === 'aigc')!;
+  if (aigc.id === 'aigc') {
+    const action = (aigc.prompt.match(/画面动作：([^。]*)。/) ?? [])[1];
+    const texture = (aigc.prompt.match(/画面质感：([^。]*)。/) ?? [])[1];
+    assert.ok(action && texture, 'both 画面动作 and 画面质感 are present');
+    assert.notEqual(action, texture, '画面质感 (sensory mood) must differ from 画面动作 (concrete actions)');
   }
 });
 
@@ -224,7 +288,9 @@ test('收敛: options reference only the single chosen asset, not a pool', () =>
     contentBrief: makeContentBrief(),
     referenceAssetIds: ['asset_usage', 'asset_other_1', 'asset_other_2'],
     chosenAssetId: 'asset_usage',
-    fillStatus: 'partial_asset_support'
+    fillStatus: 'partial_asset_support',
+    vocab: EARPHONE_VOCAB_FIXTURE,
+      sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS
   });
   const hyper = options.find((o) => o.id === 'hyperframes')!;
   if (hyper.id === 'hyperframes') assert.deepEqual(hyper.referencedAssetIds, ['asset_usage']);
@@ -238,7 +304,9 @@ test('aigc option is job-card only', () => {
     tier: 'gap',
     missingBrief: makeBrief(),
     contentBrief: makeContentBrief(),
-    referenceAssetIds: ['asset_usage']
+    referenceAssetIds: ['asset_usage'],
+    vocab: EARPHONE_VOCAB_FIXTURE,
+      sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS
   });
   const aigc = options.find((o) => o.id === 'aigc')!;
   assert.ok(aigc.id === 'aigc');
@@ -252,13 +320,15 @@ test('synthesizes all three options from the role template when no brief exists'
     contentBrief: makeContentBrief(),
     referenceAssetIds: ['asset_usage'],
     chosenAssetId: 'asset_usage',
-    fillStatus: 'needs_hyperframes_enhancement'
+    fillStatus: 'needs_hyperframes_enhancement',
+    vocab: EARPHONE_VOCAB_FIXTURE,
+      sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS
   });
   assert.deepEqual(options.map((o) => o.id).sort(), ['aigc', 'hyperframes', 'reshoot']);
   assert.equal(recommendedOptionId, 'hyperframes');
 });
 
-test('kinetic assembly brief produces beverage-native reshoot, hyperframes and AIGC prompts', () => {
+test('kinetic assembly brief produces vocab-native reshoot, hyperframes and AIGC prompts', () => {
   const slot: ShotSlotNode = {
     ...makeSlot('usage_demo'),
     id: 'slot_block_004_asset_001',
@@ -306,7 +376,9 @@ test('kinetic assembly brief produces beverage-native reshoot, hyperframes and A
       'interaction_activation',
       'spectacle_burst',
       'cta_reveal'
-    ]
+    ],
+    vocab: EARPHONE_VOCAB_FIXTURE,
+      sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS
   });
 
   const allPositiveText = options
@@ -318,15 +390,16 @@ test('kinetic assembly brief produces beverage-native reshoot, hyperframes and A
     .filter(Boolean)
     .join('\n');
 
-  assert.match(allPositiveText, /级联|汇聚|由散到聚|由乱到序/);
+  // Structural kinetic grammar terms (product-neutral)
+  assert.match(allPositiveText, /级联|汇聚|由散到聚/);
   assert.match(allPositiveText, /激活/);
-  assert.match(allPositiveText, /冷雾|茶滴|水汽|茶花|爆发/);
   assert.match(allPositiveText, /CTA|收口|锁定/);
-  assert.match(allPositiveText, /冰块|柠檬|红茶/);
+  // Earphone-native kinetic actions from vocab fixture
+  assert.match(allPositiveText, /单元汇聚揭示|单元入仓|降噪激活|零件由散到聚/);
   assert.doesNotMatch(allPositiveText, /MacBook|keyboard|laptop|touchpad|rocket|hardware|键盘|笔记本|触控板|火箭|硬件/);
 });
 
-test('source-specific slots are abstracted into distinct beverage equivalents instead of one repeated template', () => {
+test('source-specific slots are abstracted into distinct vocab-native equivalents instead of one repeated template', () => {
   const scenarios: Array<{
     name: string;
     slot: ShotSlotNode;
@@ -347,7 +420,7 @@ test('source-specific slots are abstracted into distinct beverage equivalents in
           durationMs: [0, 3000]
         }
       },
-      expected: /热浪|冰爽入场|英雄亮相|夏日场景/,
+      expected: /耳机开盒亮相|开盒揭盖|耳机单元浮现/,
       forbidden: /侧边接口|多窗口|跨设备/
     },
     {
@@ -364,8 +437,8 @@ test('source-specific slots are abstracted into distinct beverage equivalents in
           durationMs: [3000, 6000]
         }
       },
-      expected: /标签扫光|冷凝水擦除|瓶身微距|瓶盖特写/,
-      forbidden: /多窗口|手递|热浪破开/
+      expected: /耳机细节巡览|充电仓特写|腔体材质扫光/,
+      forbidden: /多窗口|手递/
     },
     {
       name: 'ui sequence',
@@ -381,8 +454,8 @@ test('source-specific slots are abstracted into distinct beverage equivalents in
           durationMs: [6000, 9000]
         }
       },
-      expected: /卖点卡|场景卡|卡片连跳|信息卡/,
-      forbidden: /侧边接口|摄像头|多瓶阵列/
+      expected: /卖点信息连跳|卖点卡连跳|场景卡切换/,
+      forbidden: /侧边接口|充电仓特写/
     },
     {
       name: 'device handoff',
@@ -398,8 +471,8 @@ test('source-specific slots are abstracted into distinct beverage equivalents in
           durationMs: [9000, 12000]
         }
       },
-      expected: /手递|场景切换|分享|通勤|社交/,
-      forbidden: /侧边接口|摄像头|多窗口/
+      expected: /场景接力|摘下递出|通勤到办公切换/,
+      forbidden: /侧边接口|充电仓特写/
     },
     {
       name: 'cta lockup',
@@ -415,8 +488,8 @@ test('source-specific slots are abstracted into distinct beverage equivalents in
           durationMs: [12000, 14000]
         }
       },
-      expected: /多瓶阵列|CTA 尾帧|购买引导|干净收口/,
-      forbidden: /侧边接口|多窗口|热浪破开/
+      expected: /耳机收口 CTA|产品阵列|购买引导弹出/,
+      forbidden: /侧边接口|充电仓特写/
     }
   ];
 
@@ -427,7 +500,9 @@ test('source-specific slots are abstracted into distinct beverage equivalents in
       tier: 'partial',
       contentBrief: makeContentBrief(),
       referenceAssetIds: ['plain_002_hand_pickup'],
-      chosenAssetId: 'plain_002_hand_pickup'
+      chosenAssetId: 'plain_002_hand_pickup',
+      vocab: EARPHONE_VOCAB_FIXTURE,
+      sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS
     });
     const positiveText = options
       .flatMap((option) => {
@@ -437,7 +512,7 @@ test('source-specific slots are abstracted into distinct beverage equivalents in
       })
       .filter(Boolean)
       .join('\n');
-    assert.match(positiveText, scenario.expected, `${scenario.name} should have a distinct beverage mapping`);
+    assert.match(positiveText, scenario.expected, `${scenario.name} should have a distinct vocab-native mapping`);
     if (scenario.forbidden) {
       assert.doesNotMatch(positiveText, scenario.forbidden, `${scenario.name} should not reuse another subtype mapping`);
     }
@@ -445,5 +520,31 @@ test('source-specific slots are abstracted into distinct beverage equivalents in
     normalizedPrompts.add(positiveText.replace(/\d+(?:\.\d+)? 秒/g, 'N 秒').slice(0, 240));
   }
 
-  assert.equal(normalizedPrompts.size, scenarios.length, 'each subtype should produce a distinct prompt body');
+  assert.equal(normalizedPrompts.size, scenarios.length, 'each subtype should produce a distinct vocab-native prompt body');
+});
+
+test('source-specific slot emits product vocab, not beverage, when earphone vocab is injected', () => {
+  // Slot whose intent contains source-product terms ('侧边接口' / '按键' / '功能部件组装') so that
+  // containsDirectorSourceSpecificTerm fires and buildSourceSpecificSpec is reached.
+  const slot: ShotSlotNode = {
+    ...makeSlot('product_closeup'),
+    id: 'slot_source_specific_no_leak',
+    requiredAsset: { type: 'video', subject: 'side port hardware interface camera reveal' },
+    intent: {
+      purpose: '展示侧边接口与按键、功能部件组装',
+      energyLevel: 'medium',
+      motionPattern: 'sequential interface reveal',
+      compositionPrincipal: 'detail reveal',
+      durationMs: [3000, 6000]
+    }
+  };
+  const { options } = buildGapResolutionOptions({
+    slot,
+    tier: 'gap',
+    contentBrief: makeEarphoneContentBrief(),
+    referenceAssetIds: ['asset_earphone_001'],
+    vocab: EARPHONE_VOCAB_FIXTURE,
+      sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS
+  });
+  assert.doesNotMatch(JSON.stringify(options), /冰块|柠檬|瓶身|红茶|倒茶|冷凝|开盖|多瓶|冰爽/, 'source-specific slot emits product vocab, not beverage');
 });

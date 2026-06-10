@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { ShotSlotNode } from '@viral-struct/shared';
 import { mineRuleGaps, parseRuleProposals, buildRuleProposalPrompt } from './motifRuleMiner';
+import { MACBOOK_SOURCE_BANNED_TERMS } from '../directorAgent/vocabularyFixture';
 
 function slot(partial: Partial<ShotSlotNode> & { id: string }): ShotSlotNode {
   return {
@@ -64,7 +65,7 @@ test('parseRuleProposals rejects a proposal that leaks a source-specific term', 
       { token: 'keyboard_assembly', canonicalPhrase: 'keyboard assembly', patterns: ['keyboard', '键盘'] }
     ]
   });
-  const result = parseRuleProposals(raw);
+  const result = parseRuleProposals(raw, MACBOOK_SOURCE_BANNED_TERMS);
   assert.equal(result.accepted.length, 0);
   assert.equal(result.rejected.length, 1);
   assert.match(result.rejected[0].reason, /leakage/i);

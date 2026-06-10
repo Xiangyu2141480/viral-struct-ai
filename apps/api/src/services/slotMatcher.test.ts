@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import type { AssetCard, Boundary, ViralStructureGraph } from '@viral-struct/shared';
 import { splitRejectIfForTransfer } from '@viral-struct/shared';
 import { matchSlots, matchSlotsLLM, matchSlotsWithFallback, statusFromQualityWithEvidence } from './slotMatcher';
+import { MACBOOK_SOURCE_BANNED_TERMS } from './directorAgent/vocabularyFixture';
 
 function makeGraph(): ViralStructureGraph {
   return {
@@ -405,7 +406,8 @@ test('splitRejectIfForTransfer separates source-specific source-product constrai
       '没有触控板',
       '没有 screen / port / chassis evidence'
     ],
-    targetCategory: 'beverage'
+    targetCategory: 'beverage',
+    sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS
   });
 
   assert.deepEqual(split.hardRejectIf, ['背景杂乱', '产品被遮挡']);

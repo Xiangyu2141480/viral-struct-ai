@@ -27,6 +27,7 @@ import { runBoundaryScan } from '../services/boundaryScanRunner';
 import { analyzeAssetsWithFallbackResult } from '../services/assetAnalyzer';
 import { matchSlotsWithFallback } from '../services/slotMatcher';
 import { runDirectorAgent, buildGapResolutionOptions } from '../services/directorAgent';
+import { translateCategoryEquivalents } from '../services/directorAgent/categoryEquivalentTranslator';
 import { planAigcBeats } from '@viral-struct/video-agent';
 import { renderAigcTimeline } from '../services/videoAgent/aigcRenderer';
 import { wanConfigFromEnv } from '../services/videoAgent/wanVideoClient';
@@ -670,7 +671,7 @@ structRouter.post('/diagnose', async (req, res) => {
     // synthesized fill (toDiagnosisRecord handles an absent slotResolutions).
     let slotResolutions: Record<string, SlotGapResolution> | undefined;
     try {
-      slotResolutions = buildSlotResolutions({
+      slotResolutions = await buildSlotResolutions({
         graph,
         matches: matchResult.matches,
         assetCards,
@@ -1306,13 +1307,17 @@ structRouter.get('/hyperframes/:jobId', (req, res) => {
  * result: matched → covered (the three options are alternatives); partial → augment;
  * missing → a true gap. The Director Agent authors the full option payload.
  */
-function buildSlotResolutions(input: {
+async function buildSlotResolutions(input: {
   graph: ReturnType<typeof buildStructureGraph>;
   matches: SlotMatch[];
   assetCards: ReturnType<typeof materialsToAssetCards>;
   contentBrief: ContentBrief;
-}): Record<string, SlotGapResolution> {
+}): Promise<Record<string, SlotGapResolution>> {
   const { graph, matches, assetCards, contentBrief } = input;
+  // #76: the 3-option briefs are driven by an LLM-translated category-equivalent
+  // vocabulary (no deterministic fallback). Build it ONCE; if the LLM is unavailable
+  // this throws and the /diagnose caller falls back to the base 4-state diagnosis.
+  const vocab = await translateCategoryEquivalents({ contentBrief, assetCards });
   const matchBySlot = new Map(matches.map((m) => [m.slotId, m]));
   const referenceAssetIds = assetCards.map((c) => c.id);
   const out: Record<string, SlotGapResolution> = {};
@@ -1327,6 +1332,10 @@ function buildSlotResolutions(input: {
       contentBrief,
       referenceAssetIds,
       chosenAssetId: tier === 'gap' ? undefined : match?.assetId,
+      vocab,
+      // Secondary source-leak guard; the vocab translator already forbids cross-category
+      // terms, so this adapter path skips the extra LLM banlist derivation.
+      sourceBannedTerms: [],
     });
     out[slot.id] = { options, recommendedOptionId };
   }
@@ -1678,7 +1687,7 @@ structRouter.get('/demo', async (_req, res) => {
     // to the base synthesized fill (toDiagnosisRecord handles an absent slotResolutions).
     let slotResolutions: Record<string, SlotGapResolution> | undefined;
     try {
-      slotResolutions = buildSlotResolutions({
+      slotResolutions = await buildSlotResolutions({
         graph,
         matches: matchResult.matches,
         assetCards: cards,

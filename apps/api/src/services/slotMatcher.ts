@@ -375,7 +375,8 @@ B. 新商品的"候选素材清单"：每张 AssetCard 含视觉描述 (visualCo
 hardRejectIf 是真正的质量、安全、构图拒绝条件。
 sourceSpecificRejectIf 是源品类专属限制，不得直接用于否决目标品类素材。
 请把 sourceSpecificRejectIf 理解为需要做目标品类等价迁移的提示。
-例如源片要求“不能是无开合结构的素材”，迁移到饮料品类时不应否决瓶装饮料，而应判断是否存在开盖、触碰、倒入、冰爽爆发等目标品类等价动作。
+例如源片要求“不能是无开合结构的素材”，迁移到目标品类时，不应因为目标素材没有源品类那种具体结构就直接否决，而应判断是否存在**目标产品自己品类**的等价动作（用目标产品自身的部件与行为来对应，绝不要套用其它品类的专属动作词或意象）。
+treatmentSpec 的所有文字（syncPoint、captionOverlay 等）也只能用目标产品自己品类的语言；涉及"盖子/开启"等动作要点明具体部件并用本品类说法，不要用跨品类有歧义的裸动词。
 
 判断原则：
 1. 只看意图 + 接受标准，不要让 sourceInstance 把你带跑——新素材不需要和源片产品长得像。
@@ -473,12 +474,13 @@ interface AssetSummary {
   };
 }
 
-function summarizeSlot(slot: ViralStructureGraph['shotSlots'][number]): SlotSummary {
+function summarizeSlot(slot: ViralStructureGraph['shotSlots'][number], sourceBannedTerms: readonly string[]): SlotSummary {
   const acceptanceCriteria = slot.acceptanceCriteria
     ? {
         anyOf: slot.acceptanceCriteria.anyOf,
         ...splitRejectIfForTransfer({
           ...slot.acceptanceCriteria,
+          sourceBannedTerms,
           slotText: [
             slot.intent?.purpose,
             slot.intent?.motionPattern,
@@ -651,11 +653,13 @@ function reasonFromAlignment(result: AlignmentResult, status: SlotMatch['status'
 function buildLLMMatch(
   slot: ViralStructureGraph['shotSlots'][number],
   result: AlignmentResult,
+  sourceBannedTerms: readonly string[],
   asset?: AssetCard
 ): SlotMatch {
   const assetId = result.assetId ?? undefined;
   const sourceSplit = splitRejectIfForTransfer({
     ...slot.acceptanceCriteria,
+    sourceBannedTerms,
     slotText: `${slot.intent?.purpose ?? ''}\n${slot.sourceInstance?.specificAction ?? ''}`
   });
   const hardRejectTriggered = sourceSplit.hardRejectIf.some((item) => result.missing.includes(item));
@@ -703,10 +707,12 @@ export interface MatchSlotsLLMOptions {
   boundaries?: Boundary[];
   clientFactory?: () => Client;
   model?: string;
+  /** Source-product-specific terms (derived from the scanned source graph) used to classify source-specific rejects. */
+  sourceBannedTerms?: readonly string[];
 }
 
 export async function matchSlotsLLM(opts: MatchSlotsLLMOptions): Promise<{ matches: SlotMatch[]; gaps: MaterialGap[] }> {
-  const { graph, assets, clientFactory, model } = opts;
+  const { graph, assets, clientFactory, model, sourceBannedTerms = [] } = opts;
   const matchableAssets = assets.filter(isMatchableAsset);
   const client = (clientFactory ?? createOpenAICompatibleClient)();
   const modelId = model ?? process.env.LLM_MODEL;
@@ -714,7 +720,7 @@ export async function matchSlotsLLM(opts: MatchSlotsLLMOptions): Promise<{ match
     throw new Error('LLM_MODEL is required for matchSlotsLLM.');
   }
 
-  const slotSummaries = graph.shotSlots.map(summarizeSlot);
+  const slotSummaries = graph.shotSlots.map((slot) => summarizeSlot(slot, sourceBannedTerms));
   const assetSummaries = matchableAssets.map(summarizeAsset);
 
   const messages = [
@@ -758,7 +764,7 @@ export async function matchSlotsLLM(opts: MatchSlotsLLMOptions): Promise<{ match
     if (aligned.assetId && !knownAssetIds.has(aligned.assetId)) {
       throw new Error(`LLM returned unknown assetId ${aligned.assetId} for slot ${slot.id}`);
     }
-    return buildLLMMatch(slot, aligned, aligned.assetId ? assetById.get(aligned.assetId) : undefined);
+    return buildLLMMatch(slot, aligned, sourceBannedTerms, aligned.assetId ? assetById.get(aligned.assetId) : undefined);
   });
 
   const gaps: MaterialGap[] = matches

@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { AuthoredTimelineSchema } from '@viral-struct/shared';
 import { buildOrchestratedTimeline } from '../directorAgent/orchestratedTimelineBuilder';
 import { makeAssets, makeContentBrief, makeFakeClient, makeGraph } from '../directorAgent/testFixtures';
+import { EARPHONE_VOCAB_FIXTURE, MACBOOK_SOURCE_BANNED_TERMS } from '../directorAgent/vocabularyFixture';
 import { orchestratedToAuthored } from './orchestratedToAuthored';
 
 async function makeTimeline() {
@@ -16,7 +17,9 @@ async function makeTimeline() {
       slot_usage: { assetId: 'asset_usage', quality: 0.6 },
       slot_cta: { assetId: null, quality: 0.2 }
     }),
-    model: 'fake-model'
+    model: 'fake-model',
+    vocabulary: EARPHONE_VOCAB_FIXTURE,
+    sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS
   });
 }
 

@@ -1,4 +1,5 @@
 import type {
+  CategoryEquivalentVocabulary,
   PreservedStructureFunction,
   ProductComplexity,
   ProductIntelligence,
@@ -84,6 +85,7 @@ export interface PlanStructuralCompressionInput {
   structureGraph: ViralStructureGraph;
   productIntelligence: ProductIntelligence;
   targetDurationMode: TargetDurationMode;
+  vocab: CategoryEquivalentVocabulary;
 }
 
 const MIN_BEAT_MS = 800;
@@ -187,7 +189,7 @@ export function planStructuralCompression(input: PlanStructuralCompressionInput)
       preservedStructureFunction: draft.func,
       sourceFunctionFamily: draft.chunk.map((c) => c.segment.role).join('+'),
       targetEquivalentFamily: draft.family,
-      targetEquivalentBeat: buildBeatNL(draft.func, draft.family, pi),
+      targetEquivalentBeat: buildBeatNL(draft.func, draft.family, pi, input.vocab),
       compressionDecision: draft.decision,
       compressionReason: buildReason(draft, pi.complexity),
       proofType: draft.proofType,
@@ -377,7 +379,7 @@ function pickProofType(func: PreservedStructureFunction, proofTypes: ProofType[]
 // Target-equivalent natural language (neutral; feeds prompt context)
 // ---------------------------------------------------------------------------
 
-function buildBeatNL(func: PreservedStructureFunction, family: TargetEquivalentFamily, pi: ProductIntelligence): string {
+function buildBeatNL(func: PreservedStructureFunction, family: TargetEquivalentFamily, pi: ProductIntelligence, vocab: CategoryEquivalentVocabulary): string {
   const name = pi.productName;
   const sensory = topValues(pi.sensoryCues, 3);
   const benefits = topValues(pi.coreBenefits, 3);
@@ -385,8 +387,8 @@ function buildBeatNL(func: PreservedStructureFunction, family: TargetEquivalentF
   const social = topValues(pi.socialContexts, 2);
   const cascadeNL = `把"由散到聚"的结构动势迁移成 ${name} 的感官汇聚：${sensory.join('、') || '感官元素'}围绕产品高速掠入并收束成一次冷冽利落的 reveal`;
   const benefitNL = `用感官化方式归纳核心利益：${benefits.join('、') || '核心卖点'}`;
-  const ritualNL = `真人完成 ${name} 的真实使用激活：${rituals.join('、') || '开盖、使用'}`;
-  const usageBenefitNL = `把使用过程收束成利益证明：${name} 入口后 ${benefits.slice(0, 2).join('、') || '即时满足'} 的即时获得感，用"喝完之后"的结果而不是再演一遍开盖动作来说话`;
+  const ritualNL = `真人完成 ${name} 的真实使用激活：${rituals.join('、') || '完成使用动作'}`;
+  const usageBenefitNL = `把使用过程收束成利益证明：${name} 的 ${benefits.slice(0, 2).join('、') || '即时满足'}，用「${vocab.connective.afterUseResult}」这种结果化表达，而不是再演一遍使用动作`;
   const socialNL = `${social.join('、') || '日常使用'}的社交场景，${name} 作为共享中心`;
 
   switch (func) {
@@ -406,7 +408,7 @@ function buildBeatNL(func: PreservedStructureFunction, family: TargetEquivalentF
       return `情绪/感官释放的高点：${sensory.slice(0, 2).join('、') || '爽感'}爆发后收束`;
     case 'cta_lockup':
     default:
-      return `${name} 包装/瓶身 hero + 行动号召收口`;
+      return `${vocab.connective.productHero} + 行动号召收口`;
   }
 }
 

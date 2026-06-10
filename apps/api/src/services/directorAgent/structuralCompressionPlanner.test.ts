@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import type { ProductIntelligence, ViralStructureGraph } from '@viral-struct/shared';
 import { planStructuralCompression } from './structuralCompressionPlanner';
 import { buildDeterministicProductIntelligence } from '../productIntelligence/productIntelligenceAnalyzer';
+import { EARPHONE_VOCAB_FIXTURE } from './vocabularyFixture';
 
 function seg(id: string, role: string, start: number, end: number) {
   return { id, role, start, end, duration: end - start, purpose: role, transferRule: 't', importance: 4 };
@@ -42,7 +43,7 @@ const graph = {
   edges: []
 } as unknown as ViralStructureGraph;
 
-const lowComplexityPi: ProductIntelligence = buildDeterministicProductIntelligence({
+const _lowComplexityPiBase = buildDeterministicProductIntelligence({
   productName: '康师傅冰红茶',
   category: 'beverage',
   targetAudience: 'a',
@@ -51,11 +52,22 @@ const lowComplexityPi: ProductIntelligence = buildDeterministicProductIntelligen
   cta: 'c'
 });
 
+// Override usageRituals so the beat NL test can assert no beverage-specific terms
+// (开盖 comes from the beverage deterministic profile; replace with product-neutral values).
+const lowComplexityPi: ProductIntelligence = {
+  ..._lowComplexityPiBase,
+  usageRituals: [
+    { value: '取出产品', evidence: [{ source: 'llm_inference', text: '取出产品', confidence: 0.6 }], confidence: 0.6 },
+    { value: '完成使用', evidence: [{ source: 'llm_inference', text: '完成使用', confidence: 0.6 }], confidence: 0.6 }
+  ]
+};
+
 function plan() {
   return planStructuralCompression({
     structureGraph: graph,
     productIntelligence: lowComplexityPi,
-    targetDurationMode: 'high_conversion_20s'
+    targetDurationMode: 'high_conversion_20s',
+    vocab: EARPHONE_VOCAB_FIXTURE
   });
 }
 
@@ -95,4 +107,10 @@ test('every representative slot id is a real source slot id, and each beat carri
   const sourceIds = new Set(graph.shotSlots.map((s) => s.id));
   for (const id of p.timingBySlot.keys()) assert.ok(sourceIds.has(id), `${id} should be a source slot id`);
   assert.ok(p.beats.every((b) => b.targetEquivalentBeat.length > 0));
+});
+
+test('beat NL contains no beverage-specific idioms', () => {
+  const p = plan();
+  const allNL = p.beats.map((b) => b.targetEquivalentBeat).join(' ');
+  assert.doesNotMatch(allNL, /喝完|瓶身|开盖/);
 });

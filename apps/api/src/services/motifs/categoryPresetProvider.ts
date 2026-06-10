@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { MotifType } from '@viral-struct/shared';
 import { createOpenAICompatibleClient } from '../llmProvider';
-import { SOURCE_SPECIFIC_TERMS, containsSourceSpecificTerm } from './motionGrammarSanitizer';
+import { containsSourceSpecificTerm } from './motionGrammarSanitizer';
 
 /**
  * Target-category preset = the "what does this motion become in THIS product
@@ -96,6 +96,8 @@ export function normalizeCategory(value: string): string {
 export interface BuildPresetInput {
   category: string;
   availableAssets?: string[];
+  /** Source-product-specific terms (derived from the scanned source graph) the preset must keep out. */
+  sourceBannedTerms?: readonly string[];
 }
 
 export function buildDeterministicPreset(input: BuildPresetInput): CategoryPreset {
@@ -107,7 +109,7 @@ export function buildDeterministicPreset(input: BuildPresetInput): CategoryPrese
     objects: seed.objects,
     actions: seed.actions,
     sensoryKeywords: seed.sensoryKeywords,
-    bannedSourceTerms: SOURCE_SPECIFIC_TERMS,
+    bannedSourceTerms: [...(input.sourceBannedTerms ?? [])],
     motifEquivalents: seed.motifEquivalents,
     defaultEquivalents: seed.defaultEquivalents,
     requiredAssets: grounding.required,
@@ -135,12 +137,17 @@ const LlmPresetSchema = z.object({
   motifEquivalents: z.record(z.string(), z.array(z.string())).optional()
 });
 
-const PRESET_SYSTEM_PROMPT = [
-  'You translate abstract viral motion grammar into a target product category.',
-  'Output JSON only. Use only category-native objects/actions.',
-  'NEVER include source-specific terms: keyboard, laptop, touchpad, rocket, hardware, MacBook, Apple, 键盘, 笔记本, 触控板, 火箭, 硬件功能.',
-  'Do not invent price, promotion, medical benefit, or other brands.'
-].join(' ');
+function presetSystemPrompt(sourceBannedTerms: readonly string[]): string {
+  const banLine = sourceBannedTerms.length
+    ? `NEVER include source-specific terms from the borrowed source video: ${sourceBannedTerms.join(', ')}.`
+    : 'NEVER include terms specific to the borrowed source product (its brand, model, or exclusive parts/props).';
+  return [
+    'You translate abstract viral motion grammar into a target product category.',
+    'Output JSON only. Use only category-native objects/actions.',
+    banLine,
+    'Do not invent price, promotion, medical benefit, or other brands.'
+  ].join(' ');
+}
 
 export async function generateCategoryPresetLLM(opts: GenerateCategoryPresetOptions): Promise<CategoryPreset> {
   const category = normalizeCategory(opts.category);
@@ -157,7 +164,7 @@ export async function generateCategoryPresetLLM(opts: GenerateCategoryPresetOpti
   const response = await client.chat.completions.create({
     model: modelId,
     messages: [
-      { role: 'system', content: PRESET_SYSTEM_PROMPT },
+      { role: 'system', content: presetSystemPrompt(opts.sourceBannedTerms ?? []) },
       {
         role: 'user',
         content: [
@@ -182,7 +189,7 @@ export async function generateCategoryPresetLLM(opts: GenerateCategoryPresetOpti
     ...parsed.defaultEquivalents,
     ...Object.values(parsed.motifEquivalents ?? {}).flat()
   ].join(' ');
-  if (containsSourceSpecificTerm(surface)) {
+  if (containsSourceSpecificTerm(surface, opts.sourceBannedTerms ?? [])) {
     throw new Error('LLM category preset leaked a source-specific term; rejecting.');
   }
 
@@ -192,7 +199,7 @@ export async function generateCategoryPresetLLM(opts: GenerateCategoryPresetOpti
     objects: parsed.objects,
     actions: parsed.actions,
     sensoryKeywords: parsed.sensoryKeywords,
-    bannedSourceTerms: SOURCE_SPECIFIC_TERMS,
+    bannedSourceTerms: [...(opts.sourceBannedTerms ?? [])],
     motifEquivalents: (parsed.motifEquivalents ?? {}) as Partial<Record<MotifType, string[]>>,
     defaultEquivalents: parsed.defaultEquivalents,
     requiredAssets: grounding.required,

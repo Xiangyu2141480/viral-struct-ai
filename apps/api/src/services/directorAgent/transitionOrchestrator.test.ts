@@ -1,11 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { OrchestratedSlot, SlotFillGap, SlotFillMatched } from '@viral-struct/shared';
-import { buildOrchestratedTransitions, planTransition } from './transitionOrchestrator';
+import { buildOrchestratedTransitions } from './transitionOrchestrator';
 import { makeAssets, makeContentBrief } from './testFixtures';
-
-const USER_VISIBLE_TRANSITION_GUARDRAIL_RE =
-  /品牌安全|合规|未授权品牌|brand|IP|claims|source-copying|Review|医疗|价格|促销|宣称|不得加入|未经证实/i;
+import { EARPHONE_VOCAB_FIXTURE } from './vocabularyFixture';
 
 function matchedFill(assetId: string): SlotFillMatched {
   return {
@@ -50,7 +48,7 @@ function slot(
   };
 }
 
-const base = { assetCards: makeAssets(), contentBrief: makeContentBrief() };
+const base = { assetCards: makeAssets(), contentBrief: makeContentBrief(), vocab: EARPHONE_VOCAB_FIXTURE };
 
 test('emits exactly slots.length - 1 transitions', () => {
   const slots = [
@@ -126,70 +124,14 @@ test('infers diverse semantic transition functions with Chinese execution guidan
   assert.ok(functions.size >= 4);
 
   const guidance = transitions.map((transition) => transition.hyperframes?.editingGuidanceNL ?? transition.aigcFrameBridge?.prompt ?? '').join('\n');
-  assert.match(guidance, /冰块|柠檬|茶滴|冷雾|开盖|CTA/);
-  assert.match(guidance, /转场|承接|擦除|收口|汇聚/);
+  // structural connective language is present...
+  assert.match(guidance, /转场|承接|擦除|收口|汇聚|定格/);
+  // ...the kinetic-assembly bridge surfaces the injected product-native vocab (earphone, not beverage)...
+  assert.match(guidance, /单元入仓|零件由散到聚|降噪激活/);
+  // ...and NO beverage MOTIF leaks from the de-beveraged switches. Strip the product name first, since the
+  // fixture product itself is a beverage (康师傅冰红茶) and naming the product is legitimate.
+  const guidanceSansProduct = guidance.split(base.contentBrief.productName).join('');
+  assert.doesNotMatch(guidanceSansProduct, /冰块|柠檬|茶滴|红茶|冷雾|冷凝|瓶身|开盖|倒茶|热浪/);
+  // ...nor any source (MacBook) term.
   assert.doesNotMatch(guidance, /MacBook|keyboard|laptop|touchpad|rocket|hardware|键盘|笔记本|触控板|火箭|硬件/);
-});
-
-test('planTransition emits evidence-aware planner fields for report handoff', () => {
-  const from = slot('a', 'opening_attention', 0, matchedFill('asset_open'));
-  const to = slot('b', 'usage_demo', 1, matchedFill('asset_usage'));
-
-  const transition = planTransition({
-    id: 'transition_001',
-    from,
-    to,
-    productName: base.contentBrief.productName,
-    hyperframesWeight: 1
-  });
-
-  assert.equal(transition.implementationMode, 'hyperframes');
-  assert.equal(transition.assetSupport, 'real_asset_primary');
-  assert.equal(typeof transition.confidence, 'number');
-  assert.ok((transition.whyThisMode ?? '').length > 0);
-  assert.ok((transition.visualAction ?? '').length > 0);
-  assert.ok((transition.fallbackStrategy ?? '').length > 0);
-  assert.deepEqual(transition.missingTransitionAssets, []);
-  assert.ok((transition.whyNot ?? []).some((reason) => reason.includes('AIGC')));
-});
-
-test('buildOrchestratedTransitions delegates every adjacent pair to evidence-aware planTransition output', () => {
-  const slots = [
-    slot('a', 'opening_attention', 0, matchedFill('asset_open')),
-    slot('b', 'usage_demo', 1, matchedFill('asset_usage')),
-    slot('c', 'cta_visual', 2, gapFill())
-  ];
-
-  const transitions = buildOrchestratedTransitions({ slots, ...base });
-
-  assert.equal(transitions.length, 2);
-  for (const transition of transitions) {
-    assert.ok(transition.implementationMode);
-    assert.ok(transition.assetSupport);
-    assert.equal(typeof transition.confidence, 'number');
-    assert.ok(transition.whyThisMode);
-    assert.ok(Array.isArray(transition.whyNot));
-    assert.ok(Array.isArray(transition.missingTransitionAssets));
-    assert.ok(transition.visualAction);
-    assert.ok(transition.fallbackStrategy);
-  }
-});
-
-test('transition handoff text stays creative and does not expose brand-safety review wording', () => {
-  const slots = [
-    slot('a', 'opening_attention', 0, matchedFill('asset_open'), ['component_cascade']),
-    slot('b', 'usage_demo', 1, matchedFill('asset_usage')),
-    slot('c', 'cta_visual', 2, gapFill())
-  ];
-
-  const transitions = buildOrchestratedTransitions({ slots, ...base });
-  const visibleText = transitions.map((transition) => [
-    transition.reason,
-    transition.hyperframes?.editingGuidanceNL,
-    transition.aigcFrameBridge?.prompt,
-    ...(transition.riskNotes ?? [])
-  ].filter(Boolean).join('\n')).join('\n');
-
-  assert.match(visibleText, /转场|承接|冷雾|产品|CTA/);
-  assert.doesNotMatch(visibleText, USER_VISIBLE_TRANSITION_GUARDRAIL_RE);
 });

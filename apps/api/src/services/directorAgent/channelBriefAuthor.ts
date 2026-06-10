@@ -88,6 +88,8 @@ export interface AuthorChannelBriefsOptions {
   channels: AuthoringChannel[];
   clientFactory?: () => Client;
   model?: string;
+  /** Source-product-specific terms (derived from the scanned source graph) the authored text must not leak. */
+  sourceBannedTerms?: readonly string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -98,7 +100,7 @@ const RESHOOT_SYSTEM_PROMPT = `你是真人短视频「补拍」导演。给定�
 
 硬性能力边界（必须遵守）：
 1. 只能是物理世界里真人/真物真实可拍的动作、构图、光线、场景。
-2. 严禁任何超现实或后期特效内容：悬浮、凭空出现、级联飞入、配料自动汇聚、形变、粒子、爆发、炸开、冷雾炸裂、物体自动组装、镜头穿越物体等，一律不许写。把抽象的"结构动机"落地成真实可执行的人手动作（如：开盖、倒入杯中、举起瓶子旋转展示标签、把多瓶依次摆好、喝一口）。
+2. 严禁任何超现实或后期特效内容：悬浮、凭空出现、级联飞入、自动汇聚、形变、粒子、爆发、冷雾炸裂、物体自动组装、镜头穿越物体等，一律不许写。把抽象的"结构动机"落地成**目标产品品类里真实可拍的人手动作**（具体动作请依据本拍给定的目标等价动作，不要套用其他品类的动作）。
 3. 不得出现具体品牌名/型号/源产品物体；不得出现明星或公众人物；不得写价格、促销、医疗或功效宣称。
 4. 紧扣给定的「本拍核心功能」来设计动作：不同功能的镜头要拍出不同内容（钩子=强冲击亮相、利益点=结果化呈现、使用=真实使用、CTA=收口定格），不要每个镜头都写成"拿起瓶子拧盖喝一口"。
 
@@ -108,7 +110,7 @@ const HYPERFRAMES_SYSTEM_PROMPT = `你是使用 HyperFrames 做「基于已有�
 
 硬性能力边界（必须遵守）：
 1. 只能描述对「已有真实素材帧」的剪辑操作（裁切、推近/拉远、卡点、定格、循环、转场擦除）和 2D 图层动画（文字卡、卖点卡、CTA 卡、箭头/高亮/进度点）。必须围绕给定的参考素材来编排。
-2. 严禁描述任何需要重新生成的写实新画面或 VFX：不要写"冰块飞入""冷雾爆发""配料级联汇聚""产品形变"等——那是 AIGC 的活，不是剪辑能做的。
+2. 严禁描述任何需要重新生成的写实新画面或 VFX：不要写任何超现实生成效果（如悬浮飞入、冷雾爆发、汇聚组装、产品形变等）——那是 AIGC 的活，不是剪辑能做的。
 3. 不得出现具体品牌名/型号/源产品物体、明星、价格、医疗或功效宣称。
 4. 紧扣给定的「本拍核心功能」编排剪辑：不同功能的镜头要有不同的卡片类型与节奏，不要写成雷同的剪辑步骤。
 
@@ -117,7 +119,7 @@ const HYPERFRAMES_SYSTEM_PROMPT = `你是使用 HyperFrames 做「基于已有�
 const AIGC_SYSTEM_PROMPT = `你是 AIGC 视频生成提示词工程师。给定本拍的核心功能，写一条可交给视频生成模型执行的提示词（仅为提示词，不是成片）。
 
 能力与边界：
-1. 以 targetEquivalentBeat 描述的本拍功能为第一优先级来设计画面与运镜；可以使用超现实效果，但必须服务于该功能，并用目标品类等价元素演绎（饮料语境：冰块、柠檬片、红茶水滴、冷雾、开盖、倒茶、CTA 收口）。
+1. 以 targetEquivalentBeat 描述的本拍功能为第一优先级来设计画面与运镜；可以使用超现实效果，但必须服务于该功能，并且只能用**目标产品自己品类**的等价元素来演绎（严禁出现与目标产品无关的他品类专属物体/意象）。
 2. "由散到聚 / 汇聚 / 组装 / 级联"这类汇聚型结构动势，只属于明确是"感官汇聚 reveal"的那一拍；钩子、利益点归纳、使用演示、CTA 等镜头要各自用自己的结构动作表达，不要套用汇聚组装。
 3. 严禁照搬源产品/源场景的具体物体；不得出现具体品牌名/型号、明星、价格、医疗或功效宣称。
 
@@ -179,27 +181,27 @@ function containsAny(text: string, terms: string[]): string | undefined {
   return terms.find((t) => lower.includes(t.toLowerCase()));
 }
 
-function assertReshootFilmable(r: AuthoredReshoot): void {
+function assertReshootFilmable(r: AuthoredReshoot, sourceBannedTerms: readonly string[]): void {
   const blob = [r.guidanceNL, r.framing, ...r.mustCapture].join(' ');
   const hit = containsAny(blob, SURREAL_TERMS);
   if (hit) throw new Error(`reshoot brief contains non-filmable/surreal term "${hit}"`);
-  assertNoSourceLeak(blob);
+  assertNoSourceLeak(blob, sourceBannedTerms);
 }
 
-function assertHyperframesEditable(h: AuthoredHyperframes): void {
+function assertHyperframesEditable(h: AuthoredHyperframes, sourceBannedTerms: readonly string[]): void {
   const blob = [h.editingGuidanceNL, h.cardType ?? '', JSON.stringify(h.copy ?? {})].join(' ');
   const hit = containsAny(blob, SURREAL_TERMS);
   if (hit) throw new Error(`hyperframes brief describes generation/VFX term "${hit}" (not an editing op)`);
-  assertNoSourceLeak(blob);
+  assertNoSourceLeak(blob, sourceBannedTerms);
 }
 
-function assertAigcSafe(a: AuthoredAigc): void {
+function assertAigcSafe(a: AuthoredAigc, sourceBannedTerms: readonly string[]): void {
   // aigc MAY be surreal; it must only stay free of source-product leakage in the POSITIVE prompt.
-  assertNoSourceLeak(a.prompt);
+  assertNoSourceLeak(a.prompt, sourceBannedTerms);
 }
 
-function assertNoSourceLeak(text: string): void {
-  if (containsSourceSpecificTerm(text)) {
+function assertNoSourceLeak(text: string, sourceBannedTerms: readonly string[]): void {
+  if (containsSourceSpecificTerm(text, sourceBannedTerms)) {
     throw new Error('authored text leaked a source-specific product term');
   }
 }
@@ -320,15 +322,15 @@ export async function authorChannelBriefs(opts: AuthorChannelBriefsOptions): Pro
       const raw = await callChannel(client, model, channel, opts.intent);
       if (channel === 'reshoot') {
         const r = parseReshoot(raw);
-        assertReshootFilmable(r);
+        assertReshootFilmable(r, opts.sourceBannedTerms ?? []);
         result.reshoot = r;
       } else if (channel === 'hyperframes') {
         const h = parseHyperframes(raw);
-        assertHyperframesEditable(h);
+        assertHyperframesEditable(h, opts.sourceBannedTerms ?? []);
         result.hyperframes = h;
       } else {
         const a = parseAigc(raw);
-        assertAigcSafe(a);
+        assertAigcSafe(a, opts.sourceBannedTerms ?? []);
         result.aigc = a;
       }
     } catch (err) {

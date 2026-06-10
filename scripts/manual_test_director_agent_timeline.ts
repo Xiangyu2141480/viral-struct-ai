@@ -25,7 +25,7 @@ import { splitRejectIfForTransfer } from '../packages/shared/src/index';
 import { normalizeAssetCards } from '../apps/api/src/services/assetManager/assetNormalizer';
 import { buildAssetSupplyContext } from '../apps/api/src/services/assetManager/assetSupplyContextBuilder';
 import { buildDeterministicPreset } from '../apps/api/src/services/motifs/categoryPresetProvider';
-import { SOURCE_SPECIFIC_TERMS } from '../apps/api/src/services/motifs/motionGrammarSanitizer';
+import { deriveSourceIdentityBanlist } from '../apps/api/src/services/directorAgent/sourceIdentityBanlist';
 import { runDirectorAgent } from '../apps/api/src/services/directorAgent/index';
 import { authorTimelineOptions } from '../apps/api/src/services/directorAgent/authorTimelineOptions';
 import { analyzeProductIntelligence } from '../apps/api/src/services/productIntelligence/productIntelligenceAnalyzer';
@@ -97,14 +97,26 @@ async function main(): Promise<void> {
   // borrowed MacBook graph penalized them on the source script, not the asset). PRODUCT_NATIVE_GRAPH=false
   // falls back to the borrowed MacBook source graph for comparison.
   const useNativeGraph = process.env.PRODUCT_NATIVE_GRAPH !== 'false';
+  const borrowedSourcePath = process.env.SOURCE_GRAPH ?? INPUTS.structureGraph;
   const structureGraph = useNativeGraph
     ? buildProductNativeStructureGraph({ contentBrief, productIntelligence })
-    : readJson<ViralStructureGraph>(INPUTS.structureGraph);
+    : readJson<ViralStructureGraph>(borrowedSourcePath);
   console.log(
     `- structure skeleton: ${useNativeGraph
       ? `product-native arc (${structureGraph.shotSlots.length} slots, PI-derived)`
-      : 'macbook_neo (legacy borrowed source graph)'}`
+      : `borrowed source graph: ${borrowedSourcePath} (${structureGraph.shotSlots.length} slots)`}`
   );
+
+  // Source-leak banlist: only a BORROWED source can leak its product identity into the target output. In
+  // product-native mode the skeleton IS the target product, so there is nothing to ban. In borrow mode we
+  // derive the banned terms from the actual scanned source (no hardcoded MacBook list) and use them both to
+  // drive the guardrails and to audit the output below.
+  const sourceBannedTerms = useNativeGraph
+    ? []
+    : (await deriveSourceIdentityBanlist({ structureGraph })).terms;
+  if (!useNativeGraph) {
+    console.log(`- source-identity banlist (${sourceBannedTerms.length}): ${sourceBannedTerms.slice(0, 16).join('、')}${sourceBannedTerms.length > 16 ? ' …' : ''}`);
+  }
 
   // ② kept: produce the supply-context evidence the Director consumes read-only.
   const assetSupplyContext = buildAssetSupplyContext({
@@ -131,7 +143,8 @@ async function main(): Promise<void> {
     options: {
       useLlmMatcher: process.env.DIRECTOR_LLM_MATCHER === 'true',
       targetDurationMode: productIntelligence.targetDurationRecommendation.preferred,
-      structuralCompression: useCompression ? { productIntelligence } : undefined
+      structuralCompression: useCompression ? { productIntelligence } : undefined,
+      sourceBannedTerms
     }
   });
 
@@ -151,11 +164,11 @@ async function main(): Promise<void> {
   // Handoff: map to the Video Agent's AuthoredTimeline (a TIMELINE — never rendered here).
   const authored = orchestratedToAuthored(timeline, { assetCards });
 
-  const leakage = checkSourceLeakage(timeline);
+  const leakage = checkSourceLeakage(timeline, sourceBannedTerms);
 
   writeText(OUTPUTS.timelineJson, `${JSON.stringify(timeline, null, 2)}\n`);
   writeText(OUTPUTS.authoredJson, `${JSON.stringify(authored, null, 2)}\n`);
-  writeText(OUTPUTS.report, buildReport(timeline, authored, leakage, productIntelligence, structureGraph));
+  writeText(OUTPUTS.report, buildReport(timeline, authored, leakage, productIntelligence, structureGraph, sourceBannedTerms));
 
   const counts = countFills(timeline);
   console.log('Director Agent orchestrated-timeline manual test complete.');
@@ -215,13 +228,13 @@ interface LeakageResult {
 // string except these negative-direction keys.
 const NEGATIVE_DIRECTION_KEYS = new Set(['negativePrompt', 'avoid']);
 
-function checkSourceLeakage(timeline: OrchestratedTimeline): LeakageResult {
+function checkSourceLeakage(timeline: OrchestratedTimeline, sourceBannedTerms: readonly string[]): LeakageResult {
   const hits = new Set<string>();
   const walk = (value: unknown, key?: string): void => {
     if (key && NEGATIVE_DIRECTION_KEYS.has(key)) return;
     if (typeof value === 'string') {
       const lower = value.toLowerCase();
-      for (const term of SOURCE_SPECIFIC_TERMS) {
+      for (const term of sourceBannedTerms) {
         if (lower.includes(term.toLowerCase())) hits.add(term);
       }
     } else if (Array.isArray(value)) {
@@ -280,7 +293,8 @@ function buildReport(
   authored: ReturnType<typeof orchestratedToAuthored>,
   leakage: LeakageResult,
   productIntelligence: ProductIntelligence,
-  sourceGraph: ViralStructureGraph
+  sourceGraph: ViralStructureGraph,
+  sourceBannedTerms: readonly string[]
 ): string {
   const counts = countFills(timeline);
   const modes = countModes(timeline);
@@ -401,6 +415,7 @@ function buildReport(
         const sourceSlot = findSourceSlot(slot.slotId);
         const split = splitRejectIfForTransfer({
           ...sourceSlot?.acceptanceCriteria,
+          sourceBannedTerms,
           slotText: [
             sourceSlot?.intent?.purpose,
             sourceSlot?.sourceInstance?.specificAction,
@@ -478,7 +493,7 @@ function buildReport(
     '',
     sourceSpecificSlots.length
       ? markdownTable(
-          ['slotId', 'role', 'fillStatus', 'source subtype', 'beverage equivalent'],
+          ['slotId', 'role', 'fillStatus', 'source subtype', 'target equivalent'],
           sourceSpecificSlots.slice(0, 12).map((slot) => [
             slot.slotId,
             slot.role,
@@ -513,18 +528,41 @@ function buildReport(
       ])
     ),
     '',
-    '## Per-beat resolution channels (covered ⇒ alternatives)',
+    '## 逐段详表：案例片段 → 匹配素材 → 三渠道完整指导',
     '',
-    '_Every beat now carries all three channels (reshoot / hyperframes / aigc). For a **covered** (matched) beat they are ALTERNATIVES to the placed real asset; for partial/gap they resolve the missing material. The recommended channel is starred._',
+    '_每个「段」对应案例视频的一个结构槽位。表头给出该段对应的案例片段（源片时间段 + 结构功能 + 源槽位）、匹配到的素材与匹配度、填充状态与成片位置；下表列出 补拍(reshoot) / hyperframes / aigc 三条**完整**指导（不截断），★ 为推荐渠道。matched 段的三条是已放置真实素材的备选；partial/gap 段的三条用于补足缺失内容。_',
     '',
-    optionSlots
-      .map((slot) => {
-        const options = slot.fill.options ?? [];
+    timeline.slots
+      .map((slot, i) => {
+        const options = slot.fill.kind === 'gap' ? slot.fill.options : (slot.fill.options ?? []);
         const recommended = slot.fill.recommendedOptionId;
         const status = slot.fillStatus ?? (slot.fill.kind === 'gap' ? 'missing_generation_required' : slot.fill.status);
-        const alt = status === 'matched' ? ' — covered, channels are alternatives' : '';
-        const lines = options.map((option) => `  - ${option.id === recommended ? '**' : ''}${option.id}${option.id === recommended ? '** (recommended)' : ''}: ${describeOption(option)}`);
-        return [`### ${slot.slotId} (${slot.role}) · ${status}${alt}`, ...lines].join('\n');
+        const matched = slot.fill.kind === 'matched';
+        const asset = matched ? slot.fill.assetId : '（缺口，无匹配素材，待生成）';
+        const quality = matched ? slot.fill.matchQuality.toFixed(2) : '—';
+        const beat = slot.compressionBeat;
+        const sourceSeg = `源片 ${slot.sourceStartMs ?? '-'}–${slot.sourceEndMs ?? '-'}ms`
+          + (beat ? `｜结构功能 ${beat.preservedStructureFunction}｜源槽位 ${beat.mergedSourceSlotIds.join('+') || slot.slotId}` : `｜源槽位 ${slot.slotId}`);
+        const cell = (id: string): string => {
+          const option = options.find((opt) => opt.id === id);
+          if (!option) return '—';
+          return (option.id === recommended ? '★ ' : '') + describeOptionFull(option);
+        };
+        const heading = `### 段 ${i + 1} · ${slot.role} · ${slot.slotId}`;
+        const meta = [
+          `- 对应案例片段：${sourceSeg}`,
+          `- 匹配素材：**${asset}**（匹配度 ${quality}）`,
+          `- 填充状态：${status}｜成片位置 ${slot.startMs}–${slot.endMs}ms`
+        ].join('\n');
+        const table = markdownTable(
+          ['渠道', '完整指导内容（★ = 推荐渠道）'],
+          [
+            ['补拍 reshoot', cell('reshoot')],
+            ['hyperframes', cell('hyperframes')],
+            ['aigc', cell('aigc')]
+          ]
+        );
+        return [heading, meta, '', table].join('\n');
       })
       .join('\n\n'),
     '',
@@ -639,6 +677,13 @@ function describeOption(option: GapResolutionOption): string {
 
 function getOptions(slot: OrchestratedTimeline['slots'][number]): GapResolutionOption[] {
   return slot.fill.kind === 'gap' ? slot.fill.options : slot.fill.options ?? [];
+}
+
+/** Full (untruncated) option text for the per-slot detail table — fixes the aigc-prompt-cut-off issue. */
+function describeOptionFull(option: GapResolutionOption): string {
+  if (option.id === 'reshoot') return option.guidanceNL;
+  if (option.id === 'hyperframes') return option.editingGuidanceNL;
+  return `[${option.providerHint}] ${option.prompt}`;
 }
 
 function firstOptionText(slot: OrchestratedTimeline['slots'][number]): string {

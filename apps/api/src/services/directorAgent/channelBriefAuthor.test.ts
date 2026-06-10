@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { authorChannelBriefs, type AuthoringChannel, type SharedChannelIntent } from './channelBriefAuthor';
+import { MACBOOK_SOURCE_BANNED_TERMS } from './vocabularyFixture';
 
 function makeIntent(): SharedChannelIntent {
   return {
@@ -10,7 +11,7 @@ function makeIntent(): SharedChannelIntent {
     category: 'beverage',
     sellingPoints: ['冰爽解腻'],
     transferableIntent: 'transfer assembly grammar into beverage-native motion',
-    motionTokens: ['assembly_completion', 'pour_flow'],
+    motionTokens: ['assembly_completion', 'flow_motion'],
     motifType: 'kinetic_assembly_reveal',
     fillStatus: 'needs_hyperframes_enhancement',
     referenceAssetIds: ['asset_003'],
@@ -43,7 +44,8 @@ const opts = (client: unknown, channels: AuthoringChannel[]) => ({
   channels,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   clientFactory: () => client as any,
-  model: 'fake-model'
+  model: 'fake-model',
+  sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS
 });
 
 test('reshoot: a filmable brief is accepted', async () => {
@@ -143,4 +145,22 @@ test('a thrown LLM error for one channel does not break the others', async () =>
   assert.equal(res.reshoot, undefined);
   assert.ok(res.aigc, 'other channels still author when one throws');
   assert.ok(res.warnings.some((w) => w.includes('reshoot')));
+});
+
+test('channel author system prompts carry no hardcoded beverage examples', async () => {
+  const captured: string[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const clientFactory = () => ({
+    chat: { completions: { create: async (req: any) => {
+      captured.push(req.messages.map((m: any) => m.content).join('\n'));
+      return { choices: [{ message: { content: JSON.stringify({ prompt: 'x', negativePrompt: 'y', guidanceNL: 'g', framing: 'f', editingGuidanceNL: 'e' }) } }] };
+    } } }
+  }) as any;
+  const intent: any = {
+    slotId: 's1', role: 'product_closeup', productName: '无线蓝牙耳机', category: '电子',
+    sellingPoints: ['主动降噪'], motionTokens: [], fillStatus: 'partial_asset_support',
+    referenceAssetIds: [], assetEvidence: [], durationSec: 3, targetEquivalentBeat: '展示产品'
+  };
+  await authorChannelBriefs({ intent, channels: ['aigc', 'reshoot', 'hyperframes'], clientFactory, model: 'm' });
+  assert.doesNotMatch(captured.join('\n'), /冰块|柠檬|红茶|倒茶|开盖|瓶身|多瓶/);
 });
