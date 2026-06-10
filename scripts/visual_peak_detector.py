@@ -321,8 +321,16 @@ def compute_visual_score_series_from_clip(
                 continue
             next_sample_time = frame.time + sample_period_s
 
-            bgr = frame.to_ndarray(format="bgr24")
-            small_bgr = cv2.resize(bgr, small_size, interpolation=cv2.INTER_AREA)
+            # Downscale in PyAV's C-level scaler (libswscale) BEFORE materializing a
+            # numpy array, so a high-resolution source never allocates a full-res BGR
+            # frame in Python — that full-res per-frame allocation is what OOMs with
+            # "[Errno 12] Cannot allocate memory" on 4K/high-bitrate clips or
+            # memory-constrained machines. We only ever hold the small_size array;
+            # output shape (h, w, 3) is identical to the old cv2.resize, so every
+            # downstream channel (gray/hist/flow/MOG2) is unchanged.
+            small_bgr = frame.reformat(
+                width=small_size[0], height=small_size[1], format="bgr24"
+            ).to_ndarray()
             gray = cv2.cvtColor(small_bgr, cv2.COLOR_BGR2GRAY)
             hue = cv2.split(cv2.cvtColor(small_bgr, cv2.COLOR_BGR2HSV))[0]
             hist = cv2.calcHist([hue], [0], None, [32], [0, 180])
