@@ -330,18 +330,13 @@ function buildCandidate(candidate: SlotCandidateAsset, row: SlotCoverageRow, ass
   const keyframes = asset?.analysis?.media.keyframes ?? [];
   const sourceUrl = asset?.analysis?.media.sourceUrl ?? asset?.url;
   const mediaReadinessScore = scoreMediaReadiness(asset, sourceUrl, keyframes.length);
-  const safetyScore = asset?.analysis?.safety.status === 'blocked'
-    ? 0
-    : asset?.analysis?.safety.status === 'needs_review'
-      ? 55
-      : 100;
+  // Safety scoring removed from the chain: the former 0.10 safety weight is folded into semantic match.
   const score = Math.min(candidate.score, roundScore(
     0.30 * candidate.roleAffordance
     + 0.20 * candidate.assetQuality
     + 0.15 * mediaReadinessScore
-    + 0.15 * candidate.intentSemanticMatch
+    + 0.25 * candidate.intentSemanticMatch
     + 0.10 * candidate.editabilityFit
-    + 0.10 * safetyScore
   ));
   return {
     assetId: candidate.assetId,
@@ -369,7 +364,7 @@ function buildCandidate(candidate: SlotCandidateAsset, row: SlotCoverageRow, ass
       keyframeIds: keyframes.map((keyframe) => keyframe.id),
       reasons: [
         candidate.rationale,
-        `ranking=0.30*roleAffordance(${candidate.roleAffordance}) + 0.20*quality(${candidate.assetQuality}) + 0.15*mediaReadiness(${mediaReadinessScore}) + 0.15*semantic(${candidate.intentSemanticMatch}) + 0.10*editability(${candidate.editabilityFit}) + 0.10*safety(${safetyScore})`
+        `ranking=0.30*roleAffordance(${candidate.roleAffordance}) + 0.20*quality(${candidate.assetQuality}) + 0.15*mediaReadiness(${mediaReadinessScore}) + 0.25*semantic(${candidate.intentSemanticMatch}) + 0.10*editability(${candidate.editabilityFit})`
       ],
       warnings: asset?.analysis?.warnings ?? []
     }

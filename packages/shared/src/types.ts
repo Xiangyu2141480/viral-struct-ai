@@ -198,6 +198,15 @@ export interface ShotSlotAcceptanceCriterion {
 export interface ShotSlotAcceptanceCriteria {
   anyOf: ShotSlotAcceptanceCriterion[];
   rejectIf?: string[];
+  hardRejectIf?: string[];
+  sourceSpecificRejectIf?: string[];
+}
+
+export interface TransferSafeAcceptanceCriteria {
+  anyOf?: ShotSlotAcceptanceCriterion[];
+  rejectIf?: string[];
+  hardRejectIf?: string[];
+  sourceSpecificRejectIf?: string[];
 }
 
 export interface ShotSlotNode {

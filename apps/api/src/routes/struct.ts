@@ -13,7 +13,10 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { randomUUID } from 'node:crypto';
+import { mkdirSync } from 'node:fs';
 import { readFile, rm, unlink } from 'node:fs/promises';
+import path from 'node:path';
+import { nanoid } from 'nanoid';
 import type { Request } from 'express';
 import { analyzeVideoFile, getSeedVideoPath, getUploadedVideoPath, listSeedVideos } from '../services/videoAnalyzer';
 import { extractStructureFromVideoAnalysis } from '../services/structureExtractor';
@@ -21,10 +24,11 @@ import { runRoughScan } from '../services/roughScanRunner';
 import { runFineScan, type FineBlockDetail } from '../services/fineScanRunner';
 import { analyzeAssetsWithFallbackResult } from '../services/assetAnalyzer';
 import { matchSlotsWithFallback } from '../services/slotMatcher';
-import { planGapRepairsWithFallback } from '../services/gapRepairPlanner';
-import { generateTimelineWithFallback } from '../services/timelineGenerator';
-import { applyTimelineEdit } from '../services/timelineEditPlanner';
-import { renderTimeline } from '../services/renderService';
+import { runDirectorAgent } from '../services/directorAgent';
+import { orchestratedToAuthored } from '../services/videoAgent/orchestratedToAuthored';
+import { authoredTimelineToTimelineItems } from '../services/videoAgent/authoredTimelineAdapter';
+import { renderAuthoredTimeline } from '../services/videoAgent/runVideoAgentPipeline';
+import { applyNaturalLanguageEditWithFallback } from '../services/timelineEditor';
 import { evaluateQuality } from '../services/qualityEvaluator';
 import { checkBrandSafety } from '../services/brandSafetyChecker';
 import { estimateDemoAnalytics } from '../services/demoScoringEstimator';
@@ -32,9 +36,15 @@ import { planStoryboardFrames } from '../services/storyboardPromptPlanner';
 import { planMissingMaterialGenerationJobs } from '../services/missingMaterialGenerationPlanner';
 import { loadAssetLibrary } from '../services/assetLibraryLoader';
 import { getDemoShowcase } from '../services/demoShowcase';
-import { getUploadDir } from '../services/videoPaths';
+import { getRenderDir, getUploadDir } from '../services/videoPaths';
 import type { RenderProfile } from '@viral-struct/render-executor';
-import type { ContentBrief } from '@viral-struct/shared';
+import type {
+  AuthoredComposition,
+  AuthoredSegmentRole,
+  AuthoredTimeline,
+  ContentBrief,
+  TimelineItem,
+} from '@viral-struct/shared';
 import {
   assetCardsToMaterials,
   buildContentBrief,
@@ -44,6 +54,7 @@ import {
   segsToTimelineItems,
   timelineItemsToSegs,
   toDiagnosisRecord,
+  variantToTargetDurationMode,
   versionFromId,
   versionIdToVariant,
 } from '../services/structAdapter/structAdapter';
@@ -401,27 +412,21 @@ structRouter.post('/diagnose', async (req, res) => {
     const contentBrief = buildContentBrief(product, sourceVideo);
 
     const matchResult = await matchSlotsWithFallback({ graph, assets: assetCards, boundaries: graph.boundaries });
-    const repairResult = await planGapRepairsWithFallback({
-      gaps: matchResult.gaps,
-      assets: assetCards,
-      newContent: contentBrief,
-      graph,
-      boundaries: graph.boundaries,
-    });
 
+    // Gap repairs are now planned by the Director Agent per beat (not a separate
+    // ①-era planner). The diagnosis projection tolerates an empty repairs list —
+    // every repair-derived field falls back to a synthesized honest suggestion.
     const diagnosis = toDiagnosisRecord({
       sourceVideo,
       matches: matchResult.matches,
       gaps: matchResult.gaps,
-      repairs: repairResult.repairs,
+      repairs: [],
       materials,
     });
 
     const warnings: string[] = [];
     if (matchResult.warning) warnings.push(matchResult.warning);
-    if (repairResult.warning) warnings.push(repairResult.warning);
     if (matchResult.alignmentSource === 'rule_based') warnings.push('槽位对齐使用规则降级（非 LLM judge）');
-    if (repairResult.gapSpecSource === 'rule_based') warnings.push('缺口补全规格使用规则降级（非 LLM 生成）');
 
     res.json({ diagnosis, warnings });
   } catch (error) {
@@ -470,29 +475,26 @@ structRouter.post('/compile', async (req, res) => {
     const assetCards = materialsToAssetCards(materials, sourceVideo, product);
     const contentBrief: ContentBrief = buildContentBrief(product, sourceVideo);
 
-    const matchResult = await matchSlotsWithFallback({ graph, assets: assetCards, boundaries: graph.boundaries });
-    const repairResult = await planGapRepairsWithFallback({
-      gaps: matchResult.gaps,
-      assets: assetCards,
-      newContent: contentBrief,
-      graph,
-      boundaries: graph.boundaries,
-    });
-    const generation = await generateTimelineWithFallback({
+    // ② Director Agent (plan-only) → ③ Video Agent handoff: transfer the source
+    // structure onto the product, then project the plan into the flat TimelineItem[]
+    // the UI timeline consumes. useLlmMatcher:false keeps it deterministic/offline.
+    const orchestrated = await runDirectorAgent({
+      projectId: sourceVideo.id,
       structureGraph: graph,
-      newContent: contentBrief,
-      matches: matchResult.matches,
-      repairs: repairResult.repairs,
-      assets: assetCards,
-      variant: versionIdToVariant(versionId),
+      assetCards,
+      contentBrief,
       boundaries: graph.boundaries,
+      options: {
+        targetDurationMode: variantToTargetDurationMode(versionIdToVariant(versionId)),
+        useLlmMatcher: false,
+      },
     });
+    const authored = orchestratedToAuthored(orchestrated, { assetCards });
+    const timelineItems = authoredTimelineToTimelineItems(authored);
 
-    const timeline = timelineItemsToSegs(generation.timeline, { sourceVideo, diagnosis });
+    const timeline = timelineItemsToSegs(timelineItems, { sourceVideo, diagnosis });
     const version = versionFromId(versionId);
-    const warnings: string[] = [];
-    if (generation.warning) warnings.push(generation.warning);
-    if (generation.scriptSource === 'template') warnings.push('脚本使用模板降级（非 LLM 生成）');
+    const warnings = [...new Set(orchestrated.warnings)];
 
     res.json({ version, timeline, warnings });
   } catch (error) {
@@ -512,14 +514,23 @@ structRouter.post('/nl-edit', async (req, res) => {
     }
 
     const items = segsToTimelineItems(segs);
-    const result = applyTimelineEdit({ instruction, timeline: items });
-    const timeline = timelineItemsToSegs(result.updatedTimeline, { sourceVideo });
-    const warnings = [...(result.warnings ?? [])];
-    if (result.editType === 'unsupported') {
-      warnings.push(`未识别的改片指令，支持：${(result.supportedEditSuggestions ?? []).join(' / ')}`);
+    const result = await applyNaturalLanguageEditWithFallback({ instruction, timeline: items });
+    const timeline = timelineItemsToSegs(result.timeline, { sourceVideo });
+
+    // Synthesize the UI's required patchSummary string from the structured patches
+    // (the new editor returns patches/operations, not a prebuilt summary).
+    const patchSummary = result.patches.length
+      ? result.patches.map((p) => p.reason).join('；')
+      : result.operations.length
+        ? '指令已识别，但未产生实际改动'
+        : '未识别该改片指令';
+
+    const warnings = [...(result.warning ? [result.warning] : [])];
+    if (result.operations.length === 0) {
+      warnings.push('未识别的改片指令，支持：减少字幕 / 增强节奏 / 商品信息提前 / 开头更抓人');
     }
 
-    res.json({ timeline, patchSummary: result.patchSummary, warnings });
+    res.json({ timeline, patchSummary, warnings });
   } catch (error) {
     res.status(500).json({ error: errorMessage(error) });
   }
@@ -544,6 +555,43 @@ function absoluteMediaUrl(req: Request, mediaUrl: string): string {
   return /^https?:\/\//i.test(mediaUrl) ? mediaUrl : `${req.protocol}://${req.get('host')}${mediaUrl}`;
 }
 
+const DEFAULT_EXPORT_PROFILE: RenderProfile = { width: 1080, height: 1920, fps: 30, format: 'mp4' };
+
+/**
+ * Map the UI's asset-stripped TimelineItem[] into an AuthoredTimeline for the
+ * Video Agent renderer. The incoming segs carry no assetId (the UI strips media
+ * before export), so EVERY beat is marked `unresolvedReason` → the renderer paints
+ * the honest substitute card. This is inherently plan-only: no real pixels exist to
+ * composite, so the export stays honest about producing no MP4.
+ */
+function timelineItemsToAuthored(
+  items: TimelineItem[],
+  opts: { profile: RenderProfile },
+): AuthoredTimeline {
+  const beats: AuthoredComposition[] = items.map((item, i) => {
+    const startSeconds = Math.max(0, item.start);
+    const endSeconds = Math.max(startSeconds + 0.1, item.end);
+    const captions = (item.subtitles ?? []).filter(Boolean);
+    return {
+      id: item.id || `beat_${i + 1}`,
+      segmentRole: item.segmentRole as AuthoredSegmentRole,
+      startSeconds,
+      endSeconds,
+      mediaLayers: [],
+      textElements: captions.length
+        ? [{ id: `${item.id || `beat_${i + 1}`}_text`, type: 'headline', content: captions, zOrder: 10 }]
+        : [],
+      unresolvedReason: 'export plan-only: timeline is asset-stripped, no real media to composite',
+    };
+  });
+  return {
+    schemaVersion: '1.0',
+    renderProfile: { width: opts.profile.width, height: opts.profile.height, fps: opts.profile.fps, format: 'mp4' },
+    beats,
+    meta: { beatCount: beats.length },
+  };
+}
+
 structRouter.post('/export', async (req, res) => {
   try {
     const segs = (req.body?.timeline ?? []) as TimelineSeg[];
@@ -559,14 +607,21 @@ structRouter.post('/export', async (req, res) => {
 
     let result: ExportResult;
     try {
-      const rendered = await renderTimeline({ timeline: items, profile });
-      if (rendered.render.rendered && rendered.mediaUrl) {
+      const authored = timelineItemsToAuthored(items, { profile: profile ?? DEFAULT_EXPORT_PROFILE });
+      const renderDir = getRenderDir();
+      mkdirSync(renderDir, { recursive: true });
+      const render = await renderAuthoredTimeline({
+        timeline: authored,
+        outputPath: path.join(renderDir, `render_${jobId}_${nanoid(8)}.mp4`),
+      });
+      const mediaUrl = render.rendered && render.outputPath ? `/media/renders/${path.basename(render.outputPath)}` : null;
+      if (mediaUrl) {
         result = {
           jobId,
           status: 'done',
           progress: 100,
-          downloadUrl: absoluteMediaUrl(req, rendered.mediaUrl),
-          warnings: [...warnings, ...(rendered.render.warnings ?? [])],
+          downloadUrl: absoluteMediaUrl(req, mediaUrl),
+          warnings: [...warnings, ...(render.warnings ?? [])],
         };
       } else {
         // Honest: no real pixels were produced (plan-only). No fake download link.
@@ -577,7 +632,7 @@ structRouter.post('/export', async (req, res) => {
           warnings: [
             ...warnings,
             '渲染为计划态（plan-only），未产出真实 MP4，暂无可下载文件',
-            ...(rendered.render.warnings ?? []),
+            ...(render.warnings ?? []),
           ],
         };
       }
@@ -631,33 +686,33 @@ async function composeSharedContext(body: {
   const assetCards = materialsToAssetCards(materials, sourceVideo, product);
   const contentBrief = buildContentBrief(product, sourceVideo);
   const matchResult = await matchSlotsWithFallback({ graph, assets: assetCards, boundaries: graph.boundaries });
-  const repairResult = await planGapRepairsWithFallback({
-    gaps: matchResult.gaps,
-    assets: assetCards,
-    newContent: contentBrief,
-    graph,
-    boundaries: graph.boundaries,
-  });
 
-  let timelineItems;
+  // Gap repairs are now folded into the Director Agent's per-beat plan; downstream
+  // capability routes tolerate an empty repairs list (every repair-derived field has
+  // a fallback). When a compiled timeline is supplied we reuse it verbatim; otherwise
+  // we derive one via the director → authored → flat-items handoff (plan-only).
+  let timelineItems: TimelineItem[];
   let timelineWarning: string | undefined;
   if (Array.isArray(body.timeline) && body.timeline.length) {
     timelineItems = segsToTimelineItems(body.timeline);
   } else {
-    const gen = await generateTimelineWithFallback({
+    const orchestrated = await runDirectorAgent({
+      projectId: sourceVideo.id,
       structureGraph: graph,
-      newContent: contentBrief,
-      matches: matchResult.matches,
-      repairs: repairResult.repairs,
-      assets: assetCards,
-      variant: versionIdToVariant(body.versionId),
+      assetCards,
+      contentBrief,
       boundaries: graph.boundaries,
+      options: {
+        targetDurationMode: variantToTargetDurationMode(versionIdToVariant(body.versionId)),
+        useLlmMatcher: false,
+      },
     });
-    timelineItems = gen.timeline;
-    timelineWarning = gen.warning;
+    const authored = orchestratedToAuthored(orchestrated, { assetCards });
+    timelineItems = authoredTimelineToTimelineItems(authored);
+    timelineWarning = orchestrated.warnings.length ? [...new Set(orchestrated.warnings)].join('；') : undefined;
   }
 
-  return { graph, assetCards, contentBrief, matchResult, repairResult, timelineItems, timelineWarning, boundaries: graph.boundaries };
+  return { graph, assetCards, contentBrief, matchResult, repairs: [], timelineItems, timelineWarning, boundaries: graph.boundaries };
 }
 
 /* ─── POST /api/struct/quality — self-check scorecard (QualityReport) ─── */
@@ -701,7 +756,7 @@ structRouter.post('/estimate', async (req, res) => {
       contentBrief: ctx.contentBrief,
       slotMatches: ctx.matchResult.matches,
       materialGaps: ctx.matchResult.gaps,
-      repairs: ctx.repairResult.repairs,
+      repairs: ctx.repairs,
       timeline: ctx.timelineItems,
       qualityReport,
       generationVariant: versionIdToVariant(req.body?.versionId),
@@ -755,7 +810,7 @@ structRouter.post('/storyboard', async (req, res) => {
       assetCards: ctx.assetCards,
       slotMatches: ctx.matchResult.matches,
       materialGaps: ctx.matchResult.gaps,
-      repairs: ctx.repairResult.repairs,
+      repairs: ctx.repairs,
     });
     res.json(result);
   } catch (error) {
@@ -773,7 +828,7 @@ structRouter.post('/material-jobs', async (req, res) => {
     const ctx = await composeSharedContext(req.body);
     const result = planMissingMaterialGenerationJobs({
       materialGaps: ctx.matchResult.gaps,
-      repairs: ctx.repairResult.repairs,
+      repairs: ctx.repairs,
       timeline: ctx.timelineItems,
       contentBrief: ctx.contentBrief,
       aspectRatio: '9:16',
@@ -834,20 +889,26 @@ structRouter.get('/demo', async (_req, res) => {
     const cards = materialsToAssetCards(materials, sourceVideo, product);
     const contentBrief = buildContentBrief(product, sourceVideo);
     const matchResult = await matchSlotsWithFallback({ graph, assets: cards, boundaries: graph.boundaries });
-    const repairResult = await planGapRepairsWithFallback({
-      gaps: matchResult.gaps, assets: cards, newContent: contentBrief, graph, boundaries: graph.boundaries,
-    });
     const diagnosis = toDiagnosisRecord({
-      sourceVideo, matches: matchResult.matches, gaps: matchResult.gaps, repairs: repairResult.repairs, materials,
+      sourceVideo, matches: matchResult.matches, gaps: matchResult.gaps, repairs: [], materials,
     });
-    const generation = await generateTimelineWithFallback({
-      structureGraph: graph, newContent: contentBrief, matches: matchResult.matches,
-      repairs: repairResult.repairs, assets: cards, variant: 'high_click', boundaries: graph.boundaries,
+    const orchestrated = await runDirectorAgent({
+      projectId: sourceVideo.id,
+      structureGraph: graph,
+      assetCards: cards,
+      contentBrief,
+      boundaries: graph.boundaries,
+      options: {
+        targetDurationMode: variantToTargetDurationMode('high_click'),
+        useLlmMatcher: false,
+      },
     });
-    const timeline = timelineItemsToSegs(generation.timeline, { sourceVideo, diagnosis });
+    const authored = orchestratedToAuthored(orchestrated, { assetCards: cards });
+    const timelineItems = authoredTimelineToTimelineItems(authored);
+    const timeline = timelineItemsToSegs(timelineItems, { sourceVideo, diagnosis });
 
     if (matchResult.alignmentSource === 'rule_based') warnings.push('槽位对齐使用规则降级');
-    if (generation.scriptSource === 'template') warnings.push('脚本使用模板降级');
+    warnings.push(...new Set(orchestrated.warnings));
     void diagReq;
 
     res.json({

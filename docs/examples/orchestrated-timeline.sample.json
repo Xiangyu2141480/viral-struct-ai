@@ -1,0 +1,174 @@
+{
+  "schemaVersion": "orchestrated-v1",
+  "projectId": "kangshifu_iced_tea_demo",
+  "renderProfile": { "width": 1080, "height": 1920, "fps": 30, "aspectRatio": "9:16" },
+  "slots": [
+    {
+      "slotId": "slot_block_001",
+      "segmentId": "segment_hook",
+      "role": "opening_attention",
+      "index": 0,
+      "startMs": 0,
+      "endMs": 3000,
+      "sourceIntent": "high-energy opening that grabs attention in the first 3 seconds",
+      "transferableIntent": "fast product entry with refreshing summer energy",
+      "motifType": "dynamic_entry",
+      "motionTokens": ["dynamic_entry", "impact_beat"],
+      "fill": {
+        "kind": "matched",
+        "assetId": "asset_001",
+        "matchQuality": 0.91,
+        "matchedCriteria": ["product enters frame quickly", "clear label visible"],
+        "status": "matched",
+        "videoEngineInstruction": "Use asset_001 directly for the opening; quick push-in, hold the product label readable.",
+        "evidence": {
+          "coverageStatus": "covered",
+          "matchedIngredients": ["visual_subject", "product_evidence"],
+          "missingIngredients": [],
+          "blockingReasons": []
+        }
+      }
+    },
+    {
+      "slotId": "slot_block_002",
+      "segmentId": "segment_usage",
+      "role": "usage_demo",
+      "index": 1,
+      "startMs": 3000,
+      "endMs": 7000,
+      "sourceIntent": "show the product being used naturally",
+      "transferableIntent": "hand-only usage moment, opening cap and drinking",
+      "motifType": "category_usage_moment",
+      "motionTokens": ["snap_open", "drink_action"],
+      "fill": {
+        "kind": "matched",
+        "assetId": "asset_002",
+        "matchQuality": 0.62,
+        "matchedCriteria": ["product visible during use"],
+        "missingCriteria": ["clear open-cap action"],
+        "treatmentSpec": { "motion": "crop_zoom", "durationMs": 4000, "syncPoint": "on cap open" },
+        "status": "partial",
+        "videoEngineInstruction": "Place asset_002, then enhance with hyperframes editing to emphasize the open-cap moment.",
+        "recommendedOptionId": "hyperframes",
+        "options": [
+          {
+            "id": "reshoot",
+            "title": "补拍使用过程",
+            "guidanceNL": "Shoot a 4 second vertical hand-only clip opening the cap and taking one sip; keep the label readable and the background clean.",
+            "framing": "vertical hand/neck-down shot, product and action visible",
+            "durationSec": 4,
+            "mustCapture": ["open cap", "drink one sip", "label readable"],
+            "avoid": ["other visible brands", "celebrity likeness", "price or medical claims"]
+          },
+          {
+            "id": "hyperframes",
+            "title": "Usage placeholder card",
+            "editingGuidanceNL": "Use asset_002 as the base layer, add a step 1/2/3 motion card emphasizing the open-cap action; keep the original product label visible and add no unverified claims.",
+            "cardType": "usage_placeholder_card",
+            "copy": { "headline": "一拧就开", "bullets": ["开盖", "畅饮"] },
+            "referencedAssetIds": ["asset_002"],
+            "durationMs": 4000
+          }
+        ],
+        "evidence": {
+          "coverageStatus": "weak",
+          "matchedIngredients": ["visual_subject", "product_evidence"],
+          "missingIngredients": ["usage_evidence", "motion"],
+          "blockingReasons": []
+        }
+      }
+    },
+    {
+      "slotId": "slot_block_003",
+      "segmentId": "segment_cta",
+      "role": "cta_visual",
+      "index": 2,
+      "startMs": 7000,
+      "endMs": 9000,
+      "sourceIntent": "clear closing call to action",
+      "transferableIntent": "clean ending frame with space for CTA copy",
+      "fill": {
+        "kind": "gap",
+        "reason": "no asset can support a clean CTA closing frame",
+        "missing": "clean product ending frame with safe copy area",
+        "recommendedOptionId": "aigc",
+        "videoEngineInstruction": "No matched asset; execute the recommended AIGC option as a job card to produce the CTA background.",
+        "options": [
+          {
+            "id": "reshoot",
+            "title": "补拍干净尾帧/CTA 底图",
+            "guidanceNL": "Shoot a 2 second clean ending frame with the product centered and clear empty space for CTA text.",
+            "framing": "vertical product shot with clean negative space",
+            "durationSec": 2,
+            "mustCapture": ["product visible", "clear empty area for copy", "steady ending"],
+            "avoid": ["other visible brands", "celebrity likeness", "price or medical claims"]
+          },
+          {
+            "id": "hyperframes",
+            "title": "CTA card",
+            "editingGuidanceNL": "Build a CTA lock-up card using the product reference as the center layer with a clean hold and CTA reveal; keep the label visible and add no unverified claims.",
+            "cardType": "cta_card",
+            "copy": { "cta": "冰爽一夏，立即尝鲜" },
+            "referencedAssetIds": ["asset_001"],
+            "durationMs": 2000
+          },
+          {
+            "id": "aigc",
+            "prompt": "Prompt brief only, not rendered output. Create a clean 9:16 CTA background; product visible, safe empty area for copy, no text added. Do not invent price, promotion, medical benefit, celebrity endorsement, or extra brands.",
+            "negativePrompt": "no text overlays, no watermark, no celebrity, no other brands, no price promotion, no medical claims",
+            "referenceAssetIds": ["asset_001"],
+            "aspectRatio": "9:16",
+            "expectedDurationSec": 2,
+            "providerHint": "gemini",
+            "ownership": "external_generation_job_card_only"
+          }
+        ],
+        "evidence": {
+          "coverageStatus": "insufficient",
+          "matchedIngredients": [],
+          "missingIngredients": ["cta_surface", "text_safe_area"],
+          "blockingReasons": ["no candidate asset above threshold"]
+        }
+      }
+    }
+  ],
+  "transitions": [
+    {
+      "id": "transition_001",
+      "fromSlotId": "slot_block_001",
+      "toSlotId": "slot_block_002",
+      "mode": "hyperframes",
+      "transitionFunction": "ingredient_to_product",
+      "preferredImplementation": "hyperframes",
+      "reason": "Bridge the opening into the usage moment with a hyperframes card animation.",
+      "hyperframes": {
+        "editingGuidanceNL": "Carry the product from the opening into the usage shot with a quick push-in card wipe; keep the label readable.",
+        "durationMs": 400,
+        "styleTokens": ["dynamic_entry", "match_cut"]
+      },
+      "requiredAssets": ["asset_001", "asset_002"],
+      "missingAssets": [],
+      "riskNotes": ["Plan-only transition; review brand/IP before rendering."]
+    },
+    {
+      "id": "transition_002",
+      "fromSlotId": "slot_block_002",
+      "toSlotId": "slot_block_003",
+      "mode": "cut",
+      "transitionFunction": "product_to_cta",
+      "preferredImplementation": "hyperframes",
+      "reason": "The CTA slot is an unfilled gap, so use a simple cut into the CTA card rather than a real frame bridge.",
+      "requiredAssets": [],
+      "missingAssets": ["slot_block_003 asset"],
+      "riskNotes": ["Plan-only transition; CTA frame is a gap pending resolution."]
+    }
+  ],
+  "meta": {
+    "productName": "康师傅冰红茶",
+    "targetCategory": "beverage",
+    "matchSource": "llm_judge",
+    "generatedAt": "1970-01-01T00:00:00.000Z",
+    "planOnly": true
+  },
+  "warnings": []
+}

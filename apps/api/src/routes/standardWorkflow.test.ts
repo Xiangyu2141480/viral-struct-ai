@@ -4,11 +4,9 @@ import { after, before, test } from 'node:test';
 import express from 'express';
 import type { AssetCard, ContentBrief, MaterialGap, SlotMatch, ViralStructureGraph } from '@viral-struct/shared';
 import { analyticsRouter } from './analytics';
-import { gapsRouter } from './gaps';
 import { materialGenerationRouter } from './materialGeneration';
 import { storyboardRouter } from './storyboard';
 import { slotsRouter } from './slots';
-import { timelineRouter } from './timeline';
 
 let server: Server;
 let baseUrl = '';
@@ -138,8 +136,6 @@ before(async () => {
   app.use(express.json({ limit: '1mb' }));
   app.use('/api/analytics', analyticsRouter);
   app.use('/api/slots', slotsRouter);
-  app.use('/api/gaps', gapsRouter);
-  app.use('/api/timeline', timelineRouter);
   app.use('/api/storyboard', storyboardRouter);
   app.use('/api/material-generation', materialGenerationRouter);
 
@@ -184,120 +180,6 @@ test('POST /api/slots/match exposes fallback alignment source when LLM is unavai
   assert.ok(body.warning.includes('LLM alignment failed'));
   assert.deepEqual(body.warnings, [body.warning]);
   assert.ok(body.matches.every((match: SlotMatch) => match.alignmentSource === 'rule_based'));
-});
-
-test('POST /api/gaps/repair exposes fallback gap-spec source when LLM is unavailable', async () => {
-  const gap: MaterialGap = {
-    slotId: 'slot_cta',
-    role: 'cta_visual',
-    type: 'missing_cta_visual',
-    severity: 'high',
-    reason: '缺少结尾 CTA 镜头',
-    impact: '影响收束转化',
-    affectedSegmentId: 'seg_cta'
-  };
-
-  const response = await fetch(`${baseUrl}/api/gaps/repair`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      gaps: [gap],
-      assetCards,
-      newContent: contentBrief,
-      structureGraph: graph,
-      boundaries: graph.boundaries
-    })
-  });
-
-  assert.equal(response.status, 200);
-  const body = await response.json();
-  assert.equal(body.gapSpecSource, 'rule_based');
-  assert.ok(body.warning.includes('LLM gap-spec failed'));
-  assert.deepEqual(body.warnings, [body.warning]);
-  assert.equal(body.repairs[0].slotId, 'slot_cta');
-  assert.equal(body.repairs[0].strategy, 'cta_card');
-});
-
-test('POST /api/timeline/generate exposes fallback script source when LLM is unavailable', async () => {
-  const match: SlotMatch = {
-    slotId: 'slot_hook',
-    assetId: 'asset_splash',
-    score: 0.9,
-    status: 'matched',
-    reason: 'matched',
-    alignmentSource: 'rule_based'
-  };
-
-  const response = await fetch(`${baseUrl}/api/timeline/generate`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      structureGraph: graph,
-      newContent: contentBrief,
-      matches: [match],
-      repairs: [],
-      assets: assetCards,
-      variant: 'high_click',
-      boundaries: graph.boundaries
-    })
-  });
-
-  assert.equal(response.status, 200);
-  const body = await response.json();
-  assert.equal(body.scriptSource, 'template');
-  assert.ok(body.warning.includes('LLM script generation failed'));
-  assert.deepEqual(body.warnings, [body.warning]);
-  assert.ok(body.timeline.length >= 1);
-  assert.ok(body.timeline.every((item: { scriptSource?: string }) => item.scriptSource === 'template'));
-});
-
-test('POST /api/timeline/apply-edit returns a real patch summary and changed timeline items', async () => {
-  const timeline = [
-    {
-      id: 'tl_hook',
-      start: 0,
-      end: 3,
-      segmentRole: 'hook',
-      sourceSegmentId: 'seg_hook',
-      slotId: 'slot_hook',
-      script: '午后太热怎么办？',
-      subtitles: ['午后太热', '怎么办', '先看这个'],
-      visualAction: '静态展示产品场景',
-      packaging: { captionStyle: 'clean_subtitle_only', transition: 'fade', motion: 'static' },
-      scriptSource: 'template'
-    },
-    {
-      id: 'tl_cta',
-      start: 3,
-      end: 6,
-      segmentRole: 'cta',
-      sourceSegmentId: 'seg_cta',
-      slotId: 'slot_cta',
-      script: '现在试试看。',
-      subtitles: ['现在', '试试看'],
-      visualAction: '结尾展示',
-      packaging: { captionStyle: 'clean_subtitle_only', transition: 'fade', motion: 'static' },
-      scriptSource: 'template'
-    }
-  ];
-
-  const response = await fetch(`${baseUrl}/api/timeline/apply-edit`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      instruction: '开头更抓人',
-      timeline,
-      contentBrief
-    })
-  });
-
-  assert.equal(response.status, 200);
-  const body = await response.json();
-  assert.equal(body.editType, 'hook_stronger');
-  assert.ok(body.patchSummary.includes('开头'));
-  assert.notEqual(body.updatedTimeline[0].script, timeline[0].script);
-  assert.ok(body.updatedTimeline[0].end - body.updatedTimeline[0].start < 3);
-  assert.ok(body.changedItems.some((item: { itemId: string }) => item.itemId === 'tl_hook'));
 });
 
 test('POST /api/storyboard/plan returns prompt-ready storyboard frames without image API keys', async () => {

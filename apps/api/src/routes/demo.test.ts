@@ -74,7 +74,10 @@ test('POST /api/demo/run returns a complete judge-facing workflow result', async
   );
   assert.ok(body.assetCards.some((card: { url?: string }) => card.url?.includes('kangshifu_iced_tea')));
   assert.ok(body.materialGaps.length >= 1);
-  assert.ok(body.repairs.length >= 1);
+  // ② director → ③ video-agent: the orchestrated plan is projected into the authored timeline.
+  assert.ok(body.orchestratedTimeline.slots.length >= 4);
+  assert.equal(body.orchestratedTimeline.meta.planOnly, true);
+  assert.ok(body.authoredTimeline.beats.length >= 4);
   assert.ok(body.timeline.length >= 4);
   assert.ok(body.qualityReport.structureMatch > 0);
 });
@@ -111,7 +114,7 @@ test('POST /api/demo/run surfaces migration contracts and transition fidelity in
   assert.match(migrationTrace.detail, /迁移契约/);
   assert.match(migrationTrace.detail, /可迁移意图/);
 
-  const timelineTrace = body.evidenceTrace.find((item: { id: string }) => item.id === 'timeline_quality');
-  assert.ok(timelineTrace, 'evidenceTrace should include timeline_quality');
+  const timelineTrace = body.evidenceTrace.find((item: { id: string }) => item.id === 'authored_timeline_quality');
+  assert.ok(timelineTrace, 'evidenceTrace should include authored_timeline_quality');
   assert.match(timelineTrace.detail, /转场保真/);
 });

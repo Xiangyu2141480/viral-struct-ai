@@ -23,6 +23,7 @@ import type {
   ShotSlotNode,
   ShotSlotRole,
   SlotMatch,
+  TargetDurationMode,
   TimelineItem,
   ViralStructureGraph,
 } from '@viral-struct/shared';
@@ -700,4 +701,14 @@ export function versionIdToVariant(versionId: string | undefined): GenerationVar
   if (versionId === 'convert') return 'high_conversion';
   if (versionId === 'premium') return 'premium';
   return 'high_click';
+}
+
+// Map the UI compile variant onto the Director Agent's TargetDurationMode (the
+// duration arc it re-budgets the source into). 高点击版 favours a tight 15s arc;
+// 高转化版 a 20s arc with room for value/comparison; 高质感版 preserves the source
+// pacing (慢节奏 + Ken Burns) rather than aggressively compressing.
+export function variantToTargetDurationMode(variant: GenerationVariant): TargetDurationMode {
+  if (variant === 'high_conversion') return 'high_conversion_20s';
+  if (variant === 'premium') return 'source_preserve';
+  return 'high_click_15s';
 }

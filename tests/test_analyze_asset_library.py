@@ -50,34 +50,42 @@ class AnalyzeAssetLibraryTests(unittest.TestCase):
         self.assertEqual(content[0], {"type": "input_video", "file_id": "file-video"})
         self.assertNotIn("instructions", payload)
 
-    def test_normalize_asset_card_filters_invalid_values_and_strips_nulls(self):
-        card = self.module.normalize_asset_card(
-            asset_id="asset_001",
-            media_type="image",
-            parsed={
-                "spatialDescription": "产品居中，纯色背景，近景构图。",
-                "temporalDescription": "图片不应保留时间描述",
-                "detectedObjects": ["product", 123, "hand"],
-                "suitableSlots": ["product_closeup", "made_up_slot"],
-                "qualityScore": 1.4,
-                "detectedIngredients": ["clean_background", "fake_ingredient"],
-                "humanPresence": {
-                    "hasHuman": True,
-                    "role": "hand_only",
-                    "framing": ["hands", "bad_frame"],
-                    "actions": ["holding_product", "bad_action"],
-                },
-                "visualStyleTags": ["clean_background", "bad_style"],
-            },
+    # The native-video rewrite split the old monolithic `normalize_asset_card` into focused pure helpers
+    # (`_filter_enum_list` / `_str_list` / `_clamp01` / `_strip_none` / `_sanitize_human_presence`) composed
+    # by `build_full_card`. These cover the same "drop invalid enums / clamp score / strip nulls / sanitize
+    # human presence" behaviour the old single-function test asserted.
+
+    def test_filter_enum_list_keeps_only_allowed_strings_and_dedupes(self):
+        out = self.module._filter_enum_list(
+            ["product_closeup", "made_up_slot", "product_closeup", 123],
+            {"product_closeup", "usage_demo"},
+        )
+        self.assertEqual(out, ["product_closeup"])
+
+    def test_str_list_drops_non_string_and_blank_values(self):
+        self.assertEqual(self.module._str_list(["product", 123, " hand ", ""]), ["product", "hand"])
+
+    def test_clamp01_clamps_out_of_range_and_falls_back_on_non_numbers(self):
+        self.assertEqual(self.module._clamp01(1.4), 1.0)
+        self.assertEqual(self.module._clamp01(-0.2), 0.0)
+        self.assertEqual(self.module._clamp01("not a number", default=0.5), 0.5)
+
+    def test_strip_none_removes_null_keys_recursively(self):
+        self.assertEqual(
+            self.module._strip_none({"a": 1, "b": None, "c": {"d": None, "e": 2}}),
+            {"a": 1, "c": {"e": 2}},
         )
 
-        self.assertEqual(card["id"], "asset_001")
-        self.assertEqual(card["type"], "image")
-        self.assertNotIn("temporalDescription", card)
-        self.assertEqual(card["detectedObjects"], ["product", "hand"])
-        self.assertEqual(card["suitableSlots"], ["product_closeup"])
-        self.assertEqual(card["qualityScore"], 1.0)
-        self.assertEqual(card["detectedIngredients"], ["clean_background"])
-        self.assertEqual(card["humanPresence"]["framing"], ["hands"])
-        self.assertEqual(card["humanPresence"]["actions"], ["holding_product"])
-        self.assertEqual(card["visualStyleTags"], ["clean_background"])
+    def test_sanitize_human_presence_filters_invalid_framing_and_actions(self):
+        out = self.module._sanitize_human_presence(
+            {
+                "hasHuman": True,
+                "role": "hand_only",
+                "framing": ["hands", "bad_frame"],
+                "actions": ["holding_product", "bad_action"],
+            }
+        )
+        self.assertEqual(out["hasHuman"], True)
+        self.assertEqual(out["role"], "hand_only")
+        self.assertEqual(out["framing"], ["hands"])
+        self.assertEqual(out["actions"], ["holding_product"])
