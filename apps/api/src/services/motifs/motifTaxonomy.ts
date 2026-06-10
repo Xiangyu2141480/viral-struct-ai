@@ -46,23 +46,23 @@ export const MOTIF_DEFINITIONS: MotifDefinition[] = [
   },
   {
     motifType: 'ingredient_transformation',
-    signalTokens: ['component_cascade', 'morph', 'pour_flow', 'falling_object'],
-    strongPairs: [['component_cascade', 'morph'], ['pour_flow', 'falling_object']],
+    signalTokens: ['component_cascade', 'morph', 'flow_motion', 'falling_object'],
+    strongPairs: [['component_cascade', 'morph'], ['flow_motion', 'falling_object']],
     threshold: 0.5,
     priority: 75,
     summary: 'category-native ingredients cascade / transform / flow together'
   },
   {
     motifType: 'kinetic_product_reveal',
-    signalTokens: ['dynamic_entry', 'bottle_rotation', 'push_in', 'assembly_reveal', 'clean_hold'],
-    strongPairs: [['dynamic_entry', 'clean_hold'], ['bottle_rotation', 'push_in']],
+    signalTokens: ['dynamic_entry', 'object_rotation', 'push_in', 'assembly_reveal', 'clean_hold'],
+    strongPairs: [['dynamic_entry', 'clean_hold'], ['object_rotation', 'push_in']],
     threshold: 0.5,
     priority: 70,
     summary: 'product revealed via whole-object motion (rotation / push-in), not fragments'
   },
   {
     motifType: 'lineup_lockup',
-    signalTokens: ['lineup_sweep', 'bottle_rotation', 'clean_hold', 'cta_reveal'],
+    signalTokens: ['lineup_sweep', 'object_rotation', 'clean_hold', 'cta_reveal'],
     strongPairs: [['lineup_sweep', 'clean_hold']],
     threshold: 0.5,
     priority: 70,
@@ -94,8 +94,8 @@ export const MOTIF_DEFINITIONS: MotifDefinition[] = [
   },
   {
     motifType: 'category_usage_moment',
-    signalTokens: ['snap_open', 'pour_flow', 'drink_action', 'activation_moment'],
-    strongPairs: [['snap_open', 'drink_action'], ['pour_flow', 'drink_action']],
+    signalTokens: ['snap_open', 'flow_motion', 'consume_action', 'activation_moment'],
+    strongPairs: [['snap_open', 'consume_action'], ['flow_motion', 'consume_action']],
     threshold: 0.45,
     priority: 40,
     summary: 'ordinary category usage (open / pour / drink) — the plain baseline'

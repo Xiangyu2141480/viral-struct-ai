@@ -2,6 +2,7 @@ import type {
   AssetCard,
   AssetSupplyContext,
   Boundary,
+  CategoryEquivalentVocabulary,
   ContentBrief,
   ContextualSlotCoverage,
   DirectorFillStatus,
@@ -35,6 +36,8 @@ import { buildGapResolutionOptions } from './gapResolutionOptionsBuilder';
 import { buildOrchestratedTransitions } from './transitionOrchestrator';
 import { buildSourceAbstraction } from './sourceSpecificAbstraction';
 import { DEFAULT_ASPECT_RATIO, DEFAULT_HYPERFRAMES_TRANSITION_WEIGHT } from './constants';
+import { translateCategoryEquivalents } from './categoryEquivalentTranslator';
+import { deriveSourceIdentityBanlist } from './sourceIdentityBanlist';
 
 type LlmClient = ReturnType<typeof createOpenAICompatibleClient>;
 
@@ -64,6 +67,13 @@ export interface BuildOrchestratedTimelineInput {
   /** Injected for tests / mock LLM; falls back to the real OpenAI-compatible client otherwise. */
   clientFactory?: () => LlmClient;
   model?: string;
+  /** Injected for tests; when omitted, the translator is CALLED (mandatory LLM, no fallback). */
+  vocabulary?: CategoryEquivalentVocabulary;
+  /**
+   * Source-product-specific terms to keep out of target output, derived from the SCANNED source graph.
+   * Injected for tests; when omitted, deriveSourceIdentityBanlist is CALLED (mandatory LLM, no fallback).
+   */
+  sourceBannedTerms?: readonly string[];
 }
 
 /**
@@ -77,6 +87,21 @@ export async function buildOrchestratedTimeline(input: BuildOrchestratedTimeline
   const targetCategory = inferTargetCategory(contentBrief, input.categoryPreset);
   const targetDurationMode = input.targetDurationMode ?? DEFAULT_TARGET_DURATION_MODE;
 
+  const vocab = input.vocabulary ?? await translateCategoryEquivalents({
+    contentBrief,
+    productIntelligence: input.structuralCompression?.productIntelligence,
+    assetCards,
+    clientFactory: input.clientFactory,
+    model: input.model
+  });
+
+  // Source-leak guardrails follow whatever source was actually scanned (no hardcoded MacBook list).
+  const sourceBannedTerms = input.sourceBannedTerms ?? (await deriveSourceIdentityBanlist({
+    structureGraph,
+    clientFactory: input.clientFactory,
+    model: input.model
+  })).terms;
+
   // P0-B (opt-in): re-budget the functional skeleton into ~6-8 canonical beats. When enabled we run the
   // whole pipeline on the rewritten (K representative slot) graph + a budgeted timing plan; otherwise we
   // keep the legacy 1:1 proportional timing on the original 27 slots.
@@ -84,7 +109,8 @@ export async function buildOrchestratedTimeline(input: BuildOrchestratedTimeline
     ? planStructuralCompression({
         structureGraph,
         productIntelligence: input.structuralCompression.productIntelligence,
-        targetDurationMode
+        targetDurationMode,
+        vocab
       })
     : undefined;
   const workingGraph = compression?.graph ?? structureGraph;
@@ -100,7 +126,7 @@ export async function buildOrchestratedTimeline(input: BuildOrchestratedTimeline
           categoryPreset: input.categoryPreset
         });
 
-  const match = await runMatch(input, workingGraph);
+  const match = await runMatch(input, workingGraph, sourceBannedTerms);
   const matchBySlot = new Map(match.matches.map((entry) => [entry.slotId, entry]));
   const coverageBySlot = new Map(
     (assetSupplyContext.contextualCoverage?.slotCoverages ?? []).map((coverage) => [coverage.slotId, coverage])
@@ -138,7 +164,7 @@ export async function buildOrchestratedTimeline(input: BuildOrchestratedTimeline
     });
     const tier = fillStatusToTier(fillStatus, slotMatch);
     const referenceAssetIds = selectReferenceAssetIds(slotMatch, coverage, assetCards);
-    const evidence = buildEvidence(coverage, slotMatch, gate.reasons);
+    const evidence = buildEvidence(coverage, slotMatch, gate.reasons, sourceBannedTerms);
     const motionTokens = sanitizeMotionGrammarText(buildSlotText(slot)).motionTokens;
     const transferableIntent = motionTokens.length > 0
       ? sanitizeMotionGrammarText(slot.intent?.purpose ?? buildSlotText(slot)).sanitizedIntent
@@ -146,7 +172,9 @@ export async function buildOrchestratedTimeline(input: BuildOrchestratedTimeline
     const sourceAbstraction = buildSourceAbstraction({
       slot,
       motif,
-      targetCategory
+      targetCategory,
+      vocab,
+      sourceBannedTerms
     });
 
     const fill = buildFill({
@@ -162,7 +190,9 @@ export async function buildOrchestratedTimeline(input: BuildOrchestratedTimeline
       evidence,
       fillStatus,
       motif,
-      compressionBeat
+      compressionBeat,
+      vocab,
+      sourceBannedTerms
     });
 
     return {
@@ -179,7 +209,7 @@ export async function buildOrchestratedTimeline(input: BuildOrchestratedTimeline
       fillStatus,
       // sourceIntent is provenance only; drop it whenever it carries source-product-specific semantics
       // so the raw source intent can never leak through the handoff (§12; mirrors the PR #60 leak fix).
-      sourceIntent: safeSourceIntent(slot.intent?.purpose),
+      sourceIntent: safeSourceIntent(slot.intent?.purpose, sourceBannedTerms),
       transferableIntent,
       sourceAbstraction,
       motifType: motif?.motifType,
@@ -198,6 +228,7 @@ export async function buildOrchestratedTimeline(input: BuildOrchestratedTimeline
     slots,
     assetCards,
     contentBrief,
+    vocab,
     hyperframesWeight: input.hyperframesTransitionWeight ?? DEFAULT_HYPERFRAMES_TRANSITION_WEIGHT
   });
 
@@ -207,7 +238,7 @@ export async function buildOrchestratedTimeline(input: BuildOrchestratedTimeline
     renderProfile: buildRenderProfile(structureGraph),
     slots,
     transitions,
-    reusableAssetPacks: buildReusableAssetPacks({ slots, contentBrief }),
+    reusableAssetPacks: buildReusableAssetPacks({ slots, contentBrief, vocab, sourceBannedTerms }),
     meta: {
       productName: contentBrief.productName,
       targetCategory,
@@ -226,7 +257,7 @@ export async function buildOrchestratedTimeline(input: BuildOrchestratedTimeline
 
 // --- matching ---------------------------------------------------------------
 
-async function runMatch(input: BuildOrchestratedTimelineInput, graph: ViralStructureGraph): Promise<MatchSlotsResultWithSource> {
+async function runMatch(input: BuildOrchestratedTimelineInput, graph: ViralStructureGraph, sourceBannedTerms: readonly string[]): Promise<MatchSlotsResultWithSource> {
   if (input.useLlmMatcher === false) {
     const result = matchSlots(graph, input.assetCards, input.boundaries);
     return {
@@ -240,7 +271,8 @@ async function runMatch(input: BuildOrchestratedTimelineInput, graph: ViralStruc
     assets: input.assetCards,
     boundaries: input.boundaries,
     clientFactory: input.clientFactory,
-    model: input.model
+    model: input.model,
+    sourceBannedTerms
   });
 }
 
@@ -355,6 +387,8 @@ interface BuildFillArgs {
   fillStatus: DirectorFillStatus;
   motif?: ViralMotifAnnotation;
   compressionBeat?: StructuralCompressionBeat;
+  vocab: CategoryEquivalentVocabulary;
+  sourceBannedTerms: readonly string[];
 }
 
 function buildFill(args: BuildFillArgs): SlotFillMatched | SlotFillGap {
@@ -381,7 +415,9 @@ function buildFill(args: BuildFillArgs): SlotFillMatched | SlotFillGap {
       motionTokens: args.motionTokens,
       fillStatus: args.fillStatus,
       motif: args.motif,
-      gateSourceCascade
+      gateSourceCascade,
+      vocab: args.vocab,
+      sourceBannedTerms: args.sourceBannedTerms
     });
     return {
       kind: 'matched',
@@ -413,7 +449,9 @@ function buildFill(args: BuildFillArgs): SlotFillMatched | SlotFillGap {
       motionTokens: args.motionTokens,
       fillStatus: args.fillStatus,
       motif: args.motif,
-      gateSourceCascade
+      gateSourceCascade,
+      vocab: args.vocab,
+      sourceBannedTerms: args.sourceBannedTerms
     });
     const missing = args.slotMatch?.missingDescription;
     return {
@@ -444,7 +482,9 @@ function buildFill(args: BuildFillArgs): SlotFillMatched | SlotFillGap {
     motionTokens: args.motionTokens,
     fillStatus: args.fillStatus,
     motif: args.motif,
-    gateSourceCascade
+    gateSourceCascade,
+    vocab: args.vocab,
+    sourceBannedTerms: args.sourceBannedTerms
   });
   return {
     kind: 'gap',
@@ -481,7 +521,8 @@ function treatmentSummary(match: SlotMatch | undefined): string {
 function buildEvidence(
   coverage: ContextualSlotCoverage | undefined,
   match: SlotMatch | undefined,
-  gateReasons: string[]
+  gateReasons: string[],
+  sourceBannedTerms: readonly string[]
 ): OrchestratedSlotEvidence {
   // Evidence is a downstream-facing field, so its labels must be leak-safe too: a raw ingredient label
   // can be the source caption ("MacBook Neo / From $599 ..."). Drop leaky matched criteria; replace a
@@ -489,10 +530,10 @@ function buildEvidence(
   const matchedIngredients = unique([
     ...(coverage?.availableIngredients?.map((entry) => entry.requiredIngredientId) ?? []),
     ...(match?.matchedCriteria ?? [])
-  ]).filter((label) => !containsSourceSpecificTerm(label));
+  ]).filter((label) => !containsSourceSpecificTerm(label, sourceBannedTerms));
   const missingIngredients = unique([
-    ...(coverage?.missingIngredients?.map((entry) => safeLabel(entry.label, entry.requiredIngredientId)) ?? []),
-    ...(coverage?.weakIngredients?.map((entry) => safeLabel(entry.label, entry.requiredIngredientId)) ?? [])
+    ...(coverage?.missingIngredients?.map((entry) => safeLabel(entry.label, entry.requiredIngredientId, sourceBannedTerms)) ?? []),
+    ...(coverage?.weakIngredients?.map((entry) => safeLabel(entry.label, entry.requiredIngredientId, sourceBannedTerms)) ?? [])
   ]);
   return {
     coverageStatus: coverage?.coverageStatus,
@@ -502,8 +543,8 @@ function buildEvidence(
   };
 }
 
-function safeLabel(label: string, fallback: string): string {
-  return containsSourceSpecificTerm(label) ? fallback : label;
+function safeLabel(label: string, fallback: string, sourceBannedTerms: readonly string[]): string {
+  return containsSourceSpecificTerm(label, sourceBannedTerms) ? fallback : label;
 }
 
 // --- references -------------------------------------------------------------
@@ -650,15 +691,9 @@ function inferTargetCategory(brief: ContentBrief, categoryPreset?: CategoryPrese
 
 // --- helpers ----------------------------------------------------------------
 
-function safeSourceIntent(purpose: string | undefined): string | undefined {
+function safeSourceIntent(purpose: string | undefined, sourceBannedTerms: readonly string[]): string | undefined {
   if (!purpose) return undefined;
-  return containsDirectorSourceSpecificTerm(purpose) ? undefined : purpose;
-}
-
-function containsDirectorSourceSpecificTerm(text: string): boolean {
-  return containsSourceSpecificTerm(text)
-    || /MacBook|Apple|laptop|keyboard|trackpad|touchpad|screen|port|interface|camera|hinge|chassis|rocket|hardware|purchase window|multi[-_\s]?window|system interaction/i.test(text)
-    || /笔记本|苹果|键盘|触控板|屏幕|接口|摄像头|机身|火箭|购买窗口|硬件功能|硬件|开合结构|闭合|按键|功能部件|多窗口|系统交互|侧边/.test(text);
+  return containsSourceSpecificTerm(purpose, sourceBannedTerms) ? undefined : purpose;
 }
 
 function buildSlotText(slot: ShotSlotNode): string {
@@ -687,6 +722,8 @@ function unique<T>(values: T[]): T[] {
 function buildReusableAssetPacks(args: {
   slots: OrchestratedSlot[];
   contentBrief: ContentBrief;
+  vocab: CategoryEquivalentVocabulary;
+  sourceBannedTerms: readonly string[];
 }): ReusableAssetPackPlan[] {
   const slotIdsByPredicate = (predicate: (slot: OrchestratedSlot) => boolean): string[] => {
     const ids = args.slots.filter(predicate).map((slot) => slot.slotId);
@@ -695,7 +732,7 @@ function buildReusableAssetPacks(args: {
   const slotIdsByRole = (roles: string[]): string[] => slotIdsByPredicate((slot) => roles.includes(slot.role));
   const actionsByPredicate = (predicate: (slot: OrchestratedSlot) => boolean, fallback: string): string => {
     const matchingSlots = args.slots.filter(predicate);
-    const vocabulary = packActionVocabulary(matchingSlots.length ? matchingSlots : args.slots);
+    const vocabulary = packActionVocabulary(matchingSlots.length ? matchingSlots : args.slots, args.sourceBannedTerms);
     return vocabulary.slice(0, 5).join('、') || fallback;
   };
   const motifSlotIds = slotIdsByPredicate((slot) =>
@@ -705,37 +742,37 @@ function buildReusableAssetPacks(args: {
   );
   const heroActions = actionsByPredicate(
     (slot) => slot.role === 'opening_attention' || slot.sourceAbstraction?.subtype === 'opening_transform',
-    '强开场入场、产品英雄亮相、hook 标题定格'
+    args.vocab.byRole.opening_attention!.mustCapture.join('、')
   );
   const closeupActions = actionsByPredicate(
     (slot) => slot.role === 'product_closeup' || slot.sourceAbstraction?.subtype === 'interface_detail',
-    '瓶盖特写、标签扫光、冷凝水擦除、瓶身微距'
+    args.vocab.byRole.product_closeup!.mustCapture.join('、')
   );
   const usageActions = actionsByPredicate(
     (slot) => slot.role === 'usage_demo' || slot.role === 'technique_demo',
-    '开盖动作、倒茶入杯、饮用动作、手部互动'
+    args.vocab.byRole.usage_demo!.mustCapture.join('、')
   );
   const benefitActions = actionsByPredicate(
     (slot) => slot.role === 'benefit_visual' || slot.sourceAbstraction?.subtype === 'assembly_detail',
-    '冰块汇聚、柠檬片扫过、茶滴环绕、卖点卡落下'
+    args.vocab.byRole.benefit_visual!.mustCapture.join('、')
   );
   const motifActions = actionsByPredicate(
     (slot) => motifSlotIds.includes(slot.slotId),
-    '冰块级联、柠檬片扫过、红茶水滴汇聚、开盖激活、CTA 收口'
+    args.vocab.bySubtype.kinetic_assembly_reveal!.actions.join('、')
   );
   const transitionActions = actionsByPredicate(
     (slot) => Boolean(slot.sourceAbstraction) || (slot.motionTokens?.length ?? 0) > 0,
-    '镜头运动、卖点承接、产品定格'
+    args.vocab.byRole.transition!.mustCapture.join('、')
   );
   const ctaActions = actionsByPredicate(
     (slot) => slot.role === 'cta_visual' || slot.sourceAbstraction?.subtype === 'cta_lockup',
-    '多瓶阵列、产品定格、CTA 留白、购买引导弹出'
+    args.vocab.byRole.cta_visual!.mustCapture.join('、')
   );
   const socialActions = actionsByPredicate(
     (slot) => slot.role === 'comparison'
       || slot.role === 'testimonial'
       || slot.sourceAbstraction?.subtype === 'device_handoff',
-    '手递产品、通勤场景切换、朋友分享、多瓶陈列'
+    args.vocab.byRole.social_proof!.mustCapture.join('、')
   );
   const product = args.contentBrief.productName;
   const packs: ReusableAssetPackPlan[] = [
@@ -762,9 +799,9 @@ function buildReusableAssetPacks(args: {
       ownership: 'director_handoff_plan_only'
     },
     {
-      id: 'pack_cap_open_usage',
-      packType: 'cap_open_usage',
-      title: '开盖使用动作包',
+      id: 'pack_usage_action',
+      packType: 'usage_action_pack',
+      title: '使用动作包',
       status: 'required',
       recommendedChannel: 'reshoot',
       promptSummary: `从 usage_demo 槽位聚类生成：补齐真实使用动作和手部/场景证据；优先动作：${usageActions}。`,
@@ -773,9 +810,9 @@ function buildReusableAssetPacks(args: {
       ownership: 'director_handoff_plan_only'
     },
     {
-      id: 'pack_pour_or_drink_usage',
-      packType: 'pour_or_drink_usage',
-      title: '倒入/饮用动作包',
+      id: 'pack_continuous_usage',
+      packType: 'continuous_usage_pack',
+      title: '连续使用动作包',
       status: 'required',
       recommendedChannel: 'reshoot',
       promptSummary: `根据 usage_demo 的 motionTokens 与 target equivalents 生成连续动作素材包；用于增强使用过程可信度，覆盖：${usageActions}。`,
@@ -784,9 +821,9 @@ function buildReusableAssetPacks(args: {
       ownership: 'director_handoff_plan_only'
     },
     {
-      id: 'pack_cold_condensation_macro',
-      packType: 'cold_condensation_macro',
-      title: '冰爽微距包',
+      id: 'pack_texture_proof',
+      packType: 'texture_proof_macro',
+      title: '质感证明包',
       status: 'required',
       recommendedChannel: 'hyperframes',
       promptSummary: `从 benefit / product evidence 槽位聚类生成质感证明素材；使用目标品类等价元素：${benefitActions || closeupActions}。`,
@@ -806,9 +843,9 @@ function buildReusableAssetPacks(args: {
       ownership: 'director_handoff_plan_only'
     },
     {
-      id: 'pack_transition_ice_lemon',
-      packType: 'transition_ice_lemon_pack',
-      title: '冰柠转场元素包',
+      id: 'pack_transition_element',
+      packType: 'transition_element_pack',
+      title: '转场元素包',
       status: 'optional',
       recommendedChannel: 'hyperframes',
       promptSummary: `从相邻 slot 的 motionTokens/sourceAbstraction 聚类生成转场元素；用于镜头之间的语义承接：${transitionActions}。`,
@@ -830,7 +867,7 @@ function buildReusableAssetPacks(args: {
     {
       id: 'pack_lineup_social_proof',
       packType: 'lineup_social_proof',
-      title: '多瓶陈列/分享包',
+      title: '陈列/分享包',
       status: 'optional',
       recommendedChannel: 'reshoot',
       promptSummary: `从 comparison / testimonial / device_handoff 槽位聚类生成陈列、分享或证明素材；支持对比和社交证明：${socialActions}。`,
@@ -842,7 +879,7 @@ function buildReusableAssetPacks(args: {
   return packs;
 }
 
-function packActionVocabulary(slots: OrchestratedSlot[]): string[] {
+function packActionVocabulary(slots: OrchestratedSlot[], sourceBannedTerms: readonly string[]): string[] {
   return unique(
     slots.flatMap((slot) => [
       ...(slot.sourceAbstraction?.targetEquivalentActions ?? []),
@@ -850,7 +887,7 @@ function packActionVocabulary(slots: OrchestratedSlot[]): string[] {
       slot.sourceAbstraction?.targetEquivalentLabel
     ])
       .filter((value): value is string => Boolean(value))
-      .filter((value) => !containsSourceSpecificTerm(value))
+      .filter((value) => !containsSourceSpecificTerm(value, sourceBannedTerms))
   );
 }
 
@@ -864,7 +901,7 @@ function tokenToPackAction(token: string): string {
     spectacle_burst: '爆发瞬间',
     cta_reveal: 'CTA 收口',
     snap_open: '开启动作',
-    bottle_rotation: '产品旋转',
+    object_rotation: '产品旋转',
     lineup_sweep: '阵列扫过',
     card_drop: '卡片落下',
     clean_hold: '干净定格'

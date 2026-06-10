@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import type { OrchestratedSlot, SlotFillGap, SlotFillMatched } from '@viral-struct/shared';
 import { buildOrchestratedTransitions } from './transitionOrchestrator';
 import { makeAssets, makeContentBrief } from './testFixtures';
+import { EARPHONE_VOCAB_FIXTURE } from './vocabularyFixture';
 
 function matchedFill(assetId: string): SlotFillMatched {
   return {
@@ -47,7 +48,7 @@ function slot(
   };
 }
 
-const base = { assetCards: makeAssets(), contentBrief: makeContentBrief() };
+const base = { assetCards: makeAssets(), contentBrief: makeContentBrief(), vocab: EARPHONE_VOCAB_FIXTURE };
 
 test('emits exactly slots.length - 1 transitions', () => {
   const slots = [
@@ -123,7 +124,14 @@ test('infers diverse semantic transition functions with Chinese execution guidan
   assert.ok(functions.size >= 4);
 
   const guidance = transitions.map((transition) => transition.hyperframes?.editingGuidanceNL ?? transition.aigcFrameBridge?.prompt ?? '').join('\n');
-  assert.match(guidance, /冰块|柠檬|茶滴|冷雾|开盖|CTA/);
-  assert.match(guidance, /转场|承接|擦除|收口|汇聚/);
+  // structural connective language is present...
+  assert.match(guidance, /转场|承接|擦除|收口|汇聚|定格/);
+  // ...the kinetic-assembly bridge surfaces the injected product-native vocab (earphone, not beverage)...
+  assert.match(guidance, /单元入仓|零件由散到聚|降噪激活/);
+  // ...and NO beverage MOTIF leaks from the de-beveraged switches. Strip the product name first, since the
+  // fixture product itself is a beverage (康师傅冰红茶) and naming the product is legitimate.
+  const guidanceSansProduct = guidance.split(base.contentBrief.productName).join('');
+  assert.doesNotMatch(guidanceSansProduct, /冰块|柠檬|茶滴|红茶|冷雾|冷凝|瓶身|开盖|倒茶|热浪/);
+  // ...nor any source (MacBook) term.
   assert.doesNotMatch(guidance, /MacBook|keyboard|laptop|touchpad|rocket|hardware|键盘|笔记本|触控板|火箭|硬件/);
 });

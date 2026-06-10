@@ -6,6 +6,7 @@ import {
   normalizeCategory
 } from './categoryPresetProvider';
 import { mapTargetCategoryMotif } from './targetCategoryMotifMapper';
+import { MACBOOK_SOURCE_BANNED_TERMS } from '../directorAgent/vocabularyFixture';
 
 function fakeClient(content: string) {
   return {
@@ -55,7 +56,7 @@ test('generateCategoryPreset falls back when the LLM result leaks a source term'
     sensoryKeywords: [],
     defaultEquivalents: ['pour to cup']
   });
-  const result = await generateCategoryPreset({ category: 'beverage', model: 'test-model', clientFactory: () => fakeClient(content) });
+  const result = await generateCategoryPreset({ category: 'beverage', model: 'test-model', clientFactory: () => fakeClient(content), sourceBannedTerms: MACBOOK_SOURCE_BANNED_TERMS });
   assert.equal(result.source, 'deterministic_preset');
   assert.match(result.warning ?? '', /leak/i);
   // and the deterministic fallback is clean

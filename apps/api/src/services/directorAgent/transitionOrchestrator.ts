@@ -1,5 +1,6 @@
 import type {
   AssetCard,
+  CategoryEquivalentVocabulary,
   ContentBrief,
   OrchestratedSlot,
   OrchestratedTransition
@@ -24,6 +25,8 @@ export interface BuildOrchestratedTransitionsArgs {
   slots: OrchestratedSlot[];
   assetCards: AssetCard[];
   contentBrief: ContentBrief;
+  /** Product-native category-equivalent vocabulary. The kinetic-assembly bridge reads its actions from here; everything else stays category-neutral structural language. */
+  vocab: CategoryEquivalentVocabulary;
   /** Share of transitions that prefer hyperframes (default 0.8). At >= 1 even strong pairs stay hyperframes. */
   hyperframesWeight?: number;
 }
@@ -87,7 +90,7 @@ export function buildOrchestratedTransitions(args: BuildOrchestratedTransitionsA
           fromTailFrameRef: `required: extract tail frame from ${from.slotId}`,
           toHeadFrameRef: `required: extract head frame from ${to.slotId}`,
           prompt:
-            `仅为生成提示词，非成片。为 ${productName} 生成衔接帧：${transitionPrompt(transitionFunction, from, to)}`
+            `仅为生成提示词，非成片。为 ${productName} 生成衔接帧：${transitionPrompt(transitionFunction, from, to, args.vocab)}`
             + '不得加入任何未授权品牌、价格承诺或医疗功效宣称。',
           negativePrompt: SAFE_NEGATIVE_PROMPT_ZH,
           durationMs: 500,
@@ -113,7 +116,7 @@ export function buildOrchestratedTransitions(args: BuildOrchestratedTransitionsA
       preferredImplementation: 'hyperframes',
       reason: `用语义转场把「${zhRole(from.role)}」承接到「${zhRole(to.role)}」，保留结构节奏但不复制源画面。`,
       hyperframes: {
-        editingGuidanceNL: `${transitionGuidance(transitionFunction, productName, from, to)}保持产品标签清晰可见，不加任何未经证实的宣称。`,
+        editingGuidanceNL: `${transitionGuidance(transitionFunction, productName, from, to, args.vocab)}保持产品标签清晰可见，不加任何未经证实的宣称。`,
         durationMs: 400,
         styleTokens: styleTokens(from, to, transitionFunction)
       },
@@ -162,20 +165,32 @@ function isMotifAssemblyBridge(from: OrchestratedSlot, to: OrchestratedSlot): bo
   return from.motifType === 'kinetic_assembly_reveal' || to.motifType === 'kinetic_assembly_reveal';
 }
 
-function transitionGuidance(functionName: string, productName: string, from: OrchestratedSlot, to: OrchestratedSlot): string {
+/**
+ * Category-neutral transition guidance. Transitions are structural connective tissue, so — apart from the
+ * kinetic-assembly bridge, which expresses the product's OWN cascade actions from the injected vocab — every
+ * case stays product-neutral (product name + generic motion verbs) and never names any category-specific
+ * imagery. This keeps transitions from re-stating slot content and from leaking another category's motifs.
+ */
+function transitionGuidance(
+  functionName: string,
+  productName: string,
+  from: OrchestratedSlot,
+  to: OrchestratedSlot,
+  vocab: CategoryEquivalentVocabulary
+): string {
   switch (functionName) {
     case 'opening_to_product':
-      return `以 ${productName} 为主体，用热浪破碎或冷雾擦除从「${zhRole(from.role)}」转场到「${zhRole(to.role)}」，前 0.4 秒快速推近产品。`;
+      return `以 ${productName} 为主体，用快速推近或干净擦除从「${zhRole(from.role)}」转场到「${zhRole(to.role)}」，前 0.4 秒迅速锁定产品主体。`;
     case 'product_to_usage':
-      return `以 ${productName} 为主体，用开盖声点、瓶身轻转或手部动作触发，从产品特写承接到真实使用动作。`;
+      return `以 ${productName} 为主体，用手部动作或细节触发，从产品特写自然承接到真实使用动作。`;
     case 'usage_to_benefit':
-      return `把使用动作的末帧接到卖点证明，用冷凝水擦除、红茶水滴或利益点卡片落下完成转场。`;
+      return `把使用动作的末帧接到卖点证明，用利益点卡片落下或干净擦除完成转场。`;
     case 'benefit_to_usage':
       return `让卖点卡下落或侧滑，露出下一段真实使用动作，保留节奏但降低字幕压力。`;
     case 'motif_assembly_bridge':
-      return `迁移级联组装语法：冰块、柠檬片、红茶水滴由散到聚，冷雾爆发后承接到「${zhRole(to.role)}」镜头。`;
+      return `迁移级联组装语法：让 ${vocab.bySubtype.kinetic_assembly_reveal!.actions.join('、')} 由散到聚地依次完成，再承接到「${zhRole(to.role)}」镜头。`;
     case 'product_to_cta':
-      return `用冷雾散开、产品定格和 CTA 锁定，把前一镜头收束到结尾行动引导。`;
+      return `用产品定格和 CTA 锁定，把前一镜头收束到结尾行动引导。`;
     case 'cta_lockup':
       return `保持产品轻微弹动后稳定在 CTA 尾帧，形成干净收口。`;
     case 'proof_to_cta':
@@ -185,16 +200,21 @@ function transitionGuidance(functionName: string, productName: string, from: Orc
   }
 }
 
-function transitionPrompt(functionName: string, from: OrchestratedSlot, to: OrchestratedSlot): string {
+function transitionPrompt(
+  functionName: string,
+  from: OrchestratedSlot,
+  to: OrchestratedSlot,
+  vocab: CategoryEquivalentVocabulary
+): string {
   switch (functionName) {
     case 'motif_assembly_bridge':
-      return `冰块、柠檬片、红茶水滴和冷雾从上一镜头级联汇聚，形成由散到聚的冰爽转场，再自然进入「${zhRole(to.role)}」镜头。`;
+      return `${vocab.bySubtype.kinetic_assembly_reveal!.actions.join('、')} 从上一镜头由散到聚地级联汇聚，形成结构化转场，再自然进入「${zhRole(to.role)}」镜头。`;
     case 'opening_to_product':
-      return `热浪被冰雾击碎，露出清晰产品主体，并自然进入「${zhRole(to.role)}」镜头。`;
+      return `用干净擦除露出清晰产品主体，并自然进入「${zhRole(to.role)}」镜头。`;
     case 'product_to_usage':
-      return `瓶身轻转或开盖动作触发画面切换，承接到真实使用动作。`;
+      return `用手部动作或细节触发画面切换，承接到真实使用动作。`;
     case 'product_to_cta':
-      return `冷雾散开后产品定格，进入 CTA 锁定尾帧。`;
+      return `产品定格后进入 CTA 锁定尾帧。`;
     default:
       return `从「${zhRole(from.role)}」镜头以目标品类元素自然承接到「${zhRole(to.role)}」镜头。`;
   }

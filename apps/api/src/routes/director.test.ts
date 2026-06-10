@@ -4,11 +4,13 @@ import { after, before, test } from 'node:test';
 import express from 'express';
 import { directorRouter } from './director';
 import { makeAssets, makeContentBrief, makeGraph } from '../services/directorAgent/testFixtures';
+import { installRouteLlmMock, uninstallRouteLlmMock } from '../testSupport/routeLlmMock';
 
 let server: Server;
 let baseUrl = '';
 
 before(async () => {
+  installRouteLlmMock();
   const app = express();
   app.use(express.json({ limit: '4mb' }));
   app.use('/api/director', directorRouter);
@@ -22,6 +24,7 @@ before(async () => {
 });
 
 after(async () => {
+  uninstallRouteLlmMock();
   await new Promise<void>((resolve, reject) => {
     server.close((error) => (error ? reject(error) : resolve()));
   });

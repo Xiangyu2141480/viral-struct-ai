@@ -2,6 +2,7 @@ import type {
   AssetCard,
   AssetSupplyContext,
   Boundary,
+  CategoryEquivalentVocabulary,
   ContentBrief,
   OrchestratedTimeline,
   ProductIntelligence,
@@ -39,6 +40,16 @@ export interface RunDirectorAgentInput {
     /** Injected for tests / mock LLM. */
     clientFactory?: () => LlmClient;
     model?: string;
+    /**
+     * Injected category-equivalent vocabulary (tests). When omitted, buildOrchestratedTimeline calls the
+     * mandatory LLM translator (no deterministic fallback) using clientFactory/model.
+     */
+    vocabulary?: CategoryEquivalentVocabulary;
+    /**
+     * Injected source-identity banlist. When omitted, buildOrchestratedTimeline derives it from the scanned
+     * source graph via the mandatory LLM (deriveSourceIdentityBanlist, no deterministic fallback).
+     */
+    sourceBannedTerms?: readonly string[];
   };
 }
 
@@ -56,6 +67,8 @@ export async function runDirectorAgent(input: RunDirectorAgentInput): Promise<Or
     structuralCompression: input.options?.structuralCompression,
     useLlmMatcher: input.options?.useLlmMatcher,
     clientFactory: input.options?.clientFactory,
-    model: input.options?.model
+    model: input.options?.model,
+    vocabulary: input.options?.vocabulary,
+    sourceBannedTerms: input.options?.sourceBannedTerms
   });
 }

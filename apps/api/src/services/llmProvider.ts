@@ -1,6 +1,21 @@
 import OpenAI from 'openai';
 
-export function createOpenAICompatibleClient() {
+export type OpenAICompatibleClient = OpenAI;
+
+let testClientFactory: (() => OpenAICompatibleClient) | null = null;
+
+/**
+ * Test-only seam: route EVERY LLM client through a mock factory. Used by full-pipeline HTTP/route and demo
+ * integration tests that must exercise the (mandatory-LLM, no-fallback) category-equivalent vocab and
+ * source-identity banlist without a live LLM. Pass null to restore real clients. No effect in production.
+ */
+export function setLlmClientFactoryForTests(factory: (() => OpenAICompatibleClient) | null): void {
+  testClientFactory = factory;
+}
+
+export function createOpenAICompatibleClient(): OpenAICompatibleClient {
+  if (testClientFactory) return testClientFactory();
+
   const apiKey = process.env.LLM_API_KEY;
   const baseURL = process.env.LLM_BASE_URL;
 
