@@ -11,23 +11,32 @@
 // store additionally falls back to local fixtures if a route is unreachable.
 
 import { Router } from 'express';
-import multer from 'multer';
+import multer, { MulterError } from 'multer';
+import type { RequestHandler } from 'express';
 import { randomUUID } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
-import { readFile, rm, unlink } from 'node:fs/promises';
+import { existsSync, mkdirSync } from 'node:fs';
+import { copyFile, readFile, rm, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { nanoid } from 'nanoid';
 import type { Request } from 'express';
 import { analyzeVideoFile, getSeedVideoPath, getUploadedVideoPath, listSeedVideos } from '../services/videoAnalyzer';
 import { extractStructureFromVideoAnalysis } from '../services/structureExtractor';
-import { runRoughScan } from '../services/roughScanRunner';
+import { runRoughScan, getScanDataDir } from '../services/roughScanRunner';
 import { runFineScan, type FineBlockDetail } from '../services/fineScanRunner';
+import { runBoundaryScan } from '../services/boundaryScanRunner';
 import { analyzeAssetsWithFallbackResult } from '../services/assetAnalyzer';
 import { matchSlotsWithFallback } from '../services/slotMatcher';
-import { runDirectorAgent } from '../services/directorAgent';
+import { runDirectorAgent, buildGapResolutionOptions } from '../services/directorAgent';
+import { translateCategoryEquivalents } from '../services/directorAgent/categoryEquivalentTranslator';
+import { planAigcBeats } from '@viral-struct/video-agent';
+import { renderAigcTimeline } from '../services/videoAgent/aigcRenderer';
+import { wanConfigFromEnv } from '../services/videoAgent/wanVideoClient';
 import { orchestratedToAuthored } from '../services/videoAgent/orchestratedToAuthored';
 import { authoredTimelineToTimelineItems } from '../services/videoAgent/authoredTimelineAdapter';
 import { renderAuthoredTimeline } from '../services/videoAgent/runVideoAgentPipeline';
+import { renderHyperframesForSlot } from '../services/hyperframesSlotRenderer';
+import { renderTransitionPreview, transitionDurationMs } from '../services/transitionRenderer';
+import { rewriteAssetCardUrlsToDisk } from '../services/authoredRenderService';
 import { applyNaturalLanguageEditWithFallback } from '../services/timelineEditor';
 import { evaluateQuality } from '../services/qualityEvaluator';
 import { checkBrandSafety } from '../services/brandSafetyChecker';
@@ -37,6 +46,13 @@ import { planMissingMaterialGenerationJobs } from '../services/missingMaterialGe
 import { loadAssetLibrary } from '../services/assetLibraryLoader';
 import { getDemoShowcase } from '../services/demoShowcase';
 import { getRenderDir, getUploadDir } from '../services/videoPaths';
+import {
+  deleteStructure,
+  getStructure,
+  getStructureArtifacts,
+  listStructures,
+  saveStructure,
+} from '../services/structLibraryStore';
 import type { RenderProfile } from '@viral-struct/render-executor';
 import type {
   AuthoredComposition,
@@ -47,31 +63,85 @@ import type {
 } from '@viral-struct/shared';
 import {
   assetCardsToMaterials,
+  boundaryToUiTransition,
+  boundaryTypeToUi,
   buildContentBrief,
   buildStructureGraph,
   graphToSourceVideo,
   materialsToAssetCards,
   segsToTimelineItems,
+  techniqueTagsToBoundaryType,
   timelineItemsToSegs,
   toDiagnosisRecord,
   variantToTargetDurationMode,
   versionFromId,
   versionIdToVariant,
+  type SlotGapResolution,
 } from '../services/structAdapter/structAdapter';
+import type { SlotMatch } from '@viral-struct/shared';
 import type {
   Diagnosis,
   ExportResult,
   Material,
+  ResolutionMethod,
   SourceVideo,
   TargetProduct,
   TimelineSeg,
+  Transition,
 } from '../services/structAdapter/structTypes';
 
-const upload = multer({ dest: getUploadDir() });
+// Shared multer instance (used by /scan, /sample/analyze, /materials/upload).
+// 500MB hard cap per file — a clear Chinese 413 is returned when exceeded.
+const MAX_UPLOAD_BYTES = 500 * 1024 * 1024;
+const upload = multer({ dest: getUploadDir(), limits: { fileSize: MAX_UPLOAD_BYTES } });
 export const structRouter = Router();
+
+/**
+ * Wrap a multer middleware so a LIMIT_FILE_SIZE (or any multer error) becomes a
+ * clear Chinese 413/400 instead of an unhandled error. Keeps the size cap honest
+ * and fail-fast across every upload route.
+ */
+function withUploadGuard(middleware: RequestHandler): RequestHandler {
+  return (req, res, next) => {
+    middleware(req, res, (err: unknown) => {
+      if (err instanceof MulterError) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          res.status(413).json({ error: `上传文件过大，单个文件不能超过 ${Math.round(MAX_UPLOAD_BYTES / (1024 * 1024))}MB。` });
+          return;
+        }
+        res.status(400).json({ error: `上传失败：${err.message}` });
+        return;
+      }
+      if (err) {
+        res.status(400).json({ error: `上传失败：${errorMessage(err)}` });
+        return;
+      }
+      next();
+    });
+  };
+}
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/** Stable per-session asset dir (NOT swept before produce), under the upload dir. */
+function getAssetSessionDir(sessionId: string): string {
+  return path.join(getUploadDir(), 'struct_assets', sessionId);
+}
+
+/** Uploaded asset session dirs awaiting cleanup, keyed by dir path. Swept after ~2h
+ *  so the stable per-session copies created in /materials/upload don't leak on disk. */
+const assetSessionDirs = new Map<string, { dir: string; createdAt: number }>();
+
+function sweepAssetSessionDirs(): void {
+  const now = Date.now();
+  for (const [dir, entry] of assetSessionDirs) {
+    if (now - entry.createdAt > 2 * 60 * 60_000) {
+      assetSessionDirs.delete(dir);
+      void rm(entry.dir, { recursive: true, force: true }).catch(() => {});
+    }
+  }
 }
 
 function stubProduct(sourceVideo: SourceVideo, materials: Material[]): TargetProduct {
@@ -96,7 +166,7 @@ structRouter.get('/sample/seeds', async (_req, res) => {
 });
 
 /* ─── POST /api/struct/sample/analyze — video → SourceVideo (StructureIR) ─── */
-structRouter.post('/sample/analyze', upload.single('video'), async (req, res) => {
+structRouter.post('/sample/analyze', withUploadGuard(upload.single('video')), async (req, res) => {
   try {
     const warnings: string[] = [];
     let videoId: string;
@@ -140,8 +210,10 @@ structRouter.post('/sample/analyze', upload.single('video'), async (req, res) =>
     if (structure.debug?.fallbackUsed) warnings.push('结构抽取降级为 mock 结构图');
     if (structure.debug?.warnings?.length) warnings.push(...structure.debug.warnings);
 
-    const sourceVideo = graphToSourceVideo(structure.structureGraph, { videoId, title });
+    const defaultedFields: string[] = [];
+    const sourceVideo = graphToSourceVideo(structure.structureGraph, { videoId, title, defaultedFields });
     warnings.push('播放数据（点击率/完播/点赞）非真实测量，仅结构与转场为真实分析结果');
+    if (defaultedFields.length) warnings.push('部分节奏/包装字段未检测，已留空');
 
     res.json({ sourceVideo, warnings });
   } catch (error) {
@@ -171,6 +243,12 @@ interface ScanArtifacts {
   roughScanPath: string;
   workDir: string;
   createdAt: number;
+  /**
+   * When true, the entry's files are LIBRARY-OWNED (persisted under getStructLibraryDir
+   * via a reopened structure). The TTL sweep evicts the in-memory entry but must NOT
+   * unlink/delete its files — otherwise reopening would destroy the persisted source.
+   */
+  keepFiles?: boolean;
 }
 /** Retained per-video scan inputs (raw video + rough output) for follow-up fine scans. */
 const scanArtifacts = new Map<string, ScanArtifacts>();
@@ -186,6 +264,34 @@ interface FineJob {
 }
 const fineJobs = new Map<string, FineJob>();
 
+interface BoundaryJob {
+  status: ScanJobStatus;
+  stage?: string;
+  transitionIndex: number;
+  /** The re-scanned UI transition (real type + evidence), spliced in by the store. */
+  transition?: Transition;
+  warnings?: string[];
+  error?: string;
+  startedAt: number;
+  finishedAt?: number;
+}
+const boundaryJobs = new Map<string, BoundaryJob>();
+
+interface HyperframesJob {
+  status: ScanJobStatus;
+  stage?: string;
+  /** Slot id (for slot fills) or transition id (for transition fills). */
+  targetId: string;
+  /** Absolute preview URL of the rendered beat/transition MP4 (when done). */
+  previewUrl?: string;
+  source?: 'llm' | 'mock';
+  warnings?: string[];
+  error?: string;
+  startedAt: number;
+  finishedAt?: number;
+}
+const hyperframesJobs = new Map<string, HyperframesJob>();
+
 function sweepScanJobs(): void {
   const now = Date.now();
   for (const [id, job] of scanJobs) {
@@ -194,17 +300,26 @@ function sweepScanJobs(): void {
   for (const [id, job] of fineJobs) {
     if (job.finishedAt && now - job.finishedAt > 30 * 60_000) fineJobs.delete(id);
   }
+  for (const [id, job] of boundaryJobs) {
+    if (job.finishedAt && now - job.finishedAt > 30 * 60_000) boundaryJobs.delete(id);
+  }
+  for (const [id, job] of hyperframesJobs) {
+    if (job.finishedAt && now - job.finishedAt > 30 * 60_000) hyperframesJobs.delete(id);
+  }
   // Evict retained scan inputs after 60 min (free disk: raw video + work dir).
+  // LIBRARY-OWNED entries (keepFiles) are evicted from the Map but their files are
+  // NEVER deleted — those source.<ext>/rough.json live under getStructLibraryDir().
   for (const [id, art] of scanArtifacts) {
     if (now - art.createdAt > 60 * 60_000) {
       scanArtifacts.delete(id);
+      if (art.keepFiles) continue;
       void unlink(art.videoPath).catch(() => {});
       void rm(art.workDir, { recursive: true, force: true }).catch(() => {});
     }
   }
 }
 
-structRouter.post('/scan', upload.single('video'), (req, res) => {
+structRouter.post('/scan', withUploadGuard(upload.single('video')), (req, res) => {
   if (!req.file) {
     res.status(400).json({ error: '请上传一个视频文件。' });
     return;
@@ -227,7 +342,8 @@ structRouter.post('/scan', upload.single('video'), (req, res) => {
       setStage('读取视频信息');
       const analysis = await analyzeVideoFile({ videoId, filePath });
       const { graph, warnings, roughScanPath, workDir } = await runRoughScan(filePath, videoId, analysis.metadata.duration, setStage);
-      const sourceVideo = graphToSourceVideo(graph, { videoId, title });
+      const defaultedFields: string[] = [];
+      const sourceVideo = graphToSourceVideo(graph, { videoId, title, defaultedFields });
       // Retain the raw video + rough output so a follow-up fine scan can reuse them.
       scanArtifacts.set(videoId, { videoPath: filePath, roughScanPath, workDir, createdAt: Date.now() });
       scanJobs.set(jobId, {
@@ -237,6 +353,7 @@ structRouter.post('/scan', upload.single('video'), (req, res) => {
           ...warnings,
           '结构来自真实 rough scan（VLM 逐镜头解析），非启发式模板',
           '播放数据（点击率/完播/点赞）非真实测量',
+          ...(defaultedFields.length ? ['部分节奏/包装字段未检测，已留空'] : []),
         ],
         startedAt,
         finishedAt: Date.now(),
@@ -334,8 +451,113 @@ structRouter.get('/scan/fine/:jobId', (req, res) => {
   });
 });
 
+/* ─── POST /api/struct/scan/:videoId/boundary — boundary-scan ONE transition seam ──
+   The web rough scan does NOT run boundary_scan.py, so graph.boundaries is absent and
+   the UI synthesizes all-硬切 seams. This re-scans ONE seam on demand to recover its
+   real transition type (叠化/推镜/…). Reuses the rough scan's retained raw video + rough
+   output. Async (microscope clip + VLM, ~30–60s). Body: { transitionIndex, transition }.
+   Poll GET /scan/boundary/:jobId. The UI transition at index i maps to rough boundary
+   `boundary_{i+1:03d}` (the seam between block i and i+1 — same indexing as the offline
+   _build_boundaries in extract_structure_graph.py). */
+
+/** UI transition index i → rough scan boundary id (1-based, zero-padded to 3). */
+function boundaryIdForIndex(index: number): string {
+  return `boundary_${String(index + 1).padStart(3, '0')}`;
+}
+
+structRouter.post('/scan/:videoId/boundary', async (req, res) => {
+  const { videoId } = req.params;
+  const artifacts = scanArtifacts.get(videoId);
+  if (!artifacts) {
+    res.status(404).json({ error: '找不到该视频的扫描数据（可能已过期，请重新上传并粗扫描）。' });
+    return;
+  }
+  const body = (req.body ?? {}) as { transitionIndex?: unknown; transition?: Partial<Transition> };
+  const transitionIndex = Number(body.transitionIndex);
+  if (!Number.isInteger(transitionIndex) || transitionIndex < 0) {
+    res.status(400).json({ error: 'transitionIndex（转场序号）缺失或无效。' });
+    return;
+  }
+  const tr = body.transition;
+  if (!tr || typeof tr.id !== 'string' || typeof tr.from !== 'string' || typeof tr.to !== 'string') {
+    res.status(400).json({ error: 'transition（待扫描的转场对象）缺失或无效。' });
+    return;
+  }
+
+  const boundaryId = boundaryIdForIndex(transitionIndex);
+  try {
+    const rough = JSON.parse(await readFile(artifacts.roughScanPath, 'utf-8')) as {
+      boundaryCandidates?: Array<{ id?: string }>;
+    };
+    const exists = (rough.boundaryCandidates ?? []).some((b) => b?.id === boundaryId);
+    if (!exists) {
+      res.status(400).json({ error: `该转场（${boundaryId}）在粗扫描中无对应边界候选，无法精扫描。` });
+      return;
+    }
+  } catch (error) {
+    res.status(500).json({ error: errorMessage(error) });
+    return;
+  }
+
+  sweepScanJobs();
+  const jobId = randomUUID();
+  boundaryJobs.set(jobId, { status: 'running', stage: '排队中', transitionIndex, startedAt: Date.now() });
+  res.status(202).json({ jobId });
+
+  const from = tr.from;
+  const to = tr.to;
+  const at = typeof tr.at === 'number' ? tr.at : 0;
+  const id = tr.id;
+
+  void (async () => {
+    const setStage = (stage: string) => {
+      const j = boundaryJobs.get(jobId);
+      if (j && j.status === 'running') j.stage = stage;
+    };
+    const startedAt = boundaryJobs.get(jobId)?.startedAt ?? Date.now();
+    try {
+      const { candidate } = await runBoundaryScan(artifacts.videoPath, artifacts.roughScanPath, boundaryId, artifacts.workDir, setStage);
+      // No transition unit detected → an honest content hard-cut (硬切 is its ceiling).
+      // Otherwise classify techniqueTags → shared type → UI type (beats skipped → no 卡点).
+      const uiType = candidate.exists
+        ? boundaryTypeToUi(techniqueTagsToBoundaryType(candidate.techniqueTags))
+        : '硬切';
+      const transition = boundaryToUiTransition({ id, from, to, at, type: uiType, evidence: candidate.visualChange, scanned: true });
+
+      const warnings: string[] = [];
+      if (!candidate.exists) {
+        warnings.push('Boundary Scan：此处为内容硬切，无独立转场单元（硬切是其天花板）');
+      } else {
+        const conf = typeof candidate.confidence === 'number' ? ` · 置信度 ${Math.round(candidate.confidence * 100)}%` : '';
+        warnings.push(`Boundary Scan：识别为「${uiType}」${conf}${candidate.visualChange ? ` · ${candidate.visualChange}` : ''}`);
+      }
+      boundaryJobs.set(jobId, { status: 'done', transitionIndex, transition, warnings, startedAt, finishedAt: Date.now() });
+    } catch (error) {
+      boundaryJobs.set(jobId, { status: 'error', transitionIndex, error: errorMessage(error), startedAt, finishedAt: Date.now() });
+    }
+  })();
+});
+
+structRouter.get('/scan/boundary/:jobId', (req, res) => {
+  const job = boundaryJobs.get(req.params.jobId);
+  if (!job) {
+    res.status(404).json({ error: 'boundary scan job not found（任务可能已过期）' });
+    return;
+  }
+  const elapsedSec = Math.round(((job.finishedAt ?? Date.now()) - job.startedAt) / 1000);
+  res.json({
+    status: job.status,
+    stage: job.stage,
+    transitionIndex: job.transitionIndex,
+    transition: job.transition,
+    warnings: job.warnings,
+    error: job.error,
+    elapsedSec,
+  });
+});
+
 /* ─── POST /api/struct/materials/upload — assets → Material[] ─── */
-structRouter.post('/materials/upload', upload.array('assets'), async (req, res) => {
+structRouter.post('/materials/upload', withUploadGuard(upload.array('assets')), async (req, res) => {
   try {
     const files = (req.files ?? []) as Express.Multer.File[];
     let product: TargetProduct | undefined;
@@ -351,10 +573,37 @@ structRouter.post('/materials/upload', upload.array('assets'), async (req, res) 
     const result = await analyzeAssetsWithFallbackResult({ files, textBrief });
     const materials = assetCardsToMaterials(result.assetCards);
     const warnings = [...(result.warnings ?? [])];
+
+    // T4: persist each uploaded file into a STABLE per-session dir so its url
+    // survives to /produce (multer's temp dest could be reused/cleaned). Rewrite
+    // each Material.url that points at an uploaded temp path to the stable copy.
+    const pathRewrites = new Map<string, string>();
+    if (files.length) {
+      sweepAssetSessionDirs();
+      const sessionDir = getAssetSessionDir(randomUUID());
+      mkdirSync(sessionDir, { recursive: true });
+      // Track this dir so it can be swept ~2h later (free disk: stable asset copies).
+      assetSessionDirs.set(sessionDir, { dir: sessionDir, createdAt: Date.now() });
+      for (const file of files) {
+        const ext = path.extname(file.originalname) || path.extname(file.path);
+        const stablePath = path.join(sessionDir, `${path.basename(file.path)}${ext}`);
+        try {
+          await copyFile(file.path, stablePath);
+          pathRewrites.set(file.path, stablePath);
+          void unlink(file.path).catch(() => {}); // free the temp copy; stable copy is authoritative
+        } catch (copyError) {
+          warnings.push(`素材落盘失败（${file.originalname}）：${errorMessage(copyError)}，将沿用临时路径`);
+        }
+      }
+    }
+    const stableMaterials = materials.map((m) =>
+      m.url && pathRewrites.has(m.url) ? { ...m, url: pathRewrites.get(m.url) } : m,
+    );
+
     if (result.assetCards.some((c) => c.analysisSource === 'mock_filename_rules')) {
       warnings.push('素材分析降级为文件名规则（mock_filename_rules）');
     }
-    res.json({ materials, warnings });
+    res.json({ materials: stableMaterials, warnings });
   } catch (error) {
     res.status(500).json({ error: errorMessage(error) });
   }
@@ -413,18 +662,35 @@ structRouter.post('/diagnose', async (req, res) => {
 
     const matchResult = await matchSlotsWithFallback({ graph, assets: assetCards, boundaries: graph.boundaries });
 
-    // Gap repairs are now planned by the Director Agent per beat (not a separate
-    // ①-era planner). The diagnosis projection tolerates an empty repairs list —
-    // every repair-derived field falls back to a synthesized honest suggestion.
+    const warnings: string[] = [];
+
+    // Real per-gap 3-option resolution (T1): for each slot derive its tier
+    // (matched/partial/gap) and ask the Director Agent for the full
+    // reshoot + HyperFrames + AIGC menu (with a recommendation). A throw from one
+    // slot's option builder must NOT 500 the whole diagnosis — fall back to the base
+    // synthesized fill (toDiagnosisRecord handles an absent slotResolutions).
+    let slotResolutions: Record<string, SlotGapResolution> | undefined;
+    try {
+      slotResolutions = await buildSlotResolutions({
+        graph,
+        matches: matchResult.matches,
+        assetCards,
+        contentBrief,
+      });
+    } catch (resolutionError) {
+      slotResolutions = undefined;
+      warnings.push(`3-option 方案生成失败，已回退到基础诊断：${errorMessage(resolutionError)}`);
+    }
+
     const diagnosis = toDiagnosisRecord({
       sourceVideo,
       matches: matchResult.matches,
       gaps: matchResult.gaps,
       repairs: [],
       materials,
+      slotResolutions,
     });
 
-    const warnings: string[] = [];
     if (matchResult.warning) warnings.push(matchResult.warning);
     if (matchResult.alignmentSource === 'rule_based') warnings.push('槽位对齐使用规则降级（非 LLM judge）');
 
@@ -434,7 +700,19 @@ structRouter.post('/diagnose', async (req, res) => {
   }
 });
 
-/* ─── POST /api/struct/strategy/apply — mark a slot's gap repaired ─── */
+const RESOLUTION_METHODS: readonly ResolutionMethod[] = ['reshoot', 'hyperframes', 'aigc'];
+const RESOLUTION_METHOD_NAMES: Record<ResolutionMethod, string> = {
+  reshoot: '补拍',
+  hyperframes: 'HyperFrames 卡片',
+  aigc: 'AIGC 生成',
+};
+function parseResolutionMethod(value: unknown): ResolutionMethod | null {
+  return typeof value === 'string' && (RESOLUTION_METHODS as readonly string[]).includes(value)
+    ? (value as ResolutionMethod)
+    : null;
+}
+
+/* ─── POST /api/struct/strategy/apply — apply the chosen repair method to a slot ─── */
 structRouter.post('/strategy/apply', async (req, res) => {
   try {
     const slotId = String(req.body?.slotId ?? '');
@@ -444,15 +722,39 @@ structRouter.post('/strategy/apply', async (req, res) => {
       return;
     }
     const current = diagnosis[slotId];
-    // Applying the recommended strategy lifts the slot to 已满足 (the gap is now
-    // covered by the chosen repair). Deterministic, honest, idempotent.
+
+    // T2: honor the chosen method ('reshoot' | 'hyperframes' | 'aigc'). When the
+    // request omits `method`, fall back to the slot's Director recommendation, then
+    // to its strategy. Fail-fast if a method is supplied but invalid.
+    const requested = req.body?.method;
+    let method: ResolutionMethod | null;
+    if (requested === undefined || requested === null || requested === '') {
+      method = current.recommended ?? parseResolutionMethod(current.strategy) ?? 'hyperframes';
+    } else {
+      method = parseResolutionMethod(requested);
+      if (!method) {
+        res.status(400).json({ error: `method 无效：必须是 reshoot / hyperframes / aigc 之一（收到：${String(requested)}）` });
+        return;
+      }
+    }
+    const payload = req.body?.payload;
+
+    // Applying the chosen strategy lifts the slot to 已满足 (the gap is now covered by
+    // the chosen repair). Persist chosenMethod/payload so compile/produce can honor it.
     diagnosis[slotId] = {
       ...current,
       state: 'filled',
       gap_reason: '—',
-      impact: { ...current.impact, pct: 0, note: `已应用补全策略：${current.fix?.kind ?? '补全'} · ${current.impact.note}` },
+      chosenMethod: method,
+      ...(payload !== undefined ? { chosenPayload: payload } : {}),
+      strategy: method,
+      impact: {
+        ...current.impact,
+        pct: 0,
+        note: `已应用补全策略：${RESOLUTION_METHOD_NAMES[method]} · ${current.impact.note}`,
+      },
     };
-    res.json({ diagnosis, appliedSlots: [slotId], warnings: [] });
+    res.json({ diagnosis, appliedSlots: [slotId], method, warnings: [] });
   } catch (error) {
     res.status(500).json({ error: errorMessage(error) });
   }
@@ -665,6 +967,382 @@ structRouter.get('/export/:jobId', (req, res) => {
   res.json(result);
 });
 
+/* ─── POST /api/struct/produce + GET /api/struct/produce/:jobId ────────────────
+   REAL AIGC produce (T3): rebuild the shared context, run the Director Agent to get
+   the OrchestratedTimeline (NOT the asset-stripped UI segs), plan AIGC beats and
+   render them via Wan2.7. Async (generation takes minutes); mirrors the /scan job
+   pattern. HONEST-GATE: if DASHSCOPE_API_KEY is unset the job fails with a clear
+   message and never produces a fake MP4. */
+
+type ProduceJobStatus = 'running' | 'done' | 'error';
+interface ProduceJob {
+  status: ProduceJobStatus;
+  stage?: string;
+  downloadUrl?: string;
+  warnings?: string[];
+  error?: string;
+  startedAt: number;
+  finishedAt?: number;
+}
+const produceJobs = new Map<string, ProduceJob>();
+
+function sweepProduceJobs(): void {
+  // Piggyback the uploaded-asset-dir cleanup on the produce sweep cadence.
+  sweepAssetSessionDirs();
+  const now = Date.now();
+  for (const [id, job] of produceJobs) {
+    if (job.finishedAt && now - job.finishedAt > 60 * 60_000) {
+      produceJobs.delete(id);
+      // Also delete this job's render artifacts so finished produce files/beat dirs
+      // don't leak on disk after the in-memory job is evicted.
+      const renderDir = getRenderDir();
+      void rm(path.join(renderDir, `produce_${id}.mp4`), { force: true }).catch(() => {});
+      void rm(path.join(renderDir, `produce_${id}_beats`), { recursive: true, force: true }).catch(() => {});
+    }
+  }
+}
+
+structRouter.post('/produce', (req, res) => {
+  const sourceVideo = req.body?.sourceVideo as SourceVideo | undefined;
+  if (!sourceVideo?.segments?.length) {
+    res.status(400).json({ error: 'sourceVideo with segments is required' });
+    return;
+  }
+  const materials = (req.body?.materials ?? []) as Material[];
+  const product = (req.body?.product as TargetProduct) ?? stubProduct(sourceVideo, materials);
+  const productImageUrl =
+    typeof req.body?.productImageUrl === 'string' && req.body.productImageUrl ? req.body.productImageUrl : undefined;
+  const versionId = String(req.body?.versionId ?? 'click');
+
+  sweepProduceJobs();
+  const jobId = randomUUID();
+  produceJobs.set(jobId, { status: 'running', stage: '排队中', startedAt: Date.now() });
+  // Capture the absolute media base BEFORE going async (req is request-scoped).
+  const mediaBase = `${req.protocol}://${req.get('host')}`;
+  res.status(202).json({ jobId });
+
+  void (async () => {
+    const startedAt = produceJobs.get(jobId)?.startedAt ?? Date.now();
+    const setStage = (stage: string) => {
+      const j = produceJobs.get(jobId);
+      if (j && j.status === 'running') j.stage = stage;
+    };
+    const fail = (error: string) => {
+      produceJobs.set(jobId, { status: 'error', error, startedAt, finishedAt: Date.now() });
+    };
+    try {
+      // (a) HONEST-GATE: verify generation is configured BEFORE doing any work.
+      let cfg: ReturnType<typeof wanConfigFromEnv>;
+      try {
+        cfg = wanConfigFromEnv();
+      } catch {
+        fail('成片生成未配置：缺少 DASHSCOPE_API_KEY（请在 apps/api/.env 配置后重试）');
+        return;
+      }
+
+      const warnings: string[] = [];
+      // (b) rebuild graph/assetCards/contentBrief, then run the Director Agent →
+      // OrchestratedTimeline (the asset-bearing plan, NOT the UI-stripped segs).
+      setStage('准备结构与素材');
+      const graph = buildStructureGraph(sourceVideo);
+      const assetCards = materialsToAssetCards(materials, sourceVideo, product);
+      const contentBrief = buildContentBrief(product, sourceVideo);
+      if (assetCards.every((c) => !c.url)) {
+        warnings.push('无可用真实素材（素材均无 url），AIGC 将以纯生成兜底，效果可能下降');
+      }
+      if (!productImageUrl) {
+        warnings.push('未提供产品参考图（productImageUrl），AIGC 生成可能偏离真实包装');
+      }
+
+      setStage('运行导演 Agent（编排时间线）');
+      const orchestrated = await runDirectorAgent({
+        projectId: sourceVideo.id,
+        structureGraph: graph,
+        assetCards,
+        contentBrief,
+        boundaries: graph.boundaries,
+        options: {
+          targetDurationMode: variantToTargetDurationMode(versionIdToVariant(versionId)),
+          useLlmMatcher: false,
+        },
+      });
+      warnings.push(...new Set(orchestrated.warnings));
+
+      // (c) plan AIGC beats → render via Wan2.7 (ported from scripts/render_director_aigc.mts).
+      setStage('规划 AIGC 分镜');
+      const plans = planAigcBeats({
+        timeline: orchestrated,
+        assetCards,
+        productImageUrl,
+        productName: contentBrief.productName,
+        resolution: '720P',
+      });
+
+      setStage('生成并合成成片（Wan2.7，耗时较长）');
+      const renderDir = getRenderDir();
+      mkdirSync(renderDir, { recursive: true });
+      const outputPath = path.join(renderDir, `produce_${jobId}.mp4`);
+      const workDir = path.join(renderDir, `produce_${jobId}_beats`);
+      const result = await renderAigcTimeline({ plans, outputPath, cfg, workDir, concurrency: 4 });
+
+      const renderWarnings = [...warnings, ...result.warnings];
+      if (result.rendered) {
+        const downloadUrl = `${mediaBase}/media/renders/${path.basename(result.outputPath)}`;
+        produceJobs.set(jobId, {
+          status: 'done',
+          downloadUrl,
+          warnings: renderWarnings,
+          startedAt,
+          finishedAt: Date.now(),
+        });
+      } else {
+        // Honest: no real MP4 was produced. Surface warnings, no fake download link.
+        produceJobs.set(jobId, {
+          status: 'done',
+          warnings: [...renderWarnings, '成片未渲染成功（无可合成的真实片段或合成失败），暂无可下载文件'],
+          startedAt,
+          finishedAt: Date.now(),
+        });
+      }
+    } catch (error) {
+      fail(errorMessage(error));
+    }
+  })();
+});
+
+structRouter.get('/produce/:jobId', (req, res) => {
+  const job = produceJobs.get(req.params.jobId);
+  if (!job) {
+    res.status(404).json({ error: 'produce job not found（任务可能已过期）' });
+    return;
+  }
+  const elapsedSec = Math.round(((job.finishedAt ?? Date.now()) - job.startedAt) / 1000);
+  res.json({
+    status: job.status,
+    stage: job.stage,
+    downloadUrl: job.downloadUrl,
+    warnings: job.warnings,
+    error: job.error,
+    elapsedSec,
+  });
+});
+
+/* ─── POST /api/struct/hyperframes/slot — render ONE slot with the HyperFrames Agent ──
+   The user picked 「HyperFrames 补全」 for this slot in the gap-fill studio. The Director
+   authors the per-slot brief and the (narrowed) HyperFrames engine renders JUST this beat
+   into a real MP4 for preview — no whole-ad authoring, no new pixels (real assets only).
+   Async (author→lint→render→critic, ~30–120s). Poll GET /hyperframes/:jobId.
+   Body: { sourceVideo, materials, product, slotId, productImageUrl? }. */
+structRouter.post('/hyperframes/slot', (req, res) => {
+  const sourceVideo = req.body?.sourceVideo as SourceVideo | undefined;
+  if (!sourceVideo?.segments?.length) {
+    res.status(400).json({ error: 'sourceVideo with segments is required' });
+    return;
+  }
+  const slotId = typeof req.body?.slotId === 'string' ? req.body.slotId : '';
+  if (!slotId) {
+    res.status(400).json({ error: 'slotId（待补全的槽位）缺失' });
+    return;
+  }
+  const materials = (req.body?.materials ?? []) as Material[];
+  const product = (req.body?.product as TargetProduct) ?? stubProduct(sourceVideo, materials);
+  const productImageUrl =
+    typeof req.body?.productImageUrl === 'string' && req.body.productImageUrl ? req.body.productImageUrl : undefined;
+
+  sweepScanJobs();
+  const jobId = randomUUID();
+  hyperframesJobs.set(jobId, { status: 'running', stage: '排队中', targetId: slotId, startedAt: Date.now() });
+  // Capture the absolute media base BEFORE going async (req is request-scoped).
+  const mediaBase = `${req.protocol}://${req.get('host')}`;
+  res.status(202).json({ jobId });
+
+  void (async () => {
+    const startedAt = hyperframesJobs.get(jobId)?.startedAt ?? Date.now();
+    const setStage = (stage: string) => {
+      const j = hyperframesJobs.get(jobId);
+      if (j && j.status === 'running') j.stage = stage;
+    };
+    try {
+      const result = await renderHyperframesForSlot({ sourceVideo, materials, product, slotId, productImageUrl, onStage: setStage });
+      if (!result.rendered || !result.mediaUrl) {
+        hyperframesJobs.set(jobId, {
+          status: 'error',
+          targetId: slotId,
+          error: result.warnings[0] ?? 'HyperFrames 渲染失败（未产出 MP4）',
+          warnings: result.warnings,
+          startedAt,
+          finishedAt: Date.now(),
+        });
+        return;
+      }
+      hyperframesJobs.set(jobId, {
+        status: 'done',
+        targetId: slotId,
+        previewUrl: `${mediaBase}${result.mediaUrl}`,
+        source: result.source,
+        warnings: result.warnings,
+        startedAt,
+        finishedAt: Date.now(),
+      });
+    } catch (error) {
+      hyperframesJobs.set(jobId, { status: 'error', targetId: slotId, error: errorMessage(error), startedAt, finishedAt: Date.now() });
+    }
+  })();
+});
+
+/** Resolve a Material.url (absolute uploaded disk path, or /media/demo-assets web path)
+ *  to an on-disk file ffmpeg can read. Returns null when it can't be located. */
+function resolveMaterialDiskPath(url: string): string | null {
+  if (existsSync(url)) return url;
+  const [rewritten] = rewriteAssetCardUrlsToDisk([{ url }]);
+  if (rewritten?.url && existsSync(rewritten.url)) return rewritten.url;
+  return null;
+}
+
+/* ─── POST /api/struct/hyperframes/transition — composite ONE seam's transition ──
+   Non-generative HyperFrames transition: take the two adjacent slots' REAL assigned
+   assets and ffmpeg-xfade them with the seam's real type (from Boundary Scan) + a
+   content-aware duration → a real "首尾帧形变转场" preview MP4 (no new pixels).
+   Async. Poll GET /hyperframes/:jobId. Body: { sourceVideo, materials, transitionIndex }. */
+structRouter.post('/hyperframes/transition', (req, res) => {
+  const sourceVideo = req.body?.sourceVideo as SourceVideo | undefined;
+  if (!sourceVideo?.transitions?.length) {
+    res.status(400).json({ error: 'sourceVideo with transitions is required' });
+    return;
+  }
+  const transitionIndex = Number(req.body?.transitionIndex);
+  if (!Number.isInteger(transitionIndex) || transitionIndex < 0 || transitionIndex >= sourceVideo.transitions.length) {
+    res.status(400).json({ error: 'transitionIndex（转场序号）缺失或越界' });
+    return;
+  }
+  const tr = sourceVideo.transitions[transitionIndex];
+  const materials = (req.body?.materials ?? []) as Material[];
+  const fromMat = materials.find((m) => m.slot === tr.from);
+  const toMat = materials.find((m) => m.slot === tr.to);
+  if (!fromMat?.url || !toMat?.url) {
+    const missing = !fromMat?.url ? tr.from : tr.to;
+    res.status(400).json({ error: `需要先在「素材」给槽位 ${String(missing).toUpperCase()} 分配一个素材，才能合成这条转场` });
+    return;
+  }
+  const fromPath = resolveMaterialDiskPath(fromMat.url);
+  const toPath = resolveMaterialDiskPath(toMat.url);
+  if (!fromPath || !toPath) {
+    res.status(400).json({ error: '相邻槽位素材无法定位到磁盘文件（可能已过期，请重新上传素材）' });
+    return;
+  }
+
+  sweepScanJobs();
+  const jobId = randomUUID();
+  hyperframesJobs.set(jobId, { status: 'running', stage: '排队中', targetId: tr.id, startedAt: Date.now() });
+  const mediaBase = `${req.protocol}://${req.get('host')}`;
+  res.status(202).json({ jobId });
+
+  void (async () => {
+    const startedAt = hyperframesJobs.get(jobId)?.startedAt ?? Date.now();
+    const setStage = (stage: string) => {
+      const j = hyperframesJobs.get(jobId);
+      if (j && j.status === 'running') j.stage = stage;
+    };
+    try {
+      const durationMs = transitionDurationMs(tr.type, sourceVideo.rhythm?.avg_shot);
+      const result = await renderTransitionPreview({
+        fromPath,
+        toPath,
+        uiType: tr.type,
+        durationMs,
+        outDir: getRenderDir(),
+        onStage: setStage,
+      });
+      if (!result.rendered || !result.mediaUrl) {
+        hyperframesJobs.set(jobId, {
+          status: 'error',
+          targetId: tr.id,
+          error: result.warnings[0] ?? '转场合成失败',
+          warnings: result.warnings,
+          startedAt,
+          finishedAt: Date.now(),
+        });
+        return;
+      }
+      hyperframesJobs.set(jobId, {
+        status: 'done',
+        targetId: tr.id,
+        previewUrl: `${mediaBase}${result.mediaUrl}`,
+        source: 'mock',
+        warnings: [
+          `转场「${tr.type}」· xfade ${result.transition} · ${result.durationSec.toFixed(2)}s · 真实素材`,
+          ...result.warnings,
+        ],
+        startedAt,
+        finishedAt: Date.now(),
+      });
+    } catch (error) {
+      hyperframesJobs.set(jobId, { status: 'error', targetId: tr.id, error: errorMessage(error), startedAt, finishedAt: Date.now() });
+    }
+  })();
+});
+
+structRouter.get('/hyperframes/:jobId', (req, res) => {
+  const job = hyperframesJobs.get(req.params.jobId);
+  if (!job) {
+    res.status(404).json({ error: 'hyperframes job not found（任务可能已过期）' });
+    return;
+  }
+  const elapsedSec = Math.round(((job.finishedAt ?? Date.now()) - job.startedAt) / 1000);
+  res.json({
+    status: job.status,
+    stage: job.stage,
+    targetId: job.targetId,
+    previewUrl: job.previewUrl,
+    source: job.source,
+    warnings: job.warnings,
+    error: job.error,
+    elapsedSec,
+  });
+});
+
+/**
+ * Build the REAL per-slot 3-option resolution menu (reshoot + HyperFrames + AIGC)
+ * for every shotSlot in the graph (T1). Each slot's tier is derived from the match
+ * result: matched → covered (the three options are alternatives); partial → augment;
+ * missing → a true gap. The Director Agent authors the full option payload.
+ */
+async function buildSlotResolutions(input: {
+  graph: ReturnType<typeof buildStructureGraph>;
+  matches: SlotMatch[];
+  assetCards: ReturnType<typeof materialsToAssetCards>;
+  contentBrief: ContentBrief;
+}): Promise<Record<string, SlotGapResolution>> {
+  const { graph, matches, assetCards, contentBrief } = input;
+  // #76: the 3-option briefs are driven by an LLM-translated category-equivalent
+  // vocabulary (no deterministic fallback). Build it ONCE; if the LLM is unavailable
+  // this throws and the /diagnose caller falls back to the base 4-state diagnosis.
+  const vocab = await translateCategoryEquivalents({ contentBrief, assetCards });
+  const matchBySlot = new Map(matches.map((m) => [m.slotId, m]));
+  const referenceAssetIds = assetCards.map((c) => c.id);
+  const out: Record<string, SlotGapResolution> = {};
+
+  for (const slot of graph.shotSlots) {
+    const match = matchBySlot.get(slot.id);
+    const tier: 'matched' | 'partial' | 'gap' =
+      match?.status === 'matched' ? 'matched' : match?.status === 'partial' ? 'partial' : 'gap';
+    const { options, recommendedOptionId } = buildGapResolutionOptions({
+      slot,
+      tier,
+      contentBrief,
+      referenceAssetIds,
+      chosenAssetId: tier === 'gap' ? undefined : match?.assetId,
+      vocab,
+      // Secondary source-leak guard; the vocab translator already forbids cross-category
+      // terms, so this adapter path skips the extra LLM banlist derivation.
+      sourceBannedTerms: [],
+    });
+    out[slot.id] = { options, recommendedOptionId };
+  }
+
+  return out;
+}
+
 /* ============================================================
    CAPABILITY ROUTES — surface the remaining backend functions to
    UI buttons. Each takes the UI model (sourceVideo / materials /
@@ -849,6 +1527,113 @@ structRouter.get('/materials/library/:libraryId', async (req, res) => {
   }
 });
 
+/* ============================================================
+   STRUCT LIBRARY ROUTES — persist a scanned SourceVideo structure into the
+   real "结构样例库" (a JSON-file-backed store under getStructLibraryDir(), which
+   persists across server restarts) so it can be reopened later.
+   ============================================================ */
+
+/* ─── POST /api/struct/structures — save a scanned structure into the library ─── */
+structRouter.post('/structures', async (req, res) => {
+  try {
+    const sourceVideo = req.body?.sourceVideo as SourceVideo | undefined;
+    if (!sourceVideo?.segments?.length) {
+      res.status(400).json({ error: 'sourceVideo with a non-empty segments array is required' });
+      return;
+    }
+    const segmentDetails = req.body?.segmentDetails as Record<string, FineBlockDetail> | undefined;
+    const title = typeof req.body?.title === 'string' ? req.body.title : undefined;
+
+    // Persist the ORIGINAL source video + rough.json alongside the structure when the
+    // scan's retained inputs are still available — this lets a reopened structure run
+    // 精扫描 again. If they've already expired, the structure still saves (without the
+    // video) and the response carries an honest warning.
+    const artifacts = scanArtifacts.get(sourceVideo.id);
+
+    try {
+      const summary = await saveStructure({
+        sourceVideo,
+        segmentDetails,
+        title,
+        sourceVideoPath: artifacts?.videoPath,
+        roughScanPath: artifacts?.roughScanPath,
+      });
+      if (summary.hasVideo) {
+        res.status(201).json(summary);
+      } else {
+        res.status(201).json({
+          ...summary,
+          warning: '原视频已不可用，未随结构持久化；载入后将无法重新精扫描',
+        });
+      }
+    } catch (validationError) {
+      // saveStructure throws on invalid input (e.g. no segments) → honest 400.
+      res.status(400).json({ error: errorMessage(validationError) });
+    }
+  } catch (error) {
+    res.status(500).json({ error: errorMessage(error) });
+  }
+});
+
+/* ─── GET /api/struct/structures — list saved structures (summaries) ─── */
+structRouter.get('/structures', async (_req, res) => {
+  try {
+    const structures = await listStructures();
+    res.json({ structures });
+  } catch (error) {
+    res.status(500).json({ error: errorMessage(error) });
+  }
+});
+
+/* ─── GET /api/struct/structures/:id — load one full saved structure ─── */
+structRouter.get('/structures/:id', async (req, res) => {
+  try {
+    const structure = await getStructure(req.params.id);
+    if (!structure) {
+      res.status(404).json({ error: '结构样例不存在（可能已被删除）。' });
+      return;
+    }
+
+    // Re-register the persisted source video + rough.json into the in-memory scan-
+    // artifacts map (keyed by the structure's sourceVideo.id) so a reopened structure
+    // can run 精扫描 on any segment again. The fine-scan workDir is a FRESH writable tmp
+    // dir under getScanDataDir() (sweepable) — NOT the library subdir — and keepFiles
+    // protects the library-owned source.<ext>/rough.json from the TTL sweep's unlink.
+    if (structure.hasVideo) {
+      const artifacts = await getStructureArtifacts(req.params.id);
+      if (artifacts) {
+        const workDir = path.join(getScanDataDir(), structure.sourceVideo.id);
+        mkdirSync(workDir, { recursive: true });
+        scanArtifacts.set(structure.sourceVideo.id, {
+          videoPath: artifacts.videoPath,
+          roughScanPath: artifacts.roughScanPath,
+          workDir,
+          createdAt: Date.now(),
+          keepFiles: true,
+        });
+      }
+    }
+
+    res.json(structure);
+  } catch (error) {
+    res.status(500).json({ error: errorMessage(error) });
+  }
+});
+
+/* ─── DELETE /api/struct/structures/:id — remove a saved structure ─── */
+structRouter.delete('/structures/:id', async (req, res) => {
+  try {
+    const ok = await deleteStructure(req.params.id);
+    if (!ok) {
+      res.status(404).json({ ok: false, error: '结构样例不存在（无法删除）。' });
+      return;
+    }
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ error: errorMessage(error) });
+  }
+});
+
 /* ─── GET /api/struct/demo — one-click: run the full demo into the UI model ─── */
 structRouter.get('/demo', async (_req, res) => {
   try {
@@ -866,10 +1651,13 @@ structRouter.get('/demo', async (_req, res) => {
     });
     if (analysis.analysisSource === 'mock_fallback') warnings.push('视频解析降级为 mock_fallback');
     const structure = await extractStructureFromVideoAnalysis(analysis);
+    const defaultedFields: string[] = [];
     const sourceVideo = graphToSourceVideo(structure.structureGraph, {
       videoId: showcase.case.seedFilename,
       title: showcase.case.title,
+      defaultedFields,
     });
+    if (defaultedFields.length) warnings.push('部分节奏/包装字段未检测，已留空');
 
     const product: TargetProduct = {
       name: showcase.case.productName,
@@ -880,7 +1668,13 @@ structRouter.get('/demo', async (_req, res) => {
       industry: showcase.case.targetAudience,
     };
 
-    let assetCards = await loadAssetLibrary(showcase.case.assetLibraryId).catch(() => []);
+    // T5: a failed example-library load must be VISIBLE, not silently swallowed.
+    let assetCards: Awaited<ReturnType<typeof loadAssetLibrary>> = [];
+    try {
+      assetCards = await loadAssetLibrary(showcase.case.assetLibraryId);
+    } catch (libError) {
+      warnings.push(`示例素材库加载失败：${errorMessage(libError)}，演示将以 0 素材继续`);
+    }
     const materials = assetCardsToMaterials(assetCards);
     product.asset_count = materials.length;
 
@@ -889,8 +1683,22 @@ structRouter.get('/demo', async (_req, res) => {
     const cards = materialsToAssetCards(materials, sourceVideo, product);
     const contentBrief = buildContentBrief(product, sourceVideo);
     const matchResult = await matchSlotsWithFallback({ graph, assets: cards, boundaries: graph.boundaries });
+    // A throw from one slot's option builder must NOT 500 the whole demo — fall back
+    // to the base synthesized fill (toDiagnosisRecord handles an absent slotResolutions).
+    let slotResolutions: Record<string, SlotGapResolution> | undefined;
+    try {
+      slotResolutions = await buildSlotResolutions({
+        graph,
+        matches: matchResult.matches,
+        assetCards: cards,
+        contentBrief,
+      });
+    } catch (resolutionError) {
+      slotResolutions = undefined;
+      warnings.push(`3-option 方案生成失败，已回退到基础诊断：${errorMessage(resolutionError)}`);
+    }
     const diagnosis = toDiagnosisRecord({
-      sourceVideo, matches: matchResult.matches, gaps: matchResult.gaps, repairs: [], materials,
+      sourceVideo, matches: matchResult.matches, gaps: matchResult.gaps, repairs: [], materials, slotResolutions,
     });
     const orchestrated = await runDirectorAgent({
       projectId: sourceVideo.id,

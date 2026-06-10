@@ -369,8 +369,67 @@ export interface AssetKeyframe {
   id: string;
   timeSec?: number;
   url?: string;
+  localPath?: string;
   description?: string;
   source: 'uploaded_video' | 'sampled_frame' | 'placeholder' | 'manual';
+}
+
+export type AssetVideoSegmentSource = 'deterministic' | 'vlm' | 'hybrid';
+
+export type AssetVideoBoundarySource = 'hard_cut' | 'motion_regime' | 'visual_peak' | 'fallback' | 'manual';
+
+export interface AssetVideoBoundaryCandidate {
+  timeSec: number;
+  source: AssetVideoBoundarySource;
+  confidence: number;
+  score: number;
+  reason: string;
+}
+
+export interface VisualSegmentationProfile {
+  durationSec: number;
+  shouldSlice: boolean;
+  boundaryCandidates: AssetVideoBoundaryCandidate[];
+  hardCutCount: number;
+  motionChangeCount: number;
+  visualPeakCount: number;
+  boundaryConfidence: number;
+  warnings: string[];
+}
+
+export interface AssetVideoSegment {
+  id: string;
+  parentAssetId: string;
+  startSec: number;
+  endSec: number;
+  durationSec: number;
+  label: string;
+  visualSummary: string;
+  roleHints: ShotSlotRole[];
+  actionTags: string[];
+  qualityScore: number;
+  confidence: number;
+  keyframeIds: string[];
+  thumbnailUrl?: string;
+  source: AssetVideoSegmentSource;
+  boundaryEvidence?: AssetVideoBoundaryCandidate;
+  warnings?: string[];
+}
+
+export interface AssetSegmentSource {
+  parentAssetId: string;
+  startSec: number;
+  endSec: number;
+  durationSec: number;
+  segmentIndex: number;
+  label: string;
+  visualSummary?: string;
+  roleHints?: ShotSlotRole[];
+  actionTags: string[];
+  confidence?: number;
+  source: AssetVideoSegmentSource;
+  boundaryEvidence?: AssetVideoBoundaryCandidate;
+  warnings?: string[];
 }
 
 export interface AssetMediaProfile {
@@ -500,6 +559,8 @@ export interface AssetAnalysisProfile {
   safety: AssetSafetyProfile;
   search: AssetSearchProfile;
   roleAffordance?: RoleAffordanceScore[];
+  visualSegmentation?: VisualSegmentationProfile;
+  videoSegments?: AssetVideoSegment[];
   vlm?: AssetVlmAnalysisProfile;
 }
 
@@ -524,6 +585,7 @@ export interface AssetCard {
   visualContent?: AssetVisualContent;
   motionPotential?: AssetMotionPotential;
   candidateSlotRoles?: AssetCandidateSlotRole[];
+  segmentSource?: AssetSegmentSource;
   analysisSource?: AssetAnalysisSource;
   analysis?: AssetAnalysisProfile;
 }
@@ -1308,6 +1370,11 @@ export type SlotAlignmentSource = 'llm_judge' | 'rule_based';
 
 export interface AssetMatchEvidence {
   assetId: string;
+  parentAssetId?: string;
+  segmentLabel?: string;
+  mediaStartSec?: number;
+  mediaEndSec?: number;
+  segmentIndex?: number;
   qualityScore: number;
   topAffordanceRole?: AssetManagerRole;
   topAffordanceScore?: number;
@@ -1321,6 +1388,9 @@ export interface AssetMatchEvidence {
 export interface SlotMatch {
   slotId: string;
   assetId?: string;
+  assetSegmentId?: string;
+  mediaStartSec?: number;
+  mediaEndSec?: number;
   score: number;
   ingredientMatchScore?: number;
   missingIngredients?: CreativeIngredientType[];

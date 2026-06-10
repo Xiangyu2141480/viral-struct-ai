@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import './loadEnv';
 import { mkdirSync } from 'node:fs';
 import cors from 'cors';
 import express from 'express';

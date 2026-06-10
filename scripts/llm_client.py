@@ -239,7 +239,12 @@ def load_dotenv(path: str | Path) -> dict[str, str]:
 
 
 def env_value(name: str, env_file_values: dict[str, str], default: str = "") -> str:
-    return os.environ.get(name) or env_file_values.get(name) or default
+    # The explicitly-passed --env file is authoritative: prefer it over any value
+    # inherited via os.environ. The API spawns this script inheriting its boot-time
+    # process.env, which goes STALE when you edit .env (the long-lived parent doesn't
+    # reload). File-first means an edited .env takes effect on the very next run,
+    # without restarting the parent API.
+    return env_file_values.get(name) or os.environ.get(name) or default
 
 
 def render_prompt(template: str, values: dict[str, Any]) -> str:

@@ -84,6 +84,72 @@ test('analyzeAssetsDeterministic returns a controlled video fallback when ffprob
   }
 });
 
+test('analyzeAssetsDeterministic expands a long video into segment AssetCards', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'det-asset-long-video-'));
+  const videoPath = path.join(dir, 'kangshifu-open-cap-pour-clean-cta.mp4');
+  await writeFile(videoPath, Buffer.from('fake mp4 metadata comes from injected probe'));
+
+  try {
+    const cards = await analyzeAssetsDeterministic({
+      files: [{ originalname: 'kangshifu-open-cap-pour-clean-cta.mp4', path: videoPath, size: 32 } as Express.Multer.File],
+      ffprobePath: 'mock:26.2',
+      ffmpegPath: path.join(dir, 'missing-ffmpeg.exe'),
+      frameDir: path.join(dir, 'frames'),
+      visualSegmentation: {
+        durationSec: 26.2,
+        shouldSlice: true,
+        hardCutCount: 3,
+        motionChangeCount: 1,
+        visualPeakCount: 0,
+        boundaryConfidence: 0.84,
+        boundaryCandidates: [
+          { timeSec: 4.1, source: 'hard_cut', confidence: 0.92, score: 0.9, reason: 'opening to closeup' },
+          { timeSec: 9.8, source: 'motion_regime', confidence: 0.8, score: 0.78, reason: 'closeup to usage' },
+          { timeSec: 15.7, source: 'hard_cut', confidence: 0.86, score: 0.82, reason: 'usage to benefit' },
+          { timeSec: 21.2, source: 'hard_cut', confidence: 0.83, score: 0.79, reason: 'benefit to cta' }
+        ],
+        warnings: []
+      }
+    });
+
+    assert.equal(cards.length, 5);
+    assert.ok(cards.every((card) => card.type === 'video'));
+    assert.ok(cards.every((card) => card.url === videoPath));
+    assert.ok(cards.every((card) => card.segmentSource?.parentAssetId === 'asset_001'));
+    assert.equal(cards[0].segmentSource?.startSec, 0);
+    assert.equal(cards.at(-1)?.segmentSource?.endSec, 26.2);
+    assert.ok(cards.some((card) => card.suitableSlots.includes('usage_demo')));
+    assert.ok(cards.some((card) => card.suitableSlots.includes('cta_visual')));
+    assert.ok(cards.some((card) => card.segmentSource?.actionTags.includes('pour_to_cup')));
+    assert.equal(cards[1].segmentSource?.boundaryEvidence?.source, 'hard_cut');
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('analyzeAssetsDeterministic keeps short videos as a single segment card', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'det-asset-short-video-'));
+  const videoPath = path.join(dir, 'short-product-closeup.mp4');
+  await writeFile(videoPath, Buffer.from('fake mp4 metadata comes from injected probe'));
+
+  try {
+    const cards = await analyzeAssetsDeterministic({
+      files: [{ originalname: 'short-product-closeup.mp4', path: videoPath, size: 32 } as Express.Multer.File],
+      ffprobePath: 'mock:5.2',
+      ffmpegPath: path.join(dir, 'missing-ffmpeg.exe'),
+      frameDir: path.join(dir, 'frames')
+    });
+
+    assert.equal(cards.length, 1);
+    assert.equal(cards[0].id, 'asset_001_seg_001');
+    assert.equal(cards[0].segmentSource?.parentAssetId, 'asset_001');
+    assert.equal(cards[0].segmentSource?.startSec, 0);
+    assert.equal(cards[0].segmentSource?.endSec, 5.2);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('analyzeAssetsDeterministic does not over-infer roles for plain product or hand assets', async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'det-asset-roles-'));
   const productPath = path.join(dir, 'table-product-pan.png');

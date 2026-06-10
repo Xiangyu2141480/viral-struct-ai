@@ -434,6 +434,12 @@ export const SvgCtaShape = () => (
 
 /* ─── Material placeholder shape (no real photos) ───────── */
 
+/** Format a clip time range like "3.0–7.5s" from start/end seconds. */
+const fmtRange = (start?: number, end?: number): string | null => {
+  if (typeof start !== 'number' || typeof end !== 'number') return null;
+  return `${start.toFixed(1)}–${end.toFixed(1)}s`;
+};
+
 export const MatThumb = ({ mat }: { mat: Material }) => {
   if (mat.kind === 'text') {
     return (
@@ -442,6 +448,39 @@ export const MatThumb = ({ mat }: { mat: Material }) => {
         <svg viewBox="0 0 24 24" width="32" height="32" style={{ opacity: 0.35 }}>
           <path d="M4 6h16M4 11h16M4 16h12" fill="none" stroke="currentColor" strokeWidth="1.5" />
         </svg>
+      </div>
+    );
+  }
+  if (mat.kind === 'video') {
+    const range = fmtRange(mat.startSec, mat.endSec);
+    const dur = typeof mat.durationSec === 'number' ? `${mat.durationSec.toFixed(1)}s` : null;
+    const badge = range ?? (dur ? `· ${dur}` : null);
+    const hasImage = typeof mat.url === 'string' && /\.(png|jpe?g|gif|webp|avif)$/i.test(mat.url);
+    return (
+      <div className="mat-thumb" style={{
+        backgroundColor: hasImage ? 'var(--surface-3)' : (mat.color || 'var(--surface-3)'),
+        backgroundImage: hasImage
+          ? `linear-gradient(180deg, rgba(0,0,0,0.10) 0%, rgba(0,0,0,0.45) 100%), url("${mat.url}")`
+          : 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(0,0,0,0.22) 100%)',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      }}>
+        <span className="mat-thumb-tag">CLIP · {mat.id.toUpperCase()}</span>
+        {!hasImage && (
+          <svg viewBox="0 0 24 24" width="30" height="30" style={{ opacity: 0.45 }}>
+            <rect x="3" y="5" width="18" height="14" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+            <path d="M3 9h18M7 5v14M17 5v14" stroke="currentColor" strokeWidth="1.2" />
+            <path d="M10 11l4 2.2-4 2.2z" fill="currentColor" />
+          </svg>
+        )}
+        {badge && (
+          <span style={{
+            position: 'absolute', bottom: 6, right: 6,
+            fontFamily: 'var(--ff-mono)', fontSize: 9,
+            color: 'rgba(255,255,255,0.92)', background: 'rgba(0,0,0,0.6)',
+            padding: '1px 5px', borderRadius: 3, letterSpacing: '0.03em',
+          }}>{badge}</span>
+        )}
       </div>
     );
   }

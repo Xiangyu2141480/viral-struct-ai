@@ -4,7 +4,8 @@
 // (Ported from screens-ab.jsx; React/window globals replaced with imports.)
 
 import { useEffect, useState } from 'react';
-import { ROLES, type Seg, type TargetProduct } from './data';
+import type { NormalizedAssetCard } from '@viral-struct/shared';
+import { ROLES, type Material, type Seg, type SourceSegment, type TargetProduct } from './data';
 import { useProjectStore } from './store/useProjectStore';
 import { AssetAffordanceChips, AssetManagerEvidencePanel } from './AssetManagerEvidence';
 import {
@@ -105,13 +106,20 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
   const scanning = useProjectStore((s) => s.scanning);
   const scanStage = useProjectStore((s) => s.scanStage);
   const scanSample = useProjectStore((s) => s.scanSample);
-  const fineScanningSegId = useProjectStore((s) => s.fineScanningSegId);
-  const fineScanStage = useProjectStore((s) => s.fineScanStage);
+  const fineScanStages = useProjectStore((s) => s.fineScanStages);
   const segmentDetails = useProjectStore((s) => s.segmentDetails);
   const fineScanSegment = useProjectStore((s) => s.fineScanSegment);
   const runDemo = useProjectStore((s) => s.runDemo);
   const loadingDemo = useProjectStore((s) => s.loadingDemo);
+  const saveCurrentStructure = useProjectStore((s) => s.saveCurrentStructure);
   const T = v.duration;
+  const hasStructure = v.segments.length > 0;
+
+  const handleSaveStructure = () => {
+    void saveCurrentStructure()
+      .then(() => showToast('已保存到结构样例库'))
+      .catch(() => showToast(useProjectStore.getState().lastError ?? '保存失败'));
+  };
   const [hoveredSeg, setHoveredSeg] = useState<Seg | undefined>(v.segments[0]);
   const [selectedSegId, setSelectedSegId] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState('');
@@ -198,6 +206,12 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
           </div>
         </div>
         <div className="screen-head-r">
+          <button className="btn" style={{ padding: '5px 12px', fontSize: 11.5 }}
+            disabled={!hasStructure}
+            title={hasStructure ? '把当前已解析的结构保存到结构样例库' : '先扫描一个视频再保存'}
+            onClick={handleSaveStructure}>
+            <Icon name="library" size={12} /> 保存到结构样例库
+          </button>
           <button className="btn primary" style={{ padding: '5px 12px', fontSize: 11.5 }}
             disabled={loadingDemo}
             onClick={() => { void runDemo().then(() => showToast('一键演示已载入 · 真实后端全流程数据')).catch(() => {}); }}>
@@ -290,7 +304,7 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
               共享时间轴 0 ~ {v.duration}s
             </span>
           </div>
-          <AbstractStructureBand segments={v.segments} total={T} onSegHover={setHoveredSeg} onSegClick={(seg) => setSelectedSegId(seg.id ?? null)} selectedId={selectedSegId ?? undefined} />
+          <AbstractStructureBand segments={v.segments} total={T} onSegHover={setHoveredSeg} onSegClick={(seg) => setSelectedSegId(seg.id ?? null)} selectedId={selectedSegId ?? undefined} scannedIds={new Set(Object.keys(segmentDetails))} scanningIds={new Set(Object.keys(fineScanStages))} />
 
           {/* prominent dashed sync rails connecting the two layers */}
           <SyncRails segments={v.segments} total={T} height={32} />
@@ -342,12 +356,17 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
         const idx = v.segments.indexOf(seg);
         const dur = (seg.end ?? 0) - (seg.start ?? 0);
         const fine = seg.id ? segmentDetails[seg.id] : undefined;
-        const isFineScanning = fineScanningSegId === seg.id;
+        const stageLabel = seg.id ? fineScanStages[seg.id] : undefined;
+        const isFineScanning = stageLabel !== undefined;
         return (
           <div className="panel">
             <div className="panel-head">
               <h4>段落明细 · {String(idx + 1).padStart(2, '0')} {ROLES[seg.role]?.name ?? seg.label}</h4>
-              <span className="mono dim" style={{ fontSize: 10.5 }}>点击上方时间轴的任一段落查看明细</span>
+              <span className="mono dim" style={{ fontSize: 10.5 }}>
+                {Object.keys(segmentDetails).length > 0
+                  ? `已精扫描 ${Object.keys(segmentDetails).length}/${v.segments.length} 段 · 结果均保留，点上方任一段查看`
+                  : '点击上方时间轴的任一段落查看明细'}
+              </span>
             </div>
             <div className="panel-body">
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
@@ -369,7 +388,7 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
                     disabled={isFineScanning}
                     onClick={() => { if (seg.id) void fineScanSegment(idx, seg.id).catch(() => {}); }}
                   >
-                    <Icon name="sparkle" size={12} /> {isFineScanning ? (fineScanStage || '精扫描中…') : fine ? '重新精扫描此段' : '深度分析 · 精扫描此段'}
+                    <Icon name="sparkle" size={12} /> {isFineScanning ? (stageLabel || '精扫描中…') : fine ? '重新精扫描此段' : '深度分析 · 精扫描此段'}
                   </button>
                   {!fine && !isFineScanning && (
                     <span className="mono dim" style={{ fontSize: 10.5 }}>视觉峰值 + 逐峰 VLM · 字幕行为 / 动作节拍 / 转场 / 可迁移母题（约 30–60 秒）</span>
@@ -399,6 +418,176 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
    屏 2 · 新商品 + 素材输入与适配
    ============================================================ */
 
+/** Format a clip time range like "3.0–7.5s" from start/end seconds. */
+const fmtClipRange = (start?: number, end?: number): string | null => {
+  if (typeof start !== 'number' || typeof end !== 'number') return null;
+  return `${start.toFixed(1)}–${end.toFixed(1)}s`;
+};
+
+/** Kind label for the meta line. */
+const kindLabel = (kind: Material['kind']): string =>
+  kind === 'photo' ? '图像' : kind === 'video' ? '视频片段' : '文本';
+
+interface ClipCardProps {
+  clip: Material;
+  segments: SourceSegment[];
+  isProductAnchor: boolean;
+  onAssign: (slot: string | null) => void;
+  onSetProductImage?: () => void;
+  affordanceAsset?: NormalizedAssetCard;
+}
+
+/** One clip sub-card inside an asset's clip strip. Carries its own slot control. */
+const ClipCard = ({ clip, segments, isProductAnchor, onAssign, onSetProductImage, affordanceAsset }: ClipCardProps) => {
+  const targetSeg = clip.slot ? segments.find((s) => s.id === clip.slot) : null;
+  const range = fmtClipRange(clip.startSec, clip.endSec);
+  const dur = typeof clip.durationSec === 'number' ? `${clip.durationSec.toFixed(1)}s` : null;
+  const hints = (clip.roleHints ?? []).slice(0, 3);
+  const canBeProduct = clip.kind === 'photo' && typeof clip.url === 'string' && clip.url.length > 0;
+  return (
+    <div
+      className="mat-card"
+      style={{
+        minWidth: 150,
+        flex: '0 0 150px',
+        outline: isProductAnchor ? '1.5px solid var(--accent)' : 'none',
+        outlineOffset: -1,
+      }}
+    >
+      <MatThumb mat={clip} />
+      <div className="mat-body">
+        <div className="mat-name" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {clip.label || clip.subject}
+        </div>
+        <div className="mat-sub">
+          {clip.id.toUpperCase()} · {kindLabel(clip.kind)} · q={clip.quality.toFixed(1)}
+        </div>
+        {(range || dur) && (
+          <div className="mono dim" style={{ fontSize: 10 }}>
+            {[range && `⏱ ${range}`, dur && `时长 ${dur}`].filter(Boolean).join(' · ')}
+          </div>
+        )}
+        {hints.length > 0 && (
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 2 }}>
+            {hints.map((h) => (
+              <span key={h} className="tag" style={{ padding: '1px 5px', fontSize: 9.5 }}>
+                {ROLES[h]?.name ?? h}
+              </span>
+            ))}
+          </div>
+        )}
+        <label className="row gap-6 mt-8" style={{ minHeight: 22 }}>
+          {targetSeg ? (
+            <span className={`role-dot role-${targetSeg.role}`} />
+          ) : (
+            <span className="role-dot" style={{ background: 'var(--text-faint)' }} />
+          )}
+          <select
+            className="mono"
+            value={clip.slot ?? ''}
+            onChange={(e) => onAssign(e.target.value || null)}
+            style={{
+              flex: 1, minWidth: 0, fontSize: 10, padding: '2px 4px',
+              background: 'var(--surface-3)', color: 'var(--text)',
+              border: '1px solid var(--border)', borderRadius: 3,
+            }}
+          >
+            <option value="">未分配</option>
+            {segments.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.id.toUpperCase()} · {ROLES[s.role]?.name ?? s.role}
+              </option>
+            ))}
+          </select>
+        </label>
+        {canBeProduct && (
+          <button
+            className={isProductAnchor ? 'btn primary' : 'btn ghost'}
+            style={{ padding: '2px 6px', fontSize: 9.5, justifyContent: 'center', marginTop: 2 }}
+            onClick={onSetProductImage}
+            title="将此图设为 AIGC 生成的产品主图锚点"
+          >
+            {isProductAnchor ? '★ 产品主图' : '设为产品主图'}
+          </button>
+        )}
+        <AssetAffordanceChips asset={affordanceAsset} />
+      </div>
+    </div>
+  );
+};
+
+interface AssetGroupTileProps {
+  parentKey: string;
+  clips: Material[];
+  segments: SourceSegment[];
+  productImageUrl: string | null;
+  onAssign: (clipId: string, slot: string | null) => void;
+  onSetProductImage: (clip: Material) => void;
+  findAffordance: (id: string) => NormalizedAssetCard | undefined;
+}
+
+/** One parent asset tile: header + horizontal clip strip (1+ clips). */
+const AssetGroupTile = ({
+  parentKey,
+  clips,
+  segments,
+  productImageUrl,
+  onAssign,
+  onSetProductImage,
+  findAffordance,
+}: AssetGroupTileProps) => {
+  const isMultiClip = clips.length > 1;
+  const head = clips[0];
+  const assigned = clips.filter((c) => c.slot).length;
+  const totalDur = clips.reduce((acc, c) => acc + (typeof c.durationSec === 'number' ? c.durationSec : 0), 0);
+  return (
+    <div
+      style={{
+        border: '1px solid var(--border)',
+        borderRadius: 6,
+        background: 'var(--surface)',
+        padding: '10px 12px',
+        display: 'flex', flexDirection: 'column', gap: 8,
+        minWidth: 0,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {isMultiClip ? (head.subject || '上传素材') : (head.label || head.subject)}
+          </div>
+          <div className="mono dim" style={{ fontSize: 10, marginTop: 2 }}>
+            {parentKey.toUpperCase()} · {isMultiClip ? `${clips.length} 个片段` : kindLabel(head.kind)}
+            {totalDur > 0 ? ` · 总时长 ${totalDur.toFixed(1)}s` : ''}
+          </div>
+        </div>
+        <span className="tag mono" style={{ padding: '1px 6px', fontSize: 10, flexShrink: 0 }}>
+          {assigned}/{clips.length} 已分配
+        </span>
+      </div>
+      <div
+        style={{
+          display: 'flex', gap: 10,
+          overflowX: isMultiClip ? 'auto' : 'visible',
+          paddingBottom: isMultiClip ? 4 : 0,
+        }}
+      >
+        {clips.map((clip) => (
+          <ClipCard
+            key={clip.id}
+            clip={clip}
+            segments={segments}
+            isProductAnchor={!!productImageUrl && clip.url === productImageUrl}
+            onAssign={(slot) => onAssign(clip.id, slot)}
+            onSetProductImage={() => onSetProductImage(clip)}
+            affordanceAsset={findAffordance(clip.id)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+};
+
 export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack: () => void }) => {
   const v = useProjectStore((s) => s.sourceVideo);
   const materials = useProjectStore((s) => s.materials);
@@ -412,6 +601,9 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
   const loadLibrary = useProjectStore((s) => s.loadLibrary);
   const uploading = useProjectStore((s) => s.uploading);
   const applyAssignments = useProjectStore((s) => s.applyAssignments);
+  const setSlot = useProjectStore((s) => s.setSlot);
+  const productImageUrl = useProjectStore((s) => s.productImageUrl);
+  const setProductImageUrl = useProjectStore((s) => s.setProductImageUrl);
   const updateProduct = useProjectStore((s) => s.updateProduct);
   const runDiagnosis = useProjectStore((s) => s.runDiagnosis);
   const refreshAssetManagerCoverage = useProjectStore((s) => s.refreshAssetManagerCoverage);
@@ -463,6 +655,61 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
     void runDiagnosis().catch(() => {});
     onNext();
   };
+
+  // Assign a single clip to a structure slot. setSlot keeps the UI snappy; the
+  // single-entry applyAssignments persists + refreshes coverage/affordance, matching
+  // the batch flow so each clip can be slotted individually.
+  const handleClipAssign = (clipId: string, slot: string | null) => {
+    setSlot(clipId, slot);
+    void applyAssignments({ [clipId]: slot }).catch(() => {});
+  };
+
+  // Designate one uploaded IMAGE clip as the AIGC product hero (产品主图) anchor.
+  const handleSetProductImage = (clip: Material) => {
+    if (typeof clip.url !== 'string' || clip.url.length === 0) return;
+    setProductImageUrl(clip.url);
+    showToast('已设为产品主图 · 将锚定 AIGC 生成');
+  };
+
+  // GROUP materials by parent asset (parentAssetId ?? id). Each group = one uploaded
+  // asset; multi-clip groups (a long video sliced into clips) render a clip strip.
+  const assetGroups = (() => {
+    const order: string[] = [];
+    const byParent = new Map<string, Material[]>();
+    for (const m of materials) {
+      const key = m.parentAssetId ?? m.id;
+      const bucket = byParent.get(key);
+      if (bucket) {
+        bucket.push(m);
+      } else {
+        byParent.set(key, [m]);
+        order.push(key);
+      }
+    }
+    // Keep clips inside a group ordered by their segment index when present.
+    for (const key of order) {
+      const clips = byParent.get(key)!;
+      if (clips.length > 1) {
+        clips.sort((a, b) => (a.segmentIndex ?? 0) - (b.segmentIndex ?? 0));
+      }
+    }
+    return order.map((key) => ({ key, clips: byParent.get(key)! }));
+  })();
+
+  const findAffordance = (id: string): NormalizedAssetCard | undefined =>
+    assetSupplyContext?.assets.find((asset) => asset.id === id);
+
+  // The current product-anchor image material (if any), for the header summary.
+  const productAnchorMaterial = productImageUrl
+    ? materials.find((m) => m.url === productImageUrl) ?? null
+    : null;
+
+  // Footer status — derived from real materials + structure slots (no hardcoded numbers).
+  const totalSlots = v.segments.length;
+  const assignedSlots = v.segments.filter((s) => materials.some((m) => m.slot === s.id)).length;
+  const footerStatus = `${materials.length} 项素材 · ${assignedSlots}/${totalSlots} 槽位已分配`;
+  const footerTone: 'ok' | 'warn' =
+    totalSlots > 0 && assignedSlots >= totalSlots ? 'ok' : 'warn';
 
   useEffect(() => {
     void refreshAssetManagerCoverage();
@@ -580,57 +827,71 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
               </div>
             </div>
 
+            {/* Product hero (产品主图) anchor banner — drives AIGC generation */}
             <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
-              gap: 10,
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '8px 10px', borderRadius: 6,
+              border: `1px solid ${productAnchorMaterial ? 'var(--accent)' : 'var(--border)'}`,
+              background: 'var(--surface)',
             }}>
-              {materials.map(m => {
-                const targetSeg = m.slot ? v.segments.find(s => s.id === m.slot) : null;
-                return (
-                  <div key={m.id} className="mat-card">
-                    <MatThumb mat={m} />
-                    <div className="mat-body">
-                      <div className="mat-name" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {m.subject}
-                      </div>
-                      <div className="mat-sub">
-                        {m.id.toUpperCase()} · {m.kind === 'photo' ? '图像' : '文本'} · q={m.quality.toFixed(1)}
-                      </div>
-                      {targetSeg ? (
-                        <div className="row gap-6 mt-8" style={{ minHeight: 18 }}>
-                          <span className={`role-dot role-${targetSeg.role}`} />
-                          <span className="tag" style={{ padding: '1px 6px', fontSize: 10 }}>
-                            → {m.slot?.toUpperCase()}
-                          </span>
-                          <span className="mono dim" style={{ fontSize: 10 }}>
-                            {ROLES[targetSeg.role]?.name}
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="row gap-6 mt-8" style={{ minHeight: 18 }}>
-                          <span className="tag" style={{ color: 'var(--text-mute)', padding: '1px 6px', fontSize: 10 }}>未分配</span>
-                        </div>
-                      )}
-                      <AssetAffordanceChips asset={assetSupplyContext?.assets.find((asset) => asset.id === m.id)} />
-                    </div>
-                  </div>
-                );
-              })}
+              <div style={{
+                width: 34, height: 34, borderRadius: 4, flexShrink: 0,
+                background: productAnchorMaterial?.url
+                  ? `center / cover no-repeat url("${productAnchorMaterial.url}")`
+                  : 'var(--surface-3)',
+                border: '1px solid var(--border)',
+                display: 'grid', placeItems: 'center',
+              }}>
+                {!productAnchorMaterial?.url && <Icon name="sparkle" size={14} />}
+              </div>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text)' }}>
+                  产品主图 · AIGC 锚点
+                </div>
+                <div className="mono dim" style={{ fontSize: 10, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {productAnchorMaterial
+                    ? `已锚定 ${productAnchorMaterial.id.toUpperCase()} · ${productAnchorMaterial.subject} — 将用于锚定 AIGC 生成`
+                    : '在下方图片素材上点「设为产品主图」，AIGC 生成将以它为锚'}
+                </div>
+              </div>
+              {productAnchorMaterial && (
+                <button
+                  className="btn ghost"
+                  style={{ padding: '2px 8px', fontSize: 10 }}
+                  onClick={() => { setProductImageUrl(null); showToast('已清除产品主图锚点'); }}
+                >
+                  清除
+                </button>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {assetGroups.map(({ key, clips }) => (
+                <AssetGroupTile
+                  key={key}
+                  parentKey={key}
+                  clips={clips}
+                  segments={v.segments}
+                  productImageUrl={productImageUrl}
+                  onAssign={handleClipAssign}
+                  onSetProductImage={handleSetProductImage}
+                  findAffordance={findAffordance}
+                />
+              ))}
               <button className="mat-card" onClick={() => setUploadOpen(true)} style={{
                 border: '1px dashed var(--border-2)',
                 background: 'transparent',
-                display: 'flex', flexDirection: 'column',
+                display: 'flex', flexDirection: 'row',
                 alignItems: 'center', justifyContent: 'center',
                 color: 'var(--text-mute)',
                 fontSize: 11,
-                gap: 6,
+                gap: 8,
                 aspectRatio: 'auto',
-                minHeight: 130,
+                minHeight: 56,
                 cursor: 'pointer',
                 fontFamily: 'inherit',
               }}>
-                <Icon name="plus" size={20} />
+                <Icon name="plus" size={18} />
                 <span>添加素材</span>
                 <span className="mono" style={{ fontSize: 9.5, color: 'var(--text-faint)' }}>JPG · PNG · MP4 · TXT</span>
               </button>
@@ -730,8 +991,8 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
         variant="full"
       />
       <ScreenFooter
-        status="6 项素材入库 · 5 / 7 槽位已分配"
-        statusTone="warn"
+        status={footerStatus}
+        statusTone={footerTone}
         secondary={[{ label: '返回结构', onClick: onBack }]}
         primary={{ label: matching ? '匹配中…' : '识别并诊断缺口', onClick: handleNext }}
       />

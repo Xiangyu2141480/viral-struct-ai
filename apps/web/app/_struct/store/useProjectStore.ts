@@ -20,11 +20,33 @@ import type {
   StoryboardFrame,
 } from '@viral-struct/shared';
 import { analyzeStructAssetManagerCoverage } from '../api/assetManager';
-import { compile as compileApi, exportVideo as exportApi, nlEdit as nlEditApi } from '../api/compile';
+import {
+  compile as compileApi,
+  exportVideo as exportApi,
+  getProduceStatus as getProduceStatusApi,
+  nlEdit as nlEditApi,
+  startProduce as startProduceApi,
+} from '../api/compile';
 import { applyStrategy as applyStrategyApi, diagnose as diagnoseApi } from '../api/diagnose';
 import { matchMaterials as matchMaterialsApi, uploadMaterials as uploadMaterialsApi } from '../api/materials';
 import { analyzeSample as analyzeSampleApi } from '../api/sample';
-import { getFineScanStatus, getScanStatus, startFineScan, startScan, type FineBlockDetail } from '../api/scan';
+import {
+  getBoundaryScanStatus,
+  getFineScanStatus,
+  getScanStatus,
+  startBoundaryScan,
+  startFineScan,
+  startScan,
+  type FineBlockDetail,
+} from '../api/scan';
+import { getHyperframesStatus, startHyperframesSlot, startHyperframesTransition } from '../api/hyperframes';
+import {
+  deleteStructure as deleteStructureApi,
+  getStructure as getStructureApi,
+  listStructures as listStructuresApi,
+  saveStructure as saveStructureApi,
+  type SavedStructureSummary,
+} from '../api/library';
 import {
   type InsightRequest,
   checkSafety as checkSafetyApi,
@@ -41,6 +63,7 @@ import {
   type CompileVersion,
   type Diagnosis,
   type Material,
+  type ResolutionMethod,
   type SourceVideo,
   type TargetProduct,
 } from '../data';
@@ -59,6 +82,11 @@ interface ProjectState {
   timeline: TimelineSeg[] | null;
   exportResult: ExportResult | null;
   assetSupplyContext: AssetSupplyContext | null;
+  /** Product reference image url (defaults to the first image material's url).
+   *  Used as the produce anchor so AIGC stays close to the real packaging. */
+  productImageUrl: string | null;
+  /** Saved structures from 结构样例库 (newest first). Empty until loaded/saved. */
+  savedStructures: SavedStructureSummary[];
 
   // ── insights / generation (capability buttons) ─────────────
   qualityReport: QualityReport | null;
@@ -74,10 +102,18 @@ interface ProjectState {
   scanning: boolean;
   /** Human-readable rough-scan progress label (stage + elapsed). */
   scanStage: string;
-  /** Segment id currently being fine-scanned (null = none). */
-  fineScanningSegId: string | null;
-  /** Human-readable fine-scan progress label. */
-  fineScanStage: string;
+  /** Per-segment fine-scan progress label, keyed by segment id (a key present = that
+   *  segment is in progress). Multiple segments fine-scan CONCURRENTLY and each keeps
+   *  its own progress, so analyzing one segment never clobbers another's state. */
+  fineScanStages: Record<string, string>;
+  /** Per-transition boundary-scan progress label, keyed by transition id (a key present
+   *  = that seam is being re-scanned). Independent per seam, like fineScanStages. */
+  boundaryScanStages: Record<string, string>;
+  /** Per-slot HyperFrames-render progress label, keyed by slot id (a key present = that
+   *  slot is being rendered by the HyperFrames Agent). Independent per slot. */
+  hyperframesStages: Record<string, string>;
+  /** Per-slot HyperFrames preview result (a real MP4 url + source), keyed by slot id. */
+  hyperframesPreviews: Record<string, { url: string; source: string }>;
   /** Per-segment deep detail from fine scan, keyed by UI segment id. */
   segmentDetails: Record<string, FineBlockDetail>;
   uploading: boolean;
@@ -86,6 +122,10 @@ interface ProjectState {
   compiling: boolean;
   nlApplying: boolean;
   exporting: boolean;
+  /** REAL AIGC produce job in progress (run Director → Wan2.7 render). */
+  producing: boolean;
+  /** Human-readable produce progress label (stage + elapsed). */
+  produceStage: string;
   assetManagerLoading: boolean;
   assetManagerWarnings: string[];
   assetManagerLastError: string | null;
@@ -104,16 +144,26 @@ interface ProjectState {
   analyzeSample: (input: { file?: File; sampleId?: string }) => Promise<void>;
   scanSample: (file: File) => Promise<void>;
   fineScanSegment: (segmentIndex: number, segmentId: string) => Promise<void>;
+  /** Re-scan ONE transition seam (boundary_scan.py) to recover its real type. */
+  boundaryScanTransition: (transitionIndex: number, transitionId: string) => Promise<void>;
+  /** Render ONE slot with the HyperFrames Agent in the background → a real preview MP4. */
+  hyperframesFillSlot: (slotId: string) => Promise<void>;
+  /** Composite ONE transition seam (ffmpeg xfade over adjacent real assets) → preview MP4. */
+  hyperframesFillTransition: (transitionIndex: number, transitionId: string) => Promise<void>;
   addMaterials: (files: File[]) => Promise<void>;
   setSlot: (materialId: string, slot: string | null) => void;
   applyAssignments: (assignments: Record<string, string | null>) => Promise<void>;
   updateProduct: (product: TargetProduct) => void;
   runDiagnosis: () => Promise<void>;
-  applyStrategy: (slotId: string) => Promise<void>;
+  applyStrategy: (slotId: string, method?: ResolutionMethod, payload?: unknown) => Promise<void>;
   selectVersion: (versionId: string) => void;
   compile: () => Promise<void>;
   applyNlEdit: (instruction: string) => Promise<string>;
   exportVideo: (format: string) => Promise<ExportResult>;
+  /** Set the product reference image url used as the produce anchor. */
+  setProductImageUrl: (url: string | null) => void;
+  /** Run the REAL AIGC produce job (Director → Wan2.7); polls until done/error. */
+  produce: () => Promise<void>;
 
   // ── insights / generation actions ─────────────────────────
   evaluateQuality: () => Promise<void>;
@@ -123,12 +173,34 @@ interface ProjectState {
   planMaterialJobs: () => Promise<void>;
   loadLibrary: (libraryId: string) => Promise<void>;
   runDemo: () => Promise<void>;
+
+  // ── 结构样例库 persistence actions ─────────────────────────
+  loadSavedStructures: () => Promise<void>;
+  saveCurrentStructure: (title?: string) => Promise<SavedStructureSummary>;
+  openSavedStructure: (id: string) => Promise<void>;
+  deleteSavedStructure: (id: string) => Promise<void>;
+
   reset: () => void;
 }
 
 /** Normalize a thrown value into a human-readable message. */
 function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
+}
+
+/** The first image material's url, used as the produce anchor (productImageUrl).
+ *  Returns null when no image material carries a usable url. */
+function firstImageMaterialUrl(materials: Material[]): string | null {
+  const img = materials.find((m) => m.kind === 'photo' && typeof m.url === 'string' && m.url.length > 0);
+  return img?.url ?? null;
+}
+
+/** Resolve the productImageUrl after materials change: keep an explicit existing
+ *  anchor if it's still present among the materials, otherwise default to the
+ *  first image material's url (so produce always has an anchor when one exists). */
+function resolveProductImageUrl(materials: Material[], current: string | null): string | null {
+  if (current && materials.some((m) => m.url === current)) return current;
+  return firstImageMaterialUrl(materials);
 }
 
 /** Derive a playable timeline from the structure + diagnosis (mock fallback). */
@@ -169,6 +241,8 @@ const initialState = {
   timeline: null as TimelineSeg[] | null,
   exportResult: null as ExportResult | null,
   assetSupplyContext: null as AssetSupplyContext | null,
+  productImageUrl: null as string | null,
+  savedStructures: [] as SavedStructureSummary[],
   qualityReport: null as QualityReport | null,
   demoEstimate: null as DemoEstimate | null,
   safetyStatus: null as SafetyStatus | null,
@@ -178,8 +252,10 @@ const initialState = {
   analyzing: false,
   scanning: false,
   scanStage: '',
-  fineScanningSegId: null,
-  fineScanStage: '',
+  fineScanStages: {} as Record<string, string>,
+  boundaryScanStages: {} as Record<string, string>,
+  hyperframesStages: {} as Record<string, string>,
+  hyperframesPreviews: {} as Record<string, { url: string; source: string }>,
   segmentDetails: {} as Record<string, FineBlockDetail>,
   uploading: false,
   matching: false,
@@ -187,6 +263,8 @@ const initialState = {
   compiling: false,
   nlApplying: false,
   exporting: false,
+  producing: false,
+  produceStage: '',
   assetManagerLoading: false,
   assetManagerWarnings: [] as string[],
   assetManagerLastError: null as string | null,
@@ -258,7 +336,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         }
         if (s.status === 'error') throw new Error(s.error || '粗扫描失败');
         if (!s.sourceVideo) throw new Error('扫描完成但未返回结构');
-        set({ sourceVideo: s.sourceVideo, mode: 'live', warnings: s.warnings ?? [], scanning: false, scanStage: '', segmentDetails: {} });
+        set({ sourceVideo: s.sourceVideo, mode: 'live', warnings: s.warnings ?? [], scanning: false, scanStage: '', segmentDetails: {}, fineScanStages: {}, boundaryScanStages: {}, hyperframesStages: {}, hyperframesPreviews: {} });
         void get().refreshAssetManagerCoverage();
         return;
       }
@@ -271,25 +349,187 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
 
   fineScanSegment: async (segmentIndex, segmentId) => {
     // Deep per-segment analysis: visual peak detection + per-peak VLM on the raw video.
-    set({ fineScanningSegId: segmentId, fineScanStage: '排队中', lastError: null });
+    set((st) => ({ fineScanStages: { ...st.fineScanStages, [segmentId]: '排队中' }, lastError: null }));
     try {
       const { jobId } = await startFineScan(get().sourceVideo.id, segmentIndex);
       for (let i = 0; i < 180; i++) {
         await new Promise((resolve) => setTimeout(resolve, 2000));
         const s = await getFineScanStatus(jobId);
         if (s.status === 'running') {
-          set({ fineScanStage: (s.stage ?? '精扫描中') + (s.elapsedSec ? ` · ${s.elapsedSec}s` : '') });
+          set((st) => ({ fineScanStages: { ...st.fineScanStages, [segmentId]: (s.stage ?? '精扫描中') + (s.elapsedSec ? ` · ${s.elapsedSec}s` : '') } }));
           continue;
         }
         if (s.status === 'error') throw new Error(s.error || '精扫描失败');
         if (!s.detail) throw new Error('精扫描完成但未返回明细');
         const detail = s.detail;
-        set((st) => ({ segmentDetails: { ...st.segmentDetails, [segmentId]: detail }, fineScanningSegId: null, fineScanStage: '' }));
+        set((st) => {
+          const rest = { ...st.fineScanStages };
+          delete rest[segmentId];
+          return { segmentDetails: { ...st.segmentDetails, [segmentId]: detail }, fineScanStages: rest };
+        });
         return;
       }
       throw new Error('精扫描超时（>6 分钟）');
     } catch (e) {
-      set({ fineScanningSegId: null, fineScanStage: '', lastError: '精扫描失败 · ' + errMsg(e) });
+      set((st) => {
+        const rest = { ...st.fineScanStages };
+        delete rest[segmentId];
+        return { fineScanStages: rest, lastError: '精扫描失败 · ' + errMsg(e) };
+      });
+      throw e;
+    }
+  },
+
+  boundaryScanTransition: async (transitionIndex, transitionId) => {
+    // Re-scan ONE seam: boundary_scan.py → real transition type (叠化/推镜/…) for just
+    // this transition. The backend returns an updated copy; splice it in BY ID (so
+    // other seams stay untouched). FAIL-FAST on error. Multiple seams can scan at once,
+    // each keyed by its own transition id in boundaryScanStages.
+    const transition = get().sourceVideo.transitions[transitionIndex];
+    if (!transition || transition.id !== transitionId) {
+      set({ lastError: '转场扫描失败 · 找不到该转场（结构可能已更新，请重试）' });
+      return;
+    }
+    set((st) => ({ boundaryScanStages: { ...st.boundaryScanStages, [transitionId]: '排队中' }, lastError: null }));
+    try {
+      const { jobId } = await startBoundaryScan(get().sourceVideo.id, transitionIndex, transition);
+      for (let i = 0; i < 180; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        const s = await getBoundaryScanStatus(jobId);
+        if (s.status === 'running') {
+          set((st) => ({ boundaryScanStages: { ...st.boundaryScanStages, [transitionId]: (s.stage ?? '转场扫描中') + (s.elapsedSec ? ` · ${s.elapsedSec}s` : '') } }));
+          continue;
+        }
+        if (s.status === 'error') throw new Error(s.error || '转场扫描失败');
+        if (!s.transition) throw new Error('转场扫描完成但未返回结果');
+        const updated = s.transition;
+        set((st) => {
+          const rest = { ...st.boundaryScanStages };
+          delete rest[transitionId];
+          // Match by id (the index may have shifted) so only this seam is replaced.
+          const transitions = st.sourceVideo.transitions.map((t) => (t.id === transitionId ? updated : t));
+          return {
+            sourceVideo: { ...st.sourceVideo, transitions },
+            boundaryScanStages: rest,
+            mode: 'live',
+            warnings: s.warnings ?? [],
+          };
+        });
+        return;
+      }
+      throw new Error('转场扫描超时（>6 分钟）');
+    } catch (e) {
+      set((st) => {
+        const rest = { ...st.boundaryScanStages };
+        delete rest[transitionId];
+        return { boundaryScanStages: rest, lastError: '转场扫描失败 · ' + errMsg(e) };
+      });
+      throw e;
+    }
+  },
+
+  hyperframesFillSlot: async (slotId) => {
+    // Render ONE slot with the HyperFrames Agent → a real preview MP4. The Director
+    // authors this slot's brief server-side; the Agent edits in the background. We poll
+    // and store the preview BY slot id, so multiple slots can render concurrently and
+    // each keeps its own progress/preview. FAIL-FAST: surface the backend error
+    // verbatim; never a fake preview.
+    set((st) => ({ hyperframesStages: { ...st.hyperframesStages, [slotId]: '排队中' }, lastError: null }));
+    try {
+      const { jobId } = await startHyperframesSlot({
+        sourceVideo: get().sourceVideo,
+        materials: get().materials,
+        product: get().product,
+        slotId,
+        productImageUrl: get().productImageUrl ?? undefined,
+      });
+      // Poll ~3s; author→lint→render→critic can take a few minutes → ceiling ~120 polls.
+      for (let i = 0; i < 120; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        const s = await getHyperframesStatus(jobId);
+        if (s.status === 'running') {
+          set((st) => ({
+            hyperframesStages: {
+              ...st.hyperframesStages,
+              [slotId]: (s.stage ?? 'HyperFrames 剪辑中') + (s.elapsedSec ? ` · ${s.elapsedSec}s` : ''),
+            },
+          }));
+          continue;
+        }
+        if (s.status === 'error') throw new Error(s.error || 'HyperFrames 渲染失败');
+        const previewUrl = s.previewUrl;
+        if (!previewUrl) throw new Error('HyperFrames 渲染完成但未返回预览');
+        const source = s.source ?? 'llm';
+        set((st) => {
+          const stages = { ...st.hyperframesStages };
+          delete stages[slotId];
+          return {
+            hyperframesStages: stages,
+            hyperframesPreviews: { ...st.hyperframesPreviews, [slotId]: { url: previewUrl, source } },
+            mode: 'live',
+            warnings: s.warnings ?? [],
+          };
+        });
+        return;
+      }
+      throw new Error('HyperFrames 渲染超时（>6 分钟）');
+    } catch (e) {
+      set((st) => {
+        const stages = { ...st.hyperframesStages };
+        delete stages[slotId];
+        return { hyperframesStages: stages, lastError: 'HyperFrames 补全失败 · ' + errMsg(e) };
+      });
+      throw e;
+    }
+  },
+
+  hyperframesFillTransition: async (transitionIndex, transitionId) => {
+    // Composite ONE transition seam (ffmpeg xfade over the two adjacent slots' real
+    // assets) → a real preview MP4. Keyed by transition id in the same maps as slot
+    // fills (t-ids never collide with s-ids). FAIL-FAST: surface backend error verbatim.
+    set((st) => ({ hyperframesStages: { ...st.hyperframesStages, [transitionId]: '排队中' }, lastError: null }));
+    try {
+      const { jobId } = await startHyperframesTransition({
+        sourceVideo: get().sourceVideo,
+        materials: get().materials,
+        transitionIndex,
+      });
+      // ffmpeg xfade is quick → poll ~2s, ceiling ~60 (2 min).
+      for (let i = 0; i < 60; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        const s = await getHyperframesStatus(jobId);
+        if (s.status === 'running') {
+          set((st) => ({
+            hyperframesStages: {
+              ...st.hyperframesStages,
+              [transitionId]: (s.stage ?? '合成转场中') + (s.elapsedSec ? ` · ${s.elapsedSec}s` : ''),
+            },
+          }));
+          continue;
+        }
+        if (s.status === 'error') throw new Error(s.error || '转场合成失败');
+        const previewUrl = s.previewUrl;
+        if (!previewUrl) throw new Error('转场合成完成但未返回预览');
+        const source = s.source ?? 'mock';
+        set((st) => {
+          const stages = { ...st.hyperframesStages };
+          delete stages[transitionId];
+          return {
+            hyperframesStages: stages,
+            hyperframesPreviews: { ...st.hyperframesPreviews, [transitionId]: { url: previewUrl, source } },
+            mode: 'live',
+            warnings: s.warnings ?? [],
+          };
+        });
+        return;
+      }
+      throw new Error('转场合成超时（>2 分钟）');
+    } catch (e) {
+      set((st) => {
+        const stages = { ...st.hyperframesStages };
+        delete stages[transitionId];
+        return { hyperframesStages: stages, lastError: 'HyperFrames 转场失败 · ' + errMsg(e) };
+      });
       throw e;
     }
   },
@@ -298,8 +538,15 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     if (files.length === 0) return;
     set({ uploading: true, lastError: null });
     try {
+      // Pass materials VERBATIM from the API (they carry .url + clip fields) —
+      // do NOT strip them. Default the produce anchor to the first image url.
       const { materials, warnings } = await uploadMaterialsApi(files, get().product);
-      set({ materials, mode: 'live', warnings: warnings ?? [] });
+      set({
+        materials,
+        productImageUrl: resolveProductImageUrl(materials, get().productImageUrl),
+        mode: 'live',
+        warnings: warnings ?? [],
+      });
       void get().refreshAssetManagerCoverage();
     } catch (e) {
       set({ lastError: '素材上传失败 · ' + errMsg(e) });
@@ -326,7 +573,12 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         materials: local,
         assignments,
       });
-      set({ materials, mode: 'live', warnings: warnings ?? [] });
+      set({
+        materials,
+        productImageUrl: resolveProductImageUrl(materials, get().productImageUrl),
+        mode: 'live',
+        warnings: warnings ?? [],
+      });
       void get().refreshAssetManagerCoverage();
     } catch (e) {
       set({ lastError: '素材匹配失败 · ' + errMsg(e) });
@@ -359,12 +611,14 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     }
   },
 
-  applyStrategy: async (slotId) => {
+  applyStrategy: async (slotId, method, payload) => {
     // Mark applied immediately for responsiveness.
     set((state) => ({ appliedSlots: { ...state.appliedSlots, [slotId]: true }, lastError: null }));
     try {
       const { diagnosis, appliedSlots, warnings } = await applyStrategyApi({
         slotId,
+        method,
+        payload,
         sourceVideo: get().sourceVideo,
         materials: get().materials,
         diagnosis: get().diagnosis,
@@ -432,6 +686,64 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       throw e;
     } finally {
       set({ exporting: false });
+    }
+  },
+
+  setProductImageUrl: (url) => set({ productImageUrl: url }),
+
+  produce: async () => {
+    // REAL AIGC produce: start the job → poll until done (downloadUrl when rendered)
+    // or error. FAIL-FAST: on error record lastError verbatim and re-throw — never
+    // a fake download link. Honors the DASHSCOPE-missing honest error from backend.
+    set({ producing: true, produceStage: '排队中', lastError: null });
+    try {
+      const { jobId } = await startProduceApi({
+        sourceVideo: get().sourceVideo,
+        materials: get().materials,
+        product: get().product,
+        productImageUrl: get().productImageUrl ?? undefined,
+        versionId: get().selectedVersionId,
+      });
+      // Poll every ~3s. Wan2.7 generation takes minutes → ceiling of 200 polls (~10min).
+      const maxPolls = 200;
+      // Tolerate transient status-poll failures: a network blip shouldn't kill a
+      // ~10-min job. Only abort after 3 CONSECUTIVE failures (reset on any success).
+      const maxConsecutiveErrors = 3;
+      let consecutiveErrors = 0;
+      for (let i = 0; i < maxPolls; i++) {
+        // Cancellation: anything that sets producing:false (reset / new run / navigate
+        // away) stops this loop so it can't clobber later exportResult/mode/produceStage.
+        if (!get().producing) return;
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        let s: Awaited<ReturnType<typeof getProduceStatusApi>>;
+        try {
+          s = await getProduceStatusApi(jobId);
+          consecutiveErrors = 0;
+        } catch (pollError) {
+          consecutiveErrors += 1;
+          if (consecutiveErrors >= maxConsecutiveErrors) throw pollError;
+          continue;
+        }
+        if (s.status === 'running') {
+          set({ produceStage: (s.stage ?? '生成中') + (s.elapsedSec ? ` · ${s.elapsedSec}s` : '') });
+          continue;
+        }
+        if (s.status === 'error') throw new Error(s.error || '成片生成失败');
+        // status === 'done': may or may not have a real downloadUrl (honest gate).
+        const result: ExportResult = {
+          jobId,
+          status: s.downloadUrl ? 'done' : 'failed',
+          progress: 100,
+          downloadUrl: s.downloadUrl,
+          warnings: s.warnings ?? [],
+        };
+        set({ exportResult: result, mode: 'live', warnings: s.warnings ?? [], producing: false, produceStage: '' });
+        return;
+      }
+      throw new Error('成片生成超时（>10 分钟）');
+    } catch (e) {
+      set({ producing: false, produceStage: '', lastError: '成片生成失败 · ' + errMsg(e) });
+      throw e;
     }
   },
 
@@ -504,7 +816,12 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     set({ uploading: true, lastError: null });
     try {
       const { materials, warnings } = await loadLibraryMaterialsApi(libraryId);
-      set({ materials, mode: 'live', warnings: warnings ?? [] });
+      set({
+        materials,
+        productImageUrl: resolveProductImageUrl(materials, get().productImageUrl),
+        mode: 'live',
+        warnings: warnings ?? [],
+      });
       void get().refreshAssetManagerCoverage();
     } catch (e) {
       set({ lastError: '示例素材库加载失败 · ' + errMsg(e) });
@@ -522,6 +839,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         sourceVideo: bundle.sourceVideo,
         product: bundle.product,
         materials: bundle.materials,
+        productImageUrl: resolveProductImageUrl(bundle.materials, get().productImageUrl),
         diagnosis: bundle.diagnosis,
         timeline: bundle.timeline,
         selectedVersionId: bundle.version?.id ?? get().selectedVersionId,
@@ -535,6 +853,75 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       throw e;
     } finally {
       set({ loadingDemo: false });
+    }
+  },
+
+  loadSavedStructures: async () => {
+    try {
+      const structures = await listStructuresApi();
+      set({ savedStructures: structures });
+    } catch (e) {
+      // Don't crash the library screen — surface the error but keep the prior list.
+      set({ lastError: '结构样例库加载失败 · ' + errMsg(e) });
+    }
+  },
+
+  saveCurrentStructure: async (title) => {
+    // FAIL-FAST: nothing scanned yet → don't POST an empty structure.
+    if (get().sourceVideo.segments.length === 0) {
+      const msg = '请先扫描一个视频再保存';
+      set({ lastError: msg });
+      throw new Error(msg);
+    }
+    set({ lastError: null });
+    try {
+      const summary = await saveStructureApi({
+        sourceVideo: get().sourceVideo,
+        segmentDetails: get().segmentDetails,
+        title,
+      });
+      set((st) => ({ savedStructures: [summary, ...st.savedStructures] }));
+      return summary;
+    } catch (e) {
+      set({ lastError: '保存结构失败 · ' + errMsg(e) });
+      throw e;
+    }
+  },
+
+  openSavedStructure: async (id) => {
+    set({ lastError: null });
+    try {
+      const rec = await getStructureApi(id);
+      // Load the saved structure as a FRESH migration start: keep its source +
+      // fine-scan detail, but reset all downstream working state (materials,
+      // diagnosis, applied slots, timeline, export, in-flight fine scans).
+      set({
+        sourceVideo: rec.sourceVideo,
+        segmentDetails: rec.segmentDetails ?? {},
+        mode: 'live',
+        materials: [],
+        diagnosis: {},
+        appliedSlots: {},
+        timeline: null,
+        exportResult: null,
+        fineScanStages: {},
+        boundaryScanStages: {},
+      });
+      void get().refreshAssetManagerCoverage();
+    } catch (e) {
+      set({ lastError: '载入结构失败 · ' + errMsg(e) });
+      throw e;
+    }
+  },
+
+  deleteSavedStructure: async (id) => {
+    set({ lastError: null });
+    try {
+      await deleteStructureApi(id);
+      set((st) => ({ savedStructures: st.savedStructures.filter((s) => s.id !== id) }));
+    } catch (e) {
+      set({ lastError: '删除结构失败 · ' + errMsg(e) });
+      throw e;
     }
   },
 

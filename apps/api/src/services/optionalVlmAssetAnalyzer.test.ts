@@ -90,7 +90,24 @@ test('enrichAssetsWithOptionalVlm accepts a validated mock VLM JSON response and
   assert.equal(enriched.analysis?.vlm?.productVisibilityScore, 93);
   assert.ok(enriched.analysis?.semantic.detectedObjects.includes('lemon slice'));
   assert.equal(enriched.analysis?.quality.productFocus, 0.93);
+  assert.ok((enriched.candidateSlotRoles ?? []).some((entry) => entry.role === 'product_closeup' && entry.confidence === 0.93));
   assert.match(JSON.stringify(requests[0]), /Do not invent product efficacy claims/);
+});
+
+test('enrichAssetsWithOptionalVlm avoids response_format for Ark/Doubao-compatible VLM endpoints', async () => {
+  const requests: unknown[] = [];
+  const result = await enrichAssetsWithOptionalVlm({
+    assetCards: [makeCard()],
+    contentBrief: brief,
+    enabled: true,
+    model: 'fake-vlm',
+    clientFactory: () => makeClient(happyVlmResponse(), requests) as never
+  });
+
+  assert.equal(result.vlmStatus, 'enhanced');
+  assert.equal(requests.length, 1);
+  assert.doesNotMatch(JSON.stringify(requests[0]), /response_format/);
+  assert.equal(result.assetCards[0].analysis?.vlm?.shortCaption, 'Cold iced tea bottle with bright lemon and ice cues.');
 });
 
 test('enrichAssetsWithOptionalVlm falls back to deterministic analysis on malformed JSON', async () => {

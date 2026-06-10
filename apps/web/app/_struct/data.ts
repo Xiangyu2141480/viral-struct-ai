@@ -70,6 +70,8 @@ export interface Transition {
   impact: { dim: string; pct: number; note: string };
   fix: { kind: string; desc: string } | null;
   note: string;
+  /** Human-readable visual evidence from an on-demand boundary scan (optional). */
+  evidence?: string;
 }
 
 export interface SourceVideo {
@@ -242,11 +244,29 @@ export const TARGET_PRODUCT: TargetProduct = {
 
 export interface Material {
   id: string;
-  kind: 'photo' | 'text';
+  kind: 'photo' | 'text' | 'video';
   subject: string;
   slot: string | null;
   quality: number;
   color?: string;
+  /** Real file/asset URL (file path set by the analyzer). Enables real-clip resolution. */
+  url?: string;
+  /** Provenance: id of the parent asset this clip was sliced from (PR#73). */
+  parentAssetId?: string;
+  /** Ordinal index of this clip within the parent asset. */
+  segmentIndex?: number;
+  /** Clip start offset within the parent asset, in seconds. */
+  startSec?: number;
+  /** Clip end offset within the parent asset, in seconds. */
+  endSec?: number;
+  /** Clip duration in seconds. */
+  durationSec?: number;
+  /** Human-readable clip label. */
+  label?: string;
+  /** Suggested slot roles for this clip (from segment analysis). */
+  roleHints?: string[];
+  /** How this clip's segmentation was derived. */
+  source?: 'deterministic' | 'vlm' | 'hybrid';
 }
 
 // User-uploaded materials (just 5 photos + 1 text)
@@ -263,11 +283,66 @@ export const TARGET_MATERIALS: Material[] = [
 //   reshoot    → 补拍建议 (shooting guide + suggested shots)
 //   hyperframes→ HyperFrames 复用合成 (which owned materials to reuse)
 //   aigc       → AIGC 生成 (the prompt to copy)
+//
+// The legacy synthesized fields (reshoot.guide/shots, hyperframes.uses/desc,
+// aigc.prompt) are KEPT so existing screen code keeps compiling. The new
+// structured fields (mirrored from the server-side DiagnosisFill in
+// apps/api/src/services/structAdapter/structTypes.ts) are ADDITIVE/optional and
+// carry the FULL Director-authored option payload for the real reshoot brief /
+// HyperFrames card / AIGC job-card.
 export interface DiagnosisFill {
-  reshoot: { guide: string; shots: string[] };
-  hyperframes: { uses: string[]; desc: string };
-  aigc: { prompt: string };
+  reshoot: {
+    /** Legacy synthesized one-liner (kept for the existing UI mirror). */
+    guide: string;
+    /** Legacy synthesized shot list (kept for the existing UI mirror). */
+    shots: string[];
+    /** Full natural-language shooting brief authored by the Director Agent. */
+    guidanceNL?: string;
+    /** Recommended framing for the reshoot. */
+    framing?: string;
+    /** Suggested shot duration in seconds. */
+    durationSec?: number;
+    /** What the reshoot MUST capture. */
+    mustCapture?: string[];
+    /** What the reshoot should avoid. */
+    avoid?: string[];
+  };
+  hyperframes: {
+    /** Legacy: ids of reused assets (kept for the existing UI mirror). */
+    uses: string[];
+    /** Legacy: synthesized description (kept for the existing UI mirror). */
+    desc: string;
+    /** Full editing guidance the Video Agent can execute from existing assets. */
+    editingGuidanceNL?: string;
+    /** HyperFrames card type. */
+    cardType?: string;
+    /** Card copy (headline / subline / bullets / cta). */
+    copy?: { headline?: string; subline?: string; bullets?: string[]; cta?: string };
+    /** Asset ids referenced by this card. */
+    referencedAssetIds?: string[];
+    /** Card duration in milliseconds. */
+    durationMs?: number;
+  };
+  aigc: {
+    /** Generation prompt (the creative target). */
+    prompt: string;
+    /** Negative prompt (safety guardrail). */
+    negativePrompt?: string;
+    /** Reference asset ids that anchor generation to real material. */
+    referenceAssetIds?: string[];
+    /** Output aspect ratio (e.g. '9:16'). */
+    aspectRatio?: string;
+    /** Expected clip duration in seconds. */
+    expectedDurationSec?: number;
+    /** Suggested generation provider. */
+    providerHint?: string;
+    /** Ownership marker — AIGC is a job-card only, the Director never submits it. */
+    ownership?: string;
+  };
 }
+
+/** The chosen resolution channel persisted by /strategy/apply. */
+export type ResolutionMethod = 'reshoot' | 'hyperframes' | 'aigc';
 
 export interface Diagnosis {
   state: StateKey;
@@ -279,6 +354,12 @@ export interface Diagnosis {
   strategy: string | null;
   /** Present on non-filled slots that offer a fill workbench (s1/s2/s3/s6). */
   fill?: DiagnosisFill;
+  /** The Director Agent's recommended resolution channel for this slot. */
+  recommended?: ResolutionMethod;
+  /** The channel the user actually applied (set by /strategy/apply). */
+  chosenMethod?: ResolutionMethod;
+  /** Opaque payload from /strategy/apply (uploaded asset ref / generated job id). */
+  chosenPayload?: unknown;
 }
 
 // Diagnostic state per slot

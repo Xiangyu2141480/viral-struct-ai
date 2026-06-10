@@ -180,8 +180,8 @@ const LabDirectionA = () => (
           <LabPreview structure={s} />
           <SameMatsBar compact />
           <div className="col" style={{ gap: 4 }}>
-            <LabMetric label="点击 CTR"  value={parseFloat(s.sig.预测点击)} max={12} color={s.color} />
-            <LabMetric label="完播率"    value={parseFloat(s.sig.预测完播)} max={60} color={s.color} />
+            <LabMetric label="点击·示例" value={parseFloat(s.sig.预测点击)} max={12} color={s.color} />
+            <LabMetric label="完播·示例" value={parseFloat(s.sig.预测完播)} max={60} color={s.color} />
           </div>
         </div>
       </div>
@@ -228,8 +228,8 @@ const LabDirectionB = () => (
               <div style={{ display: 'flex', gap: 10, alignItems: 'stretch' }}>
                 <div style={{ width: 64 }}><LabPreview structure={s} /></div>
                 <div className="col" style={{ gap: 4, flex: 1, justifyContent: 'center' }}>
-                  <LabMetric label="CTR"  value={parseFloat(s.sig.预测点击)} max={12} color={s.color} />
-                  <LabMetric label="完播" value={parseFloat(s.sig.预测完播)} max={60} color={s.color} />
+                  <LabMetric label="点击·示例" value={parseFloat(s.sig.预测点击)} max={12} color={s.color} />
+                  <LabMetric label="完播·示例" value={parseFloat(s.sig.预测完播)} max={60} color={s.color} />
                 </div>
               </div>
             </div>
@@ -255,14 +255,19 @@ const LabDirectionB = () => (
             </tr>
           </thead>
           <tbody>
-            {LAB_DIFF_ROWS.map(row => (
-              <tr key={row}>
-                <td className="mono" style={{ color: 'var(--text-mute)' }}>{row}</td>
-                {LAB_STRUCTURES.map(s => (
-                  <td key={s.id} style={{ color: 'var(--text-2)' }}>{s.sig[row] ?? '—'}</td>
-                ))}
-              </tr>
-            ))}
+            {LAB_DIFF_ROWS.map(row => {
+              // Prediction rows are illustrative demo, not genuine model output — label them so.
+              const isDemoMetric = row === '预测点击' || row === '预测完播';
+              const rowLabel = isDemoMetric ? `${row}（示例）` : row;
+              return (
+                <tr key={row}>
+                  <td className="mono" style={{ color: 'var(--text-mute)' }}>{rowLabel}</td>
+                  {LAB_STRUCTURES.map(s => (
+                    <td key={s.id} style={{ color: isDemoMetric ? 'var(--text-mute)' : 'var(--text-2)' }}>{s.sig[row] ?? '—'}</td>
+                  ))}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -315,16 +320,16 @@ const LabDirectionC = () => {
         </div>
       </div>
     )},
-    { key: '预测点击', label: '预测点击', render: (s) => (
+    { key: '预测点击', label: '点击（示例）', render: (s) => (
       <div>
-        <div className="stat-value" style={{ fontSize: 22, color: s.color }}>{s.sig.预测点击}</div>
-        <div className="mono dim" style={{ fontSize: 10 }}>predicted CTR</div>
+        <div className="stat-value" style={{ fontSize: 22, color: 'var(--text-2)' }}>{s.sig.预测点击}</div>
+        <div className="mono dim" style={{ fontSize: 10 }}>示例 · demo, not a real prediction</div>
       </div>
     )},
-    { key: '预测完播', label: '预测完播', render: (s) => (
+    { key: '预测完播', label: '完播（示例）', render: (s) => (
       <div>
-        <div className="stat-value" style={{ fontSize: 22, color: s.color }}>{s.sig.预测完播}</div>
-        <div className="mono dim" style={{ fontSize: 10 }}>predicted finish</div>
+        <div className="stat-value" style={{ fontSize: 22, color: 'var(--text-2)' }}>{s.sig.预测完播}</div>
+        <div className="mono dim" style={{ fontSize: 10 }}>示例 · demo, not a real prediction</div>
       </div>
     )},
   ];
@@ -418,6 +423,22 @@ export const ScreenLab = () => {
         <div className="screen-head-r" style={{ gap: 8 }}>
           <span className="mono">3 structures · 6 fixed assets</span>
         </div>
+      </div>
+
+      {/* Honesty banner — the per-structure numbers are demo, not genuine predictions */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '10px 14px', marginBottom: 14,
+        background: 'var(--st-weakly-bg)', border: '1px solid var(--st-weakly-line)',
+        borderRadius: 8, color: 'var(--text-2)', fontSize: 12,
+      }}>
+        <Icon name="diagnose" size={14} />
+        <span>
+          <b style={{ color: 'var(--st-weakly)' }}>示例对比 · 演示数据（非真实预测）</b>
+          <span style={{ marginLeft: 8, color: 'var(--text-dim)' }}>
+            下方的预测点击 / 预测完播为演示示例，用于展示结构差异，尚未接入真实的预测模型。
+          </span>
+        </span>
       </div>
 
       {/* direction tab strip */}

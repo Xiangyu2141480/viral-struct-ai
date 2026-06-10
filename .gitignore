@@ -41,6 +41,13 @@ seed_assets/analysis/**
 !seed_assets/analysis/macbook_neo/
 !seed_assets/analysis/macbook_neo/structure_graph.json
 
+# AIGC (Wan2.7 / DashScope) generated-clip cache & work dirs. Covered by tmp/ above,
+# but anchored explicitly in case they move out of tmp/ (runner uses tmp/aigc_beats; docs §13 uses tmp/wan_cache).
+wan_cache/
+aigc_beats/
+**/wan_cache/
+**/aigc_beats/
+
 # Build and cache artifacts
 .tmp/
 .turbo/
@@ -72,3 +79,6 @@ scripts/_dump_demo.py
 # Root-anchored: seed/product images under seed_assets/ are unaffected.
 /*.png
 .playwright-mcp/
+
+# user-saved structures (结构样例库 persistence — runtime data, not seed)
+seed_assets/struct_library/

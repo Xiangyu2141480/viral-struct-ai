@@ -141,7 +141,7 @@ async function main(): Promise<void> {
     contentBrief,
     categoryPreset,
     options: {
-      useLlmMatcher: true,
+      useLlmMatcher: process.env.DIRECTOR_LLM_MATCHER === 'true',
       targetDurationMode: productIntelligence.targetDurationRecommendation.preferred,
       structuralCompression: useCompression ? { productIntelligence } : undefined,
       sourceBannedTerms
@@ -173,8 +173,11 @@ async function main(): Promise<void> {
   const counts = countFills(timeline);
   console.log('Director Agent orchestrated-timeline manual test complete.');
   console.log(
-    `- slots=${timeline.slots.length} fullySatisfied=${counts.fullySatisfied}`
-    + ` partial=${counts.partialWithEnhancement} generationRequired=${counts.generationRequired}`
+    `- slots=${timeline.slots.length} directMatched=${counts.directMatched}`
+    + ` partialAssetSupport=${counts.partialAssetSupport}`
+    + ` hyperframesEnhancementRequired=${counts.hyperframesEnhancementRequired}`
+    + ` targetEquivalentRewriteRequired=${counts.targetEquivalentRewriteRequired}`
+    + ` missingGenerationRequired=${counts.missingGenerationRequired}`
   );
   console.log(`- fillStatus=${JSON.stringify(counts.byStatus)}`);
   console.log(`- duration=${timeline.meta.sourceDurationMs ?? '-'}ms -> ${timeline.meta.targetDurationMs ?? '-'}ms (${timeline.meta.targetDurationMode ?? '-'})`);
@@ -245,18 +248,30 @@ function checkSourceLeakage(timeline: OrchestratedTimeline, sourceBannedTerms: r
 }
 
 function countFills(timeline: OrchestratedTimeline) {
-  let fullySatisfied = 0;
-  let partialWithEnhancement = 0;
-  let generationRequired = 0;
+  let directMatched = 0;
+  let partialAssetSupport = 0;
+  let hyperframesEnhancementRequired = 0;
+  let targetEquivalentRewriteRequired = 0;
+  let missingGenerationRequired = 0;
   const byStatus: Record<string, number> = {};
   for (const slot of timeline.slots) {
     const status = slot.fillStatus ?? (slot.fill.kind === 'gap' ? 'missing_generation_required' : slot.fill.status);
     byStatus[status] = (byStatus[status] ?? 0) + 1;
-    if (status === 'matched') fullySatisfied += 1;
-    else if (status === 'missing_generation_required') generationRequired += 1;
-    else partialWithEnhancement += 1;
+    if (status === 'matched') directMatched += 1;
+    else if (status === 'partial_asset_support') partialAssetSupport += 1;
+    else if (status === 'needs_hyperframes_enhancement') hyperframesEnhancementRequired += 1;
+    else if (status === 'source_specific_not_transferable') targetEquivalentRewriteRequired += 1;
+    else if (status === 'missing_generation_required') missingGenerationRequired += 1;
+    else partialAssetSupport += 1;
   }
-  return { fullySatisfied, partialWithEnhancement, generationRequired, byStatus };
+  return {
+    directMatched,
+    partialAssetSupport,
+    hyperframesEnhancementRequired,
+    targetEquivalentRewriteRequired,
+    missingGenerationRequired,
+    byStatus
+  };
 }
 
 function countModes(timeline: OrchestratedTimeline): Record<string, number> {
@@ -284,30 +299,37 @@ function buildReport(
   const counts = countFills(timeline);
   const modes = countModes(timeline);
   const optionSlots = timeline.slots.filter((s) => (s.fill.kind === 'gap' ? s.fill.options : s.fill.options)?.length);
-  const aigcOptionSlots = timeline.slots.filter((s) => ((s.fill.kind === 'gap' ? s.fill.options : s.fill.options) ?? []).some((option) => option.id === 'aigc'));
+  const aigcOptionSlots = timeline.slots.filter((s) => getOptions(s).some((option) => option.id === 'aigc'));
+  const requiredAigcSlots = timeline.slots.filter((s) =>
+    (s.fillStatus === 'missing_generation_required' || s.fill.kind === 'gap')
+    && getOptions(s).some((option) => option.id === 'aigc')
+  );
+  const optionalAigcSlots = timeline.slots.filter((s) =>
+    s.fillStatus !== 'missing_generation_required'
+    && s.fill.kind !== 'gap'
+    && getOptions(s).some((option) => option.id === 'aigc')
+  );
+  const transitionAigcBridgeCards = timeline.transitions.filter((t) => t.mode === 'aigc_frame_bridge' && t.aigcFrameBridge).length;
   const realMediaReferenced = timeline.slots.filter((slot) => slot.fill.kind === 'matched' && Boolean(slot.fill.assetId)).length;
-  const fullySatisfied = timeline.slots.filter((slot) => slot.fillStatus === 'matched').length;
-  const partialWithEnhancement = timeline.slots.filter((slot) =>
-    slot.fillStatus === 'partial_asset_support'
-    || slot.fillStatus === 'needs_hyperframes_enhancement'
-    || slot.fillStatus === 'source_specific_not_transferable'
-  ).length;
-  const generationRequired = timeline.slots.filter((slot) => slot.fillStatus === 'missing_generation_required' || slot.fill.kind === 'gap').length;
+  const directMediaBeats = realMediaReferenced;
   const motifSlots = timeline.slots.filter((slot) => slot.motifType || slot.slotId.includes('slot_block_004'));
   const sourceSpecificSlots = timeline.slots.filter((slot) => slot.fillStatus === 'source_specific_not_transferable');
 
   const jobCards: string[][] = [];
   for (const slot of timeline.slots) {
-    const options = slot.fill.kind === 'gap' ? slot.fill.options : slot.fill.options ?? [];
+    const options = getOptions(slot);
     for (const option of options) {
       if (option.id === 'aigc') {
-        jobCards.push([slot.slotId, 'aigc', option.providerHint, option.ownership]);
+        const requirement = (slot.fillStatus === 'missing_generation_required' || slot.fill.kind === 'gap')
+          ? 'required for unplanned gap'
+          : 'optional alternative';
+        jobCards.push([slot.slotId, requirement, 'aigc', option.providerHint, option.ownership]);
       }
     }
   }
   for (const transition of timeline.transitions) {
     if (transition.mode === 'aigc_frame_bridge' && transition.aigcFrameBridge) {
-      jobCards.push([`${transition.fromSlotId}→${transition.toSlotId}`, 'aigc_frame_bridge', '-', transition.aigcFrameBridge.ownership]);
+      jobCards.push([`${transition.fromSlotId}→${transition.toSlotId}`, 'optional transition bridge', 'aigc_frame_bridge', '-', transition.aigcFrameBridge.ownership]);
     }
   }
 
@@ -327,17 +349,22 @@ function buildReport(
         ['plan only', String(timeline.meta.planOnly)],
         ['duration compression', `${timeline.meta.sourceDurationMs ?? '-'}ms -> ${timeline.meta.targetDurationMs ?? '-'}ms (${timeline.meta.targetDurationMode ?? '-'})`],
         ['fillStatus breakdown', JSON.stringify(counts.byStatus)],
-        ['real media referenced', `${realMediaReferenced} / ${timeline.slots.length}`],
-        ['fully satisfied slots', `${fullySatisfied} / ${timeline.slots.length}`],
-        ['partial with enhancement', `${partialWithEnhancement} / ${timeline.slots.length}`],
-        ['generation required', `${generationRequired} / ${timeline.slots.length}`],
+        ['direct matched slots', `${counts.directMatched} / ${timeline.slots.length}`],
+        ['direct media beats', `${directMediaBeats} / ${timeline.slots.length} (includes partial media bases; not equal to fully satisfied slots)`],
+        ['partial asset support', `${counts.partialAssetSupport} / ${timeline.slots.length}`],
+        ['HyperFrames enhancement required', `${counts.hyperframesEnhancementRequired} / ${timeline.slots.length}`],
+        ['target equivalent rewrite required', `${counts.targetEquivalentRewriteRequired} / ${timeline.slots.length}`],
+        ['missing generation required', `${counts.missingGenerationRequired} / ${timeline.slots.length}`],
         ['transitions', `${timeline.transitions.length} ${JSON.stringify(modes)}`],
-        ['matched / partial / gap', `${fullySatisfied} / ${partialWithEnhancement} / ${generationRequired}`],
+        ['matched / partial / gap wording', `${counts.directMatched} real-asset-primary / ${counts.partialAssetSupport + counts.hyperframesEnhancementRequired + counts.targetEquivalentRewriteRequired} real-asset-plus-enhancement / ${counts.missingGenerationRequired} plan-only gap`],
         ['transition function counts', JSON.stringify(countTransitionFunctions(timeline))],
         ['prompt diversity', JSON.stringify(promptDiversity(timeline))],
         ['reusable asset packs', `${timeline.reusableAssetPacks?.length ?? 0}`],
         ['slots with resolution options', String(optionSlots.length)],
-        ['AIGC job-card slots', String(aigcOptionSlots.length)],
+        ['AIGC job-card slots (total)', String(aigcOptionSlots.length)],
+        ['AIGC required for missing slots', String(requiredAigcSlots.length)],
+        ['AIGC optional alternatives', String(optionalAigcSlots.length)],
+        ['AIGC transition bridge cards', String(transitionAigcBridgeCards)],
         ['authored handoff beats', `${authored.beats.length} timeline beats, not rendered`],
         ['source leakage check', leakage.passed ? 'PASS' : `FAIL (${leakage.hits.join(', ')})`]
       ]
@@ -357,7 +384,6 @@ function buildReport(
         ['sensory cues', productIntelligence.sensoryCues.map((f) => f.value).join(' / ')],
         ['usage rituals', productIntelligence.usageRituals.map((f) => f.value).join(' / ')],
         ['social contexts', productIntelligence.socialContexts.map((f) => f.value).join(' / ')],
-        ['forbidden claims', productIntelligence.forbiddenClaims.map((c) => c.risk).join(', ')],
         ['recommended duration', `${productIntelligence.targetDurationRecommendation.preferred} (${productIntelligence.targetDurationRecommendation.reason})`],
         ['analysis source', productIntelligence.analysisSource]
       ]
@@ -373,7 +399,7 @@ function buildReport(
           timeline.slots.map((slot, i) => {
             const b = slot.compressionBeat;
             return b
-              ? [String(i), b.beatId, b.preservedStructureFunction, b.targetEquivalentFamily, b.compressionDecision, String(b.mergedSourceSlotIds.length), b.targetEquivalentBeat.slice(0, 80)]
+              ? [String(i), b.beatId, b.preservedStructureFunction, b.targetEquivalentFamily, b.compressionDecision, String(b.mergedSourceSlotIds.length), b.targetEquivalentBeat]
               : [String(i), '-', '-', '-', 'legacy_1to1', '1', '-'];
           })
         )
@@ -438,6 +464,19 @@ function buildReport(
       ])
     ),
     '',
+    '### Fill Status Wording',
+    '',
+    markdownTable(
+      ['status', 'plain meaning in this report'],
+      [
+        ['matched', 'real asset primary: the beat can use a real matched asset as the main media base.'],
+        ['partial_asset_support', 'real asset + enhancement needed: existing media supports part of the beat but still needs card/subtitle/editing support.'],
+        ['needs_hyperframes_enhancement', 'real asset + HyperFrames enhancement needed: keep the real asset, add motion/card/editing guidance.'],
+        ['source_specific_not_transferable', 'target equivalent rewrite required: source-specific idea must be rewritten into the target category before execution.'],
+        ['missing_generation_required', 'no planned media base: requires reshoot/AIGC/HyperFrames plan-only option before it can be executed.']
+      ]
+    ),
+    '',
     '## 6. Motif Transfer Samples',
     '',
     motifSlots.length
@@ -447,7 +486,7 @@ function buildReport(
             slot.slotId,
             slot.motifType ?? '-',
             slot.fillStatus ?? '-',
-            firstOptionText(slot).slice(0, 180)
+            firstOptionText(slot)
           ])
         )
       : '_No motif slots detected._',
@@ -460,7 +499,7 @@ function buildReport(
             slot.role,
             slot.fillStatus ?? '-',
             slot.sourceAbstraction?.subtype ?? '-',
-            slot.sourceAbstraction?.targetEquivalentLabel ?? firstOptionText(slot).slice(0, 120)
+            slot.sourceAbstraction?.targetEquivalentLabel ?? firstOptionText(slot)
           ])
         )
       : '_No source-specific slots were downgraded._',
@@ -530,13 +569,45 @@ function buildReport(
     '## 8. Transition Plan',
     '',
     markdownTable(
-      ['id', 'from → to', 'function', 'mode', '中文剪辑指导'],
+      [
+        'id',
+        'from → to',
+        'function',
+        'mode',
+        'implementationMode',
+        'assetSupport',
+        'confidence',
+        'whyThisMode',
+        'whyNot',
+        'missingTransitionAssets',
+        'visualAction',
+        'fallbackStrategy'
+      ],
       timeline.transitions.map((t) => [
         t.id,
         `${t.fromSlotId} → ${t.toSlotId}`,
         t.transitionFunction ?? '-',
         t.mode,
-        t.hyperframes?.editingGuidanceNL ?? t.aigcFrameBridge?.prompt ?? t.reason
+        t.implementationMode ?? t.preferredImplementation,
+        t.assetSupport ?? '-',
+        t.confidence !== undefined ? t.confidence.toFixed(2) : '-',
+        t.whyThisMode ?? t.reason,
+        (t.whyNot ?? []).join('；') || '-',
+        (t.missingTransitionAssets ?? t.missingAssets ?? []).join('；') || '-',
+        t.visualAction ?? t.hyperframes?.editingGuidanceNL ?? t.aigcFrameBridge?.prompt ?? t.reason,
+        t.fallbackStrategy ?? '-'
+      ])
+    ),
+    '',
+    '### HyperFrames Justification',
+    '',
+    markdownTable(
+      ['transition', 'mode', 'assetSupport', 'why HyperFrames / why not AIGC'],
+      timeline.transitions.map((t) => [
+        `${t.fromSlotId} → ${t.toSlotId}`,
+        t.implementationMode ?? t.mode,
+        t.assetSupport ?? '-',
+        [t.whyThisMode, ...(t.whyNot ?? [])].filter(Boolean).join('；')
       ])
     ),
     '',
@@ -559,27 +630,38 @@ function buildReport(
     '',
     '```',
     'OrchestratedTimeline → orchestratedToAuthored → AuthoredTimeline',
-    `beats=${authored.beats.length}  realMediaReferenced=${realMediaReferenced}  fullySatisfied=${fullySatisfied}  partialWithEnhancement=${partialWithEnhancement}  generationRequired=${generationRequired}`,
+    `beats=${authored.beats.length}  directMediaBeats=${directMediaBeats}  directMatched=${counts.directMatched}  partialAssetSupport=${counts.partialAssetSupport}  hyperframesEnhancementRequired=${counts.hyperframesEnhancementRequired}  targetEquivalentRewriteRequired=${counts.targetEquivalentRewriteRequired}  missingGenerationRequired=${counts.missingGenerationRequired}`,
     'Director delivers this timeline; rendering (renderAuthoredTimeline) is the Video Agent\'s job, run separately.',
     '```',
+    '',
+    '## AIGC Required vs Optional',
+    '',
+    markdownTable(
+      ['bucket', 'count', 'meaning'],
+      [
+        ['required missing slot job cards', String(requiredAigcSlots.length), 'Only slots with missing_generation_required / gap.'],
+        ['optional slot alternatives', String(optionalAigcSlots.length), 'Available as alternatives, not proof that the current beat lacks media.'],
+        ['optional transition bridge cards', String(transitionAigcBridgeCards), 'Frame-bridge handoff only; no external call is made.']
+      ]
+    ),
     '',
     '## External job cards (plan-only; no external model called)',
     '',
     jobCards.length
-      ? markdownTable(['target', 'kind', 'provider', 'ownership'], jobCards)
+      ? markdownTable(['target', 'requirement', 'kind', 'provider', 'ownership'], jobCards)
       : '_No external generation job cards in this run._',
     '',
-    `## 10. Safety / Boundary`,
+    `## 10. Execution Boundary`,
     '',
     '- 仅计划 / 仅任务卡。',
-    '- 未调用外部生成模型。',
-    '- 未声称真实音频生成。',
-    '- 未伪造真实 CTR。',
-    '- 不把 source-specific rejectIf 当成目标品类 hard gate。',
-    `- Source leakage check: ${leakage.passed ? 'PASS' : 'FAIL'}`,
+    '- 没有执行外部生成模型。',
+    '- 没有生成真实音频。',
+    '- 没有使用真实 CTR。',
+    '- 源片专属 rejectIf 不作为目标品类硬拒绝条件。',
+    `- 源片词泄漏检查: ${leakage.passed ? 'PASS' : 'FAIL'}`,
     leakage.passed
-      ? '- No source-product-specific term leaked into positive target prompts.'
-      : `- Leaked terms: ${leakage.hits.join(', ')}`
+      ? '- 正向目标 prompt 未出现源产品专属词。'
+      : `- 命中词: ${leakage.hits.join(', ')}`
   ].join('\n');
 
   function findSourceSlot(slotId: string): ViralStructureGraph['shotSlots'][number] | undefined {
@@ -588,9 +670,13 @@ function buildReport(
 }
 
 function describeOption(option: GapResolutionOption): string {
-  if (option.id === 'reshoot') return option.guidanceNL.slice(0, 160);
-  if (option.id === 'hyperframes') return option.editingGuidanceNL.slice(0, 160);
-  return `[${option.providerHint}] ${option.prompt.slice(0, 160)}`;
+  if (option.id === 'reshoot') return option.guidanceNL;
+  if (option.id === 'hyperframes') return option.editingGuidanceNL;
+  return `[${option.providerHint}] ${option.prompt}`;
+}
+
+function getOptions(slot: OrchestratedTimeline['slots'][number]): GapResolutionOption[] {
+  return slot.fill.kind === 'gap' ? slot.fill.options : slot.fill.options ?? [];
 }
 
 /** Full (untruncated) option text for the per-slot detail table — fixes the aigc-prompt-cut-off issue. */
@@ -601,7 +687,7 @@ function describeOptionFull(option: GapResolutionOption): string {
 }
 
 function firstOptionText(slot: OrchestratedTimeline['slots'][number]): string {
-  const options = slot.fill.kind === 'gap' ? slot.fill.options : slot.fill.options ?? [];
+  const options = getOptions(slot);
   const option = options[0];
   return option ? describeOption(option) : slot.fill.videoEngineInstruction;
 }
@@ -640,7 +726,7 @@ function thresholdNearCases(timeline: OrchestratedTimeline): string[][] {
         slot.fill.evidence.matchedIngredients.length || slot.fill.evidence.coverageStatus ? 'weak-or-better' : 'none',
         oldStatus,
         newStatus,
-        slot.fill.videoEngineInstruction.slice(0, 90)
+        slot.fill.videoEngineInstruction
       ];
     });
 }
@@ -648,7 +734,7 @@ function thresholdNearCases(timeline: OrchestratedTimeline): string[][] {
 function promptDiversity(timeline: OrchestratedTimeline): Record<string, { total: number; unique: number; duplicateGroups: string[] }> {
   const grouped: Record<string, string[]> = { reshoot: [], hyperframes: [], aigc: [] };
   for (const slot of timeline.slots) {
-    const options = slot.fill.kind === 'gap' ? slot.fill.options : slot.fill.options ?? [];
+    const options = getOptions(slot);
     for (const option of options) {
       if (option.id === 'reshoot') grouped.reshoot.push(option.guidanceNL);
       if (option.id === 'hyperframes') grouped.hyperframes.push(option.editingGuidanceNL);
@@ -702,7 +788,18 @@ function writeText(relativePath: string, value: string): void {
 
 if (process.argv[1] && existsSync(process.argv[1]) && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main().catch((error) => {
-    console.error(error);
+    console.error(formatUnknownError(error));
     process.exitCode = 1;
   });
+}
+
+function formatUnknownError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.stack ?? error.message;
+  }
+  try {
+    return `Non-Error thrown: ${JSON.stringify(error)}`;
+  } catch {
+    return `Non-Error thrown: ${String(error)}`;
+  }
 }

@@ -25,6 +25,8 @@ export const AbstractStructureBand = ({
   onSegHover,
   onSegClick,
   selectedId,
+  scannedIds,
+  scanningIds,
   height = 64,
 }: {
   segments: Seg[];
@@ -32,6 +34,8 @@ export const AbstractStructureBand = ({
   onSegHover?: (seg: Seg) => void;
   onSegClick?: (seg: Seg) => void;
   selectedId?: string;
+  scannedIds?: Set<string>;
+  scanningIds?: Set<string>;
   height?: number;
 }) =>
 <div className="sband abstract" style={{ height }}>
@@ -39,6 +43,8 @@ export const AbstractStructureBand = ({
     const dur = seg.end !== undefined ? seg.end - (seg.start ?? 0) : (seg.dur ?? 0);
     const w = dur / total * 100;
     const isSel = selectedId !== undefined && seg.id === selectedId;
+    const isScanned = seg.id !== undefined && (scannedIds?.has(seg.id) ?? false);
+    const isScanning = seg.id !== undefined && (scanningIds?.has(seg.id) ?? false);
     return (
       <div
         key={seg.id || i}
@@ -49,11 +55,22 @@ export const AbstractStructureBand = ({
           outline: isSel ? '2px solid var(--accent)' : undefined,
           outlineOffset: isSel ? '-2px' : undefined,
           zIndex: isSel ? 2 : undefined,
+          position: 'relative',
         }}
         onMouseEnter={() => onSegHover && onSegHover(seg)}
         onClick={() => onSegClick && onSegClick(seg)}
-        title={`${ROLES[seg.role]?.code} · ${ROLES[seg.role]?.name} · ${dur.toFixed(1)}s（点击查看明细）`}>
+        title={`${ROLES[seg.role]?.code} · ${ROLES[seg.role]?.name} · ${dur.toFixed(1)}s${isScanned ? ' · 已精扫描' : isScanning ? ' · 精扫描中…' : ''}（点击查看明细）`}>
 
+          {(isScanned || isScanning) &&
+        <span
+          title={isScanning ? '精扫描中…' : '已精扫描（点击查看明细）'}
+          style={{
+            position: 'absolute', top: 2, right: 2, zIndex: 3,
+            fontSize: 9, lineHeight: 1, fontWeight: 800,
+            padding: '1px 3px', borderRadius: 3,
+            background: isScanning ? 'var(--accent)' : '#2ecc71', color: '#06231a',
+          }}>{isScanning ? '⟳' : '✓'}</span>
+        }
           <span className="sband-abs-meta top">
             {String(i + 1).padStart(2, '0')} · {ROLES[seg.role]?.code || seg.role.toUpperCase()}
           </span>
@@ -522,93 +539,6 @@ export const DiagnosticRadar = ({
 
       })}
     </svg>);
-
-};
-
-/* ============================================================
-   ISSUE 3b · GapHeatmap — 槽位 × 维度 二维缺口热力
-   ============================================================ */
-
-const HEATMAP_DIMS = [
-{ key: 'visual', label: '视觉' },
-{ key: 'caption', label: '字幕' },
-{ key: 'rhythm', label: '节奏' },
-{ key: 'anchor', label: '锚点' },
-{ key: 'social', label: '证言' }];
-
-
-// Hand-tuned satisfaction matrix derived from SLOT_DIAGNOSIS narrative
-const HEATMAP_MATRIX: Record<string, Record<string, number>> = {
-  s1: { visual: 0.2, caption: 0.5, rhythm: 0.5, anchor: 0.4, social: 0.0 },
-  s2: { visual: 0.0, caption: 0.3, rhythm: 0.2, anchor: 0.2, social: 0.0 },
-  s3: { visual: 0.4, caption: 0.8, rhythm: 0.6, anchor: 0.5, social: 0.0 },
-  s4: { visual: 1.0, caption: 0.9, rhythm: 0.9, anchor: 1.0, social: 0.4 },
-  s5: { visual: 0.8, caption: 0.7, rhythm: 0.8, anchor: 1.0, social: 0.6 },
-  s6: { visual: 0.4, caption: 0.3, rhythm: 0.6, anchor: 0.4, social: 0.5 },
-  s7: { visual: 1.0, caption: 0.7, rhythm: 1.0, anchor: 0.9, social: 0.5 }
-};
-
-export const GapHeatmap = ({
-  selected,
-  onSelect,
-}: {
-  selected?: string;
-  onSelect?: (id: string) => void;
-}) => {
-  const segs = useProjectStore((s) => s.sourceVideo.segments);
-  const cellColor = (v: number) => {
-    if (v >= 0.8) return 'var(--st-filled)';
-    if (v >= 0.5) return 'var(--st-weakly)';
-    if (v >= 0.25) return 'var(--st-missing)';
-    return 'var(--st-critical)';
-  };
-  return (
-    <div className="heatmap">
-      <div className="heatmap-grid" style={{
-        gridTemplateColumns: `90px repeat(${HEATMAP_DIMS.length}, 1fr)`
-      }}>
-        <div className="heatmap-corner">
-          <span className="eyebrow">槽位 ↓ / 维度 →</span>
-        </div>
-        {HEATMAP_DIMS.map((d) =>
-        <div key={d.key} className="heatmap-colhead">
-            <span style={{ fontSize: 11, color: 'var(--text-2)' }}>{d.label}</span>
-          </div>
-        )}
-        {segs.map((s) => {
-          const isSel = selected === s.id;
-          return (
-            <Fragment key={s.id}>
-              <div
-                className={`heatmap-rowhead ${isSel ? 'sel' : ''}`}
-                onClick={() => onSelect && onSelect(s.id)}>
-
-                <span className={`role-dot role-${s.role}`} />
-                <span className="mono" style={{ fontSize: 10, color: 'var(--text-mute)' }}>{s.id}</span>
-                <span style={{ fontSize: 11, color: 'var(--text)' }}>{s.label}</span>
-              </div>
-              {HEATMAP_DIMS.map((d) => {
-                const v = HEATMAP_MATRIX[s.id]?.[d.key] ?? 0;
-                const c = cellColor(v);
-                return (
-                  <div
-                    key={d.key}
-                    className={`heatmap-cell ${isSel ? 'sel' : ''}`}
-                    onClick={() => onSelect && onSelect(s.id)}
-                    style={{
-                      background: c,
-                      opacity: 0.18 + v * 0.65
-                    }}>
-
-                    <span className="heatmap-cell-val">{Math.round(v * 100)}</span>
-                  </div>);
-
-              })}
-            </Fragment>);
-
-        })}
-      </div>
-    </div>);
 
 };
 

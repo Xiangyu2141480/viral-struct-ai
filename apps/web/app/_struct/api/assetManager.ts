@@ -175,16 +175,23 @@ function materialToAssetCard(material: Material, sourceVideo: SourceVideo, produ
   const primaryRole = assignedSegment ? mapStructRoleToShotSlotRole(assignedSegment.role) : inferRoleFromMaterial(material);
   const suitableSlots = Array.from(new Set([primaryRole, inferRoleFromMaterial(material)].filter(Boolean))) as ShotSlotRole[];
   const description = [material.subject, assignedSegment?.label, product.name, product.category].filter(Boolean).join(' · ');
-  return {
+  // Mirror the server-side fix (structAdapter.ts materialToAssetCard): map all
+  // three kinds, carry the real url, and re-emit clip provenance so the coverage
+  // panel stays clip-aware.
+  const cardType: AssetCard['type'] = material.kind === 'video' ? 'video' : material.kind === 'photo' ? 'image' : 'text';
+  const isVisual = material.kind === 'photo' || material.kind === 'video';
+  const card: AssetCard = {
     id: material.id,
-    type: material.kind === 'photo' ? 'image' : 'text',
+    type: cardType,
+    // Round-trip the real file/asset url so the coverage panel resolves real clips.
+    url: material.url,
     text: material.kind === 'text' ? material.subject : undefined,
-    spatialDescription: material.kind === 'photo' ? description : undefined,
+    spatialDescription: isVisual ? description : undefined,
     detectedObjects: tokenizeSubject(material.subject),
     suitableSlots,
     qualityScore: clamp01(material.quality),
     detectedIngredients: ingredientsForMaterial(material, primaryRole),
-    visualStyleTags: material.kind === 'photo' ? ['clean_background', 'premium_visual'] : ['professional_review'],
+    visualStyleTags: isVisual ? ['clean_background', 'premium_visual'] : ['professional_review'],
     candidateSlotRoles: suitableSlots.map((role) => ({
       role,
       confidence: clamp01(material.quality),
@@ -192,6 +199,22 @@ function materialToAssetCard(material: Material, sourceVideo: SourceVideo, produ
     })),
     analysisSource: 'deterministic',
   };
+  // Re-emit clip provenance when this Material was a sliced video segment, so the
+  // Material → AssetCard round-trip preserves segmentSource (real-clip resolution).
+  if (material.parentAssetId !== undefined && material.segmentIndex !== undefined) {
+    card.segmentSource = {
+      parentAssetId: material.parentAssetId,
+      startSec: material.startSec ?? 0,
+      endSec: material.endSec ?? material.startSec ?? 0,
+      durationSec: material.durationSec ?? Math.max(0, (material.endSec ?? 0) - (material.startSec ?? 0)),
+      segmentIndex: material.segmentIndex,
+      label: material.label ?? material.subject,
+      roleHints: (material.roleHints as ShotSlotRole[] | undefined) ?? suitableSlots,
+      actionTags: [],
+      source: material.source ?? 'deterministic',
+    };
+  }
+  return card;
 }
 
 function inferRoleFromMaterial(material: Material): ShotSlotRole {

@@ -161,13 +161,16 @@ export const SlotFillMatchedSchema = z
     missingCriteria: z.array(z.string()).optional(),
     treatmentSpec: OrchestratedTreatmentSpecSchema.optional(),
     status: z.enum(['matched', 'partial']),
+    mediaStartSec: z.number().min(0).optional(),
+    mediaEndSec: z.number().min(0).optional(),
     videoEngineInstruction: z.string(),
     /** partial slots carry asset-preserving options; true gaps may also carry an AIGC job card. */
     options: z.array(GapResolutionOptionSchema).optional(),
     recommendedOptionId: GapResolutionOptionIdSchema.optional(),
     evidence: OrchestratedSlotEvidenceSchema
   })
-  .strict();
+  .strict()
+  ;
 export type SlotFillMatched = z.infer<typeof SlotFillMatchedSchema>;
 
 export const SlotFillGapSchema = z
@@ -281,6 +284,15 @@ export const OrchestratedTransitionSchema = z
     fromSlotId: z.string(),
     toSlotId: z.string(),
     mode: OrchestratedTransitionModeSchema,
+    /** Evidence-aware planner fields. Optional for backward-compatible old fixtures. */
+    implementationMode: z.string().optional(),
+    assetSupport: z.string().optional(),
+    confidence: z.number().min(0).max(1).optional(),
+    whyThisMode: z.string().optional(),
+    whyNot: z.array(z.string()).optional(),
+    missingTransitionAssets: z.array(z.string()).optional(),
+    visualAction: z.string().optional(),
+    fallbackStrategy: z.string().optional(),
     transitionFunction: z.string().optional(),
     preferredImplementation: z.enum(['hyperframes', 'video_engine', 'external_generation']),
     reason: z.string(),

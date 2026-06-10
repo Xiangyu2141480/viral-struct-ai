@@ -227,10 +227,27 @@ function applyVlmProfile(asset: AssetCard, vlm: AssetVlmAnalysisProfile): AssetC
   const claimWarnings = detectUnsupportedClaims(vlm);
   const summary = claimWarnings.length ? analysis.semantic.summary : vlm.shortCaption;
   const mappedSlots = vlm.suggestedRoles.flatMap(mapAssetManagerRoleToShotSlotRole);
+  const vlmConfidence = Number((vlm.productVisibilityScore / 100).toFixed(3));
+  const candidateSlotRoles = mergeCandidateSlotRoles(asset.candidateSlotRoles ?? [], mappedSlots, vlmConfidence);
+  const currentSegmentRoles = asset.segmentSource?.roleHints ?? [];
+  const currentSegmentConfidence = asset.segmentSource?.confidence ?? 0;
+  const currentSegmentWarnings = asset.segmentSource?.warnings ?? [];
+  const segmentSource = asset.segmentSource
+    ? {
+        ...asset.segmentSource,
+        label: summary,
+        visualSummary: summary,
+        roleHints: mappedSlots.length ? uniqueRoles([...currentSegmentRoles, ...mappedSlots]) : currentSegmentRoles,
+        confidence: Math.max(currentSegmentConfidence, vlmConfidence),
+        warnings: uniqueStrings([...currentSegmentWarnings, ...claimWarnings, ...vlm.risks])
+      }
+    : asset.segmentSource;
   const enriched: AssetCard = {
     ...asset,
     detectedObjects: uniqueStrings([...asset.detectedObjects, ...vlm.detectedObjects]),
     suitableSlots: uniqueRoles([...asset.suitableSlots, ...mappedSlots]),
+    candidateSlotRoles,
+    segmentSource,
     analysis: {
       ...analysis,
       warnings: uniqueStrings([...analysis.warnings, ...claimWarnings]),
@@ -318,6 +335,28 @@ function mapAssetManagerRoleToShotSlotRole(role: AssetManagerRole): ShotSlotRole
     cover: ['opening_attention', 'cta_visual']
   };
   return map[role];
+}
+
+function mergeCandidateSlotRoles(
+  existing: NonNullable<AssetCard['candidateSlotRoles']>,
+  mappedSlots: ShotSlotRole[],
+  confidence: number
+): NonNullable<AssetCard['candidateSlotRoles']> {
+  const byRole = new Map<ShotSlotRole, { role: ShotSlotRole; confidence: number; caveat?: string }>();
+  for (const entry of existing) {
+    byRole.set(entry.role, entry);
+  }
+  for (const role of mappedSlots) {
+    const current = byRole.get(role);
+    if (!current || current.confidence < confidence) {
+      byRole.set(role, {
+        role,
+        confidence,
+        caveat: 'Optional VLM evidence; visible-evidence-only analysis.'
+      });
+    }
+  }
+  return Array.from(byRole.values());
 }
 
 function isSupportedImagePath(filePath: string): boolean {

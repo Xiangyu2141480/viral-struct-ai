@@ -9,6 +9,7 @@ import type {
   CompileVersion,
   Diagnosis,
   Material,
+  ResolutionMethod,
   SourceVideo,
   TargetProduct,
 } from '../data';
@@ -54,10 +55,16 @@ export interface ApplyStrategyRequest {
   sourceVideo: SourceVideo;
   materials: Material[];
   diagnosis: Record<string, Diagnosis>;
+  /** Which resolution channel to apply. Omit → backend uses recommended/strategy. */
+  method?: ResolutionMethod;
+  /** Opaque payload (uploaded asset ref / generated job id) for the chosen method. */
+  payload?: unknown;
 }
 export interface ApplyStrategyResponse {
   diagnosis: Record<string, Diagnosis>;
   appliedSlots: string[];
+  /** The channel the backend actually applied. */
+  method?: ResolutionMethod;
   warnings?: string[];
 }
 
@@ -113,4 +120,27 @@ export interface ExportResult {
   progress: number;
   downloadUrl?: string;
   warnings?: string[];
+}
+
+/** POST /api/struct/produce — kick off the REAL AIGC produce (Wan2.7). */
+export interface ProduceRequest {
+  sourceVideo: SourceVideo;
+  materials: Material[];
+  product?: TargetProduct;
+  /** Product reference image url (an uploaded image material's url). */
+  productImageUrl?: string;
+  versionId?: string;
+}
+/** POST /api/struct/produce → 202 { jobId }. */
+export interface ProduceStartResponse {
+  jobId: string;
+}
+/** GET /api/struct/produce/:jobId — poll until status==='done'|'error'. */
+export interface ProduceStatus {
+  status: 'running' | 'done' | 'error';
+  stage?: string;
+  downloadUrl?: string;
+  warnings?: string[];
+  error?: string;
+  elapsedSec?: number;
 }

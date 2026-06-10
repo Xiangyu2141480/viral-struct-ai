@@ -9,7 +9,7 @@
 // scan can reuse the raw rough output + the same dir for clips.
 
 import { spawn } from 'node:child_process';
-import { mkdir, readFile } from 'node:fs/promises';
+import { mkdir, readFile, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -111,10 +111,42 @@ export async function runRoughScan(
   // 1) Preprocess → 5fps / 720w preview (what rough_scan.py expects).
   onProgress?.('预处理视频（5fps 预览）');
   const preview = path.join(workDir, 'preview.mp4');
-  await runScanCommand(ffmpeg, ['-y', '-i', videoPath, '-vf', 'fps=5,scale=720:-2', '-an', preview], {
-    timeoutMs: 120_000,
-    label: 'ffmpeg preprocess',
-  });
+  await runScanCommand(
+    ffmpeg,
+    [
+      '-y',
+      '-i',
+      videoPath,
+      '-vf',
+      'fps=5,scale=720:-2',
+      '-an',
+      '-c:v',
+      'libx264',
+      '-crf',
+      '30',
+      '-preset',
+      'veryfast',
+      '-pix_fmt',
+      'yuv420p',
+      preview,
+    ],
+    {
+      timeoutMs: 120_000,
+      label: 'ffmpeg preprocess',
+    }
+  );
+
+  // Honest size check: an oversized preview makes the upload slow/flaky. Surface it.
+  const PREVIEW_SIZE_WARN_BYTES = 8 * 1024 * 1024;
+  try {
+    const previewBytes = (await stat(preview)).size;
+    if (previewBytes > PREVIEW_SIZE_WARN_BYTES) {
+      const mb = (previewBytes / (1024 * 1024)).toFixed(1);
+      warnings.push(`预览体积较大(${mb}MB)，上传可能较慢`);
+    }
+  } catch {
+    // stat failure is non-fatal — the upload step will surface a real error if the file is missing.
+  }
 
   // 2) Rough scan via the VLM (upload + Responses API). Slow — generous timeout.
   onProgress?.('粗扫描中 · VLM 解析镜头与结构');

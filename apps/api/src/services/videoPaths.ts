@@ -44,3 +44,11 @@ export function getRenderDir(): string {
 export function getSeedVideoDir(): string {
   return resolveRepoPath(process.env.SEED_VIDEO_DIR, './seed_assets/raw_videos');
 }
+
+/**
+ * PERSISTENT dir for the saved-structure library ("结构样例库"). Mirrors the other
+ * persistent seed_assets dirs (NOT os.tmpdir) so saved structures survive restarts.
+ */
+export function getStructLibraryDir(): string {
+  return resolveRepoPath(process.env.STRUCT_LIBRARY_DIR, './seed_assets/struct_library');
+}

@@ -9,6 +9,7 @@ import {
   NL_PROMPTS,
   ROLES,
   type Diagnosis,
+  type ResolutionMethod,
   type SourceSegment,
   type StateKey,
   type Transition,
@@ -55,10 +56,11 @@ interface FillMethod {
 
 const FILL_METHODS: FillMethod[] = [
   { id: 'reshoot', label: '补拍建议', icon: 'image', hint: '去拍真素材 · 质感最高' },
-  { id: 'hyperframes', label: 'HyperFrames 补全', icon: 'layers', hint: '复用现有素材 · 一键生成' },
-  { id: 'aigc', label: 'AIGC 补全', icon: 'sparkle', hint: 'AI 生成后上传' },
+  { id: 'hyperframes', label: 'HyperFrames 补全', icon: 'layers', hint: '复用现有素材 · 成片时合成' },
+  { id: 'aigc', label: 'AIGC 补全', icon: 'sparkle', hint: 'AI 生成 · 成片时产出' },
 ];
 
+// Generation state for the (untouched) transition-fill studio below.
 type GenState = 'idle' | 'generating' | 'done';
 
 const UploadedChip = ({ name, onRe }: { name: string; onRe: () => void }) => (
@@ -69,41 +71,69 @@ const UploadedChip = ({ name, onRe }: { name: string; onRe: () => void }) => (
     fontSize: 11.5, color: 'var(--st-filled)',
   }}>
     <Icon name="check" size={13} />
-    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>已上传 · {name}</span>
-    <button className="btn" style={{ padding: '2px 8px', fontSize: 10.5 }} onClick={onRe}>重新上传</button>
+    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>已附加 · {name}</span>
+    <button className="btn" style={{ padding: '2px 8px', fontSize: 10.5 }} onClick={onRe}>重新选择</button>
+  </div>
+);
+
+/** Small labelled field block for a real Director-authored brief value. */
+const BriefField = ({ label, value }: { label: string; value: string }) => (
+  <div style={{ display: 'grid', gridTemplateColumns: '52px 1fr', gap: '4px 10px', alignItems: 'baseline' }}>
+    <span className="eyebrow" style={{ paddingTop: 1 }}>{label}</span>
+    <span style={{ fontSize: 11.5, color: 'var(--text-2)', lineHeight: 1.5 }}>{value}</span>
+  </div>
+);
+
+/** Render a list of chips for a real string[] brief field (mustCapture/avoid/bullets). */
+const BriefChips = ({ items, tone }: { items: string[]; tone: 'have' | 'miss' }) => (
+  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+    {items.map((it, i) => <span key={i} className={`need-chip ${tone}`}>{it}</span>)}
   </div>
 );
 
 const GapFillStudio = ({
+  slotId,
   seg,
   d,
   previewActive,
   onPreview,
   onToast,
   applied,
-  onApply,
+  applyStrategy,
 }: {
+  slotId: string;
   seg: SourceSegment;
   d: Diagnosis;
   previewActive: boolean;
   onPreview: () => void;
   onToast: (msg: string) => void;
   applied: boolean;
-  onApply: () => void;
+  applyStrategy: (slotId: string, method?: ResolutionMethod, payload?: unknown) => Promise<void>;
 }) => {
   const fill = d.fill;
-  const recommended: FillMethod['id'] = d.strategy === 'aigc' ? 'aigc' : (d.strategy === 'hyperframes' ? 'hyperframes' : 'reshoot');
-  const [method, setMethod] = useState<FillMethod['id']>(recommended);
-  const [hfState, setHfState] = useState<GenState>('idle');
+  // Preselect the REAL Director-recommended channel (falls back to strategy guess,
+  // then reshoot) — NOT a strategy-only guess. If a method was already applied,
+  // open on that one so the chosen state is reflected.
+  const recommended: FillMethod['id'] =
+    d.recommended ?? (d.strategy === 'aigc' ? 'aigc' : d.strategy === 'hyperframes' ? 'hyperframes' : 'reshoot');
+  const [method, setMethod] = useState<FillMethod['id']>(d.chosenMethod ?? recommended);
   const [reshootFile, setReshootFile] = useState<string | null>(null);
-  const [aigcFile, setAigcFile] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [applying, setApplying] = useState(false);
   const reshootInput = useRef<HTMLInputElement>(null);
-  const aigcInput = useRef<HTMLInputElement>(null);
+
+  // Real HyperFrames render for THIS slot (background job → preview MP4), keyed by slotId.
+  const hyperframesFillSlot = useProjectStore((s) => s.hyperframesFillSlot);
+  const hfStage = useProjectStore((s) => s.hyperframesStages[slotId]);
+  const hfPreview = useProjectStore((s) => s.hyperframesPreviews[slotId]);
+  const hfRendering = hfStage != null;
 
   const reshoot = fill?.reshoot;
   const hyperframes = fill?.hyperframes;
   const aigc = fill?.aigc;
+
+  // This method is the one already adopted server-side for this slot.
+  const isChosen = applied && d.chosenMethod === method;
 
   const copyPrompt = () => {
     try {
@@ -115,6 +145,27 @@ const GapFillStudio = ({
     onToast('Prompt 已复制 · 粘贴到你的 AI 工具');
     setTimeout(() => setCopied(false), 1600);
   };
+
+  // Adopt the selected method server-side. Real generation happens later at 04 produce;
+  // here we only RECORD the chosen channel (+ optional uploaded asset ref for reshoot).
+  const adopt = () => {
+    if (applying) return;
+    const payload =
+      method === 'reshoot' && reshootFile ? { uploadedAssetRef: reshootFile } : undefined;
+    setApplying(true);
+    void applyStrategy(slotId, method, payload)
+      .then(() => onToast(`${seg.label} · 已采用「${FILL_METHODS.find(m => m.id === method)?.label}」· 将在成片生成时产出`))
+      .catch((e: unknown) => onToast('采用失败 · ' + (e instanceof Error ? e.message : String(e))))
+      .finally(() => setApplying(false));
+  };
+
+  const adoptLabel = applying
+    ? '采用中…'
+    : isChosen
+      ? '已采用'
+      : applied
+        ? '改用此方案'
+        : '采用此方案';
 
   return (
     <div style={{ border: '1px solid var(--accent-line)', borderLeft: '3px solid var(--accent)', borderRadius: 5, background: 'var(--bg-2)', overflow: 'hidden' }}>
@@ -129,18 +180,32 @@ const GapFillStudio = ({
         <button
           className="btn primary"
           style={{ padding: '4px 10px', fontSize: 11 }}
-          disabled={applied}
-          onClick={onApply}
+          disabled={applying || isChosen}
+          onClick={adopt}
         >
-          <Icon name={applied ? 'check' : 'sparkle'} size={11} /> {applied ? '已应用' : '应用策略'}
+          <Icon name={isChosen ? 'check' : 'sparkle'} size={11} /> {adoptLabel}
         </button>
       </div>
+
+      {/* already-applied banner — honest: chosen channel recorded, produced at 04 */}
+      {applied && d.chosenMethod && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8, margin: '10px 12px 0',
+          padding: '8px 10px', borderRadius: 5,
+          background: 'var(--st-filled-bg)', border: '1px solid var(--st-filled-line)',
+          fontSize: 11.5, color: 'var(--st-filled)',
+        }}>
+          <Icon name="check" size={13} />
+          <span>已采用「{FILL_METHODS.find(m => m.id === d.chosenMethod)?.label ?? d.chosenMethod}」· 将在成片生成时产出</span>
+        </div>
+      )}
 
       {/* method selector — three options */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, padding: '10px 12px' }}>
         {FILL_METHODS.map(fm => {
           const active = method === fm.id;
           const isRec = recommended === fm.id;
+          const isAdopted = d.chosenMethod === fm.id;
           return (
             <button key={fm.id} onClick={() => setMethod(fm.id)} className="btn"
               style={{
@@ -160,6 +225,12 @@ const GapFillStudio = ({
                     color: 'var(--bg)', background: 'var(--accent)', padding: '0 4px', borderRadius: 2, fontWeight: 700,
                   }}>推荐</span>
                 )}
+                {isAdopted && (
+                  <span style={{
+                    fontSize: 8, fontFamily: 'var(--ff-mono)',
+                    color: 'var(--bg)', background: 'var(--st-filled)', padding: '0 4px', borderRadius: 2, fontWeight: 700,
+                  }}>已采用</span>
+                )}
                 {fm.hint}
               </span>
             </button>
@@ -167,67 +238,131 @@ const GapFillStudio = ({
         })}
       </div>
 
-      {/* method content */}
+      {/* method content — REAL Director-authored briefs (legacy fields as fallback) */}
       <div style={{ padding: '0 12px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {/* 补拍建议 */}
+        {/* 补拍建议 — guidanceNL + framing + durationSec + mustCapture[] + avoid[] */}
         {method === 'reshoot' && (
           <>
-            <div style={{ fontSize: 11.5, color: 'var(--text-dim)', lineHeight: 1.5 }}>{reshoot?.guide}</div>
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 5, padding: '8px 10px' }}>
-              <div className="eyebrow" style={{ marginBottom: 6 }}>拍摄分镜清单</div>
-              {(reshoot?.shots ?? []).map((s, i) => (
-                <div key={i} style={{ display: 'flex', gap: 8, fontSize: 11.5, color: 'var(--text-2)', padding: '3px 0', lineHeight: 1.4 }}>
-                  <span className="mono" style={{ color: 'var(--text-mute)', flexShrink: 0 }}>{String(i + 1).padStart(2, '0')}</span>
-                  <span>{s}</span>
-                </div>
-              ))}
+            <div style={{ fontSize: 11.5, color: 'var(--text-dim)', lineHeight: 1.5 }}>
+              {reshoot?.guidanceNL ?? reshoot?.guide}
             </div>
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 5, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {reshoot?.framing && <BriefField label="构图" value={reshoot.framing} />}
+              {typeof reshoot?.durationSec === 'number' && <BriefField label="时长" value={`${reshoot.durationSec}s`} />}
+              {reshoot?.mustCapture && reshoot.mustCapture.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span className="eyebrow">必拍</span>
+                  <BriefChips items={reshoot.mustCapture} tone="have" />
+                </div>
+              )}
+              {reshoot?.avoid && reshoot.avoid.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span className="eyebrow">避免</span>
+                  <BriefChips items={reshoot.avoid} tone="miss" />
+                </div>
+              )}
+              {/* legacy shot list — shown only when the structured brief is absent */}
+              {!reshoot?.mustCapture?.length && (reshoot?.shots ?? []).length > 0 && (
+                <div>
+                  <div className="eyebrow" style={{ marginBottom: 6 }}>拍摄分镜清单</div>
+                  {(reshoot?.shots ?? []).map((s, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 8, fontSize: 11.5, color: 'var(--text-2)', padding: '3px 0', lineHeight: 1.4 }}>
+                      <span className="mono" style={{ color: 'var(--text-mute)', flexShrink: 0 }}>{String(i + 1).padStart(2, '0')}</span>
+                      <span>{s}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            {/* optional: attach a real reshoot clip — passed via payload, no fake "已生成" */}
             <input ref={reshootInput} type="file" accept="video/*,image/*" style={{ display: 'none' }}
               onChange={e => {
                 const f = e.target.files?.[0];
-                if (f) { setReshootFile(f.name); onToast('补拍素材已上传 · 待编入时间线'); }
+                if (f) { setReshootFile(f.name); onToast('补拍素材已附加 · 采用后将随策略提交'); }
                 e.target.value = '';
               }} />
             {reshootFile
               ? <UploadedChip name={reshootFile} onRe={() => setReshootFile(null)} />
-              : <button className="btn primary" style={{ justifyContent: 'center', padding: '8px 12px' }} onClick={() => reshootInput.current?.click()}>
-                  <Icon name="upload" size={12} /> 上传补拍素材
+              : <button className="btn" style={{ justifyContent: 'center', padding: '8px 12px' }} onClick={() => reshootInput.current?.click()}>
+                  <Icon name="upload" size={12} /> 附加补拍素材（可选）
                 </button>}
           </>
         )}
 
-        {/* HyperFrames 补全 */}
+        {/* HyperFrames 补全 — editingGuidanceNL + cardType + copy{headline/subline/bullets/cta} */}
         {method === 'hyperframes' && (
           <>
-            <div style={{ fontSize: 11.5, color: 'var(--text-dim)', lineHeight: 1.5 }}>{hyperframes?.desc}</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span className="eyebrow">将复用</span>
-              <div style={{ display: 'flex', gap: 5 }}>
-                {(hyperframes?.uses ?? []).map(u => <span key={u} className="need-chip have">{u.toUpperCase()}</span>)}
-              </div>
+            <div style={{ fontSize: 11.5, color: 'var(--text-dim)', lineHeight: 1.5 }}>
+              {hyperframes?.editingGuidanceNL ?? hyperframes?.desc}
             </div>
-            {hfState === 'done' ? (
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 5,
-                background: 'var(--st-filled-bg)', border: '1px solid var(--st-filled-line)',
-                fontSize: 11.5, color: 'var(--st-filled)',
-              }}>
-                <Icon name="check" size={13} />
-                <span style={{ flex: 1 }}>已生成 · 已编入时间线</span>
-                <button className="btn" style={{ padding: '2px 8px', fontSize: 10.5 }} onClick={() => setHfState('idle')}>重新生成</button>
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 5, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {hyperframes?.cardType && <BriefField label="卡片" value={hyperframes.cardType} />}
+              {hyperframes?.copy?.headline && <BriefField label="主标题" value={hyperframes.copy.headline} />}
+              {hyperframes?.copy?.subline && <BriefField label="副标题" value={hyperframes.copy.subline} />}
+              {hyperframes?.copy?.bullets && hyperframes.copy.bullets.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span className="eyebrow">要点</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    {hyperframes.copy.bullets.map((b, i) => (
+                      <div key={i} style={{ display: 'flex', gap: 8, fontSize: 11.5, color: 'var(--text-2)', lineHeight: 1.4 }}>
+                        <span className="mono" style={{ color: 'var(--text-mute)', flexShrink: 0 }}>·</span>
+                        <span>{b}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {hyperframes?.copy?.cta && <BriefField label="CTA" value={hyperframes.copy.cta} />}
+            </div>
+            {(hyperframes?.referencedAssetIds?.length || hyperframes?.uses?.length) ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span className="eyebrow">将复用</span>
+                <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                  {(hyperframes?.referencedAssetIds ?? hyperframes?.uses ?? []).map(u => <span key={u} className="need-chip have">{u.toUpperCase()}</span>)}
+                </div>
               </div>
-            ) : (
-              <button className="btn primary" style={{ justifyContent: 'center', padding: '8px 12px' }}
-                disabled={hfState === 'generating'}
-                onClick={() => { setHfState('generating'); setTimeout(() => { setHfState('done'); onToast('HyperFrames 已生成补全片段'); }, 1500); }}>
-                <Icon name={hfState === 'generating' ? 'layers' : 'sparkle'} size={12} />
-                {hfState === 'generating' ? ' 生成中…' : ' 立即生成'}
+            ) : null}
+
+            {/* Real HyperFrames render — Director sends THIS slot's brief to the Agent,
+                which edits the beat in the background and returns a real preview MP4. */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 2 }}>
+              <button
+                className="btn primary"
+                style={{ justifyContent: 'center', padding: '8px 12px' }}
+                disabled={hfRendering}
+                onClick={() => {
+                  onToast('已交给 HyperFrames Agent · 后台剪辑中…');
+                  void hyperframesFillSlot(slotId).catch((e: unknown) =>
+                    onToast('HyperFrames 失败 · ' + (e instanceof Error ? e.message : String(e))),
+                  );
+                }}
+              >
+                <Icon name={hfRendering ? 'layers' : 'sparkle'} size={12} />
+                {hfRendering ? (hfStage || 'HyperFrames 剪辑中…') : hfPreview ? ' 重新生成 HyperFrames 预览' : ' 生成 HyperFrames 预览'}
               </button>
-            )}
+              {hfRendering && (
+                <div className="mono dim" style={{ fontSize: 10.5, lineHeight: 1.5 }}>
+                  Director 已把该槽位 brief 发给 Agent · 后台剪辑（作者→lint→渲染→评审）· 约 1–3 分钟
+                </div>
+              )}
+              {hfPreview && !hfRendering && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <video
+                    src={hfPreview.url}
+                    controls
+                    playsInline
+                    style={{ width: '100%', maxHeight: 360, borderRadius: 6, background: '#000', aspectRatio: '9 / 16' }}
+                  />
+                  <div className="mono dim" style={{ fontSize: 10 }}>
+                    HyperFrames 预览 · {hfPreview.source === 'mock' ? '确定性兜底合成（无 LLM 作者）' : 'LLM 作者 + 评审'} · 真实素材剪辑
+                  </div>
+                </div>
+              )}
+            </div>
           </>
         )}
 
-        {/* AIGC 补全 */}
+        {/* AIGC 补全 — prompt + negativePrompt + referenceAssetIds + providerHint (+ copy) */}
         {method === 'aigc' && (
           <>
             <div className="eyebrow">给 AI 的 Prompt</div>
@@ -244,20 +379,21 @@ const GapFillStudio = ({
                 <Icon name={copied ? 'check' : 'text'} size={11} /> {copied ? '已复制' : '复制'}
               </button>
             </div>
+            {(aigc?.negativePrompt || aigc?.providerHint || (aigc?.referenceAssetIds?.length ?? 0) > 0) && (
+              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 5, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {aigc?.negativePrompt && <BriefField label="负向" value={aigc.negativePrompt} />}
+                {aigc?.providerHint && <BriefField label="工具" value={aigc.providerHint} />}
+                {aigc?.referenceAssetIds && aigc.referenceAssetIds.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <span className="eyebrow">参考素材</span>
+                    <BriefChips items={aigc.referenceAssetIds.map(id => id.toUpperCase())} tone="have" />
+                  </div>
+                )}
+              </div>
+            )}
             <div className="mono" style={{ fontSize: 10, color: 'var(--text-mute)', lineHeight: 1.4 }}>
-              粘贴到即梦 / 可灵 / Sora 等工具生成后，回到这里上传 ↓
+              采用后，成片生成（04）将用该 Prompt 真正产出 AIGC 片段并编入时间线。
             </div>
-            <input ref={aigcInput} type="file" accept="video/*" style={{ display: 'none' }}
-              onChange={e => {
-                const f = e.target.files?.[0];
-                if (f) { setAigcFile(f.name); onToast('AI 生成视频已上传 · 待编入时间线'); }
-                e.target.value = '';
-              }} />
-            {aigcFile
-              ? <UploadedChip name={aigcFile} onRe={() => setAigcFile(null)} />
-              : <button className="btn primary" style={{ justifyContent: 'center', padding: '8px 12px' }} onClick={() => aigcInput.current?.click()}>
-                  <Icon name="upload" size={12} /> 上传 AI 生成的视频
-                </button>}
           </>
         )}
       </div>
@@ -329,6 +465,22 @@ const TransitionFillStudio = ({
   const runGen = (msg: string) => {
     setGen(prev => ({ ...prev, [method]: 'generating' }));
     setTimeout(() => { setGen(prev => ({ ...prev, [method]: 'done' })); onToast(msg); }, 1400);
+  };
+
+  // Real HyperFrames transition render (ffmpeg xfade over the two adjacent slots' real
+  // assets). Keyed by transition id in the shared hyperframes maps.
+  const hyperframesFillTransition = useProjectStore((s) => s.hyperframesFillTransition);
+  const transitions = useProjectStore((s) => s.sourceVideo.transitions);
+  const hfStage = useProjectStore((s) => s.hyperframesStages[tr.id]);
+  const hfPreview = useProjectStore((s) => s.hyperframesPreviews[tr.id]);
+  const trIndex = transitions.findIndex((t) => t.id === tr.id);
+  const hfRendering = hfStage != null;
+  const runTransition = () => {
+    if (trIndex < 0) return;
+    onToast('已交给 HyperFrames · 后台合成转场…');
+    void hyperframesFillTransition(trIndex, tr.id).catch((e: unknown) =>
+      onToast('转场失败 · ' + (e instanceof Error ? e.message : String(e))),
+    );
   };
 
   return (
@@ -417,22 +569,27 @@ const TransitionFillStudio = ({
               <span className="mono" style={{ fontSize: 9.5, color: 'var(--text-mute)', flexShrink: 0, paddingTop: 1 }}>原意</span>
               <span>原结构此处为 <b style={{ color: 'var(--text-2)' }}>{tr.type}</b> · {tr.note}</span>
             </div>
-            {st === 'done' ? (
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 5,
-                background: 'var(--st-filled-bg)', border: '1px solid var(--st-filled-line)',
-                fontSize: 11.5, color: 'var(--st-filled)',
-              }}>
-                <Icon name="check" size={13} />
-                <span style={{ flex: 1 }}>Agent 已合成 · HyperFrames「{hfEffect}」</span>
-                <button className="btn" style={{ padding: '2px 8px', fontSize: 10.5 }} onClick={() => setGen(p => ({ ...p, frame: 'idle' }))}>重做</button>
+            {hfPreview && !hfRendering ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <video
+                  src={hfPreview.url}
+                  controls
+                  playsInline
+                  style={{ width: '100%', maxHeight: 320, borderRadius: 6, background: '#000', aspectRatio: '9 / 16' }}
+                />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className="mono dim" style={{ fontSize: 10, flex: 1 }}>
+                    真转场预览 · ffmpeg xfade（{tr.type} → {hfEffect}）· 真实素材，无新像素
+                  </span>
+                  <button className="btn" style={{ padding: '2px 8px', fontSize: 10.5 }} disabled={trIndex < 0} onClick={runTransition}>重做</button>
+                </div>
               </div>
             ) : (
               <button className="btn primary" style={{ justifyContent: 'center', padding: '8px 12px' }}
-                disabled={st === 'generating'}
-                onClick={() => runGen(`Agent 已用 HyperFrames「${hfEffect}」合成过渡帧`)}>
-                <Icon name={st === 'generating' ? 'layers' : 'sparkle'} size={12} />
-                {st === 'generating' ? ' Agent 分析前后帧…' : ' 生成过渡帧'}
+                disabled={hfRendering || trIndex < 0}
+                onClick={runTransition}>
+                <Icon name={hfRendering ? 'layers' : 'sparkle'} size={12} />
+                {hfRendering ? ` ${hfStage || '合成转场中…'}` : ' 生成真转场预览（xfade 真实素材）'}
               </button>
             )}
           </>
@@ -504,6 +661,8 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
   const assetManagerWarnings = useProjectStore((s) => s.assetManagerWarnings);
   const assetManagerLastError = useProjectStore((s) => s.assetManagerLastError);
   const applyStrategy = useProjectStore((s) => s.applyStrategy);
+  const boundaryScanTransition = useProjectStore((s) => s.boundaryScanTransition);
+  const boundaryScanStages = useProjectStore((s) => s.boundaryScanStages);
   const T = v.duration;
   // `selected` may hold a SEGMENT id (s1..s7) OR a TRANSITION id (t1..t6).
   const [selected, setSelected] = useState('s2');
@@ -524,6 +683,21 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
 
   const transFilled = v.transitions.filter(t => t.state === 'filled').length;
   const transWeakly = v.transitions.filter(t => t.state === 'weakly').length;
+
+  // Real per-method slot counts for the 「建议补全策略」 overview — derived from each
+  // non-filled slot's chosen/recommended/strategy channel (no hardcoded count).
+  const strategyCounts = Object.values(diagnosis).reduce<Record<ResolutionMethod, number>>(
+    (acc, d) => {
+      if (d.state === 'filled') return acc;
+      const method: ResolutionMethod | null =
+        d.chosenMethod ??
+        d.recommended ??
+        (d.strategy === 'aigc' || d.strategy === 'hyperframes' || d.strategy === 'reshoot' ? d.strategy : null);
+      if (method) acc[method] += 1;
+      return acc;
+    },
+    { reshoot: 0, hyperframes: 0, aigc: 0 },
+  );
 
   // No source/diagnosis yet → nothing to diagnose; no mock data shown.
   if (v.segments.length === 0 || Object.keys(diagnosis).length === 0) {
@@ -554,7 +728,7 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
         <div className="screen-head-r">
           <span className="mono">{summary.critical + summary.missing} 个待补</span>
           <span className="pill" style={{ color: 'var(--st-critical)', borderColor: 'var(--st-critical-line)', background: 'var(--st-critical-bg)' }}>
-            <span className="dot" style={{ background: 'var(--st-critical)' }} /> 1 关键缺口
+            <span className="dot" style={{ background: 'var(--st-critical)' }} /> {summary.critical} 关键缺口
           </span>
         </div>
       </div>
@@ -609,11 +783,11 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                       <StrategyTag kind="aigc" />
-                      <span className="mono" style={{ fontSize: 11, color: 'var(--text-mute)', whiteSpace: 'nowrap' }}>2 槽位</span>
+                      <span className="mono" style={{ fontSize: 11, color: 'var(--text-mute)', whiteSpace: 'nowrap' }}>{strategyCounts.aigc} 槽位</span>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                       <StrategyTag kind="hyperframes" />
-                      <span className="mono" style={{ fontSize: 11, color: 'var(--text-mute)', whiteSpace: 'nowrap' }}>2 槽位</span>
+                      <span className="mono" style={{ fontSize: 11, color: 'var(--text-mute)', whiteSpace: 'nowrap' }}>{strategyCounts.hyperframes} 槽位</span>
                     </div>
                   </div>
 
@@ -643,6 +817,7 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
           <div className="sband" style={{ height: 38 }}>
             {v.segments.map(seg => {
               const d = diagnosis[seg.id];
+              if (!d) return null;
               const dur = seg.end - seg.start;
               const w = (dur / T) * 100;
               const stateColor = {
@@ -713,6 +888,7 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
                 <tbody>
                   {v.segments.map(seg => {
                     const d = diagnosis[seg.id];
+                    if (!d) return null;
                     return (
                       <tr key={seg.id} onClick={() => setSelected(seg.id)} style={{ cursor: 'pointer', background: selected === seg.id ? 'var(--accent-dim)' : 'transparent' }}>
                         <td>
@@ -816,6 +992,31 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
                     转场槽永不缺失 —— 硬切是免费兜底，最差也是<b style={{ color: 'var(--st-weakly)' }}> 弱满足</b>
                   </div>
 
+                  {/* boundary scan — re-parse THIS seam's REAL transition type on demand.
+                      Rough scan only synthesizes 硬切; this runs boundary_scan.py for one seam. */}
+                  {(() => {
+                    const trIndex = v.transitions.findIndex(t => t.id === tr.id);
+                    const stageLabel = boundaryScanStages[tr.id];
+                    const scanning = stageLabel != null;
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <button
+                          className="btn"
+                          style={{ width: '100%', justifyContent: 'center' }}
+                          disabled={scanning || trIndex < 0}
+                          onClick={() => { if (trIndex >= 0) void boundaryScanTransition(trIndex, tr.id).catch(() => {}); }}
+                        >
+                          <Icon name="sparkle" size={12} /> {scanning ? (stageLabel || '转场扫描中…') : '深度分析 · Boundary Scan 此转场'}
+                        </button>
+                        {tr.evidence && (
+                          <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-dim)', lineHeight: 1.5 }}>
+                            扫描证据 · {tr.evidence}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
                   {/* need / have */}
                   <div style={{ display: 'grid', gridTemplateColumns: '60px 1fr', gap: '6px 12px', alignItems: 'center' }}>
                     <span className="eyebrow">需要</span>
@@ -871,6 +1072,7 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
             const seg = v.segments.find(s => s.id === selected);
             if (!seg) return null;
             const d = diagnosis[selected];
+            if (!d) return null;
             const role = ROLES[seg.role];
             return (
               <div className="panel slot-detail-panel">
@@ -955,13 +1157,14 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
                   {d.state !== 'filled' ? (
                     <GapFillStudio
                       key={seg.id}
+                      slotId={selected}
                       seg={seg}
                       d={d}
                       previewActive={previewSlot === selected}
                       onPreview={() => setPreviewSlot(previewSlot === selected ? null : selected)}
                       onToast={showToast}
                       applied={!!appliedSlots[selected]}
-                      onApply={() => { void applyStrategy(selected).then(() => showToast(`${seg.label} 补全策略已应用`)).catch(() => {}); }}
+                      applyStrategy={applyStrategy}
                     />
                   ) : (
                     <div style={{
@@ -1005,6 +1208,7 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
           const seg = v.segments.find(s => s.id === previewSlot);
           if (!seg) return null;
           const d = diagnosis[previewSlot];
+          if (!d) return null;
           const SVG_BY_ROLE: Record<string, ReactElement> = {
             hook: <SvgHookShape />, pain: <SvgPainShape />, emotion: <SvgEmotionShape />,
             product: <SvgProductShape />, compare: <SvgCompareShape />, social: <SvgSocialShape />, cta: <SvgCtaShape />,
@@ -1067,9 +1271,16 @@ export const ScreenCompile = ({ onBack }: { onBack: () => void }) => {
   const compile = useProjectStore((s) => s.compile);
   const applyNlEdit = useProjectStore((s) => s.applyNlEdit);
   const exportVideo = useProjectStore((s) => s.exportVideo);
+  const produce = useProjectStore((s) => s.produce);
   const compiling = useProjectStore((s) => s.compiling);
   const nlApplying = useProjectStore((s) => s.nlApplying);
   const exporting = useProjectStore((s) => s.exporting);
+  const producing = useProjectStore((s) => s.producing);
+  const produceStage = useProjectStore((s) => s.produceStage);
+  const exportResult = useProjectStore((s) => s.exportResult);
+  const lastError = useProjectStore((s) => s.lastError);
+  const warnings = useProjectStore((s) => s.warnings);
+  const productImageUrl = useProjectStore((s) => s.productImageUrl);
   const T = v.duration;
   const [nlText, setNlText] = useState('');
   const [playingSeg, setPlayingSeg] = useState<string | null>(null);
@@ -1083,6 +1294,33 @@ export const ScreenCompile = ({ onBack }: { onBack: () => void }) => {
     setToastVisible(true);
     setTimeout(() => setToastVisible(false), 2200);
   };
+
+  // REAL 成片生成: run the AIGC produce job (Director → Wan2.7). The store sets
+  // exportResult only when the job returns a real downloadUrl; otherwise it records
+  // lastError (e.g. the honest DASHSCOPE-missing message). We GATE the success toast
+  // on a real file — never a green "成片已生成" without one.
+  const runProduce = () => {
+    if (producing) return;
+    void produce()
+      .then(() => {
+        const result = useProjectStore.getState().exportResult;
+        if (result?.downloadUrl) {
+          showToast('成片已生成 · 可下载');
+        } else {
+          // produce resolved without a real file (plan-only / blocked) — surface honestly.
+          const warn = useProjectStore.getState().warnings?.[0];
+          showToast(warn ? '成片未产出文件 · ' + warn : '成片未产出可下载文件 · 请检查生成配置');
+        }
+      })
+      .catch((e: unknown) => {
+        // FAIL-FAST: show the backend's honest error (lastError already set by the store).
+        const msg = useProjectStore.getState().lastError ?? (e instanceof Error ? e.message : String(e));
+        showToast(msg);
+      });
+  };
+
+  // A real, downloadable result exists only when the produce job returned a file.
+  const hasRealOutput = !!exportResult?.downloadUrl;
 
   // Auto-play all segments sequentially
   const autoPlayRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -1137,14 +1375,67 @@ export const ScreenCompile = ({ onBack }: { onBack: () => void }) => {
             </div>
           </div>
         </div>
-        <div className="screen-head-r">
-          <button className="btn primary" disabled={compiling} onClick={() => {
-            void compile().then(() => showToast('渲染完成 · 成片已生成')).catch(() => {});
-          }}>
-            <Icon name="sparkle" size={12} /> {compiling ? '渲染中…' : '渲染成片'}
+        <div className="screen-head-r" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {producing && produceStage && (
+            <span className="mono" style={{ fontSize: 10.5, color: 'var(--accent-2)' }}>{produceStage}</span>
+          )}
+          <button className="btn primary" disabled={producing} onClick={runProduce}>
+            <Icon name="sparkle" size={12} /> {producing ? '生成中…' : '生成成片 · AIGC'}
           </button>
         </div>
       </div>
+
+      {/* Gentle hint: AIGC anchors best to a real 产品主图 (set in 02 素材).
+          Shown only when no anchor image is present and not mid/after produce. */}
+      {!productImageUrl && !producing && !hasRealOutput && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          margin: '0 0 16px', padding: '8px 12px', borderRadius: 5,
+          background: 'var(--st-weakly-bg)', border: '1px solid var(--st-weakly-line)',
+          fontSize: 11.5, color: 'var(--st-weakly)', lineHeight: 1.5,
+        }}>
+          <Icon name="diagnose" size={13} />
+          <span>未设置产品主图 · AIGC 生成在有一张<b>产品主图</b>作锚点时效果最佳，建议回到「02 素材」上传产品图后再生成。</span>
+        </div>
+      )}
+
+      {/* PRODUCE RESULT BANNER — honest: real download link only when a file exists,
+          else the backend warning / error. Never a green success without a file. */}
+      {(producing || hasRealOutput || lastError || (exportResult && !exportResult.downloadUrl)) && (
+        <div className="panel" style={{ marginBottom: 16 }}>
+          <div className="panel-body" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            {producing ? (
+              <>
+                <span className="dot" style={{ background: 'var(--accent)' }} />
+                <span style={{ fontSize: 12.5, color: 'var(--text-2)' }}>正在生成并合成成片…</span>
+                <span className="mono" style={{ fontSize: 10.5, color: 'var(--accent-2)' }}>{produceStage || '排队中'}</span>
+              </>
+            ) : hasRealOutput ? (
+              <>
+                <Icon name="check" size={14} />
+                <span style={{ fontSize: 12.5, color: 'var(--st-filled)', fontWeight: 600 }}>成片已生成 · 真实文件可下载</span>
+                <a
+                  className="btn primary"
+                  href={exportResult!.downloadUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ marginLeft: 'auto', padding: '6px 14px', fontSize: 11.5, textDecoration: 'none' }}
+                >
+                  <Icon name="film" size={12} /> 下载成片
+                </a>
+              </>
+            ) : (
+              <>
+                <Icon name="diagnose" size={14} />
+                <span style={{ fontSize: 12.5, color: 'var(--st-critical)', fontWeight: 600 }}>未产出可下载成片</span>
+                <span style={{ fontSize: 11.5, color: 'var(--text-dim)', lineHeight: 1.5 }}>
+                  {lastError ?? warnings?.[0] ?? '生成任务未返回真实文件 · 请检查生成配置（如缺少 DASHSCOPE 凭据）'}
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* VERSION SWITCHER · 3 preset compile variants */}
       <div className="panel" style={{ marginBottom: 16 }}>
@@ -1220,11 +1511,14 @@ export const ScreenCompile = ({ onBack }: { onBack: () => void }) => {
                   hook: <SvgHookShape />, pain: <SvgPainShape />, emotion: <SvgEmotionShape />,
                   product: <SvgProductShape />, compare: <SvgCompareShape />, social: <SvgSocialShape />, cta: <SvgCtaShape />,
                 };
-                const seg = playingSegData;
-                const caption = seg ? seg.caption : '她戴二十年了 · 也送她一只新的';
+                // Derive the idle preview from the REAL first segment (no jade fixture
+                // text). `seg` = the currently-playing segment when playing, else the
+                // first real source segment; '—' only if there is genuinely none.
+                const seg = playingSegData ?? v.segments[0] ?? null;
+                const caption = seg ? seg.caption : '—';
                 const timeLabel = seg
                   ? `${seg.start.toFixed(1)}s → ${seg.end.toFixed(1)}s · ${(seg.end - seg.start).toFixed(1)}s`
-                  : '00:08 / 00:28 · ratio 9:16';
+                  : '—';
                 const bgSvg = seg ? SVG_BY_ROLE[seg.role] : <SvgEmotionShape />;
                 return (
                   <>
@@ -1320,10 +1614,13 @@ export const ScreenCompile = ({ onBack }: { onBack: () => void }) => {
               <div className="eyebrow" style={{ marginBottom: 6, marginTop: 4 }}>▼ 编译后镜头层 + 补全标记</div>
               <div className="tline" style={{ height: 76 }}>
                 {v.segments.map(seg => {
+                  // A segment may have no diagnosis entry yet — guard every access
+                  // so a missing entry can't crash the timeline render.
                   const d = diagnosis[seg.id];
+                  const fix = d?.fix ?? null;
                   const dur = seg.end - seg.start;
                   const w = (dur / T) * 100;
-                  const hasFix = d.fix !== null;
+                  const hasFix = fix !== null;
                   const isPlaying = playingSeg === seg.id;
                   return (
                     <div
@@ -1367,23 +1664,23 @@ export const ScreenCompile = ({ onBack }: { onBack: () => void }) => {
                           position: 'absolute',
                           top: 6, right: 6,
                           padding: '2px 6px',
-                          background: d.state === 'filled' ? 'var(--st-filled-bg)' :
-                                       d.state === 'weakly' ? 'var(--st-weakly-bg)' :
-                                       d.state === 'critical' ? 'var(--st-critical-bg)' : 'var(--st-missing-bg)',
+                          background: d?.state === 'filled' ? 'var(--st-filled-bg)' :
+                                       d?.state === 'weakly' ? 'var(--st-weakly-bg)' :
+                                       d?.state === 'critical' ? 'var(--st-critical-bg)' : 'var(--st-missing-bg)',
                           border: `1px solid ${
-                            d.state === 'filled' ? 'var(--st-filled-line)' :
-                            d.state === 'weakly' ? 'var(--st-weakly-line)' :
-                            d.state === 'critical' ? 'var(--st-critical-line)' : 'var(--st-missing-line)'
+                            d?.state === 'filled' ? 'var(--st-filled-line)' :
+                            d?.state === 'weakly' ? 'var(--st-weakly-line)' :
+                            d?.state === 'critical' ? 'var(--st-critical-line)' : 'var(--st-missing-line)'
                           }`,
                           borderRadius: 3,
                           fontSize: 9,
                           fontFamily: 'var(--ff-mono)',
                           color:
-                            d.state === 'filled' ? 'var(--st-filled)' :
-                            d.state === 'weakly' ? 'var(--st-weakly)' :
-                            d.state === 'critical' ? 'var(--st-critical)' : 'var(--st-missing)',
+                            d?.state === 'filled' ? 'var(--st-filled)' :
+                            d?.state === 'weakly' ? 'var(--st-weakly)' :
+                            d?.state === 'critical' ? 'var(--st-critical)' : 'var(--st-missing)',
                         }}>
-                          {d.fix?.kind}
+                          {fix?.kind}
                         </div>
                       )}
                     </div>
@@ -1528,6 +1825,18 @@ export const ScreenCompile = ({ onBack }: { onBack: () => void }) => {
           </div>
           {exporting && (
             <div className="mono dim" style={{ fontSize: 10.5, textAlign: 'center' }}>导出中…</div>
+          )}
+          {/* Real download link — only when a genuine file exists (absolute url). */}
+          {exportResult?.downloadUrl && (
+            <a
+              className="btn primary"
+              href={exportResult.downloadUrl}
+              target="_blank"
+              rel="noreferrer"
+              style={{ justifyContent: 'center', padding: '10px 12px', textDecoration: 'none' }}
+            >
+              <Icon name="film" size={12} /> 下载已生成成片
+            </a>
           )}
         </div>
       </Modal>

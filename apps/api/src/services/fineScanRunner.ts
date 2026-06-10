@@ -14,6 +14,34 @@ const REPO_ROOT = process.env.SCAN_REPO_ROOT
   : path.resolve(process.cwd(), '..', '..');
 const SCRIPTS_DIR = path.join(REPO_ROOT, 'scripts');
 
+// Fine scan spawns a memory/CPU-heavy Python process (PyAV decode + OpenCV optical
+// flow). Running several at once exhausts memory/threads/handles on constrained
+// machines ("[Errno 11] Resource temporarily unavailable" / "[Errno 12] Cannot
+// allocate memory" / Windows "页面文件太小"). Cap how many fine scans run at once —
+// extra requests QUEUE (the UI shows 排队中) and run as slots free. Default 1
+// (serialize, safest on a tight machine); raise via FINE_SCAN_MAX_CONCURRENCY.
+const FINE_SCAN_MAX_CONCURRENCY = Math.max(1, Number(process.env.FINE_SCAN_MAX_CONCURRENCY ?? 1));
+let fineScanActive = 0;
+const fineScanWaiters: Array<() => void> = [];
+
+function acquireFineScanSlot(): Promise<void> {
+  if (fineScanActive < FINE_SCAN_MAX_CONCURRENCY) {
+    fineScanActive += 1;
+    return Promise.resolve();
+  }
+  // Slot stays "held" for this waiter; release() hands it over without decrementing.
+  return new Promise<void>((resolve) => fineScanWaiters.push(resolve));
+}
+
+function releaseFineScanSlot(): void {
+  const next = fineScanWaiters.shift();
+  if (next) {
+    next(); // transfer the slot directly to the next queued fine scan
+  } else {
+    fineScanActive = Math.max(0, fineScanActive - 1);
+  }
+}
+
 /** Rich per-segment detail produced by fine_scan.py (loosely typed — all optional). */
 export interface FineBlockDetail {
   blockId?: string;
@@ -54,26 +82,34 @@ export async function runFineScan(
   onProgress?: ScanProgress
 ): Promise<FineScanResult> {
   const python = resolvePython();
-  onProgress?.('精扫描中 · 视觉峰值检测 + 逐峰 VLM');
+  if (fineScanActive >= FINE_SCAN_MAX_CONCURRENCY) {
+    onProgress?.('排队中 · 前面还有精扫描任务（内存保护，逐个运行）');
+  }
+  await acquireFineScanSlot();
+  try {
+    onProgress?.('精扫描中 · 视觉峰值检测 + 逐峰 VLM');
 
-  await runScanCommand(
-    python,
-    [
-      path.join(SCRIPTS_DIR, 'fine_scan.py'),
-      '--rough-scan', roughScanPath,
-      '--video', videoPath,
-      '--video-id', videoId,
-      '--block-ids', blockId,
-      '--skip-audio',
-      '--env', '.env',
-      '--out-dir', workDir,
-      '--work-dir', path.join(workDir, 'clips'),
-    ],
-    { cwd: REPO_ROOT, timeoutMs: Number(process.env.SCAN_FINE_TIMEOUT_MS ?? 300_000), label: 'fine_scan.py' }
-  );
+    await runScanCommand(
+      python,
+      [
+        path.join(SCRIPTS_DIR, 'fine_scan.py'),
+        '--rough-scan', roughScanPath,
+        '--video', videoPath,
+        '--video-id', videoId,
+        '--block-ids', blockId,
+        '--skip-audio',
+        '--env', '.env',
+        '--out-dir', workDir,
+        '--work-dir', path.join(workDir, 'clips'),
+      ],
+      { cwd: REPO_ROOT, timeoutMs: Number(process.env.SCAN_FINE_TIMEOUT_MS ?? 300_000), label: 'fine_scan.py' }
+    );
 
-  const outPath = path.join(workDir, `${blockId}_fine_scan.json`);
-  const raw = await readFile(outPath, 'utf-8');
-  const detail = JSON.parse(raw) as FineBlockDetail;
-  return { detail, warnings: [] };
+    const outPath = path.join(workDir, `${blockId}_fine_scan.json`);
+    const raw = await readFile(outPath, 'utf-8');
+    const detail = JSON.parse(raw) as FineBlockDetail;
+    return { detail, warnings: [] };
+  } finally {
+    releaseFineScanSlot();
+  }
 }

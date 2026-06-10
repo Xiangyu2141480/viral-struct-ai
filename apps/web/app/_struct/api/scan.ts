@@ -2,8 +2,9 @@
 // Upload a video → POST /scan returns a jobId → poll GET /scan/:jobId until the
 // VLM rough scan finishes and returns the real structure (sourceVideo).
 
-import { structGet, structPost, structPostForm } from './client';
+import { StructApiError, structGet, structPost, structPostForm } from './client';
 import type { AnalyzeSampleResponse } from './types';
+import type { Transition } from '../data';
 
 export interface ScanStartResponse {
   jobId: string;
@@ -47,6 +48,33 @@ export function getFineScanStatus(jobId: string): Promise<FineScanStatus> {
   return structGet<FineScanStatus>(`/api/struct/scan/fine/${jobId}`);
 }
 
+/* ── Boundary scan (re-parse ONE transition seam's real type) ──────── */
+
+export interface BoundaryScanStatus {
+  status: 'running' | 'done' | 'error';
+  stage?: string;
+  transitionIndex?: number;
+  /** The re-scanned UI transition (real type + evidence) — splice into sourceVideo.transitions. */
+  transition?: Transition;
+  warnings?: string[];
+  error?: string;
+  elapsedSec?: number;
+}
+
+/** Start a boundary scan for the transition at `transitionIndex` (its position in
+ *  sourceVideo.transitions). Sends the current transition so the backend returns an
+ *  updated copy with the real type. Returns a jobId to poll. */
+export function startBoundaryScan(videoId: string, transitionIndex: number, transition: Transition): Promise<ScanStartResponse> {
+  return structPost<ScanStartResponse>(
+    `/api/struct/scan/${encodeURIComponent(videoId)}/boundary`,
+    { transitionIndex, transition },
+  );
+}
+
+export function getBoundaryScanStatus(jobId: string): Promise<BoundaryScanStatus> {
+  return structGet<BoundaryScanStatus>(`/api/struct/scan/boundary/${jobId}`);
+}
+
 export interface ScanStatus {
   status: 'running' | 'done' | 'error';
   stage?: string;
@@ -56,10 +84,36 @@ export interface ScanStatus {
   elapsedSec?: number;
 }
 
-export function startScan(file: File): Promise<ScanStartResponse> {
-  const form = new FormData();
-  form.append('video', file);
-  return structPostForm<ScanStartResponse>('/api/struct/scan', form);
+/**
+ * Start a rough scan by uploading the video (multipart). Wrapped in a small
+ * bounded retry (3 attempts, 1s/2s/4s backoff) so a flaky upload connection
+ * retries before failing. Same signature — callers see no new surface; it just
+ * becomes resilient. After attempts are exhausted it re-throws (fail-fast).
+ */
+export async function startScan(file: File): Promise<ScanStartResponse> {
+  const maxAttempts = 3;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    if (attempt > 0) {
+      // 1s, 2s, 4s backoff before each retry.
+      await new Promise((resolve) => setTimeout(resolve, 1000 * 2 ** (attempt - 1)));
+    }
+    try {
+      // Rebuild the FormData each attempt so the body is fresh on retry.
+      const form = new FormData();
+      form.append('video', file);
+      return await structPostForm<ScanStartResponse>('/api/struct/scan', form);
+    } catch (e) {
+      // Deterministic client errors (HTTP 4xx, e.g. 413 file-too-large / 400 bad
+      // upload) won't succeed on retry — re-throw immediately instead of wasting
+      // the full backoff. Only retry network failures (status null) and 5xx.
+      if (e instanceof StructApiError && e.status !== null && e.status >= 400 && e.status < 500) {
+        throw e;
+      }
+      lastError = e;
+    }
+  }
+  throw lastError;
 }
 
 export function getScanStatus(jobId: string): Promise<ScanStatus> {

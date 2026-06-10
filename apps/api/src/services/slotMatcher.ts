@@ -21,8 +21,9 @@ export function matchSlots(
   assets: AssetCard[],
   boundaries?: Boundary[]
 ): { matches: SlotMatch[]; gaps: MaterialGap[] } {
+  const matchableAssets = assets.filter(isMatchableAsset);
   const matches: SlotMatch[] = graph.shotSlots.map((slot) => {
-    const ranked = assets
+    const ranked = matchableAssets
       .map((asset) => {
         const semanticMatch = getSemanticMatch(slot.role, asset);
         const typeMatch =
@@ -64,6 +65,9 @@ export function matchSlots(
       return {
         slotId: slot.id,
         assetId: best.asset.id,
+        assetSegmentId: best.asset.segmentSource ? best.asset.id : undefined,
+        mediaStartSec: best.asset.segmentSource?.startSec,
+        mediaEndSec: best.asset.segmentSource?.endSec,
         score,
         ingredientMatchScore: best.ingredientMatchScore,
         missingIngredients: sanitizeMissingIngredients(best.missingIngredients),
@@ -77,6 +81,9 @@ export function matchSlots(
       return {
         slotId: slot.id,
         assetId: best.asset.id,
+        assetSegmentId: best.asset.segmentSource ? best.asset.id : undefined,
+        mediaStartSec: best.asset.segmentSource?.startSec,
+        mediaEndSec: best.asset.segmentSource?.endSec,
         score,
         ingredientMatchScore: best.ingredientMatchScore,
         missingIngredients: sanitizeMissingIngredients(best.missingIngredients),
@@ -90,6 +97,10 @@ export function matchSlots(
 
     return {
       slotId: slot.id,
+      assetId: best?.asset.id,
+      assetSegmentId: best?.asset.segmentSource ? best.asset.id : undefined,
+      mediaStartSec: best?.asset.segmentSource?.startSec,
+      mediaEndSec: best?.asset.segmentSource?.endSec,
       score,
       ingredientMatchScore: best?.ingredientMatchScore ?? 0,
       missingIngredients: sanitizeMissingIngredients(best?.missingIngredients ?? slot.visualIngredientRequirements ?? []),
@@ -119,6 +130,14 @@ export function matchSlots(
     });
 
   return { matches, gaps };
+}
+
+function isMatchableAsset(asset: AssetCard): boolean {
+  return !(
+    asset.type === 'video'
+    && !asset.segmentSource
+    && (asset.analysis?.videoSegments?.length ?? 0) > 0
+  );
 }
 
 function buildSlotMotifContext(slot: ViralStructureGraph['shotSlots'][number]): MaterialGap['motifContext'] {
@@ -200,6 +219,7 @@ function buildAssetMatchEvidence(asset: AssetCard, slotRole: ShotSlotRole): Asse
     ?? (asset.analysis?.quality.productFocus !== undefined ? Math.round(asset.analysis.quality.productFocus * 100) : undefined);
   const reasons = [
     topAffordance ? `${topAffordance.role} affordance ${Math.round(topAffordance.score)}: ${topAffordance.rationale}` : undefined,
+    asset.segmentSource ? `segment: ${asset.segmentSource.label} (${asset.segmentSource.startSec}s-${asset.segmentSource.endSec}s)` : undefined,
     asset.analysis?.semantic.summary ? `semantic: ${asset.analysis.semantic.summary}` : undefined,
     asset.analysis?.slotAffordance.rationale ? `slot affordance: ${asset.analysis.slotAffordance.rationale}` : undefined,
     `quality: ${qualityScore.toFixed(2)}`
@@ -207,6 +227,11 @@ function buildAssetMatchEvidence(asset: AssetCard, slotRole: ShotSlotRole): Asse
 
   return {
     assetId: asset.id,
+    parentAssetId: asset.segmentSource?.parentAssetId,
+    segmentLabel: asset.segmentSource?.label,
+    mediaStartSec: asset.segmentSource?.startSec,
+    mediaEndSec: asset.segmentSource?.endSec,
+    segmentIndex: asset.segmentSource?.segmentIndex,
     qualityScore,
     topAffordanceRole: topAffordance?.role,
     topAffordanceScore: topAffordance?.score,
@@ -218,6 +243,7 @@ function buildAssetMatchEvidence(asset: AssetCard, slotRole: ShotSlotRole): Asse
     reasons,
     warnings: [
       ...(asset.analysis?.warnings ?? []),
+      ...(asset.segmentSource?.warnings ?? []),
       ...(asset.analysis?.quality.issues.map((issue) => issue.message) ?? [])
     ]
   };
@@ -422,6 +448,10 @@ interface SlotSummary {
 interface AssetSummary {
   id: string;
   type: AssetCard['type'];
+  parentAssetId?: string;
+  segmentLabel?: string;
+  mediaStartSec?: number;
+  mediaEndSec?: number;
   visualContent?: AssetCard['visualContent'];
   motionPotential?: AssetCard['motionPotential'];
   candidateSlotRoles?: AssetCard['candidateSlotRoles'];
@@ -475,6 +505,10 @@ function summarizeAsset(asset: AssetCard): AssetSummary {
   return {
     id: asset.id,
     type: asset.type,
+    parentAssetId: asset.segmentSource?.parentAssetId,
+    segmentLabel: asset.segmentSource?.label,
+    mediaStartSec: asset.segmentSource?.startSec,
+    mediaEndSec: asset.segmentSource?.endSec,
     visualContent: asset.visualContent,
     motionPotential: asset.motionPotential,
     candidateSlotRoles: asset.candidateSlotRoles,
@@ -646,7 +680,10 @@ function buildLLMMatch(
     missingDescription: result.missing || undefined,
     treatmentSpec,
     alignmentSource: 'llm_judge',
-    assetEvidence: asset ? buildAssetMatchEvidence(asset, slot.role) : undefined
+    assetEvidence: asset ? buildAssetMatchEvidence(asset, slot.role) : undefined,
+    assetSegmentId: asset?.segmentSource ? asset.id : undefined,
+    mediaStartSec: asset?.segmentSource?.startSec,
+    mediaEndSec: asset?.segmentSource?.endSec
   };
 }
 
@@ -676,6 +713,7 @@ export interface MatchSlotsLLMOptions {
 
 export async function matchSlotsLLM(opts: MatchSlotsLLMOptions): Promise<{ matches: SlotMatch[]; gaps: MaterialGap[] }> {
   const { graph, assets, clientFactory, model, sourceBannedTerms = [] } = opts;
+  const matchableAssets = assets.filter(isMatchableAsset);
   const client = (clientFactory ?? createOpenAICompatibleClient)();
   const modelId = model ?? process.env.LLM_MODEL;
   if (!modelId) {
@@ -683,7 +721,7 @@ export async function matchSlotsLLM(opts: MatchSlotsLLMOptions): Promise<{ match
   }
 
   const slotSummaries = graph.shotSlots.map((slot) => summarizeSlot(slot, sourceBannedTerms));
-  const assetSummaries = assets.map(summarizeAsset);
+  const assetSummaries = matchableAssets.map(summarizeAsset);
 
   const messages = [
     { role: 'system' as const, content: SLOT_ALIGNMENT_SYSTEM_PROMPT },
@@ -716,8 +754,8 @@ export async function matchSlotsLLM(opts: MatchSlotsLLMOptions): Promise<{ match
   const parsed = JSON.parse(stripJsonFence(raw));
   const validated = SlotAlignmentResponseSchema.parse(parsed);
 
-  const knownAssetIds = new Set(assets.map((a) => a.id));
-  const assetById = new Map(assets.map((asset) => [asset.id, asset]));
+  const knownAssetIds = new Set(matchableAssets.map((a) => a.id));
+  const assetById = new Map(matchableAssets.map((asset) => [asset.id, asset]));
   const matches: SlotMatch[] = graph.shotSlots.map((slot) => {
     const aligned = validated[slot.id];
     if (!aligned) {
