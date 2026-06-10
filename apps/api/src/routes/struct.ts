@@ -14,7 +14,7 @@ import { Router } from 'express';
 import multer, { MulterError } from 'multer';
 import type { RequestHandler } from 'express';
 import { randomUUID } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { copyFile, readFile, rm, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { nanoid } from 'nanoid';
@@ -23,6 +23,7 @@ import { analyzeVideoFile, getSeedVideoPath, getUploadedVideoPath, listSeedVideo
 import { extractStructureFromVideoAnalysis } from '../services/structureExtractor';
 import { runRoughScan, getScanDataDir } from '../services/roughScanRunner';
 import { runFineScan, type FineBlockDetail } from '../services/fineScanRunner';
+import { runBoundaryScan } from '../services/boundaryScanRunner';
 import { analyzeAssetsWithFallbackResult } from '../services/assetAnalyzer';
 import { matchSlotsWithFallback } from '../services/slotMatcher';
 import { runDirectorAgent, buildGapResolutionOptions } from '../services/directorAgent';
@@ -32,6 +33,9 @@ import { wanConfigFromEnv } from '../services/videoAgent/wanVideoClient';
 import { orchestratedToAuthored } from '../services/videoAgent/orchestratedToAuthored';
 import { authoredTimelineToTimelineItems } from '../services/videoAgent/authoredTimelineAdapter';
 import { renderAuthoredTimeline } from '../services/videoAgent/runVideoAgentPipeline';
+import { renderHyperframesForSlot } from '../services/hyperframesSlotRenderer';
+import { renderTransitionPreview, transitionDurationMs } from '../services/transitionRenderer';
+import { rewriteAssetCardUrlsToDisk } from '../services/authoredRenderService';
 import { applyNaturalLanguageEditWithFallback } from '../services/timelineEditor';
 import { evaluateQuality } from '../services/qualityEvaluator';
 import { checkBrandSafety } from '../services/brandSafetyChecker';
@@ -58,11 +62,14 @@ import type {
 } from '@viral-struct/shared';
 import {
   assetCardsToMaterials,
+  boundaryToUiTransition,
+  boundaryTypeToUi,
   buildContentBrief,
   buildStructureGraph,
   graphToSourceVideo,
   materialsToAssetCards,
   segsToTimelineItems,
+  techniqueTagsToBoundaryType,
   timelineItemsToSegs,
   toDiagnosisRecord,
   variantToTargetDurationMode,
@@ -79,6 +86,7 @@ import type {
   SourceVideo,
   TargetProduct,
   TimelineSeg,
+  Transition,
 } from '../services/structAdapter/structTypes';
 
 // Shared multer instance (used by /scan, /sample/analyze, /materials/upload).
@@ -255,6 +263,34 @@ interface FineJob {
 }
 const fineJobs = new Map<string, FineJob>();
 
+interface BoundaryJob {
+  status: ScanJobStatus;
+  stage?: string;
+  transitionIndex: number;
+  /** The re-scanned UI transition (real type + evidence), spliced in by the store. */
+  transition?: Transition;
+  warnings?: string[];
+  error?: string;
+  startedAt: number;
+  finishedAt?: number;
+}
+const boundaryJobs = new Map<string, BoundaryJob>();
+
+interface HyperframesJob {
+  status: ScanJobStatus;
+  stage?: string;
+  /** Slot id (for slot fills) or transition id (for transition fills). */
+  targetId: string;
+  /** Absolute preview URL of the rendered beat/transition MP4 (when done). */
+  previewUrl?: string;
+  source?: 'llm' | 'mock';
+  warnings?: string[];
+  error?: string;
+  startedAt: number;
+  finishedAt?: number;
+}
+const hyperframesJobs = new Map<string, HyperframesJob>();
+
 function sweepScanJobs(): void {
   const now = Date.now();
   for (const [id, job] of scanJobs) {
@@ -262,6 +298,12 @@ function sweepScanJobs(): void {
   }
   for (const [id, job] of fineJobs) {
     if (job.finishedAt && now - job.finishedAt > 30 * 60_000) fineJobs.delete(id);
+  }
+  for (const [id, job] of boundaryJobs) {
+    if (job.finishedAt && now - job.finishedAt > 30 * 60_000) boundaryJobs.delete(id);
+  }
+  for (const [id, job] of hyperframesJobs) {
+    if (job.finishedAt && now - job.finishedAt > 30 * 60_000) hyperframesJobs.delete(id);
   }
   // Evict retained scan inputs after 60 min (free disk: raw video + work dir).
   // LIBRARY-OWNED entries (keepFiles) are evicted from the Map but their files are
@@ -403,6 +445,111 @@ structRouter.get('/scan/fine/:jobId', (req, res) => {
     stage: job.stage,
     segmentIndex: job.segmentIndex,
     detail: job.detail,
+    error: job.error,
+    elapsedSec,
+  });
+});
+
+/* ─── POST /api/struct/scan/:videoId/boundary — boundary-scan ONE transition seam ──
+   The web rough scan does NOT run boundary_scan.py, so graph.boundaries is absent and
+   the UI synthesizes all-硬切 seams. This re-scans ONE seam on demand to recover its
+   real transition type (叠化/推镜/…). Reuses the rough scan's retained raw video + rough
+   output. Async (microscope clip + VLM, ~30–60s). Body: { transitionIndex, transition }.
+   Poll GET /scan/boundary/:jobId. The UI transition at index i maps to rough boundary
+   `boundary_{i+1:03d}` (the seam between block i and i+1 — same indexing as the offline
+   _build_boundaries in extract_structure_graph.py). */
+
+/** UI transition index i → rough scan boundary id (1-based, zero-padded to 3). */
+function boundaryIdForIndex(index: number): string {
+  return `boundary_${String(index + 1).padStart(3, '0')}`;
+}
+
+structRouter.post('/scan/:videoId/boundary', async (req, res) => {
+  const { videoId } = req.params;
+  const artifacts = scanArtifacts.get(videoId);
+  if (!artifacts) {
+    res.status(404).json({ error: '找不到该视频的扫描数据（可能已过期，请重新上传并粗扫描）。' });
+    return;
+  }
+  const body = (req.body ?? {}) as { transitionIndex?: unknown; transition?: Partial<Transition> };
+  const transitionIndex = Number(body.transitionIndex);
+  if (!Number.isInteger(transitionIndex) || transitionIndex < 0) {
+    res.status(400).json({ error: 'transitionIndex（转场序号）缺失或无效。' });
+    return;
+  }
+  const tr = body.transition;
+  if (!tr || typeof tr.id !== 'string' || typeof tr.from !== 'string' || typeof tr.to !== 'string') {
+    res.status(400).json({ error: 'transition（待扫描的转场对象）缺失或无效。' });
+    return;
+  }
+
+  const boundaryId = boundaryIdForIndex(transitionIndex);
+  try {
+    const rough = JSON.parse(await readFile(artifacts.roughScanPath, 'utf-8')) as {
+      boundaryCandidates?: Array<{ id?: string }>;
+    };
+    const exists = (rough.boundaryCandidates ?? []).some((b) => b?.id === boundaryId);
+    if (!exists) {
+      res.status(400).json({ error: `该转场（${boundaryId}）在粗扫描中无对应边界候选，无法精扫描。` });
+      return;
+    }
+  } catch (error) {
+    res.status(500).json({ error: errorMessage(error) });
+    return;
+  }
+
+  sweepScanJobs();
+  const jobId = randomUUID();
+  boundaryJobs.set(jobId, { status: 'running', stage: '排队中', transitionIndex, startedAt: Date.now() });
+  res.status(202).json({ jobId });
+
+  const from = tr.from;
+  const to = tr.to;
+  const at = typeof tr.at === 'number' ? tr.at : 0;
+  const id = tr.id;
+
+  void (async () => {
+    const setStage = (stage: string) => {
+      const j = boundaryJobs.get(jobId);
+      if (j && j.status === 'running') j.stage = stage;
+    };
+    const startedAt = boundaryJobs.get(jobId)?.startedAt ?? Date.now();
+    try {
+      const { candidate } = await runBoundaryScan(artifacts.videoPath, artifacts.roughScanPath, boundaryId, artifacts.workDir, setStage);
+      // No transition unit detected → an honest content hard-cut (硬切 is its ceiling).
+      // Otherwise classify techniqueTags → shared type → UI type (beats skipped → no 卡点).
+      const uiType = candidate.exists
+        ? boundaryTypeToUi(techniqueTagsToBoundaryType(candidate.techniqueTags))
+        : '硬切';
+      const transition = boundaryToUiTransition({ id, from, to, at, type: uiType, evidence: candidate.visualChange, scanned: true });
+
+      const warnings: string[] = [];
+      if (!candidate.exists) {
+        warnings.push('Boundary Scan：此处为内容硬切，无独立转场单元（硬切是其天花板）');
+      } else {
+        const conf = typeof candidate.confidence === 'number' ? ` · 置信度 ${Math.round(candidate.confidence * 100)}%` : '';
+        warnings.push(`Boundary Scan：识别为「${uiType}」${conf}${candidate.visualChange ? ` · ${candidate.visualChange}` : ''}`);
+      }
+      boundaryJobs.set(jobId, { status: 'done', transitionIndex, transition, warnings, startedAt, finishedAt: Date.now() });
+    } catch (error) {
+      boundaryJobs.set(jobId, { status: 'error', transitionIndex, error: errorMessage(error), startedAt, finishedAt: Date.now() });
+    }
+  })();
+});
+
+structRouter.get('/scan/boundary/:jobId', (req, res) => {
+  const job = boundaryJobs.get(req.params.jobId);
+  if (!job) {
+    res.status(404).json({ error: 'boundary scan job not found（任务可能已过期）' });
+    return;
+  }
+  const elapsedSec = Math.round(((job.finishedAt ?? Date.now()) - job.startedAt) / 1000);
+  res.json({
+    status: job.status,
+    stage: job.stage,
+    transitionIndex: job.transitionIndex,
+    transition: job.transition,
+    warnings: job.warnings,
     error: job.error,
     elapsedSec,
   });
@@ -973,6 +1120,180 @@ structRouter.get('/produce/:jobId', (req, res) => {
     status: job.status,
     stage: job.stage,
     downloadUrl: job.downloadUrl,
+    warnings: job.warnings,
+    error: job.error,
+    elapsedSec,
+  });
+});
+
+/* ─── POST /api/struct/hyperframes/slot — render ONE slot with the HyperFrames Agent ──
+   The user picked 「HyperFrames 补全」 for this slot in the gap-fill studio. The Director
+   authors the per-slot brief and the (narrowed) HyperFrames engine renders JUST this beat
+   into a real MP4 for preview — no whole-ad authoring, no new pixels (real assets only).
+   Async (author→lint→render→critic, ~30–120s). Poll GET /hyperframes/:jobId.
+   Body: { sourceVideo, materials, product, slotId, productImageUrl? }. */
+structRouter.post('/hyperframes/slot', (req, res) => {
+  const sourceVideo = req.body?.sourceVideo as SourceVideo | undefined;
+  if (!sourceVideo?.segments?.length) {
+    res.status(400).json({ error: 'sourceVideo with segments is required' });
+    return;
+  }
+  const slotId = typeof req.body?.slotId === 'string' ? req.body.slotId : '';
+  if (!slotId) {
+    res.status(400).json({ error: 'slotId（待补全的槽位）缺失' });
+    return;
+  }
+  const materials = (req.body?.materials ?? []) as Material[];
+  const product = (req.body?.product as TargetProduct) ?? stubProduct(sourceVideo, materials);
+  const productImageUrl =
+    typeof req.body?.productImageUrl === 'string' && req.body.productImageUrl ? req.body.productImageUrl : undefined;
+
+  sweepScanJobs();
+  const jobId = randomUUID();
+  hyperframesJobs.set(jobId, { status: 'running', stage: '排队中', targetId: slotId, startedAt: Date.now() });
+  // Capture the absolute media base BEFORE going async (req is request-scoped).
+  const mediaBase = `${req.protocol}://${req.get('host')}`;
+  res.status(202).json({ jobId });
+
+  void (async () => {
+    const startedAt = hyperframesJobs.get(jobId)?.startedAt ?? Date.now();
+    const setStage = (stage: string) => {
+      const j = hyperframesJobs.get(jobId);
+      if (j && j.status === 'running') j.stage = stage;
+    };
+    try {
+      const result = await renderHyperframesForSlot({ sourceVideo, materials, product, slotId, productImageUrl, onStage: setStage });
+      if (!result.rendered || !result.mediaUrl) {
+        hyperframesJobs.set(jobId, {
+          status: 'error',
+          targetId: slotId,
+          error: result.warnings[0] ?? 'HyperFrames 渲染失败（未产出 MP4）',
+          warnings: result.warnings,
+          startedAt,
+          finishedAt: Date.now(),
+        });
+        return;
+      }
+      hyperframesJobs.set(jobId, {
+        status: 'done',
+        targetId: slotId,
+        previewUrl: `${mediaBase}${result.mediaUrl}`,
+        source: result.source,
+        warnings: result.warnings,
+        startedAt,
+        finishedAt: Date.now(),
+      });
+    } catch (error) {
+      hyperframesJobs.set(jobId, { status: 'error', targetId: slotId, error: errorMessage(error), startedAt, finishedAt: Date.now() });
+    }
+  })();
+});
+
+/** Resolve a Material.url (absolute uploaded disk path, or /media/demo-assets web path)
+ *  to an on-disk file ffmpeg can read. Returns null when it can't be located. */
+function resolveMaterialDiskPath(url: string): string | null {
+  if (existsSync(url)) return url;
+  const [rewritten] = rewriteAssetCardUrlsToDisk([{ url }]);
+  if (rewritten?.url && existsSync(rewritten.url)) return rewritten.url;
+  return null;
+}
+
+/* ─── POST /api/struct/hyperframes/transition — composite ONE seam's transition ──
+   Non-generative HyperFrames transition: take the two adjacent slots' REAL assigned
+   assets and ffmpeg-xfade them with the seam's real type (from Boundary Scan) + a
+   content-aware duration → a real "首尾帧形变转场" preview MP4 (no new pixels).
+   Async. Poll GET /hyperframes/:jobId. Body: { sourceVideo, materials, transitionIndex }. */
+structRouter.post('/hyperframes/transition', (req, res) => {
+  const sourceVideo = req.body?.sourceVideo as SourceVideo | undefined;
+  if (!sourceVideo?.transitions?.length) {
+    res.status(400).json({ error: 'sourceVideo with transitions is required' });
+    return;
+  }
+  const transitionIndex = Number(req.body?.transitionIndex);
+  if (!Number.isInteger(transitionIndex) || transitionIndex < 0 || transitionIndex >= sourceVideo.transitions.length) {
+    res.status(400).json({ error: 'transitionIndex（转场序号）缺失或越界' });
+    return;
+  }
+  const tr = sourceVideo.transitions[transitionIndex];
+  const materials = (req.body?.materials ?? []) as Material[];
+  const fromMat = materials.find((m) => m.slot === tr.from);
+  const toMat = materials.find((m) => m.slot === tr.to);
+  if (!fromMat?.url || !toMat?.url) {
+    const missing = !fromMat?.url ? tr.from : tr.to;
+    res.status(400).json({ error: `需要先在「素材」给槽位 ${String(missing).toUpperCase()} 分配一个素材，才能合成这条转场` });
+    return;
+  }
+  const fromPath = resolveMaterialDiskPath(fromMat.url);
+  const toPath = resolveMaterialDiskPath(toMat.url);
+  if (!fromPath || !toPath) {
+    res.status(400).json({ error: '相邻槽位素材无法定位到磁盘文件（可能已过期，请重新上传素材）' });
+    return;
+  }
+
+  sweepScanJobs();
+  const jobId = randomUUID();
+  hyperframesJobs.set(jobId, { status: 'running', stage: '排队中', targetId: tr.id, startedAt: Date.now() });
+  const mediaBase = `${req.protocol}://${req.get('host')}`;
+  res.status(202).json({ jobId });
+
+  void (async () => {
+    const startedAt = hyperframesJobs.get(jobId)?.startedAt ?? Date.now();
+    const setStage = (stage: string) => {
+      const j = hyperframesJobs.get(jobId);
+      if (j && j.status === 'running') j.stage = stage;
+    };
+    try {
+      const durationMs = transitionDurationMs(tr.type, sourceVideo.rhythm?.avg_shot);
+      const result = await renderTransitionPreview({
+        fromPath,
+        toPath,
+        uiType: tr.type,
+        durationMs,
+        outDir: getRenderDir(),
+        onStage: setStage,
+      });
+      if (!result.rendered || !result.mediaUrl) {
+        hyperframesJobs.set(jobId, {
+          status: 'error',
+          targetId: tr.id,
+          error: result.warnings[0] ?? '转场合成失败',
+          warnings: result.warnings,
+          startedAt,
+          finishedAt: Date.now(),
+        });
+        return;
+      }
+      hyperframesJobs.set(jobId, {
+        status: 'done',
+        targetId: tr.id,
+        previewUrl: `${mediaBase}${result.mediaUrl}`,
+        source: 'mock',
+        warnings: [
+          `转场「${tr.type}」· xfade ${result.transition} · ${result.durationSec.toFixed(2)}s · 真实素材`,
+          ...result.warnings,
+        ],
+        startedAt,
+        finishedAt: Date.now(),
+      });
+    } catch (error) {
+      hyperframesJobs.set(jobId, { status: 'error', targetId: tr.id, error: errorMessage(error), startedAt, finishedAt: Date.now() });
+    }
+  })();
+});
+
+structRouter.get('/hyperframes/:jobId', (req, res) => {
+  const job = hyperframesJobs.get(req.params.jobId);
+  if (!job) {
+    res.status(404).json({ error: 'hyperframes job not found（任务可能已过期）' });
+    return;
+  }
+  const elapsedSec = Math.round(((job.finishedAt ?? Date.now()) - job.startedAt) / 1000);
+  res.json({
+    status: job.status,
+    stage: job.stage,
+    targetId: job.targetId,
+    previewUrl: job.previewUrl,
+    source: job.source,
     warnings: job.warnings,
     error: job.error,
     elapsedSec,

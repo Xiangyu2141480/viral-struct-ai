@@ -30,7 +30,16 @@ import {
 import { applyStrategy as applyStrategyApi, diagnose as diagnoseApi } from '../api/diagnose';
 import { matchMaterials as matchMaterialsApi, uploadMaterials as uploadMaterialsApi } from '../api/materials';
 import { analyzeSample as analyzeSampleApi } from '../api/sample';
-import { getFineScanStatus, getScanStatus, startFineScan, startScan, type FineBlockDetail } from '../api/scan';
+import {
+  getBoundaryScanStatus,
+  getFineScanStatus,
+  getScanStatus,
+  startBoundaryScan,
+  startFineScan,
+  startScan,
+  type FineBlockDetail,
+} from '../api/scan';
+import { getHyperframesStatus, startHyperframesSlot, startHyperframesTransition } from '../api/hyperframes';
 import {
   deleteStructure as deleteStructureApi,
   getStructure as getStructureApi,
@@ -97,6 +106,14 @@ interface ProjectState {
    *  segment is in progress). Multiple segments fine-scan CONCURRENTLY and each keeps
    *  its own progress, so analyzing one segment never clobbers another's state. */
   fineScanStages: Record<string, string>;
+  /** Per-transition boundary-scan progress label, keyed by transition id (a key present
+   *  = that seam is being re-scanned). Independent per seam, like fineScanStages. */
+  boundaryScanStages: Record<string, string>;
+  /** Per-slot HyperFrames-render progress label, keyed by slot id (a key present = that
+   *  slot is being rendered by the HyperFrames Agent). Independent per slot. */
+  hyperframesStages: Record<string, string>;
+  /** Per-slot HyperFrames preview result (a real MP4 url + source), keyed by slot id. */
+  hyperframesPreviews: Record<string, { url: string; source: string }>;
   /** Per-segment deep detail from fine scan, keyed by UI segment id. */
   segmentDetails: Record<string, FineBlockDetail>;
   uploading: boolean;
@@ -127,6 +144,12 @@ interface ProjectState {
   analyzeSample: (input: { file?: File; sampleId?: string }) => Promise<void>;
   scanSample: (file: File) => Promise<void>;
   fineScanSegment: (segmentIndex: number, segmentId: string) => Promise<void>;
+  /** Re-scan ONE transition seam (boundary_scan.py) to recover its real type. */
+  boundaryScanTransition: (transitionIndex: number, transitionId: string) => Promise<void>;
+  /** Render ONE slot with the HyperFrames Agent in the background → a real preview MP4. */
+  hyperframesFillSlot: (slotId: string) => Promise<void>;
+  /** Composite ONE transition seam (ffmpeg xfade over adjacent real assets) → preview MP4. */
+  hyperframesFillTransition: (transitionIndex: number, transitionId: string) => Promise<void>;
   addMaterials: (files: File[]) => Promise<void>;
   setSlot: (materialId: string, slot: string | null) => void;
   applyAssignments: (assignments: Record<string, string | null>) => Promise<void>;
@@ -230,6 +253,9 @@ const initialState = {
   scanning: false,
   scanStage: '',
   fineScanStages: {} as Record<string, string>,
+  boundaryScanStages: {} as Record<string, string>,
+  hyperframesStages: {} as Record<string, string>,
+  hyperframesPreviews: {} as Record<string, { url: string; source: string }>,
   segmentDetails: {} as Record<string, FineBlockDetail>,
   uploading: false,
   matching: false,
@@ -310,7 +336,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         }
         if (s.status === 'error') throw new Error(s.error || '粗扫描失败');
         if (!s.sourceVideo) throw new Error('扫描完成但未返回结构');
-        set({ sourceVideo: s.sourceVideo, mode: 'live', warnings: s.warnings ?? [], scanning: false, scanStage: '', segmentDetails: {}, fineScanStages: {} });
+        set({ sourceVideo: s.sourceVideo, mode: 'live', warnings: s.warnings ?? [], scanning: false, scanStage: '', segmentDetails: {}, fineScanStages: {}, boundaryScanStages: {}, hyperframesStages: {}, hyperframesPreviews: {} });
         void get().refreshAssetManagerCoverage();
         return;
       }
@@ -349,6 +375,160 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         const rest = { ...st.fineScanStages };
         delete rest[segmentId];
         return { fineScanStages: rest, lastError: '精扫描失败 · ' + errMsg(e) };
+      });
+      throw e;
+    }
+  },
+
+  boundaryScanTransition: async (transitionIndex, transitionId) => {
+    // Re-scan ONE seam: boundary_scan.py → real transition type (叠化/推镜/…) for just
+    // this transition. The backend returns an updated copy; splice it in BY ID (so
+    // other seams stay untouched). FAIL-FAST on error. Multiple seams can scan at once,
+    // each keyed by its own transition id in boundaryScanStages.
+    const transition = get().sourceVideo.transitions[transitionIndex];
+    if (!transition || transition.id !== transitionId) {
+      set({ lastError: '转场扫描失败 · 找不到该转场（结构可能已更新，请重试）' });
+      return;
+    }
+    set((st) => ({ boundaryScanStages: { ...st.boundaryScanStages, [transitionId]: '排队中' }, lastError: null }));
+    try {
+      const { jobId } = await startBoundaryScan(get().sourceVideo.id, transitionIndex, transition);
+      for (let i = 0; i < 180; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        const s = await getBoundaryScanStatus(jobId);
+        if (s.status === 'running') {
+          set((st) => ({ boundaryScanStages: { ...st.boundaryScanStages, [transitionId]: (s.stage ?? '转场扫描中') + (s.elapsedSec ? ` · ${s.elapsedSec}s` : '') } }));
+          continue;
+        }
+        if (s.status === 'error') throw new Error(s.error || '转场扫描失败');
+        if (!s.transition) throw new Error('转场扫描完成但未返回结果');
+        const updated = s.transition;
+        set((st) => {
+          const rest = { ...st.boundaryScanStages };
+          delete rest[transitionId];
+          // Match by id (the index may have shifted) so only this seam is replaced.
+          const transitions = st.sourceVideo.transitions.map((t) => (t.id === transitionId ? updated : t));
+          return {
+            sourceVideo: { ...st.sourceVideo, transitions },
+            boundaryScanStages: rest,
+            mode: 'live',
+            warnings: s.warnings ?? [],
+          };
+        });
+        return;
+      }
+      throw new Error('转场扫描超时（>6 分钟）');
+    } catch (e) {
+      set((st) => {
+        const rest = { ...st.boundaryScanStages };
+        delete rest[transitionId];
+        return { boundaryScanStages: rest, lastError: '转场扫描失败 · ' + errMsg(e) };
+      });
+      throw e;
+    }
+  },
+
+  hyperframesFillSlot: async (slotId) => {
+    // Render ONE slot with the HyperFrames Agent → a real preview MP4. The Director
+    // authors this slot's brief server-side; the Agent edits in the background. We poll
+    // and store the preview BY slot id, so multiple slots can render concurrently and
+    // each keeps its own progress/preview. FAIL-FAST: surface the backend error
+    // verbatim; never a fake preview.
+    set((st) => ({ hyperframesStages: { ...st.hyperframesStages, [slotId]: '排队中' }, lastError: null }));
+    try {
+      const { jobId } = await startHyperframesSlot({
+        sourceVideo: get().sourceVideo,
+        materials: get().materials,
+        product: get().product,
+        slotId,
+        productImageUrl: get().productImageUrl ?? undefined,
+      });
+      // Poll ~3s; author→lint→render→critic can take a few minutes → ceiling ~120 polls.
+      for (let i = 0; i < 120; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        const s = await getHyperframesStatus(jobId);
+        if (s.status === 'running') {
+          set((st) => ({
+            hyperframesStages: {
+              ...st.hyperframesStages,
+              [slotId]: (s.stage ?? 'HyperFrames 剪辑中') + (s.elapsedSec ? ` · ${s.elapsedSec}s` : ''),
+            },
+          }));
+          continue;
+        }
+        if (s.status === 'error') throw new Error(s.error || 'HyperFrames 渲染失败');
+        const previewUrl = s.previewUrl;
+        if (!previewUrl) throw new Error('HyperFrames 渲染完成但未返回预览');
+        const source = s.source ?? 'llm';
+        set((st) => {
+          const stages = { ...st.hyperframesStages };
+          delete stages[slotId];
+          return {
+            hyperframesStages: stages,
+            hyperframesPreviews: { ...st.hyperframesPreviews, [slotId]: { url: previewUrl, source } },
+            mode: 'live',
+            warnings: s.warnings ?? [],
+          };
+        });
+        return;
+      }
+      throw new Error('HyperFrames 渲染超时（>6 分钟）');
+    } catch (e) {
+      set((st) => {
+        const stages = { ...st.hyperframesStages };
+        delete stages[slotId];
+        return { hyperframesStages: stages, lastError: 'HyperFrames 补全失败 · ' + errMsg(e) };
+      });
+      throw e;
+    }
+  },
+
+  hyperframesFillTransition: async (transitionIndex, transitionId) => {
+    // Composite ONE transition seam (ffmpeg xfade over the two adjacent slots' real
+    // assets) → a real preview MP4. Keyed by transition id in the same maps as slot
+    // fills (t-ids never collide with s-ids). FAIL-FAST: surface backend error verbatim.
+    set((st) => ({ hyperframesStages: { ...st.hyperframesStages, [transitionId]: '排队中' }, lastError: null }));
+    try {
+      const { jobId } = await startHyperframesTransition({
+        sourceVideo: get().sourceVideo,
+        materials: get().materials,
+        transitionIndex,
+      });
+      // ffmpeg xfade is quick → poll ~2s, ceiling ~60 (2 min).
+      for (let i = 0; i < 60; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        const s = await getHyperframesStatus(jobId);
+        if (s.status === 'running') {
+          set((st) => ({
+            hyperframesStages: {
+              ...st.hyperframesStages,
+              [transitionId]: (s.stage ?? '合成转场中') + (s.elapsedSec ? ` · ${s.elapsedSec}s` : ''),
+            },
+          }));
+          continue;
+        }
+        if (s.status === 'error') throw new Error(s.error || '转场合成失败');
+        const previewUrl = s.previewUrl;
+        if (!previewUrl) throw new Error('转场合成完成但未返回预览');
+        const source = s.source ?? 'mock';
+        set((st) => {
+          const stages = { ...st.hyperframesStages };
+          delete stages[transitionId];
+          return {
+            hyperframesStages: stages,
+            hyperframesPreviews: { ...st.hyperframesPreviews, [transitionId]: { url: previewUrl, source } },
+            mode: 'live',
+            warnings: s.warnings ?? [],
+          };
+        });
+        return;
+      }
+      throw new Error('转场合成超时（>2 分钟）');
+    } catch (e) {
+      set((st) => {
+        const stages = { ...st.hyperframesStages };
+        delete stages[transitionId];
+        return { hyperframesStages: stages, lastError: 'HyperFrames 转场失败 · ' + errMsg(e) };
       });
       throw e;
     }
@@ -725,6 +905,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         timeline: null,
         exportResult: null,
         fineScanStages: {},
+        boundaryScanStages: {},
       });
       void get().refreshAssetManagerCoverage();
     } catch (e) {

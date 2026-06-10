@@ -122,6 +122,12 @@ const GapFillStudio = ({
   const [applying, setApplying] = useState(false);
   const reshootInput = useRef<HTMLInputElement>(null);
 
+  // Real HyperFrames render for THIS slot (background job → preview MP4), keyed by slotId.
+  const hyperframesFillSlot = useProjectStore((s) => s.hyperframesFillSlot);
+  const hfStage = useProjectStore((s) => s.hyperframesStages[slotId]);
+  const hfPreview = useProjectStore((s) => s.hyperframesPreviews[slotId]);
+  const hfRendering = hfStage != null;
+
   const reshoot = fill?.reshoot;
   const hyperframes = fill?.hyperframes;
   const aigc = fill?.aigc;
@@ -316,6 +322,43 @@ const GapFillStudio = ({
                 </div>
               </div>
             ) : null}
+
+            {/* Real HyperFrames render — Director sends THIS slot's brief to the Agent,
+                which edits the beat in the background and returns a real preview MP4. */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 2 }}>
+              <button
+                className="btn primary"
+                style={{ justifyContent: 'center', padding: '8px 12px' }}
+                disabled={hfRendering}
+                onClick={() => {
+                  onToast('已交给 HyperFrames Agent · 后台剪辑中…');
+                  void hyperframesFillSlot(slotId).catch((e: unknown) =>
+                    onToast('HyperFrames 失败 · ' + (e instanceof Error ? e.message : String(e))),
+                  );
+                }}
+              >
+                <Icon name={hfRendering ? 'layers' : 'sparkle'} size={12} />
+                {hfRendering ? (hfStage || 'HyperFrames 剪辑中…') : hfPreview ? ' 重新生成 HyperFrames 预览' : ' 生成 HyperFrames 预览'}
+              </button>
+              {hfRendering && (
+                <div className="mono dim" style={{ fontSize: 10.5, lineHeight: 1.5 }}>
+                  Director 已把该槽位 brief 发给 Agent · 后台剪辑（作者→lint→渲染→评审）· 约 1–3 分钟
+                </div>
+              )}
+              {hfPreview && !hfRendering && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <video
+                    src={hfPreview.url}
+                    controls
+                    playsInline
+                    style={{ width: '100%', maxHeight: 360, borderRadius: 6, background: '#000', aspectRatio: '9 / 16' }}
+                  />
+                  <div className="mono dim" style={{ fontSize: 10 }}>
+                    HyperFrames 预览 · {hfPreview.source === 'mock' ? '确定性兜底合成（无 LLM 作者）' : 'LLM 作者 + 评审'} · 真实素材剪辑
+                  </div>
+                </div>
+              )}
+            </div>
           </>
         )}
 
@@ -424,6 +467,22 @@ const TransitionFillStudio = ({
     setTimeout(() => { setGen(prev => ({ ...prev, [method]: 'done' })); onToast(msg); }, 1400);
   };
 
+  // Real HyperFrames transition render (ffmpeg xfade over the two adjacent slots' real
+  // assets). Keyed by transition id in the shared hyperframes maps.
+  const hyperframesFillTransition = useProjectStore((s) => s.hyperframesFillTransition);
+  const transitions = useProjectStore((s) => s.sourceVideo.transitions);
+  const hfStage = useProjectStore((s) => s.hyperframesStages[tr.id]);
+  const hfPreview = useProjectStore((s) => s.hyperframesPreviews[tr.id]);
+  const trIndex = transitions.findIndex((t) => t.id === tr.id);
+  const hfRendering = hfStage != null;
+  const runTransition = () => {
+    if (trIndex < 0) return;
+    onToast('已交给 HyperFrames · 后台合成转场…');
+    void hyperframesFillTransition(trIndex, tr.id).catch((e: unknown) =>
+      onToast('转场失败 · ' + (e instanceof Error ? e.message : String(e))),
+    );
+  };
+
   return (
     <div style={{ border: '1px solid var(--accent-line)', borderLeft: '3px solid var(--accent)', borderRadius: 5, background: 'var(--bg-2)', overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
@@ -510,22 +569,27 @@ const TransitionFillStudio = ({
               <span className="mono" style={{ fontSize: 9.5, color: 'var(--text-mute)', flexShrink: 0, paddingTop: 1 }}>原意</span>
               <span>原结构此处为 <b style={{ color: 'var(--text-2)' }}>{tr.type}</b> · {tr.note}</span>
             </div>
-            {st === 'done' ? (
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 5,
-                background: 'var(--st-filled-bg)', border: '1px solid var(--st-filled-line)',
-                fontSize: 11.5, color: 'var(--st-filled)',
-              }}>
-                <Icon name="check" size={13} />
-                <span style={{ flex: 1 }}>Agent 已合成 · HyperFrames「{hfEffect}」</span>
-                <button className="btn" style={{ padding: '2px 8px', fontSize: 10.5 }} onClick={() => setGen(p => ({ ...p, frame: 'idle' }))}>重做</button>
+            {hfPreview && !hfRendering ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <video
+                  src={hfPreview.url}
+                  controls
+                  playsInline
+                  style={{ width: '100%', maxHeight: 320, borderRadius: 6, background: '#000', aspectRatio: '9 / 16' }}
+                />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span className="mono dim" style={{ fontSize: 10, flex: 1 }}>
+                    真转场预览 · ffmpeg xfade（{tr.type} → {hfEffect}）· 真实素材，无新像素
+                  </span>
+                  <button className="btn" style={{ padding: '2px 8px', fontSize: 10.5 }} disabled={trIndex < 0} onClick={runTransition}>重做</button>
+                </div>
               </div>
             ) : (
               <button className="btn primary" style={{ justifyContent: 'center', padding: '8px 12px' }}
-                disabled={st === 'generating'}
-                onClick={() => runGen(`Agent 已用 HyperFrames「${hfEffect}」合成过渡帧`)}>
-                <Icon name={st === 'generating' ? 'layers' : 'sparkle'} size={12} />
-                {st === 'generating' ? ' Agent 分析前后帧…' : ' 生成过渡帧'}
+                disabled={hfRendering || trIndex < 0}
+                onClick={runTransition}>
+                <Icon name={hfRendering ? 'layers' : 'sparkle'} size={12} />
+                {hfRendering ? ` ${hfStage || '合成转场中…'}` : ' 生成真转场预览（xfade 真实素材）'}
               </button>
             )}
           </>
@@ -597,6 +661,8 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
   const assetManagerWarnings = useProjectStore((s) => s.assetManagerWarnings);
   const assetManagerLastError = useProjectStore((s) => s.assetManagerLastError);
   const applyStrategy = useProjectStore((s) => s.applyStrategy);
+  const boundaryScanTransition = useProjectStore((s) => s.boundaryScanTransition);
+  const boundaryScanStages = useProjectStore((s) => s.boundaryScanStages);
   const T = v.duration;
   // `selected` may hold a SEGMENT id (s1..s7) OR a TRANSITION id (t1..t6).
   const [selected, setSelected] = useState('s2');
@@ -925,6 +991,31 @@ export const ScreenDiagnose = ({ onNext, onBack }: { onNext: () => void; onBack:
                     <span className="mono" style={{ fontSize: 9.5, color: 'var(--text-mute)', letterSpacing: '0.04em' }}>FLOOR</span>
                     转场槽永不缺失 —— 硬切是免费兜底，最差也是<b style={{ color: 'var(--st-weakly)' }}> 弱满足</b>
                   </div>
+
+                  {/* boundary scan — re-parse THIS seam's REAL transition type on demand.
+                      Rough scan only synthesizes 硬切; this runs boundary_scan.py for one seam. */}
+                  {(() => {
+                    const trIndex = v.transitions.findIndex(t => t.id === tr.id);
+                    const stageLabel = boundaryScanStages[tr.id];
+                    const scanning = stageLabel != null;
+                    return (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <button
+                          className="btn"
+                          style={{ width: '100%', justifyContent: 'center' }}
+                          disabled={scanning || trIndex < 0}
+                          onClick={() => { if (trIndex >= 0) void boundaryScanTransition(trIndex, tr.id).catch(() => {}); }}
+                        >
+                          <Icon name="sparkle" size={12} /> {scanning ? (stageLabel || '转场扫描中…') : '深度分析 · Boundary Scan 此转场'}
+                        </button>
+                        {tr.evidence && (
+                          <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-dim)', lineHeight: 1.5 }}>
+                            扫描证据 · {tr.evidence}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* need / have */}
                   <div style={{ display: 'grid', gridTemplateColumns: '60px 1fr', gap: '6px 12px', alignItems: 'center' }}>

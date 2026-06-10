@@ -40,6 +40,8 @@ export interface Transition {
   impact: { dim: string; pct: number; note: string };
   fix: { kind: string; desc: string } | null;
   note: string;
+  /** Human-readable visual evidence from an on-demand boundary scan (optional). */
+  evidence?: string;
 }
 
 export interface SourceVideo {

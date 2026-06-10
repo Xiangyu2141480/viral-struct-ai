@@ -160,7 +160,7 @@ function motionForRole(role: RoleKey): NonNullable<ShotSlotNode['requiredAsset']
 
 /* ─── transition vocab (UI ↔ shared boundary) ───────────────── */
 
-function boundaryTypeToUi(transitionType: string | undefined, alignedToBeat?: boolean): TransitionTypeKey {
+export function boundaryTypeToUi(transitionType: string | undefined, alignedToBeat?: boolean): TransitionTypeKey {
   if (alignedToBeat) return '卡点';
   switch (transitionType) {
     case 'fade':
@@ -187,6 +187,72 @@ function uiTypeToBoundaryType(type: TransitionTypeKey): Boundary['transitionType
     default:
       return 'cut';
   }
+}
+
+/** techniqueTag → shared transitionType (substring match, first table hit wins).
+ *  Ported verbatim from scripts/extract_structure_graph.py:_classify_technique_tags
+ *  so the /scan/:videoId/boundary route classifies a single boundary's micro-scan
+ *  result identically to the offline graph build. Returns 'unknown' on no match. */
+const TAG_TO_TRANSITION: ReadonlyArray<readonly [string, string]> = [
+  ['fade', 'fade'],
+  ['dissolve', 'dissolve'],
+  ['wipe', 'wipe'],
+  ['cut', 'cut'],
+  ['morph', 'morph'],
+  ['motion_blur', 'morph'],
+  ['camera_move', 'morph'],
+  ['zoom', 'morph'],
+  ['pan', 'morph'],
+  ['object_fragmentation', 'morph'],
+  ['object_reassembly', 'morph'],
+  ['object_manipulation', 'morph'],
+];
+export function techniqueTagsToBoundaryType(tags: ReadonlyArray<string> | undefined): string {
+  if (!tags?.length) return 'unknown';
+  const normalized = tags.filter((t): t is string => typeof t === 'string').map((t) => t.trim().toLowerCase());
+  for (const [predicate, ttype] of TAG_TO_TRANSITION) {
+    if (normalized.some((tag) => tag.includes(predicate))) return ttype;
+  }
+  return 'unknown';
+}
+
+/** Build one canonical UI Transition from a (from→to) seam of a known type.
+ *  Single source of truth for transition-seam fields, shared by graphToTransitions
+ *  (offline graph build) and the /scan/:videoId/boundary route (on-demand re-scan of
+ *  ONE seam). `evidence`/`scanned` carry the honest provenance from a boundary scan. */
+export function boundaryToUiTransition(args: {
+  id: string;
+  from: string;
+  to: string;
+  at: number;
+  type: TransitionTypeKey;
+  evidence?: string;
+  scanned?: boolean;
+}): Transition {
+  const isCut = args.type === '硬切';
+  return {
+    id: args.id,
+    from: args.from,
+    to: args.to,
+    at: round01(args.at),
+    type: args.type,
+    applied: args.type,
+    state: isCut ? 'weakly' : 'filled',
+    upgradable: isCut,
+    dur: isCut ? 0 : 0.3,
+    intendedDur: isCut ? 0 : 0.3,
+    need: isCut ? ['硬切'] : [`${args.from} 出帧`, `${args.to} 入帧`],
+    have: isCut ? ['硬切'] : [`${args.from} 出帧`, `${args.to} 入帧`],
+    gap_reason: isCut
+      ? args.scanned
+        ? 'Boundary Scan 确认此处为硬切，弱满足是它的天花板，不是缺口'
+        : '原结构此处即为硬切，弱满足是它的天花板，不是缺口'
+      : '—',
+    impact: { dim: 'rhythm', pct: 0, note: isCut ? '硬切节奏顿挫' : '过渡成立，节奏平稳' },
+    fix: null,
+    note: `${args.from.toUpperCase()} → ${args.to.toUpperCase()}`,
+    ...(args.evidence ? { evidence: args.evidence } : {}),
+  };
 }
 
 /* ============================================================
@@ -290,26 +356,13 @@ export function graphToTransitions(graph: ViralStructureGraph, segments: SourceS
   if (boundaries.length > 0) {
     return boundaries.map((b, i) => {
       const toSeg = segments.find((s) => s.id === b.to);
-      const type = boundaryTypeToUi(b.transitionType, b.alignedToBeat);
-      const isCut = type === '硬切';
-      return {
+      return boundaryToUiTransition({
         id: b.id ?? `t${i + 1}`,
         from: b.from,
         to: b.to,
-        at: round01(toSeg?.start ?? 0),
-        type,
-        applied: type,
-        state: isCut ? 'weakly' : 'filled',
-        upgradable: isCut,
-        dur: isCut ? 0 : 0.3,
-        intendedDur: isCut ? 0 : 0.3,
-        need: isCut ? ['硬切'] : [`${b.from} 出帧`, `${b.to} 入帧`],
-        have: isCut ? ['硬切'] : [`${b.from} 出帧`, `${b.to} 入帧`],
-        gap_reason: isCut ? '原结构此处即为硬切，弱满足是它的天花板，不是缺口' : '—',
-        impact: { dim: 'rhythm', pct: 0, note: isCut ? '硬切节奏顿挫' : '过渡成立，节奏平稳' },
-        fix: null,
-        note: `${b.from.toUpperCase()} → ${b.to.toUpperCase()}`,
-      };
+        at: toSeg?.start ?? 0,
+        type: boundaryTypeToUi(b.transitionType, b.alignedToBeat),
+      });
     });
   }
   // Synthesize hard-cut seams between consecutive segments (honest floor).

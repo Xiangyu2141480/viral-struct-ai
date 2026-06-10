@@ -4,6 +4,7 @@
 
 import { StructApiError, structGet, structPost, structPostForm } from './client';
 import type { AnalyzeSampleResponse } from './types';
+import type { Transition } from '../data';
 
 export interface ScanStartResponse {
   jobId: string;
@@ -45,6 +46,33 @@ export function startFineScan(videoId: string, segmentIndex: number): Promise<Sc
 
 export function getFineScanStatus(jobId: string): Promise<FineScanStatus> {
   return structGet<FineScanStatus>(`/api/struct/scan/fine/${jobId}`);
+}
+
+/* ── Boundary scan (re-parse ONE transition seam's real type) ──────── */
+
+export interface BoundaryScanStatus {
+  status: 'running' | 'done' | 'error';
+  stage?: string;
+  transitionIndex?: number;
+  /** The re-scanned UI transition (real type + evidence) — splice into sourceVideo.transitions. */
+  transition?: Transition;
+  warnings?: string[];
+  error?: string;
+  elapsedSec?: number;
+}
+
+/** Start a boundary scan for the transition at `transitionIndex` (its position in
+ *  sourceVideo.transitions). Sends the current transition so the backend returns an
+ *  updated copy with the real type. Returns a jobId to poll. */
+export function startBoundaryScan(videoId: string, transitionIndex: number, transition: Transition): Promise<ScanStartResponse> {
+  return structPost<ScanStartResponse>(
+    `/api/struct/scan/${encodeURIComponent(videoId)}/boundary`,
+    { transitionIndex, transition },
+  );
+}
+
+export function getBoundaryScanStatus(jobId: string): Promise<BoundaryScanStatus> {
+  return structGet<BoundaryScanStatus>(`/api/struct/scan/boundary/${jobId}`);
 }
 
 export interface ScanStatus {
