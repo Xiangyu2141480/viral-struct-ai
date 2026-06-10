@@ -33,9 +33,11 @@ import { analyzeSample as analyzeSampleApi } from '../api/sample';
 import {
   getBoundaryScanStatus,
   getFineScanStatus,
+  getFineScanAllStatus,
   getScanStatus,
   startBoundaryScan,
   startFineScan,
+  startFineScanAll,
   startScan,
   type FineBlockDetail,
 } from '../api/scan';
@@ -64,6 +66,7 @@ import {
   type Diagnosis,
   type Material,
   type ResolutionMethod,
+  type SourceSegment,
   type SourceVideo,
   type TargetProduct,
 } from '../data';
@@ -106,6 +109,9 @@ interface ProjectState {
    *  segment is in progress). Multiple segments fine-scan CONCURRENTLY and each keeps
    *  its own progress, so analyzing one segment never clobbers another's state. */
   fineScanStages: Record<string, string>;
+  /** Batch fine-scan (all segments in one process) in progress + its progress label. */
+  fineScanningAll: boolean;
+  fineScanAllStage: string;
   /** Per-transition boundary-scan progress label, keyed by transition id (a key present
    *  = that seam is being re-scanned). Independent per seam, like fineScanStages. */
   boundaryScanStages: Record<string, string>;
@@ -144,6 +150,8 @@ interface ProjectState {
   analyzeSample: (input: { file?: File; sampleId?: string }) => Promise<void>;
   scanSample: (file: File) => Promise<void>;
   fineScanSegment: (segmentIndex: number, segmentId: string) => Promise<void>;
+  /** Fine-scan ALL segments in ONE backend process (concurrent across blocks — far faster than one-by-one). */
+  fineScanAll: () => Promise<void>;
   /** Re-scan ONE transition seam (boundary_scan.py) to recover its real type. */
   boundaryScanTransition: (transitionIndex: number, transitionId: string) => Promise<void>;
   /** Render ONE slot with the HyperFrames Agent in the background → a real preview MP4. */
@@ -203,6 +211,63 @@ function resolveProductImageUrl(materials: Material[], current: string | null): 
   return firstImageMaterialUrl(materials);
 }
 
+/** Strip any backend-suggested placeholder slot from freshly uploaded/loaded materials. The upload
+ *  analyzer assigns a single role-derived placeholder slot (s1..s7) to every material — an unreliable
+ *  uniform guess that would clump every connection onto one segment. We clear it and instead run the
+ *  REAL slot matcher (applyAssignments), so migration lines reflect actual matching and only confidently
+ *  matched materials draw a connection (to a real segment id). */
+function clearSuggestedSlots(materials: Material[]): Material[] {
+  return materials.map((m) => (m.slot == null ? m : { ...m, slot: null }));
+}
+
+/** TEST TOGGLE (相同功能段合并) — coalesce consecutive same-role segments into ONE block.
+ *  true  = MERGE: adjacent same-function beats become a single structural slot, for BOTH the screen-01
+ *          structure display AND migration/matching (the store's sourceVideo flows to every backend call,
+ *          so the merged block is matched/migrated as one).
+ *  false = original DIFFERENTIATE design: every scanned beat stays a separate segment and the abstract
+ *          band shows a distinct caption-derived title per beat (conciseBeatTitle in viz). Flip back to
+ *          false to restore that original behavior — it is intentionally kept, not deleted. */
+const COALESCE_SAME_ROLE_SEGMENTS = false;
+
+function joinDistinct(...parts: Array<string | undefined>): string {
+  return Array.from(new Set(parts.filter((p): p is string => Boolean(p)))).join(' / ');
+}
+
+/** Merge runs of consecutive same-role segments into one block: union time span, combined shot/caption,
+ *  the first segment's id/label/role/transferRule. Transitions are remapped onto the block ids — seams
+ *  internal to a merged block are dropped, boundary seams (deduped) kept. No-op when the flag is off or
+ *  nothing is adjacent-duplicated, so callers can wrap every sourceVideo assignment unconditionally. */
+function coalesceSameRoleSegments(sv: SourceVideo): SourceVideo {
+  if (!COALESCE_SAME_ROLE_SEGMENTS || sv.segments.length < 2) return sv;
+  const merged: SourceSegment[] = [];
+  const blockIdByOrig = new Map<string, string>();
+  for (const seg of sv.segments) {
+    const last = merged[merged.length - 1];
+    if (last && last.role === seg.role) {
+      last.end = seg.end;
+      last.shot = joinDistinct(last.shot, seg.shot);
+      last.caption = joinDistinct(last.caption, seg.caption);
+      blockIdByOrig.set(seg.id, last.id);
+    } else {
+      const block: SourceSegment = { ...seg };
+      merged.push(block);
+      blockIdByOrig.set(seg.id, block.id);
+    }
+  }
+  if (merged.length === sv.segments.length) return sv; // no adjacent duplicates → unchanged
+  const seen = new Set<string>();
+  const transitions = sv.transitions
+    .map((t) => ({ ...t, from: blockIdByOrig.get(t.from) ?? t.from, to: blockIdByOrig.get(t.to) ?? t.to }))
+    .filter((t) => {
+      if (t.from === t.to) return false; // seam inside a merged block
+      const key = `${t.from}->${t.to}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  return { ...sv, segments: merged, transitions };
+}
+
 /** Derive a playable timeline from the structure + diagnosis (mock fallback). */
 function deriveTimeline(sourceVideo: SourceVideo, diagnosis: Record<string, Diagnosis>): TimelineSeg[] {
   return sourceVideo.segments.map((seg) => ({
@@ -227,8 +292,20 @@ const EMPTY_SOURCE: SourceVideo = {
   rhythm: { avg_shot: 0, cuts: 0, hook_density: '', bgm_bpm: 0, caption_density: '' },
   packaging: { title_template: '', captions: '', bgm: '', cover: '' },
 };
-/** Blank product the user fills in — no mock product seeded. */
-const BLANK_PRODUCT: TargetProduct = { name: '', category: '', price: '', stock: 0, asset_count: 0, industry: '' };
+/** Demo default product — simulates the user's product input so the downstream rich-brief path
+ *  (parseContentBrief → analyzeProductIntelligence → category-equivalent vocab) has a real paragraph to
+ *  work with out of the box. `description` is the production "front door" (one natural paragraph); the
+ *  structured fields are convenience defaults. The user can edit all of this in 「编辑商品信息」. */
+const BLANK_PRODUCT: TargetProduct = {
+  name: '康师傅冰红茶',
+  category: '饮料',
+  price: '¥3.5',
+  stock: 50000,
+  asset_count: 0,
+  industry: '即饮茶饮料',
+  description:
+    '康师傅冰红茶，是一款柠檬味的即饮红茶饮料，主打冰爽好喝、随时畅饮。它主要卖给夏天通勤、爱和朋友聚餐的年轻人，最适合天热口渴、饭后解腻，或者三五好友聚会分享的时候来一瓶。我们最想突出的是：冰爽解腻、柠檬茶香清新、大瓶装方便分享、冰镇之后口感更清爽。希望大家看完就想现在来一瓶。整体风格偏夏日清爽、节奏明快、真实质感。',
+};
 
 const initialState = {
   sourceVideo: EMPTY_SOURCE,
@@ -253,6 +330,8 @@ const initialState = {
   scanning: false,
   scanStage: '',
   fineScanStages: {} as Record<string, string>,
+  fineScanningAll: false,
+  fineScanAllStage: '',
   boundaryScanStages: {} as Record<string, string>,
   hyperframesStages: {} as Record<string, string>,
   hyperframesPreviews: {} as Record<string, { url: string; source: string }>,
@@ -312,7 +391,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     set({ analyzing: true, lastError: null });
     try {
       const { sourceVideo, warnings } = await analyzeSampleApi(input);
-      set({ sourceVideo, mode: 'live', warnings: warnings ?? [] });
+      set({ sourceVideo: coalesceSameRoleSegments(sourceVideo), mode: 'live', warnings: warnings ?? [] });
       void get().refreshAssetManagerCoverage();
     } catch (e) {
       set({ lastError: '样例解析失败 · ' + errMsg(e) });
@@ -336,7 +415,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         }
         if (s.status === 'error') throw new Error(s.error || '粗扫描失败');
         if (!s.sourceVideo) throw new Error('扫描完成但未返回结构');
-        set({ sourceVideo: s.sourceVideo, mode: 'live', warnings: s.warnings ?? [], scanning: false, scanStage: '', segmentDetails: {}, fineScanStages: {}, boundaryScanStages: {}, hyperframesStages: {}, hyperframesPreviews: {} });
+        set({ sourceVideo: coalesceSameRoleSegments(s.sourceVideo), mode: 'live', warnings: s.warnings ?? [], scanning: false, scanStage: '', segmentDetails: {}, fineScanStages: {}, boundaryScanStages: {}, hyperframesStages: {}, hyperframesPreviews: {} });
         void get().refreshAssetManagerCoverage();
         return;
       }
@@ -376,6 +455,38 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         delete rest[segmentId];
         return { fineScanStages: rest, lastError: '精扫描失败 · ' + errMsg(e) };
       });
+      throw e;
+    }
+  },
+
+  fineScanAll: async () => {
+    // ONE backend process fine-scans every segment concurrently (block_workers) — much faster than clicking
+    // each. Merges the returned per-segment detail into segmentDetails so the diagnose step migrates it.
+    const videoId = get().sourceVideo.id;
+    if (!videoId || get().sourceVideo.segments.length === 0) return;
+    set({ fineScanningAll: true, fineScanAllStage: '排队中', lastError: null });
+    try {
+      const { jobId } = await startFineScanAll(videoId);
+      for (let i = 0; i < 360; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 2500));
+        const s = await getFineScanAllStatus(jobId);
+        if (s.status === 'running') {
+          set({ fineScanAllStage: (s.stage ?? '精扫描中') + (s.elapsedSec ? ` · ${s.elapsedSec}s` : '') });
+          continue;
+        }
+        if (s.status === 'error') throw new Error(s.error || '批量精扫描失败');
+        const details = s.details ?? {};
+        set((st) => ({
+          segmentDetails: { ...st.segmentDetails, ...details },
+          fineScanningAll: false,
+          fineScanAllStage: '',
+          warnings: s.warnings ?? [],
+        }));
+        return;
+      }
+      throw new Error('批量精扫描超时（>15 分钟）');
+    } catch (e) {
+      set({ fineScanningAll: false, fineScanAllStage: '', lastError: '批量精扫描失败 · ' + errMsg(e) });
       throw e;
     }
   },
@@ -538,12 +649,13 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     if (files.length === 0) return;
     set({ uploading: true, lastError: null });
     try {
-      // Pass materials VERBATIM from the API (they carry .url + clip fields) —
-      // do NOT strip them. Default the produce anchor to the first image url.
+      // Materials carry .url + clip fields verbatim. Clear the upload's placeholder slot guess so the
+      // migration view doesn't draw a misleading uniform clump before real matching runs.
       const { materials, warnings } = await uploadMaterialsApi(files, get().product);
+      const cleared = clearSuggestedSlots(materials);
       set({
-        materials,
-        productImageUrl: resolveProductImageUrl(materials, get().productImageUrl),
+        materials: cleared,
+        productImageUrl: resolveProductImageUrl(cleared, get().productImageUrl),
         mode: 'live',
         warnings: warnings ?? [],
       });
@@ -553,6 +665,12 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       throw e;
     } finally {
       set({ uploading: false });
+    }
+    // Upload OK → run the REAL slot matcher so the migration connections reflect actual matching
+    // (each material → its best real segment, unmatched → no line), not the upload's uniform guess.
+    // applyAssignments owns its own `matching` loading state + error reporting.
+    if (get().sourceVideo.segments.length > 0) {
+      await get().applyAssignments({}).catch(() => {});
     }
   },
 
@@ -601,6 +719,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         sourceVideo: get().sourceVideo,
         materials: get().materials,
         product: get().product,
+        // Pass fine-scan detail so the backend reflects each beat's migrated abstract structure in the prompts.
+        segmentDetails: get().segmentDetails,
       });
       set({ diagnosis, mode: 'live', warnings: warnings ?? [] });
     } catch (e) {
@@ -816,9 +936,11 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     set({ uploading: true, lastError: null });
     try {
       const { materials, warnings } = await loadLibraryMaterialsApi(libraryId);
+      // Clear placeholder slots; the real matcher (below) assigns them so lines reflect actual matching.
+      const cleared = clearSuggestedSlots(materials);
       set({
-        materials,
-        productImageUrl: resolveProductImageUrl(materials, get().productImageUrl),
+        materials: cleared,
+        productImageUrl: resolveProductImageUrl(cleared, get().productImageUrl),
         mode: 'live',
         warnings: warnings ?? [],
       });
@@ -828,6 +950,9 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       throw e;
     } finally {
       set({ uploading: false });
+    }
+    if (get().sourceVideo.segments.length > 0) {
+      await get().applyAssignments({}).catch(() => {});
     }
   },
 
@@ -896,7 +1021,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       // fine-scan detail, but reset all downstream working state (materials,
       // diagnosis, applied slots, timeline, export, in-flight fine scans).
       set({
-        sourceVideo: rec.sourceVideo,
+        sourceVideo: coalesceSameRoleSegments(rec.sourceVideo),
         segmentDetails: rec.segmentDetails ?? {},
         mode: 'live',
         materials: [],

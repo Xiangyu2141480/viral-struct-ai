@@ -276,7 +276,7 @@ function buildAigcOption(
     + `为 ${product} 生成一个竖屏 9:16、${expectedDurationSec} 秒、普通手机广告质感的「${spec.label}」镜头。`
     + `主体产品：${product}，包装与标签清晰可见、画面干净。`
     + `画面动作：${targetMappingLine}。`
-    + `分镜步骤：${buildAigcActionSteps(context, spec)}。`
+    + `分镜步骤：${timedStepBody(expectedDurationSec * 1000, context, spec)}。`
     + `画面质感：${spec.aigcScene}。`
     + sellingLine;
 
@@ -398,17 +398,33 @@ function zhRoleSpec(role: string): ZhStructuralSpec {
 function buildDirectorSpec(args: BuildGapResolutionOptionsArgs, brief?: MissingMaterialBrief): ZhRoleSpec {
   const structuralBase = zhRoleSpec(args.slot.role);
   const roleVocab = args.vocab.byRole[roleToVocabKey(args.slot.role)]!;
+  // CONCRETE per-beat actions come from the per-SUBTYPE vocab (vocab.bySubtype[subtype].actions), which the
+  // translator is required to keep mutually distinct — NOT from roleVocab.animationHints. The latter are
+  // role-generic "图层/动效提示" (layer/effect hints, IDENTICAL for every same-role slot). Feeding those layer
+  // hints into the action lines is what made every same-role slot's reshoot/hyperframes/AIGC prompt雷同 AND
+  // surfaced raw "…图层" layer jargon (e.g. "液体流动粒子图层") to the user. The subtype is inferred from the
+  // slot text, so distinct beats (摄像头模组 vs 配色芯片 vs 多窗口) resolve to distinct subtypes → distinct
+  // concrete actions even when the source-leak gate is disabled (sourceBannedTerms: [] in the adapter path).
+  const subtype = inferSourceSpecificTransferSubtype(args.slot, args.motif);
+  const subtypeActions = args.vocab.bySubtype[subtype]?.actions?.length
+    ? args.vocab.bySubtype[subtype]!.actions
+    : roleVocab.animationHints;
   // Merge structural fields from the local template with product fields from the injected vocab.
   const base: ZhRoleSpec = {
     ...structuralBase,
     label: roleVocab.label,
     reshootShot: roleVocab.reshootShot,
-    mustCapture: roleVocab.mustCapture,
-    animationHints: roleVocab.animationHints,
+    // mustCapture leads with this beat's SUBTYPE-specific actions (the migrated source abstract structure for
+    // THIS slot) so the reshoot guidance differs per beat — not just one role-generic must-capture list — then
+    // falls back to the role-level must-captures. This is what makes the three suggestions migrate the source's
+    // abstract structure, not merely its functional role.
+    mustCapture: uniqueNonEmpty([...subtypeActions.slice(0, 3), ...roleVocab.mustCapture]),
+    // Concrete, subtype-distinct actions (NOT the role-generic layer hints) drive every action/animation/AIGC
+    // line and the per-beat layer composition. roleVocab.animationHints (the "…图层" jargon) is intentionally
+    // no longer read here.
+    animationHints: subtypeActions,
     aigcScene: roleVocab.aigcScene,
-    // Vocab-derived target actions so targetActionLine never has to fall back to a motif's source-authored
-    // (potentially other-category) preferredEquivalents. This is the product-native source of truth.
-    targetEquivalentActions: roleVocab.animationHints
+    targetEquivalentActions: subtypeActions
   };
 
   if (isKineticAssemblyContext(args, brief)) {
@@ -437,7 +453,7 @@ function buildDirectorSpec(args: BuildGapResolutionOptionsArgs, brief?: MissingM
     return base;
   }
 
-  return buildSourceSpecificSpec(base, inferSourceSpecificTransferSubtype(args.slot, args.motif), args.vocab);
+  return buildSourceSpecificSpec(base, subtype, args.vocab);
 }
 
 function buildDirectorPromptContext(
@@ -550,12 +566,19 @@ function buildLayerLine(context: DirectorPromptContext, spec: ZhRoleSpec): strin
   return `需要图层：${layers.join('、')}。`;
 }
 
-function buildAnimationStepLine(durationMs: number, context: DirectorPromptContext, spec: ZhRoleSpec): string {
+/** A TIMED storyboard body (no label prefix): 0–t1 action A 入场 → t1–t2 action B 承接 → t2–end 产品定格.
+ *  Distinct from the flat "画面动作" action list, so the AIGC prompt's 画面动作 (WHAT) and 分镜步骤 (WHEN)
+ *  no longer repeat each other. Distributes whatever subtype-distinct actions targetActionLine resolved. */
+function timedStepBody(durationMs: number, context: DirectorPromptContext, spec: ZhRoleSpec): string {
   const totalSec = Math.max(1, Math.round(durationMs / 1000));
   const mid = Math.max(0.8, Number((totalSec * 0.45).toFixed(1)));
   const late = Math.max(mid + 0.6, Number((totalSec * 0.78).toFixed(1)));
   const actions = targetActionLine(context, spec).split('、');
-  return `动画步骤：0.0s-${mid}s ${actions[0] ?? spec.animationHints[0]}入场；${mid}s-${late}s ${actions[1] ?? spec.animationHints[1]}承接并形成节奏变化；${late}s-${totalSec}s 产品标签定格并收束到文案安全区。`;
+  return `0.0s-${mid}s ${actions[0] ?? spec.animationHints[0]}入场；${mid}s-${late}s ${actions[1] ?? spec.animationHints[1]}承接并形成节奏变化；${late}s-${totalSec}s 产品标签定格并收束到文案安全区。`;
+}
+
+function buildAnimationStepLine(durationMs: number, context: DirectorPromptContext, spec: ZhRoleSpec): string {
+  return `动画步骤：${timedStepBody(durationMs, context, spec)}`;
 }
 
 function buildBridgeLine(context: DirectorPromptContext): string {
@@ -563,22 +586,6 @@ function buildBridgeLine(context: DirectorPromptContext): string {
     return '前后衔接：承接上一镜头的动势，以产品居中或 CTA 尾帧收束。';
   }
   return '前后衔接：保留上一镜头运动方向，用产品定格或卖点卡承接到下一槽位。';
-}
-
-function buildAigcActionSteps(context: DirectorPromptContext, spec: ZhRoleSpec): string {
-  const actions = targetActionLine(context, spec).split('、').filter(Boolean);
-  if (context.motifType === 'kinetic_assembly_reveal') {
-    // Use the product-native kinetic actions directly (no "目标品类元素" jargon in the downstream prompt).
-    return actions.length >= 2
-      ? `${actions.join(' → ')} → 产品居中并 CTA 收口`
-      : '元素由散到聚围绕产品汇聚 → 完成激活高潮 → 产品居中并 CTA 收口';
-  }
-  return [
-    actions[0] ?? spec.animationHints[0],
-    actions[1] ?? spec.animationHints[1],
-    actions[2] ?? '产品标签清晰定格',
-    '卖点或 CTA 安全收口'
-  ].join(' → ');
 }
 
 function safePromptText(text: string | undefined, sourceBannedTerms: readonly string[]): string | undefined {

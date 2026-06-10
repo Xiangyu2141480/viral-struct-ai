@@ -48,6 +48,26 @@ export function getFineScanStatus(jobId: string): Promise<FineScanStatus> {
   return structGet<FineScanStatus>(`/api/struct/scan/fine/${jobId}`);
 }
 
+export interface FineScanAllStatus {
+  status: 'running' | 'done' | 'error';
+  stage?: string;
+  total?: number;
+  /** Per-segment-id (== block id) detail once done. */
+  details?: Record<string, FineBlockDetail>;
+  warnings?: string[];
+  error?: string;
+  elapsedSec?: number;
+}
+
+/** Fine-scan EVERY segment in one backend process (concurrent across blocks). */
+export function startFineScanAll(videoId: string): Promise<ScanStartResponse & { total?: number }> {
+  return structPost<ScanStartResponse & { total?: number }>(`/api/struct/scan/${encodeURIComponent(videoId)}/fine-all`, {});
+}
+
+export function getFineScanAllStatus(jobId: string): Promise<FineScanAllStatus> {
+  return structGet<FineScanAllStatus>(`/api/struct/scan/fine-all/${jobId}`);
+}
+
 /* ── Boundary scan (re-parse ONE transition seam's real type) ──────── */
 
 export interface BoundaryScanStatus {

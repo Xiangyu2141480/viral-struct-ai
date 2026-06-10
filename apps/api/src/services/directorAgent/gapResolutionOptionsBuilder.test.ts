@@ -548,3 +548,37 @@ test('source-specific slot emits product vocab, not beverage, when earphone voca
   });
   assert.doesNotMatch(JSON.stringify(options), /冰块|柠檬|瓶身|红茶|倒茶|冷凝|开盖|多瓶|冰爽/, 'source-specific slot emits product vocab, not beverage');
 });
+
+test('adapter path (sourceBannedTerms: []) gives distinct per-subtype actions — not one repeated role template', () => {
+  // The live /diagnose adapter passes sourceBannedTerms: [], which disables the source-specific gate so
+  // every slot falls to the role `base`. The regression this guards: base used to copy the ROLE-generic
+  // animationHints ("图层/动效提示") into targetEquivalentActions, so every same-role slot's action lines
+  // were identical AND surfaced raw "…图层" layer jargon. After the fix, base derives concrete actions from
+  // the slot's inferred SUBTYPE (vocab.bySubtype[subtype].actions), so distinct beats stay distinct.
+  const optionsFor = (subject: string) =>
+    buildGapResolutionOptions({
+      slot: { id: `slot_${subject.replace(/\W+/g, '_').slice(0, 12)}`, segmentId: 'seg', role: 'usage_demo', requiredAsset: { type: 'video', subject }, fallbackStrategies: [] },
+      tier: 'gap',
+      contentBrief: makeEarphoneContentBrief(),
+      referenceAssetIds: ['asset_x'],
+      vocab: EARPHONE_VOCAB_FIXTURE,
+      sourceBannedTerms: [] // mirrors the live adapter path (buildSlotResolutions)
+    }).options;
+
+  const aigcAction = (subject: string): string => {
+    const aigc = optionsFor(subject).find((o) => o.id === 'aigc')!;
+    return (aigc.prompt.match(/画面动作：([^。]*)。/) ?? [])[1] ?? '';
+  };
+
+  const uiSeqAction = aigcAction('multi window app browser editing on screen'); // → ui_sequence
+  const ifaceAction = aigcAction('side port interface camera lens module detail'); // → interface_detail
+
+  // distinct subtypes → distinct concrete action lines (no longer 雷同)
+  assert.notEqual(uiSeqAction, ifaceAction, 'different subtypes must yield different action lines');
+  // the CONCRETE per-subtype vocab actions are used (not the role-generic animationHints '降噪波纹示意' etc.)
+  assert.match(uiSeqAction, /卖点卡连跳|场景卡切换|降噪示意叠入|产品稳定底图/);
+  assert.match(ifaceAction, /充电仓特写|腔体材质扫光|logo 微距|接缝工艺细节/);
+  // no role-generic layer-hint jargon leaks in as the action
+  assert.doesNotMatch(uiSeqAction, /图层/);
+  assert.doesNotMatch(ifaceAction, /图层/);
+});

@@ -47,8 +47,12 @@ export interface SourceSegment {
   start: number;
   end: number;
   label: string;
+  /** Source SHOT/visual description — what the source segment actually shows. */
   shot: string;
   caption: string;
+  /** Migration directive for this beat (how to re-express it on the target product).
+   *  Kept separate from `shot` so the source screen never shows a migration rule as the shot. */
+  transferRule?: string;
 }
 
 // A transition seam between two segments (a "special slot").
@@ -230,6 +234,9 @@ export interface TargetProduct {
   stock: number;
   asset_count: number;
   industry: string;
+  /** Free-form product paragraph (the production "front door"). Parsed downstream into a rich
+   *  ContentBrief + ProductIntelligence that drive SPECIFIC, product-native prompts. */
+  description?: string;
 }
 
 // Target product (the merchant's new product)

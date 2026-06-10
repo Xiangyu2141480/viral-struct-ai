@@ -109,6 +109,9 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
   const fineScanStages = useProjectStore((s) => s.fineScanStages);
   const segmentDetails = useProjectStore((s) => s.segmentDetails);
   const fineScanSegment = useProjectStore((s) => s.fineScanSegment);
+  const fineScanAll = useProjectStore((s) => s.fineScanAll);
+  const fineScanningAll = useProjectStore((s) => s.fineScanningAll);
+  const fineScanAllStage = useProjectStore((s) => s.fineScanAllStage);
   const runDemo = useProjectStore((s) => s.runDemo);
   const loadingDemo = useProjectStore((s) => s.loadingDemo);
   const saveCurrentStructure = useProjectStore((s) => s.saveCurrentStructure);
@@ -378,19 +381,27 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
               </div>
               <dl className="kv">
                 <dt>角色定位</dt><dd>{ROLES[seg.role]?.name ?? seg.role} <span className="dim">— {ROLES[seg.role]?.desc ?? ''}</span></dd>
-                <dt>镜头内容</dt><dd style={{ lineHeight: 1.65 }}>{seg.caption || '—'}</dd>
-                <dt>迁移规则</dt><dd style={{ lineHeight: 1.65 }}>{seg.shot || '—'}</dd>
+                <dt>镜头内容</dt><dd style={{ lineHeight: 1.65 }}>{seg.shot || seg.caption || '—'}</dd>
+                <dt>迁移规则</dt><dd style={{ lineHeight: 1.65 }}>{seg.transferRule || '—'}</dd>
               </dl>
               <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                   <button
                     className="btn primary"
-                    disabled={isFineScanning}
+                    disabled={isFineScanning || fineScanningAll}
                     onClick={() => { if (seg.id) void fineScanSegment(idx, seg.id).catch(() => {}); }}
                   >
                     <Icon name="sparkle" size={12} /> {isFineScanning ? (stageLabel || '精扫描中…') : fine ? '重新精扫描此段' : '深度分析 · 精扫描此段'}
                   </button>
-                  {!fine && !isFineScanning && (
+                  <button
+                    className="btn"
+                    disabled={fineScanningAll || isFineScanning}
+                    onClick={() => { void fineScanAll().catch(() => {}); }}
+                    title="一个进程并发精扫描全部段落，比逐段点击快很多"
+                  >
+                    <Icon name="sparkle" size={12} /> {fineScanningAll ? (fineScanAllStage || '全部精扫描中…') : '精扫描全部段落（并发）'}
+                  </button>
+                  {!fine && !isFineScanning && !fineScanningAll && (
                     <span className="mono dim" style={{ fontSize: 10.5 }}>视觉峰值 + 逐峰 VLM · 字幕行为 / 动作节拍 / 转场 / 可迁移母题（约 30–60 秒）</span>
                   )}
                 </div>
@@ -593,6 +604,7 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
   const materials = useProjectStore((s) => s.materials);
   const product = useProjectStore((s) => s.product);
   const matching = useProjectStore((s) => s.matching);
+  const diagnosing = useProjectStore((s) => s.diagnosing);
   const assetSupplyContext = useProjectStore((s) => s.assetSupplyContext);
   const assetManagerLoading = useProjectStore((s) => s.assetManagerLoading);
   const assetManagerWarnings = useProjectStore((s) => s.assetManagerWarnings);
@@ -652,8 +664,13 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
   };
 
   const handleNext = () => {
-    void runDiagnosis().catch(() => {});
-    onNext();
+    // Don't navigate before the diagnosis (LLM prompt generation) finishes — otherwise screen 03 renders
+    // its empty "请先输入素材" state while the work is still running. Gate the button (busy + disabled) and
+    // only advance once runDiagnosis resolves.
+    if (diagnosing || matching) return;
+    void runDiagnosis()
+      .then(() => onNext())
+      .catch(() => {});
   };
 
   // Assign a single clip to a structure slot. setSlot keeps the UI snappy; the
@@ -994,7 +1011,12 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
         status={footerStatus}
         statusTone={footerTone}
         secondary={[{ label: '返回结构', onClick: onBack }]}
-        primary={{ label: matching ? '匹配中…' : '识别并诊断缺口', onClick: handleNext }}
+        primary={{
+          label: matching ? '匹配中…' : diagnosing ? '正在诊断缺口…' : '识别并诊断缺口',
+          onClick: handleNext,
+          disabled: matching || diagnosing,
+          busy: matching || diagnosing,
+        }}
       />
 
       {/* ── Upload Modal ── */}
@@ -1056,6 +1078,24 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
                 fontFamily: 'inherit', outline: 'none',
               }}
             />
+          </div>
+          <div>
+            <div className="eyebrow" style={{ marginBottom: 4 }}>产品描述 · 一段话(系统自动解析卖点/人群/场景/CTA)</div>
+            <textarea
+              value={productInfo.description || ''}
+              onChange={e => setProductInfo(prev => ({ ...prev, description: e.target.value }))}
+              rows={7}
+              placeholder={'用一段话介绍产品：①是什么(名字+品类) ②卖给谁 ③什么场景/时候用 ④最想突出的 3–5 个卖点 ⑤希望观众看完做什么 ⑥(可选)风格偏好。少写绝对化用语(最/第一)、医疗功效和未证实数字。'}
+              style={{
+                width: '100%', padding: '8px 12px',
+                background: 'var(--bg-2)', border: '1px solid var(--border)',
+                borderRadius: 5, color: 'var(--text)', fontSize: 13,
+                fontFamily: 'inherit', outline: 'none', resize: 'vertical', lineHeight: 1.6,
+              }}
+            />
+            <div style={{ fontSize: 10.5, color: 'var(--text-faint)', marginTop: 4, lineHeight: 1.5 }}>
+              这段描述会驱动下游补拍/HyperFrames/AIGC 的 prompt 生成 —— 越具体，建议越精准、越不雷同。
+            </div>
           </div>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
             <button className="btn" onClick={() => setEditOpen(false)}>取消</button>

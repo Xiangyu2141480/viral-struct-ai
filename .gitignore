@@ -82,3 +82,11 @@ scripts/_dump_demo.py
 
 # user-saved structures (结构样例库 persistence — runtime data, not seed)
 seed_assets/struct_library/
+
+# pipeline_data — local link outputs for sharing (see pipeline_data/README.md).
+# Keep the folder structure + README in git, but not the bulky runtime data.
+pipeline_data/**/*.json
+pipeline_data/**/*.mp4
+pipeline_data/db/
+!pipeline_data/**/.gitkeep
+!pipeline_data/README.md

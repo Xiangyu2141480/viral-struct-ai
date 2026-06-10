@@ -15,19 +15,22 @@ import multer, { MulterError } from 'multer';
 import type { RequestHandler } from 'express';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync } from 'node:fs';
-import { copyFile, readFile, rm, unlink } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, rename, rm, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { nanoid } from 'nanoid';
 import type { Request } from 'express';
 import { analyzeVideoFile, getSeedVideoPath, getUploadedVideoPath, listSeedVideos } from '../services/videoAnalyzer';
 import { extractStructureFromVideoAnalysis } from '../services/structureExtractor';
 import { runRoughScan, getScanDataDir } from '../services/roughScanRunner';
-import { runFineScan, type FineBlockDetail } from '../services/fineScanRunner';
+import { runFineScan, runFineScanBatch, type FineBlockDetail } from '../services/fineScanRunner';
 import { runBoundaryScan } from '../services/boundaryScanRunner';
 import { analyzeAssetsWithFallbackResult } from '../services/assetAnalyzer';
 import { matchSlotsWithFallback } from '../services/slotMatcher';
 import { runDirectorAgent, buildGapResolutionOptions } from '../services/directorAgent';
 import { translateCategoryEquivalents } from '../services/directorAgent/categoryEquivalentTranslator';
+import { parseContentBrief } from '../services/productIntelligence/contentBriefParser';
+import { analyzeProductIntelligence } from '../services/productIntelligence/productIntelligenceAnalyzer';
+import { enrichSourceVideoWithFineScan } from '../services/structAdapter/fineScanMotifAdapter';
 import { planAigcBeats } from '@viral-struct/video-agent';
 import { renderAigcTimeline } from '../services/videoAgent/aigcRenderer';
 import { wanConfigFromEnv } from '../services/videoAgent/wanVideoClient';
@@ -44,8 +47,11 @@ import { estimateDemoAnalytics } from '../services/demoScoringEstimator';
 import { planStoryboardFrames } from '../services/storyboardPromptPlanner';
 import { planMissingMaterialGenerationJobs } from '../services/missingMaterialGenerationPlanner';
 import { loadAssetLibrary } from '../services/assetLibraryLoader';
+import { saveScan, listScans, getScan } from '../services/db/scanRepository';
+import { saveMatchSet, getMatchSet } from '../services/db/matchRepository';
+import { appendLibraryCards, readLibraryCards, listLibraries } from '../services/db/assetLibraryRepository';
 import { getDemoShowcase } from '../services/demoShowcase';
-import { getRenderDir, getUploadDir } from '../services/videoPaths';
+import { getPipelineDataDir, getRenderDir, getUploadDir } from '../services/videoPaths';
 import {
   deleteStructure,
   getStructure,
@@ -59,7 +65,10 @@ import type {
   AuthoredSegmentRole,
   AuthoredTimeline,
   ContentBrief,
+  MotionToken,
+  ProductIntelligence,
   TimelineItem,
+  ViralMotifAnnotation,
 } from '@viral-struct/shared';
 import {
   assetCardsToMaterials,
@@ -264,6 +273,19 @@ interface FineJob {
 }
 const fineJobs = new Map<string, FineJob>();
 
+interface FineAllJob {
+  status: ScanJobStatus;
+  stage?: string;
+  total: number;
+  /** Per-segment-id fine detail (== rough block id) once done. */
+  details?: Record<string, FineBlockDetail>;
+  warnings?: string[];
+  error?: string;
+  startedAt: number;
+  finishedAt?: number;
+}
+const fineAllJobs = new Map<string, FineAllJob>();
+
 interface BoundaryJob {
   status: ScanJobStatus;
   stage?: string;
@@ -299,6 +321,9 @@ function sweepScanJobs(): void {
   }
   for (const [id, job] of fineJobs) {
     if (job.finishedAt && now - job.finishedAt > 30 * 60_000) fineJobs.delete(id);
+  }
+  for (const [id, job] of fineAllJobs) {
+    if (job.finishedAt && now - job.finishedAt > 30 * 60_000) fineAllJobs.delete(id);
   }
   for (const [id, job] of boundaryJobs) {
     if (job.finishedAt && now - job.finishedAt > 30 * 60_000) boundaryJobs.delete(id);
@@ -345,11 +370,20 @@ structRouter.post('/scan', withUploadGuard(upload.single('video')), (req, res) =
       const sourceVideo = graphToSourceVideo(graph, { videoId, title, defaultedFields });
       // Retain the raw video + rough output so a follow-up fine scan can reuse them.
       scanArtifacts.set(videoId, { videoPath: filePath, roughScanPath, workDir, createdAt: Date.now() });
+      // Persist the scan result (sourceVideo + structure graph) so the case-video
+      // structure survives restart and is queryable via /api/struct/db/scans.
+      const persistWarnings: string[] = [];
+      try {
+        await saveScan({ videoId, title, sourceVideo, source: 'rough_scan', structureGraph: graph, videoPath: filePath, roughScanPath });
+      } catch (e) {
+        persistWarnings.push(`扫描结果入库失败：${errorMessage(e)}`);
+      }
       scanJobs.set(jobId, {
         status: 'done',
         sourceVideo,
         warnings: [
           ...warnings,
+          ...persistWarnings,
           '结构来自真实 rough scan（VLM 逐镜头解析），非启发式模板',
           '播放数据（点击率/完播/点赞）非真实测量',
           ...(defaultedFields.length ? ['部分节奏/包装字段未检测，已留空'] : []),
@@ -445,6 +479,75 @@ structRouter.get('/scan/fine/:jobId', (req, res) => {
     stage: job.stage,
     segmentIndex: job.segmentIndex,
     detail: job.detail,
+    error: job.error,
+    elapsedSec,
+  });
+});
+
+/* ─── POST /api/struct/scan/:videoId/fine-all — fine-scan ALL segments in ONE process ──
+   fine_scan.py parallelizes across blocks (block_workers) + within a block (candidate_workers) behind a
+   shared HTTP semaphore, so one batch process is far faster than clicking each segment (serial single-block
+   processes) and uses ~one process worth of memory. Async; poll GET /scan/fine-all/:jobId. */
+structRouter.post('/scan/:videoId/fine-all', async (req, res) => {
+  const { videoId } = req.params;
+  const artifacts = scanArtifacts.get(videoId);
+  if (!artifacts) {
+    res.status(404).json({ error: '找不到该视频的扫描数据（可能已过期，请重新上传并粗扫描）。' });
+    return;
+  }
+  let blockIds: string[];
+  try {
+    const rough = JSON.parse(await readFile(artifacts.roughScanPath, 'utf-8')) as { contentBlocks?: Array<{ id?: string }> };
+    blockIds = (rough.contentBlocks ?? []).map((b) => b.id).filter((id): id is string => Boolean(id));
+  } catch (error) {
+    res.status(500).json({ error: errorMessage(error) });
+    return;
+  }
+  if (blockIds.length === 0) {
+    res.status(400).json({ error: '该视频没有可精扫描的段落。' });
+    return;
+  }
+
+  sweepScanJobs();
+  const jobId = randomUUID();
+  fineAllJobs.set(jobId, { status: 'running', stage: '排队中', total: blockIds.length, startedAt: Date.now() });
+  res.status(202).json({ jobId, total: blockIds.length });
+
+  void (async () => {
+    const setStage = (stage: string) => {
+      const j = fineAllJobs.get(jobId);
+      if (j && j.status === 'running') j.stage = stage;
+    };
+    const startedAt = fineAllJobs.get(jobId)?.startedAt ?? Date.now();
+    try {
+      const { details, warnings } = await runFineScanBatch(
+        artifacts.videoPath,
+        artifacts.roughScanPath,
+        videoId,
+        blockIds,
+        artifacts.workDir,
+        setStage,
+      );
+      fineAllJobs.set(jobId, { status: 'done', total: blockIds.length, details, warnings, startedAt, finishedAt: Date.now() });
+    } catch (error) {
+      fineAllJobs.set(jobId, { status: 'error', total: blockIds.length, error: errorMessage(error), startedAt, finishedAt: Date.now() });
+    }
+  })();
+});
+
+structRouter.get('/scan/fine-all/:jobId', (req, res) => {
+  const job = fineAllJobs.get(req.params.jobId);
+  if (!job) {
+    res.status(404).json({ error: 'fine-all scan job not found（任务可能已过期）' });
+    return;
+  }
+  const elapsedSec = Math.round(((job.finishedAt ?? Date.now()) - job.startedAt) / 1000);
+  res.json({
+    status: job.status,
+    stage: job.stage,
+    total: job.total,
+    details: job.details,
+    warnings: job.warnings,
     error: job.error,
     elapsedSec,
   });
@@ -608,6 +711,112 @@ structRouter.post('/materials/upload', withUploadGuard(upload.array('assets')), 
   }
 });
 
+/* ─── POST /api/struct/materials/reshoot — 补拍视频入素材库 + 解析 ───────────────
+   A reshoot/补拍 clip is analyzed into AssetCard(s) and APPENDED into a named asset
+   library (renumbered ids, stable urls). The clip now lives in the library, so a
+   re-load (loadAssetLibrary / GET /db/libraries/:id) re-reads the re-analyzed set.
+   Body (multipart): assets[] (files), libraryId (target), textBrief? */
+structRouter.post('/materials/reshoot', withUploadGuard(upload.array('assets')), async (req, res) => {
+  try {
+    const files = (req.files ?? []) as Express.Multer.File[];
+    const libraryId = String(req.body?.libraryId ?? '').trim();
+    if (!libraryId) {
+      res.status(400).json({ error: 'libraryId（目标素材库）必填' });
+      return;
+    }
+    if (!files.length) {
+      res.status(400).json({ error: '请上传至少一个补拍素材' });
+      return;
+    }
+    const textBrief = typeof req.body?.textBrief === 'string' ? req.body.textBrief : undefined;
+
+    // Analyze the reshoot clips into AssetCards (deterministic local analysis first).
+    const result = await analyzeAssetsWithFallbackResult({ files, textBrief });
+    const warnings = [...(result.warnings ?? [])];
+
+    // Stabilize each uploaded file so the card url survives (mirror /materials/upload).
+    const pathRewrites = new Map<string, string>();
+    sweepAssetSessionDirs();
+    const sessionDir = getAssetSessionDir(randomUUID());
+    mkdirSync(sessionDir, { recursive: true });
+    assetSessionDirs.set(sessionDir, { dir: sessionDir, createdAt: Date.now() });
+    for (const file of files) {
+      const ext = path.extname(file.originalname) || path.extname(file.path);
+      const stablePath = path.join(sessionDir, `${path.basename(file.path)}${ext}`);
+      try {
+        await copyFile(file.path, stablePath);
+        pathRewrites.set(file.path, stablePath);
+        void unlink(file.path).catch(() => {});
+      } catch (copyError) {
+        warnings.push(`补拍素材落盘失败（${file.originalname}）：${errorMessage(copyError)}`);
+      }
+    }
+    const stabilizedCards = result.assetCards.map((c) =>
+      c.url && pathRewrites.has(c.url) ? { ...c, url: pathRewrites.get(c.url)! } : c,
+    );
+
+    // Append (renumbered) into the library + persist.
+    const updated = await appendLibraryCards(libraryId, stabilizedCards);
+    res.json({
+      libraryId,
+      added: stabilizedCards.length,
+      cardCount: updated.length,
+      materials: assetCardsToMaterials(updated),
+      warnings: [...warnings, `已将 ${stabilizedCards.length} 个补拍素材并入素材库 ${libraryId}（共 ${updated.length} 个）`],
+    });
+  } catch (error) {
+    res.status(500).json({ error: errorMessage(error) });
+  }
+});
+
+/* ─── GET /api/struct/db/* — read the file-backed pipeline DB ─────────────────── */
+structRouter.get('/db/scans', async (_req, res) => {
+  try {
+    res.json({ scans: await listScans() });
+  } catch (error) {
+    res.status(500).json({ error: errorMessage(error) });
+  }
+});
+structRouter.get('/db/scans/:id', async (req, res) => {
+  try {
+    const scan = await getScan(req.params.id);
+    if (!scan) {
+      res.status(404).json({ error: 'scan not found' });
+      return;
+    }
+    res.json({ scan });
+  } catch (error) {
+    res.status(500).json({ error: errorMessage(error) });
+  }
+});
+structRouter.get('/db/libraries', async (_req, res) => {
+  try {
+    res.json({ libraries: await listLibraries() });
+  } catch (error) {
+    res.status(500).json({ error: errorMessage(error) });
+  }
+});
+structRouter.get('/db/libraries/:id', async (req, res) => {
+  try {
+    const cards = await readLibraryCards(req.params.id);
+    res.json({ libraryId: req.params.id, cardCount: cards.length, materials: assetCardsToMaterials(cards) });
+  } catch (error) {
+    res.status(500).json({ error: errorMessage(error) });
+  }
+});
+structRouter.get('/db/matches/:projectId', async (req, res) => {
+  try {
+    const matchSet = await getMatchSet(req.params.projectId);
+    if (!matchSet) {
+      res.status(404).json({ error: 'match set not found' });
+      return;
+    }
+    res.json({ matchSet });
+  } catch (error) {
+    res.status(500).json({ error: errorMessage(error) });
+  }
+});
+
 /* ─── POST /api/struct/materials/match — auto-match + apply assignments ─── */
 structRouter.post('/materials/match', async (req, res) => {
   try {
@@ -644,24 +853,99 @@ structRouter.post('/materials/match', async (req, res) => {
   }
 });
 
+/** Resolve the rich ContentBrief + ProductIntelligence that drive product-native prompts. When the user
+ *  supplied a free-form product paragraph (product.description), parse it (LLM + deterministic fallback)
+ *  into a real ContentBrief and analyze ProductIntelligence (grounded in the asset cards); otherwise fall
+ *  back to the thin brief synthesized from the structured product fields. Both feed the category-equivalent
+ *  translator, so a real description yields specific, product-native actions/scenes instead of the
+ *  category-stuffed placeholders the structured-fields brief produces. */
+async function resolveBriefAndIntelligence(
+  product: TargetProduct,
+  sourceVideo: SourceVideo,
+  assetCards: ReturnType<typeof materialsToAssetCards>,
+): Promise<{ contentBrief: ContentBrief; productIntelligence?: ProductIntelligence; warnings: string[] }> {
+  const warnings: string[] = [];
+  const description = (product?.description ?? '').trim();
+  let contentBrief: ContentBrief;
+  if (description) {
+    const parsed = await parseContentBrief({ rawInput: description });
+    warnings.push(...parsed.warnings);
+    contentBrief = {
+      ...parsed.contentBrief,
+      category: parsed.contentBrief.category || product.category || undefined,
+      stylePreference:
+        parsed.contentBrief.stylePreference ?? `${sourceVideo.packaging.captions} · ${sourceVideo.packaging.cover}`,
+    };
+  } else {
+    contentBrief = buildContentBrief(product, sourceVideo);
+    warnings.push('未提供产品描述，使用结构化字段合成的基础 brief（生成的 prompt 可能较笼统）');
+  }
+  let productIntelligence: ProductIntelligence | undefined;
+  try {
+    const pi = await analyzeProductIntelligence({ contentBrief, assetCards });
+    productIntelligence = pi.productIntelligence;
+    warnings.push(...pi.warnings);
+  } catch (e) {
+    warnings.push(`产品理解分析失败，将仅用 brief：${errorMessage(e)}`);
+  }
+  return { contentBrief, productIntelligence, warnings };
+}
+
+/** Best-effort: drop a complete diagnose bundle into pipeline_data/04_diagnoses/<projectId>.json so the
+ *  teammate's sample-data demo can consume real link output. Never throws (a capture failure must not break
+ *  the diagnose response); see pipeline_data/README.md. */
+async function capturePipelineDiagnosis(snapshot: {
+  projectId: string;
+  sourceVideo: SourceVideo;
+  materials: Material[];
+  product: TargetProduct;
+  diagnosis: Record<string, Diagnosis>;
+  warnings: string[];
+}): Promise<void> {
+  try {
+    const dir = path.join(getPipelineDataDir(), '04_diagnoses');
+    await mkdir(dir, { recursive: true });
+    const safe = (snapshot.projectId || 'project').replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 80) || 'project';
+    const file = path.join(dir, `${safe}.json`);
+    const tmp = `${file}.${process.pid}.tmp`;
+    await writeFile(tmp, JSON.stringify({ capturedAt: new Date().toISOString(), ...snapshot }, null, 2), 'utf-8');
+    await rename(tmp, file);
+  } catch {
+    /* capture is best-effort */
+  }
+}
+
 /* ─── POST /api/struct/diagnose — four-state diagnosis per slot ─── */
 structRouter.post('/diagnose', async (req, res) => {
   try {
-    const sourceVideo = req.body?.sourceVideo as SourceVideo;
+    const rawSourceVideo = req.body?.sourceVideo as SourceVideo;
     const materials = (req.body?.materials ?? []) as Material[];
-    const product = (req.body?.product as TargetProduct) ?? stubProduct(sourceVideo, materials);
-    if (!sourceVideo?.segments) {
+    const product = (req.body?.product as TargetProduct) ?? stubProduct(rawSourceVideo, materials);
+    const segmentDetails = req.body?.segmentDetails as Record<string, FineBlockDetail> | undefined;
+    if (!rawSourceVideo?.segments) {
       res.status(400).json({ error: 'sourceVideo with segments is required' });
       return;
     }
 
+    // Fold the FINE-SCAN detail (transferableMotifs / exploded_assembly / revealMode) into the source so the
+    // matcher + director see the abstract structure: each fine-scanned segment's shot text is enriched and
+    // assembly/cascade beats get a kinetic motif (→ 由散到聚 prompts). No-op when no fine scan was run.
+    const { sourceVideo, motifBySegmentId, motionTokensBySegmentId, enrichedSegmentCount } =
+      enrichSourceVideoWithFineScan(rawSourceVideo, segmentDetails, product.category);
+
     const graph = buildStructureGraph(sourceVideo);
     const assetCards = materialsToAssetCards(materials, sourceVideo, product);
-    const contentBrief = buildContentBrief(product, sourceVideo);
+    // Rich brief + product intelligence from the user's product paragraph (or thin fallback).
+    const { contentBrief, productIntelligence, warnings: briefWarnings } = await resolveBriefAndIntelligence(
+      product,
+      sourceVideo,
+      assetCards,
+    );
 
     const matchResult = await matchSlotsWithFallback({ graph, assets: assetCards, boundaries: graph.boundaries });
 
-    const warnings: string[] = [];
+    const warnings: string[] = [...briefWarnings];
+    if (enrichedSegmentCount > 0) warnings.push(`已用精扫描结果增强 ${enrichedSegmentCount} 个镜头的迁移结构`);
 
     // Real per-gap 3-option resolution (T1): for each slot derive its tier
     // (matched/partial/gap) and ask the Director Agent for the full
@@ -675,6 +959,9 @@ structRouter.post('/diagnose', async (req, res) => {
         matches: matchResult.matches,
         assetCards,
         contentBrief,
+        productIntelligence,
+        motifBySegmentId,
+        motionTokensBySegmentId,
       });
     } catch (resolutionError) {
       slotResolutions = undefined;
@@ -692,6 +979,24 @@ structRouter.post('/diagnose', async (req, res) => {
 
     if (matchResult.warning) warnings.push(matchResult.warning);
     if (matchResult.alignmentSource === 'rule_based') warnings.push('槽位对齐使用规则降级（非 LLM judge）');
+
+    // Persist the slot↔asset matching for this project (素材匹配字段 store; idempotent upsert).
+    try {
+      await saveMatchSet({
+        projectId: sourceVideo.id,
+        matches: matchResult.matches.map((m) => ({
+          slotId: m.slotId,
+          assetId: m.assetId ?? null,
+          quality: m.quality ?? m.score,
+          fillStatus: m.status,
+        })),
+      });
+    } catch (e) {
+      warnings.push(`匹配结果入库失败：${errorMessage(e)}`);
+    }
+
+    // Capture the full diagnose bundle for the teammate's sample-data demo (best-effort, non-blocking).
+    void capturePipelineDiagnosis({ projectId: sourceVideo.id, sourceVideo, materials, product, diagnosis, warnings });
 
     res.json({ diagnosis, warnings });
   } catch (error) {
@@ -1319,12 +1624,19 @@ async function buildSlotResolutions(input: {
   matches: SlotMatch[];
   assetCards: ReturnType<typeof materialsToAssetCards>;
   contentBrief: ContentBrief;
+  productIntelligence?: ProductIntelligence;
+  /** Per-segment kinetic motif + motion tokens derived from the fine scan (assembly/cascade beats). */
+  motifBySegmentId?: Map<string, ViralMotifAnnotation>;
+  motionTokensBySegmentId?: Map<string, MotionToken[]>;
 }): Promise<Record<string, SlotGapResolution>> {
-  const { graph, matches, assetCards, contentBrief } = input;
+  const { graph, matches, assetCards, contentBrief, productIntelligence, motifBySegmentId, motionTokensBySegmentId } =
+    input;
   // #76: the 3-option briefs are driven by an LLM-translated category-equivalent
   // vocabulary (no deterministic fallback). Build it ONCE; if the LLM is unavailable
   // this throws and the /diagnose caller falls back to the base 4-state diagnosis.
-  const vocab = await translateCategoryEquivalents({ contentBrief, assetCards });
+  // productIntelligence (when present) grounds the vocab in the product's real benefits/
+  // sensory cues/usage rituals so the per-slot actions are specific, not category-generic.
+  const vocab = await translateCategoryEquivalents({ contentBrief, productIntelligence, assetCards });
   const matchBySlot = new Map(matches.map((m) => [m.slotId, m]));
   const referenceAssetIds = assetCards.map((c) => c.id);
   const out: Record<string, SlotGapResolution> = {};
@@ -1333,6 +1645,10 @@ async function buildSlotResolutions(input: {
     const match = matchBySlot.get(slot.id);
     const tier: 'matched' | 'partial' | 'gap' =
       match?.status === 'matched' ? 'matched' : match?.status === 'partial' ? 'partial' : 'gap';
+    // Fine-scan-derived abstract structure for THIS beat (assembly/cascade → kinetic branch + motion tokens).
+    const segmentId = slot.segmentId ?? slot.id;
+    const motif = motifBySegmentId?.get(segmentId);
+    const motionTokens = motionTokensBySegmentId?.get(segmentId);
     const { options, recommendedOptionId } = buildGapResolutionOptions({
       slot,
       tier,
@@ -1340,6 +1656,8 @@ async function buildSlotResolutions(input: {
       referenceAssetIds,
       chosenAssetId: tier === 'gap' ? undefined : match?.assetId,
       vocab,
+      ...(motif ? { motif } : {}),
+      ...(motionTokens && motionTokens.length ? { motionTokens } : {}),
       // Secondary source-leak guard; the vocab translator already forbids cross-category
       // terms, so this adapter path skips the extra LLM banlist derivation.
       sourceBannedTerms: [],

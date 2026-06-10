@@ -19,6 +19,24 @@ import { useProjectStore } from './store/useProjectStore';
    两条带子视觉分离:抽象=高对比色块+协议感,具体=灰阶+film perforation
    ============================================================ */
 
+/** A short, DISTINCT title for an abstract-structure beat, derived from its source caption so that
+ *  consecutive segments sharing the same coarse role (e.g. several 产品 beats) stay visually
+ *  distinguishable — they show their actual content (摄像头模组 vs 配色芯片 vs 多窗口), not an identical
+ *  role name. Picks the first clause carrying a "payoff" verb, else the longest of the first two
+ *  clauses; trims to keep the band readable. Returns undefined when there's no caption (→ role name). */
+const BEAT_PAYOFF_VERB = /展示|演示|切换|安装|组合|拆分|弹出|运行|操作|点亮|揭示|亮相|排列|分屏|渐变|拿出|翻转/;
+function conciseBeatTitle(seg: Seg): string | undefined {
+  const caption = seg.shot || seg.caption;
+  if (!caption) return undefined;
+  const clauses = caption.split(/[，,。、；;]+/).map((c) => c.trim()).filter(Boolean);
+  if (clauses.length === 0) return undefined;
+  const pick =
+    clauses.find((c) => BEAT_PAYOFF_VERB.test(c)) ??
+    [...clauses.slice(0, 2)].sort((a, b) => b.length - a.length)[0] ??
+    clauses[0];
+  return pick.length > 16 ? `${pick.slice(0, 15)}…` : pick;
+}
+
 export const AbstractStructureBand = ({
   segments,
   total,
@@ -75,7 +93,7 @@ export const AbstractStructureBand = ({
             {String(i + 1).padStart(2, '0')} · {ROLES[seg.role]?.code || seg.role.toUpperCase()}
           </span>
           {w > 5 &&
-        <span className="sband-abs-name">{ROLES[seg.role]?.name || seg.label}</span>
+        <span className="sband-abs-name">{conciseBeatTitle(seg) || ROLES[seg.role]?.name || seg.label}</span>
         }
           <span className="sband-abs-meta bot">{dur.toFixed(1)}s</span>
         </div>);
@@ -170,6 +188,8 @@ export const MigrationFlow = () => {
   const segs = useProjectStore((s) => s.sourceVideo.segments);
   const mats = useProjectStore((s) => s.materials);
   const diagnosis = useProjectStore((s) => s.diagnosis);
+  const matching = useProjectStore((s) => s.matching);
+  const uploading = useProjectStore((s) => s.uploading);
   const stateOf = (id: string): StateKey => diagnosis[id]?.state ?? 'missing';
 
   const MAT_H = 54,MAT_GAP = 8;
@@ -178,6 +198,18 @@ export const MigrationFlow = () => {
     mats.length * MAT_H + (mats.length - 1) * MAT_GAP,
     segs.length * SLOT_H + (segs.length - 1) * SLOT_GAP
   ) + 20;
+
+  // While the asset analysis / real slot match runs, hide every wire + vessel and show a single
+  // on-brand "正在解析匹配中" state — the connections only mean something once matching resolves.
+  if (uploading || matching) {
+    return (
+      <div className="migrate migrate-analyzing" style={{ height: CONTAINER_H }}>
+        <span className="migrate-analyzing-orb" />
+        <span className="migrate-analyzing-text">正在解析匹配中</span>
+        <span className="migrate-analyzing-sub mono">素材 → 源结构槽位对齐中…</span>
+      </div>
+    );
+  }
 
   const matTotal = mats.length * MAT_H + (mats.length - 1) * MAT_GAP;
   const slotTotal = segs.length * SLOT_H + (segs.length - 1) * SLOT_GAP;
@@ -231,7 +263,7 @@ export const MigrationFlow = () => {
               </div>
               <div className="mat-vessel-body">
                 <div className="mat-vessel-name">{m.subject}</div>
-                <div className="mat-vessel-meta mono">{m.id.toUpperCase()} · q={m.quality.toFixed(1)}</div>
+                <div className="mat-vessel-meta mono">{m.id.toUpperCase()}</div>
               </div>
             </div>);
 
@@ -365,7 +397,7 @@ export const MigrationFlow = () => {
                     {{ filled: 'FILLED', weakly: 'WEAK', missing: 'MISS', critical: 'KEY GAP' }[state]}
                   </span>
                   <span className="mono" style={{ fontSize: 9.5, color: 'var(--text-mute)' }}>
-                    {fillPct}% · {(s.end - s.start).toFixed(1)}s
+                    {(s.end - s.start).toFixed(1)}s
                   </span>
                   {incoming.length > 0 &&
                   <span className="mono" style={{ fontSize: 9.5, color: 'var(--text-dim)' }}>

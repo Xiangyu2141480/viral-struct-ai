@@ -41,6 +41,20 @@ export function getRenderDir(): string {
   return resolveRepoPath(process.env.RENDER_DIR, './renders');
 }
 
+/**
+ * PERSISTENT dir for the file-backed pipeline database (scan results, slot matches,
+ * and other records that previously lived only in memory). Sits next to the other
+ * persistent seed_assets stores so records survive server restarts.
+ */
+export function getDbDir(): string {
+  return resolveRepoPath(process.env.DB_DIR, './seed_assets/db');
+}
+
+/** Folder where the live pipeline drops per-run data for sharing (see pipeline_data/README.md). */
+export function getPipelineDataDir(): string {
+  return resolveRepoPath(process.env.PIPELINE_DATA_DIR, './pipeline_data');
+}
+
 export function getSeedVideoDir(): string {
   return resolveRepoPath(process.env.SEED_VIDEO_DIR, './seed_assets/raw_videos');
 }
