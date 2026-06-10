@@ -347,7 +347,7 @@ test('kinetic assembly brief produces vocab-native reshoot, hyperframes and AIGC
   assert.doesNotMatch(allPositiveText, /MacBook|keyboard|laptop|touchpad|rocket|hardware|键盘|笔记本|触控板|火箭|硬件/);
 });
 
-test('source-specific slots are abstracted into distinct beverage equivalents instead of one repeated template', () => {
+test('source-specific slots are abstracted into distinct vocab-native equivalents instead of one repeated template', () => {
   const scenarios: Array<{
     name: string;
     slot: ShotSlotNode;
@@ -368,7 +368,7 @@ test('source-specific slots are abstracted into distinct beverage equivalents in
           durationMs: [0, 3000]
         }
       },
-      expected: /热浪|冰爽入场|英雄亮相|夏日场景/,
+      expected: /耳机开盒亮相|开盒揭盖|耳机单元浮现/,
       forbidden: /侧边接口|多窗口|跨设备/
     },
     {
@@ -385,8 +385,8 @@ test('source-specific slots are abstracted into distinct beverage equivalents in
           durationMs: [3000, 6000]
         }
       },
-      expected: /标签扫光|冷凝水擦除|瓶身微距|瓶盖特写/,
-      forbidden: /多窗口|手递|热浪破开/
+      expected: /耳机细节巡览|充电仓特写|腔体材质扫光/,
+      forbidden: /多窗口|手递/
     },
     {
       name: 'ui sequence',
@@ -402,8 +402,8 @@ test('source-specific slots are abstracted into distinct beverage equivalents in
           durationMs: [6000, 9000]
         }
       },
-      expected: /卖点卡|场景卡|卡片连跳|信息卡/,
-      forbidden: /侧边接口|摄像头|多瓶阵列/
+      expected: /卖点信息连跳|卖点卡连跳|场景卡切换/,
+      forbidden: /侧边接口|充电仓特写/
     },
     {
       name: 'device handoff',
@@ -419,8 +419,8 @@ test('source-specific slots are abstracted into distinct beverage equivalents in
           durationMs: [9000, 12000]
         }
       },
-      expected: /手递|场景切换|分享|通勤|社交/,
-      forbidden: /侧边接口|摄像头|多窗口/
+      expected: /场景接力|摘下递出|通勤到办公切换/,
+      forbidden: /侧边接口|充电仓特写/
     },
     {
       name: 'cta lockup',
@@ -436,8 +436,8 @@ test('source-specific slots are abstracted into distinct beverage equivalents in
           durationMs: [12000, 14000]
         }
       },
-      expected: /多瓶阵列|CTA 尾帧|购买引导|干净收口/,
-      forbidden: /侧边接口|多窗口|热浪破开/
+      expected: /耳机收口 CTA|产品阵列|购买引导弹出/,
+      forbidden: /侧边接口|充电仓特写/
     }
   ];
 
@@ -459,7 +459,7 @@ test('source-specific slots are abstracted into distinct beverage equivalents in
       })
       .filter(Boolean)
       .join('\n');
-    assert.match(positiveText, scenario.expected, `${scenario.name} should have a distinct beverage mapping`);
+    assert.match(positiveText, scenario.expected, `${scenario.name} should have a distinct vocab-native mapping`);
     if (scenario.forbidden) {
       assert.doesNotMatch(positiveText, scenario.forbidden, `${scenario.name} should not reuse another subtype mapping`);
     }
@@ -467,5 +467,30 @@ test('source-specific slots are abstracted into distinct beverage equivalents in
     normalizedPrompts.add(positiveText.replace(/\d+(?:\.\d+)? 秒/g, 'N 秒').slice(0, 240));
   }
 
-  assert.equal(normalizedPrompts.size, scenarios.length, 'each subtype should produce a distinct prompt body');
+  assert.equal(normalizedPrompts.size, scenarios.length, 'each subtype should produce a distinct vocab-native prompt body');
+});
+
+test('source-specific slot emits product vocab, not beverage, when earphone vocab is injected', () => {
+  // Slot whose intent contains source-product terms ('侧边接口' / '按键' / '功能部件组装') so that
+  // containsDirectorSourceSpecificTerm fires and buildSourceSpecificSpec is reached.
+  const slot: ShotSlotNode = {
+    ...makeSlot('product_closeup'),
+    id: 'slot_source_specific_no_leak',
+    requiredAsset: { type: 'video', subject: 'side port hardware interface camera reveal' },
+    intent: {
+      purpose: '展示侧边接口与按键、功能部件组装',
+      energyLevel: 'medium',
+      motionPattern: 'sequential interface reveal',
+      compositionPrincipal: 'detail reveal',
+      durationMs: [3000, 6000]
+    }
+  };
+  const { options } = buildGapResolutionOptions({
+    slot,
+    tier: 'gap',
+    contentBrief: makeEarphoneContentBrief(),
+    referenceAssetIds: ['asset_earphone_001'],
+    vocab: EARPHONE_VOCAB_FIXTURE
+  });
+  assert.doesNotMatch(JSON.stringify(options), /冰块|柠檬|瓶身|红茶|倒茶|冷凝|开盖|多瓶|冰爽/, 'source-specific slot emits product vocab, not beverage');
 });

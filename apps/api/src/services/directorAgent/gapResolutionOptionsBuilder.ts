@@ -442,7 +442,7 @@ function buildDirectorSpec(args: BuildGapResolutionOptionsArgs, brief?: MissingM
     return base;
   }
 
-  return buildSourceSpecificSpec(base, inferSourceSpecificTransferSubtype(args.slot, args.motif));
+  return buildSourceSpecificSpec(base, inferSourceSpecificTransferSubtype(args.slot, args.motif), args.vocab);
 }
 
 function buildDirectorPromptContext(
@@ -608,44 +608,11 @@ function targetSafeSlotIntent(slot: ShotSlotNode, spec: ZhRoleSpec): string | un
 }
 
 function sanitizeSourceSpecificText(text: string): string {
-  let safe = text
-    .replace(/屏幕显示与系统交互/g, '卖点卡与场景卡连续切换')
-    .replace(/系统交互/g, '卖点卡互动')
-    .replace(/多窗口并行操作/g, '多卖点卡并行展示')
-    .replace(/多个应用界面/g, '多个饮用场景卡')
-    .replace(/应用界面/g, '场景卡')
-    .replace(/界面/g, '信息卡')
-    .replace(/产品侧边接口布局/g, '瓶身标签与冷凝水细节布局')
-    .replace(/侧边接口布局/g, '瓶身标签细节布局')
-    .replace(/接口布局/g, '标签细节布局')
-    .replace(/接口/g, '瓶身细节')
-    .replace(/摄像头|镜片/g, '标签高光')
-    .replace(/功能部件组装/g, '冰爽元素汇聚')
-    .replace(/核心功能部件/g, '核心冰爽元素')
-    .replace(/功能部件/g, '冰爽元素')
-    .replace(/高清内容播放/g, '茶色质感呈现')
-    .replace(/按键操作/g, '开盖或触碰瓶身动作')
-    .replace(/按键/g, '开盖动作')
-    .replace(/产品闭合全流程/g, '产品定格收口流程')
-    .replace(/特殊开合结构/g, '开盖/倒茶动作')
-    .replace(/开合结构/g, '开盖/倒茶动作')
-    .replace(/硬件卖点/g, '冰爽卖点')
-    .replace(/硬件功能/g, '冰爽卖点')
-    .replace(/硬件/g, '冰爽卖点')
-    .replace(/跨设备联动/g, '跨场景分享接力')
-    .replace(/无缝协同/g, '顺滑场景接力')
-    .replace(/触控板/g, '触碰瓶身')
-    .replace(/键盘/g, '冰块')
-    .replace(/笔记本/g, '产品主体')
-    .replace(/火箭/g, '冰爽水汽')
-    .replace(/购买窗口/g, 'CTA 卡片');
-
-  safe = safe
+  return text
     .replace(/MacBook|Apple|laptop|keyboard|trackpad|touchpad|screen|port|interface|camera|hinge|chassis|rocket|hardware|purchase window|multi[-_\s]?window|system interaction/gi, '目标品类等价动作')
     .replace(/笔记本|苹果|键盘|触控板|屏幕|接口|摄像头|机身|火箭|购买窗口|硬件功能|硬件|开合结构|闭合|按键|功能部件|多窗口|系统交互|侧边/g, '目标品类等价动作')
     .replace(/\s+/g, ' ')
     .trim();
-  return safe;
 }
 
 function containsDirectorSourceSpecificTerm(text: string): boolean {
@@ -681,16 +648,9 @@ function zhList(values: string[]): string {
 function translateEquivalent(value: string): string {
   const lower = value.toLowerCase();
   const table: Array<[RegExp, string]> = [
-    [/ice cubes?/, '冰块'],
-    [/lemon slices?/, '柠檬片'],
-    [/tea droplets?/, '红茶水滴'],
-    [/cold mist/, '冷雾'],
-    [/cap opening|cap pop/, '开盖激活'],
-    [/pour/, '倒茶入杯'],
     [/cta lock|cta/, 'CTA 收口'],
-    [/splash|burst/, '水汽爆发'],
     [/lineup/, '产品阵列'],
-    [/brand color/, '品牌色块'],
+    [/splash|burst/, '爆发瞬间'],
     [/product/, '产品主体']
   ];
   for (const [pattern, translated] of table) {
@@ -714,114 +674,19 @@ function gatedMotifType(args: BuildGapResolutionOptionsArgs, brief?: MissingMate
   return motifType;
 }
 
-function buildSourceSpecificSpec(base: ZhRoleSpec, subtype: SourceSpecificTransferSubtype): ZhRoleSpec {
-  switch (subtype) {
-    case 'opening_transform':
-      return {
-        ...base,
-        label: '冰爽英雄入场',
-        reshootShot: '用热浪背景被冰块和瓶身入画破开，完成从夏日闷热到冰爽入场的英雄亮相',
-        mustCapture: ['热浪或夏日场景铺垫', '产品快速入画形成冰爽入场', '标签清晰可见', '第一帧留出强 hook 标题区'],
-        framing: '竖屏中近景，产品从侧前方或中央进入，顶部留标题安全区',
-        durationSec: base.durationSec,
-        hyperframesIntent: '把开场变形亮相抽象成“热到冷”的第一秒冲击',
-        animationHints: ['热浪破开', '冰块擦屏', '产品英雄亮相', '大标题定格'],
-        aigcScene: '夏日热浪被冰块和产品入画破开，产品完成冰爽英雄亮相，画面清爽明亮，标签清晰',
-        cardType: 'hook_card',
-        motifLine: '只迁移“强开场变换入场”的抽象节奏；目标等价物是热浪、冰块、夏日场景、产品英雄亮相和标题定格'
-      };
-    case 'interface_detail':
-      return {
-        ...base,
-        label: '瓶身细节扫光',
-        reshootShot: '用瓶盖特写、标签扫光、冷凝水擦除和瓶身微距完成连续细节展示',
-        mustCapture: ['瓶盖特写', '标签扫光', '冷凝水擦除', '瓶身微距', '包装文字保持清晰'],
-        framing: '竖屏微距到中近景，镜头沿瓶身或标签缓慢扫过',
-        durationSec: base.durationSec,
-        hyperframesIntent: '把细节巡礼抽象成饮料包装和冰爽质感的连续扫光',
-        animationHints: ['标签扫光', '冷凝水擦除', '瓶盖高光', '茶色流动'],
-        aigcScene: '瓶盖、标签、冷凝水和瓶身曲线的微距扫光，冰块和柠檬作为背景质感，包装保持真实清晰',
-        cardType: base.cardType,
-        motifLine: '只迁移“细节逐步揭示”的抽象结构；目标等价物是瓶盖、标签、冷凝水、瓶身微距和茶色流动'
-      };
-    case 'assembly_detail':
-      return {
-        ...base,
-        label: '冰柠元素汇聚',
-        reshootShot: '让冰块、柠檬片、茶滴和冷雾从不同方向汇聚到产品周围，形成由散到聚的卖点揭示',
-        mustCapture: ['冰块进入画面', '柠檬片扫过', '红茶茶滴或茶色流动', '元素汇聚到产品周围', '产品标签保持清晰'],
-        framing: '竖屏产品居中，四周留出元素汇聚空间',
-        durationSec: base.durationSec,
-        hyperframesIntent: '把部件归位抽象成冰爽元素汇聚到产品卖点',
-        animationHints: ['冰块汇聚', '柠檬扫过', '茶滴环绕', '卖点卡落下'],
-        aigcScene: '冰块、柠檬片、茶滴和冷雾由散到聚地汇聚到产品周围，形成冰爽卖点揭示，最后产品稳定定格',
-        cardType: 'timeline_bridge_card',
-        motifLine: '只迁移“由散到聚、卖点完成”的抽象结构；目标等价物是冰块、柠檬、茶滴、冷雾和产品卖点定格'
-      };
-    case 'ui_sequence':
-      return {
-        ...base,
-        label: '卖点场景卡连跳',
-        reshootShot: '围绕产品拍摄干净底图，再用卖点卡、场景卡和信息卡连跳展示不同饮用场景与利益点',
-        mustCapture: ['产品稳定底图', '卖点卡出现空间', '场景卡或信息卡连跳节奏', '至少一个真实使用或冰爽证据'],
-        framing: '竖屏产品偏中下，左右或上方留卡片运动空间',
-        durationSec: base.durationSec,
-        hyperframesIntent: '把多界面切换抽象成卖点卡和场景卡的连续信息节奏',
-        animationHints: ['卖点卡连跳', '场景卡切换', '信息卡叠入', '快速卡点'],
-        aigcScene: '产品作为稳定主视觉，卖点卡、场景卡和信息卡依次连跳，展示夏日解渴、柠檬茶味和分享场景',
-        cardType: 'benefit_card',
-        motifLine: '只迁移“多信息快速切换”的抽象节奏；目标等价物是卖点卡、场景卡、信息卡和产品稳定底图'
-      };
-    case 'device_handoff':
-      return {
-        ...base,
-        label: '分享场景接力',
-        reshootShot: '用手递冰红茶、桌面到通勤的场景切换或朋友分享动作，表达从个人到社交场景的接力',
-        mustCapture: ['手递产品', '通勤或桌面场景切换', '朋友分享或多人场景暗示', '产品始终可识别'],
-        framing: '竖屏中景，手部动作和产品同框，转场处留出运动方向',
-        durationSec: base.durationSec,
-        hyperframesIntent: '把跨设备接力抽象成饮用场景接力和社交分享',
-        animationHints: ['手递转场', '场景擦除', '分享箭头', '通勤场景切换'],
-        aigcScene: '一瓶冰红茶从桌面被手递到通勤或社交场景，完成清爽分享的场景切换，产品标签清晰',
-        cardType: 'timeline_bridge_card',
-        motifLine: '只迁移“从一个使用场景接力到另一个场景”的抽象结构；目标等价物是手递、通勤、社交分享和场景切换'
-      };
-    case 'cta_lockup':
-      return {
-        ...base,
-        label: '多瓶阵列 CTA 尾帧',
-        reshootShot: '拍摄多瓶阵列或单瓶定格，配合干净收口和购买引导空间，形成 CTA 尾帧',
-        mustCapture: ['多瓶阵列或单瓶稳定定格', '标签清晰', 'CTA 尾帧留白', '购买引导区域干净'],
-        framing: '竖屏产品居中或阵列居中，底部/侧边留文案安全区',
-        durationSec: base.durationSec,
-        hyperframesIntent: '把结尾锁定抽象成产品阵列、干净收口和明确行动引导',
-        animationHints: ['多瓶阵列', 'CTA 尾帧', '购买引导弹出', '干净收口'],
-        aigcScene: '多瓶阵列或单瓶产品定格，背景干净明亮，留出 CTA 文案空间，形成清晰购买引导尾帧',
-        cardType: 'cta_card',
-        motifLine: '只迁移“结尾锁定和行动引导”的抽象结构；目标等价物是多瓶阵列、CTA 尾帧、购买引导和干净收口'
-      };
-    case 'generic_source_specific':
-    default:
-      return {
-        ...base,
-        label: '饮料动作等价镜头',
-        reshootShot: '把源片里的品类专属结构展示替换成饮料原生画面：瓶身标签、冷凝水、茶色流动、开盖、倒入杯中或多瓶陈列',
-        mustCapture: [
-          '瓶身标签或包装清晰',
-          '冷凝水/冰块/柠檬片等冰爽证据',
-          '开盖、瓶身旋转、倒茶或陈列扫过中的一个饮料动作',
-          '画面留出卖点或 CTA 安全区'
-        ],
-        framing: base.framing,
-        durationSec: base.durationSec,
-        hyperframesIntent: '把源品类专属功能展示替换成饮料可拍摄/可包装的卖点画面',
-        animationHints: ['瓶身标签高光', '冷凝水擦除', '柠檬片扫过', '茶色流动', '卖点卡落下'],
-        aigcScene:
-          '瓶身标签清晰可见，冷凝水、冰块、柠檬片和红茶茶色作为视觉证据，动作可为开盖、瓶身旋转、倒入杯中或多瓶陈列扫过',
-        cardType: base.cardType,
-        motifLine: '只迁移“展示细节与功能递进”的结构，不复制源品类物体；目标等价物是瓶身标签、冷凝水、茶色流动、开盖动作和产品陈列'
-      };
-  }
+function buildSourceSpecificSpec(base: ZhRoleSpec, subtype: SourceSpecificTransferSubtype, vocab: CategoryEquivalentVocabulary): ZhRoleSpec {
+  const eq = vocab.bySubtype[subtype]!;
+  return {
+    ...base,
+    label: eq.label,
+    reshootShot: `用 ${eq.actions.join('、')} 完成「${eq.label}」的结构化呈现，产品标签保持清晰`,
+    mustCapture: [...eq.actions, '产品标签清晰可见'],
+    animationHints: eq.actions,
+    aigcScene: `${eq.actions.join('、')}，完成「${eq.label}」，产品清晰、画面干净`,
+    cardType: base.cardType,
+    motifLine: `只迁移「${subtype}」的抽象结构节奏；目标等价物：${eq.actions.join('、')}`,
+    targetEquivalentActions: eq.actions
+  };
 }
 
 function buildSlotText(slot: ShotSlotNode): string {
