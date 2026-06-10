@@ -1,8 +1,7 @@
 import { Router } from 'express';
 import path from 'node:path';
 import { nanoid } from 'nanoid';
-import type { AssetCard, ContentBrief, MaterialGap, QualityReport, SlotMatch, TimelineItem } from '@viral-struct/shared';
-import type { GapFillPlan } from '@viral-struct/video-agent';
+import type { AssetCard, ContentBrief, MaterialGap, OrchestratedTimeline, QualityReport, SlotMatch, TimelineItem } from '@viral-struct/shared';
 import { analyzeAssetsMock } from '../services/assetAnalyzer';
 import { loadAssetLibrary } from '../services/assetLibraryLoader';
 import { type DemoShowcase, getDemoShowcase } from '../services/demoShowcase';
@@ -10,8 +9,22 @@ import { evaluateQuality } from '../services/qualityEvaluator';
 import { matchSlotsWithFallback } from '../services/slotMatcher';
 import { type StructureExtractionResult, extractStructureFromVideoAnalysis } from '../services/structureExtractor';
 import { analyzeVideoFile, getSeedVideoPath } from '../services/videoAnalyzer';
-import { renderAuthoredTimeline, runVideoAgentPipeline } from '../services/videoAgent/runVideoAgentPipeline';
+import { renderAuthoredTimeline } from '../services/videoAgent/runVideoAgentPipeline';
+import { runDirectorAgent } from '../services/directorAgent';
+import { orchestratedToAuthored } from '../services/videoAgent/orchestratedToAuthored';
+import { authoredTimelineToTimelineItems } from '../services/videoAgent/authoredTimelineAdapter';
+import { buildDeterministicPreset } from '../services/motifs/categoryPresetProvider';
 import { getRenderDir } from '../services/videoPaths';
+import {
+  authoredRenderEnabled,
+  authoredRenderFromContext,
+  rewriteAssetCardUrlsToDisk
+} from '../services/authoredRenderService';
+import {
+  hyperframesRenderEnabled,
+  hyperframesRenderFromContext
+} from '../services/hyperframesRenderService';
+import type { EditConstraints, VideoEditContext } from '@viral-struct/video-agent';
 
 export const demoRouter = Router();
 
@@ -69,24 +82,36 @@ demoRouter.post('/run', async (_req, res) => {
       boundaries
     });
 
-    // ③ video-agent pipeline replaces ①'s gap planner + timeline generator + render service.
-    const pipeline = await runVideoAgentPipeline({
+    // ② Director Agent (plan-only): transfer the viral structure onto the product, propose per-beat
+    // enhancement channels (reshoot / hyperframes / aigc), and emit the Video Agent handoff. This is the
+    // real scan → assetcard → director → video-agent chain (it replaces the mock-author shortcut).
+    const categoryPreset = buildDeterministicPreset({
+      category: contentBrief.category ?? contentBrief.productName,
+      availableAssets: assetLoad.assetCards.map((card) => card.id)
+    });
+    const orchestratedTimeline = await runDirectorAgent({
+      projectId: showcase.case.id,
       structureGraph: structure.structureGraph,
       assetCards: assetLoad.assetCards,
       contentBrief,
-      boundaries,
-      match: { matches: slotResult.matches, gaps: slotResult.gaps }
+      categoryPreset,
+      boundaries
     });
+
+    // ③ Video Agent handoff: project the director's plan into a renderable AuthoredTimeline + flat items.
+    const authoredTimeline = orchestratedToAuthored(orchestratedTimeline, { assetCards: assetLoad.assetCards });
+    const timelineItems = authoredTimelineToTimelineItems(authoredTimeline);
+    const authorSource = orchestratedTimeline.meta.matchSource;
 
     const qualityReport = evaluateQuality({
       matches: slotResult.matches,
-      timeline: pipeline.timelineItems,
+      timeline: timelineItems,
       boundaries,
       contentBrief,
       assets: assetLoad.assetCards
     });
 
-    const warnings = [slotResult.warning].filter((w): w is string => Boolean(w));
+    const warnings = [slotResult.warning, ...orchestratedTimeline.warnings].filter((w): w is string => Boolean(w));
 
     // Best-effort render of the authored timeline into a real MP4. A render failure must never break the
     // analysis demo, so it is wrapped and surfaced as a warning instead.
@@ -94,12 +119,72 @@ demoRouter.post('/run', async (_req, res) => {
     let renderManifest: Awaited<ReturnType<typeof renderAuthoredTimeline>> | null = null;
     try {
       const outputPath = path.join(getRenderDir(), `render_${nanoid(10)}.mp4`);
-      renderManifest = await renderAuthoredTimeline({ timeline: pipeline.authoredTimeline, outputPath });
+      renderManifest = await renderAuthoredTimeline({ timeline: authoredTimeline, outputPath });
       renderMediaUrl = renderManifest.rendered && renderManifest.outputPath
         ? `/media/renders/${path.basename(renderManifest.outputPath)}`
         : null;
     } catch (error) {
       warnings.push(`render skipped: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    // Optional real-pixel renders (flag-gated, additive; default OFF). Both inherit a VideoEditContext from
+    // the analysis pipeline and must never break the demo on failure. The authored path composites real
+    // pixels via ffmpeg; the HyperFrames path has the LLM author an HTML+GSAP composition HyperFrames renders.
+    let authoredRenderMediaUrl: string | null = null;
+    let authoredRenderManifest: Awaited<ReturnType<typeof authoredRenderFromContext>>['render'] | null = null;
+    let authoredRenderSource: 'llm' | 'mock' | null = null;
+    let authoredRenderTrace: Awaited<ReturnType<typeof authoredRenderFromContext>>['trace'] | null = null;
+    let hyperframesRenderMediaUrl: string | null = null;
+    let hyperframesRenderSource: 'llm' | 'mock' | null = null;
+    let hyperframesRenderLint: Awaited<ReturnType<typeof hyperframesRenderFromContext>>['lint'] | null = null;
+    if (authoredRenderEnabled() || hyperframesRenderEnabled()) {
+      const sourceAspectRatio = structure.structureGraph.meta.aspectRatio;
+      const aspectRatio = narrowAspectRatio(sourceAspectRatio);
+      if (sourceAspectRatio !== aspectRatio) {
+        warnings.push(`render: aspectRatio "${sourceAspectRatio}" coerced to "${aspectRatio}".`);
+      }
+      const constraints: EditConstraints = {
+        aspectRatio,
+        allowAigc: false,
+        allowHumanGeneration: false,
+        allowedClaimSources: [],
+        forbiddenClaims: []
+      };
+      const editContext: VideoEditContext = {
+        projectId: showcase.case.id,
+        structureGraph: structure.structureGraph,
+        contentBrief,
+        assetCards: rewriteAssetCardUrlsToDisk(assetLoad.assetCards),
+        slotMatches: slotResult.matches,
+        materialGaps: slotResult.gaps,
+        timeline: timelineItems,
+        qualityReport,
+        constraints
+      };
+      if (authoredRenderEnabled()) {
+        try {
+          const authored = await authoredRenderFromContext(editContext);
+          authoredRenderMediaUrl = authored.mediaUrl;
+          authoredRenderManifest = authored.render;
+          authoredRenderSource = authored.source;
+          authoredRenderTrace = authored.trace;
+        } catch (error) {
+          warnings.push(`authored render skipped: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
+      if (hyperframesRenderEnabled()) {
+        try {
+          const hf = await hyperframesRenderFromContext(editContext);
+          hyperframesRenderMediaUrl = hf.mediaUrl;
+          hyperframesRenderSource = hf.source;
+          hyperframesRenderLint = hf.lint;
+          if (!hf.rendered) {
+            warnings.push(`hyperframes render skipped${hf.lint.errors.length ? ` (lint): ${hf.lint.errors.join('; ')}` : ''}`);
+          }
+        } catch (error) {
+          warnings.push(`hyperframes render skipped: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      }
     }
 
     res.json({
@@ -115,15 +200,22 @@ demoRouter.post('/run', async (_req, res) => {
       },
       slotMatches: slotResult.matches,
       materialGaps: slotResult.gaps,
-      gapFills: pipeline.gapFills,
-      authoredTimeline: pipeline.authoredTimeline,
-      timeline: pipeline.timelineItems,
+      orchestratedTimeline,
+      authoredTimeline,
+      timeline: timelineItems,
       qualityReport,
       renderMediaUrl,
       renderManifest,
+      authoredRenderMediaUrl,
+      authoredRenderManifest,
+      authoredRenderSource,
+      authoredRenderTrace,
+      hyperframesRenderMediaUrl,
+      hyperframesRenderSource,
+      hyperframesRenderLint,
       engineStageSources: {
         alignment: slotResult.alignmentSource,
-        author: pipeline.authorSource
+        author: authorSource
       },
       warnings,
       evidenceTrace: buildEvidenceTrace({
@@ -131,11 +223,10 @@ demoRouter.post('/run', async (_req, res) => {
         structure,
         assetLoad,
         matches: slotResult.matches,
-        gapFills: pipeline.gapFills,
-        timeline: pipeline.timelineItems,
+        orchestratedTimeline,
+        timeline: timelineItems,
         qualityReport,
-        alignmentSource: slotResult.alignmentSource,
-        authorSource: pipeline.authorSource
+        alignmentSource: slotResult.alignmentSource
       })
     });
   } catch (error) {
@@ -145,6 +236,10 @@ demoRouter.post('/run', async (_req, res) => {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function narrowAspectRatio(value: string | undefined): EditConstraints['aspectRatio'] {
+  return value === '16:9' || value === '1:1' ? value : '9:16';
 }
 
 async function loadDemoAssetCards(showcase: ReturnType<typeof getDemoShowcase>): Promise<DemoAssetLoadResult> {
@@ -172,21 +267,19 @@ function buildEvidenceTrace({
   structure,
   assetLoad,
   matches,
-  gapFills,
+  orchestratedTimeline,
   timeline,
   qualityReport,
-  alignmentSource,
-  authorSource
+  alignmentSource
 }: {
   showcase: DemoShowcase;
   structure: StructureExtractionResult;
   assetLoad: DemoAssetLoadResult;
   matches: SlotMatch[];
-  gapFills: GapFillPlan[];
+  orchestratedTimeline: OrchestratedTimeline;
   timeline: TimelineItem[];
   qualityReport: QualityReport;
   alignmentSource: 'llm_judge' | 'rule_based';
-  authorSource: 'llm' | 'mock';
 }): DemoEvidenceTraceItem[] {
   const analysisId = showcase.case.seedFilename.replace(/\.[^.]+$/, '');
   const matchedCount = matches.filter((match) => match.status === 'matched').length;
@@ -194,7 +287,13 @@ function buildEvidenceTrace({
   const migrationContractCount = structure.structureGraph.shotSlots.filter(
     (slot) => slot.intent && slot.sourceInstance && slot.acceptanceCriteria
   ).length;
-  const unresolvedFills = gapFills.filter((plan) => plan.resolutionStatus === 'unresolved').length;
+  const authorSource = orchestratedTimeline.meta.matchSource;
+  const generationRequired = orchestratedTimeline.slots.filter(
+    (slot) => slot.fill.kind === 'gap' || slot.fillStatus === 'missing_generation_required'
+  ).length;
+  const enhancementOptionSlots = orchestratedTimeline.slots.filter(
+    (slot) => (slot.fill.options ?? []).length > 0
+  ).length;
   const transitionFidelity =
     qualityReport.transitionFidelity === undefined
       ? '转场保真 n/a'
@@ -227,17 +326,17 @@ function buildEvidenceTrace({
     },
     {
       id: 'slot_gap_fill',
-      label: 'Slot Match / Gap Fill (video-agent)',
-      source: `${alignmentSource} + video_agent`,
-      detail: `${matchedCount} 个 matched，${partialOrMissingCount} 个 partial/missing，${gapFills.length} 个 video-agent 补全计划（${unresolvedFills} 个诚实兜底）；对齐来源 ${alignmentSource}`,
-      judgeBenefit: '把结构槽位、素材能力和缺口补全串成可解释迁移链路；补全由 video-agent 规划，缺真实证据时诚实降级而非伪造。'
+      label: 'Slot Match / Gap Resolution (director)',
+      source: `${alignmentSource} + director_agent`,
+      detail: `${matchedCount} 个 matched，${partialOrMissingCount} 个 partial/missing，${enhancementOptionSlots} 个 beat 带导演增强选项（reshoot/hyperframes/aigc），其中 ${generationRequired} 个需生成补全；对齐来源 ${alignmentSource}`,
+      judgeBenefit: '把结构槽位、素材能力和缺口补全串成可解释迁移链路；由 Director Agent 逐 beat 规划增强通道，缺真实证据时诚实降级而非伪造。'
     },
     {
       id: 'authored_timeline_quality',
-      label: 'Authored Timeline / Quality (video-agent)',
+      label: 'Authored Timeline / Quality (director → video-agent)',
       source: authorSource,
-      detail: `${timeline.length} 个 beat（按段落编排），结构匹配 ${qualityReport.structureMatch.toFixed(2)}，素材覆盖 ${qualityReport.slotCoverage.toFixed(2)}，${transitionFidelity}；成片编排来源 ${authorSource}`,
-      judgeBenefit: '由 video-agent 直接编排成片时间线（真素材合成 + 诚实替代卡），并集中输出可验证的结果质量。'
+      detail: `${timeline.length} 个 beat（导演按结构编排 + 逐 beat 增强指引），结构匹配 ${qualityReport.structureMatch.toFixed(2)}，素材覆盖 ${qualityReport.slotCoverage.toFixed(2)}，${transitionFidelity}；匹配来源 ${authorSource}`,
+      judgeBenefit: '由 Director Agent 编排成片时间线并交接给 Video Agent（真素材合成 + 诚实替代卡），集中输出可验证的结果质量。'
     }
   ];
 }

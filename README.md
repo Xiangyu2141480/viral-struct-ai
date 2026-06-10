@@ -42,8 +42,8 @@ pnpm dev
 
 - Web: `http://localhost:3000`
 - API: `http://localhost:4000`
-- 主评审演示：`http://localhost:3000/demo`
-- 标准产品流程：`/analyze -> /graph -> /adapt -> /gaps -> /result`
+- 主评审演示：打开 `http://localhost:3000/`，点击「一键演示」按钮（`/demo` 现已永久重定向到 `/`）
+- 标准产品流程：01 样例解析 → 02 素材输入 → 03 缺口诊断 → 04 成片编译（同一页面 / 路由 `/`，左侧步骤导航切换）
 
 ## 核心流程
 
@@ -63,14 +63,16 @@ pnpm dev
 
 ## 关键页面
 
-| 页面 | 用途 |
+应用现已合并为单页（路由 `/`），通过左侧步骤导航切换；下表的「位置」对应单页内的步骤。
+
+| 位置 | 用途 |
 |---|---|
-| `/demo` | 主评审路径，一键展示 macbook_neo 样例到康师傅冰红茶的迁移闭环 |
-| `/analyze` | 选择 seed / 上传视频 / 手动字幕，展示真实视频元信息和关键帧 |
-| `/graph` | 展示样例结构图谱、rough/fine scan 结构、migration contract |
-| `/adapt` | 输入商品 brief，加载或分析 `AssetCard` 素材 |
-| `/gaps` | 展示 slot matching、material gaps、gap repairs 和 fallback source |
-| `/result` | 展示脚本、分镜、timeline、Web 预览、Generation Trace、Migration Evidence、Variant Diff、自然语言改片 |
+| 一键演示 | 主评审路径，一键展示 macbook_neo 样例到康师傅冰红茶的迁移闭环 |
+| 步骤 01 · 样例解析 | 选择 seed / 上传视频 / 手动字幕，展示真实视频元信息和关键帧 |
+| 步骤 01 · 样例解析 | 展示样例结构图谱、rough/fine scan 结构、migration contract（结构图/上下对位在同一样例步骤内） |
+| 步骤 02 · 素材输入 | 输入商品 brief，加载或分析 `AssetCard` 素材 |
+| 步骤 03 · 缺口诊断 | 展示 slot matching、material gaps、gap repairs 和 fallback source |
+| 步骤 04 · 成片编译 | 展示脚本、分镜、timeline、Web 预览、Generation Trace、Migration Evidence、Variant Diff、自然语言改片 |
 
 ## 关键 API
 

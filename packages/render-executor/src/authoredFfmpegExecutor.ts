@@ -18,6 +18,25 @@ import {
 import { framesFor } from './manifestExecutor';
 import type { RenderResult, RenderSegmentManifestEntry } from './RenderContract';
 
+/**
+ * Compute the ffmpeg trim plan for a video media layer playing the author-chosen source sub-range
+ * [startSec, endSec) inside a `beatDuration`-long beat. `ss` is the input seek (in-point); `readDuration`
+ * is how much source to read (capped at the beat); `padDuration` > 0 means the chosen clip is shorter than
+ * the beat, so the last frame is held (tpad) to fill the remainder rather than leaving a black gap.
+ * Pure — unit-tested in renderExecutor.test.ts.
+ */
+export function computeVideoTrim(
+  beatDuration: number,
+  startSec?: number,
+  endSec?: number
+): { ss: number; readDuration: number; padDuration: number } {
+  const ss = startSec != null && startSec > 0 ? startSec : 0;
+  const clipLen = endSec != null ? Math.max(0.1, endSec - ss) : beatDuration;
+  const readDuration = Math.min(beatDuration, clipLen);
+  const padDuration = clipLen < beatDuration - 0.05 ? beatDuration - clipLen : 0;
+  return { ss, readDuration, padDuration };
+}
+
 // ffmpeg-static is CommonJS (module.exports = path); load via createRequire to avoid ESM default-interop friction.
 const requireCjs = createRequire(import.meta.url);
 
@@ -183,8 +202,14 @@ async function renderBeat(
       // -framerate fps so the looped still has exactly dur*fps frames → Ken-Burns `on` reaches the final scale.
       inputArgs.push('-loop', '1', '-framerate', String(fps), '-t', durationSec.toFixed(3), '-i', layer.media.resolvedPath);
     } else {
-      const ss = layer.media.startSec ?? 0;
-      inputArgs.push('-ss', ss.toFixed(3), '-t', durationSec.toFixed(3), '-i', layer.media.resolvedPath);
+      // Play the author-chosen source sub-range [startSec, endSec). When the chosen clip is shorter than the
+      // beat we hold its last frame (tpad clone) to fill the beat — honest (no fabricated content, just a
+      // freeze), never a black gap. Input-side -ss is fast and keyframe-accurate to the GOP — fine for trims.
+      const { ss, readDuration, padDuration } = computeVideoTrim(durationSec, layer.media.startSec, layer.media.endSec);
+      inputArgs.push('-ss', ss.toFixed(3), '-t', readDuration.toFixed(3), '-i', layer.media.resolvedPath);
+      if (padDuration > 0) {
+        chain.push(`tpad=stop_mode=clone:stop_duration=${padDuration.toFixed(3)}`);
+      }
     }
     chain.push(`scale=${width}:${height}:force_original_aspect_ratio=increase`, `crop=${width}:${height}`);
     const motion = layer.media.type === 'image' ? layer.motion : undefined;
@@ -211,6 +236,9 @@ async function renderBeat(
     writeFileSync(assPath, ass.content, 'utf8');
     chain.push(`subtitles=filename='${escapeFilterPath(assPath)}':fontsdir='${escapeFilterPath(font.dir)}'`);
   }
+  // Flash cut: each real beat flashes up from white (~0.12s) for punchy energy at the boundary.
+  // Honest substitutes stay plain (no flash) so styling never dresses up missing evidence.
+  if (!unresolved) chain.push('fade=t=in:st=0:d=0.12:color=white');
   chain.push('fps=' + fps, 'format=yuv420p', 'setsar=1');
 
   const args = [...inputArgs, '-vf', chain.join(','), '-an', ...codecArgs(videoCodec), '-r', String(fps), '-y', outPath];
@@ -238,7 +266,7 @@ function buildAuthoredAss(beat: AuthoredComposition, height: number, fontFamily:
     if (lines.length === 0) return;
     const name = `T${styleIndex++}`;
     styles.push(textStyleLine(name, el, base, height, fontFamily, forcePlain));
-    events.push(`Dialogue: 0,0:00:00.00,${end},${name},,0,0,0,,${lines.join('\\N')}`);
+    events.push(`Dialogue: 0,0:00:00.00,${end},${name},,0,0,0,,${textAnim(el.type, forcePlain)}${lines.join('\\N')}`);
   };
 
   if (unresolved) {
@@ -275,6 +303,17 @@ function buildAuthoredAss(beat: AuthoredComposition, height: number, fontFamily:
     ...events
   ].join('\n');
   return { content, hasEvents: true };
+}
+
+/** Kinetic entrance per text type (libass override tags). Headlines pop in (fade + scale overshoot);
+ *  body/annotation fade in. Substitutes and the honest marker stay plain (no animation). */
+function textAnim(type: TextElement['type'], forcePlain: boolean): string {
+  if (forcePlain || type === 'honest_marker') return '';
+  const bs = '\\'; // single backslash for ASS override tags
+  if (type === 'headline') {
+    return `{${bs}fad(120,0)${bs}t(0,160,${bs}fscx118${bs}fscy118)${bs}t(160,300,${bs}fscx100${bs}fscy100)}`;
+  }
+  return `{${bs}fad(160,0)}`;
 }
 
 function textStyleLine(name: string, el: TextElement, base: number, height: number, fontFamily: string, forcePlain: boolean): string {

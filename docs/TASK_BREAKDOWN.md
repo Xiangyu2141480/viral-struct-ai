@@ -30,7 +30,7 @@ POST /api/videos/:id/analyze
 前端页面：
 
 ```txt
-/analyze
+步骤 01 · 样例解析（同一页面 / 路由 `/`，左侧步骤导航切换）
 ```
 
 ---
@@ -56,7 +56,7 @@ ViralStructureGraph
 前端页面：
 
 ```txt
-/graph
+步骤 01 · 样例解析（结构图 / 上下对位在同一样例步骤内，路由 `/`）
 ```
 
 ---
@@ -76,7 +76,7 @@ ViralStructureGraph
 前端页面：
 
 ```txt
-/adapt
+步骤 02 · 素材输入（同一页面 / 路由 `/`，左侧步骤导航切换）
 ```
 
 ---

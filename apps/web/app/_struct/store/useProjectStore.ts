@@ -2,26 +2,42 @@
 
 // useProjectStore.ts — single source of truth across Screens 01–04.
 //
-// Each async action calls the dedicated `/api/struct/*` endpoint and, if that
-// throws (backend not up yet / route unimplemented), falls back to a local
-// derivation from the mock fixtures in ../data.ts. The active path is tracked
-// in `mode` ('live' once any call succeeds, otherwise 'mock') and surfaced in
-// `warnings`, so the prototype renders end-to-end with or without a backend.
+// FAIL-FAST: each async action calls the dedicated `/api/struct/*` endpoint and,
+// if that throws (backend down / route unimplemented / non-2xx), records a rich
+// `lastError` (which call + endpoint + HTTP status + body) and RE-THROWS. It does
+// NOT silently swap in mock fixtures or report success — so a real failure is
+// always visible (red ERROR badge + error banner) and never masked as "live"
+// data. `mode` reflects the source of the data currently shown ('mock' initially,
+// 'live' after a successful call); a failed call leaves the prior data untouched.
 
 import { create } from 'zustand';
-import type { AssetSupplyContext } from '@viral-struct/shared';
+import type {
+  AssetSupplyContext,
+  DemoEstimate,
+  MissingMaterialGenerationJob,
+  QualityReport,
+  SafetyStatus,
+  StoryboardFrame,
+} from '@viral-struct/shared';
 import { analyzeStructAssetManagerCoverage } from '../api/assetManager';
 import { compile as compileApi, exportVideo as exportApi, nlEdit as nlEditApi } from '../api/compile';
 import { applyStrategy as applyStrategyApi, diagnose as diagnoseApi } from '../api/diagnose';
 import { matchMaterials as matchMaterialsApi, uploadMaterials as uploadMaterialsApi } from '../api/materials';
 import { analyzeSample as analyzeSampleApi } from '../api/sample';
+import { getFineScanStatus, getScanStatus, startFineScan, startScan, type FineBlockDetail } from '../api/scan';
+import {
+  type InsightRequest,
+  checkSafety as checkSafetyApi,
+  estimatePerformance as estimatePerformanceApi,
+  evaluateQuality as evaluateQualityApi,
+  loadLibraryMaterials as loadLibraryMaterialsApi,
+  planMaterialJobs as planMaterialJobsApi,
+  planStoryboard as planStoryboardApi,
+  runDemo as runDemoApi,
+} from '../api/insights';
 import type { ExportResult, TimelineSeg } from '../api/types';
 import {
   COMPILE_VERSIONS,
-  SLOT_DIAGNOSIS,
-  SOURCE_VIDEO,
-  TARGET_MATERIALS,
-  TARGET_PRODUCT,
   type CompileVersion,
   type Diagnosis,
   type Material,
@@ -44,9 +60,26 @@ interface ProjectState {
   exportResult: ExportResult | null;
   assetSupplyContext: AssetSupplyContext | null;
 
+  // ── insights / generation (capability buttons) ─────────────
+  qualityReport: QualityReport | null;
+  demoEstimate: DemoEstimate | null;
+  safetyStatus: SafetyStatus | null;
+  storyboardFrames: StoryboardFrame[] | null;
+  materialJobs: MissingMaterialGenerationJob[] | null;
+
   // ── status ────────────────────────────────────────────────
   mode: ApiMode;
   analyzing: boolean;
+  /** Real rough scan in progress (upload → VLM structure scan). */
+  scanning: boolean;
+  /** Human-readable rough-scan progress label (stage + elapsed). */
+  scanStage: string;
+  /** Segment id currently being fine-scanned (null = none). */
+  fineScanningSegId: string | null;
+  /** Human-readable fine-scan progress label. */
+  fineScanStage: string;
+  /** Per-segment deep detail from fine scan, keyed by UI segment id. */
+  segmentDetails: Record<string, FineBlockDetail>;
   uploading: boolean;
   matching: boolean;
   diagnosing: boolean;
@@ -56,6 +89,9 @@ interface ProjectState {
   assetManagerLoading: boolean;
   assetManagerWarnings: string[];
   assetManagerLastError: string | null;
+  /** Which capability insight is currently loading (null = idle). */
+  insightLoading: string | null;
+  loadingDemo: boolean;
   warnings: string[];
   /** Real error message from the last failed API call (null when the last call
    * succeeded or no call has been made yet). Distinguishes a genuine failure
@@ -66,6 +102,8 @@ interface ProjectState {
   dismissWarnings: () => void;
   refreshAssetManagerCoverage: () => Promise<void>;
   analyzeSample: (input: { file?: File; sampleId?: string }) => Promise<void>;
+  scanSample: (file: File) => Promise<void>;
+  fineScanSegment: (segmentIndex: number, segmentId: string) => Promise<void>;
   addMaterials: (files: File[]) => Promise<void>;
   setSlot: (materialId: string, slot: string | null) => void;
   applyAssignments: (assignments: Record<string, string | null>) => Promise<void>;
@@ -76,10 +114,17 @@ interface ProjectState {
   compile: () => Promise<void>;
   applyNlEdit: (instruction: string) => Promise<string>;
   exportVideo: (format: string) => Promise<ExportResult>;
+
+  // ── insights / generation actions ─────────────────────────
+  evaluateQuality: () => Promise<void>;
+  estimatePerformance: () => Promise<void>;
+  checkSafety: () => Promise<void>;
+  planStoryboard: () => Promise<void>;
+  planMaterialJobs: () => Promise<void>;
+  loadLibrary: (libraryId: string) => Promise<void>;
+  runDemo: () => Promise<void>;
   reset: () => void;
 }
-
-const MOCK_NOTE = '后端未连接 · 使用本地示例数据';
 
 /** Normalize a thrown value into a human-readable message. */
 function errMsg(e: unknown): string {
@@ -100,19 +145,42 @@ function deriveTimeline(sourceVideo: SourceVideo, diagnosis: Record<string, Diag
   }));
 }
 
+/** A valid-but-EMPTY source video. The app seeds NO mock content: screen 01 stays
+ *  empty until the user uploads a sample (analyzeSample) or runs the real-backend
+ *  一键演示. Screens gate on `segments.length` and show an empty state instead. */
+const EMPTY_SOURCE: SourceVideo = {
+  id: '', title: '', platform: '', duration: 0, views: '', likes: '',
+  finish_rate: 0, ctr: 0, cvr: 0, protocol_version: '',
+  segments: [], transitions: [],
+  rhythm: { avg_shot: 0, cuts: 0, hook_density: '', bgm_bpm: 0, caption_density: '' },
+  packaging: { title_template: '', captions: '', bgm: '', cover: '' },
+};
+/** Blank product the user fills in — no mock product seeded. */
+const BLANK_PRODUCT: TargetProduct = { name: '', category: '', price: '', stock: 0, asset_count: 0, industry: '' };
+
 const initialState = {
-  sourceVideo: SOURCE_VIDEO,
-  product: TARGET_PRODUCT,
-  materials: TARGET_MATERIALS,
-  diagnosis: SLOT_DIAGNOSIS,
+  sourceVideo: EMPTY_SOURCE,
+  product: BLANK_PRODUCT,
+  materials: [] as Material[],
+  diagnosis: {} as Record<string, Diagnosis>,
   appliedSlots: {} as Record<string, boolean>,
   versions: COMPILE_VERSIONS,
   selectedVersionId: COMPILE_VERSIONS[0].id,
   timeline: null as TimelineSeg[] | null,
   exportResult: null as ExportResult | null,
   assetSupplyContext: null as AssetSupplyContext | null,
+  qualityReport: null as QualityReport | null,
+  demoEstimate: null as DemoEstimate | null,
+  safetyStatus: null as SafetyStatus | null,
+  storyboardFrames: null as StoryboardFrame[] | null,
+  materialJobs: null as MissingMaterialGenerationJob[] | null,
   mode: 'mock' as ApiMode,
   analyzing: false,
+  scanning: false,
+  scanStage: '',
+  fineScanningSegId: null,
+  fineScanStage: '',
+  segmentDetails: {} as Record<string, FineBlockDetail>,
   uploading: false,
   matching: false,
   diagnosing: false,
@@ -122,6 +190,8 @@ const initialState = {
   assetManagerLoading: false,
   assetManagerWarnings: [] as string[],
   assetManagerLastError: null as string | null,
+  insightLoading: null as string | null,
+  loadingDemo: false,
   warnings: [] as string[],
   lastError: null as string | null,
 };
@@ -132,6 +202,11 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   dismissWarnings: () => set({ warnings: [], lastError: null }),
 
   refreshAssetManagerCoverage: async () => {
+    // No source yet → nothing to analyze; keep the panel empty (no mock coverage).
+    if (get().sourceVideo.segments.length === 0) {
+      set({ assetSupplyContext: null, assetManagerWarnings: [], assetManagerLastError: null });
+      return;
+    }
     set({ assetManagerLoading: true, assetManagerLastError: null });
     try {
       const { assetSupplyContext, warnings } = await analyzeStructAssetManagerCoverage({
@@ -162,13 +237,60 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       set({ sourceVideo, mode: 'live', warnings: warnings ?? [] });
       void get().refreshAssetManagerCoverage();
     } catch (e) {
-      // Fallback: keep the mock sample (optionally retitle to the uploaded file).
-      const base = get().sourceVideo;
-      const sourceVideo = input.file ? { ...base, title: input.file.name.replace(/\.[^.]+$/, '') } : base;
-      set({ sourceVideo, mode: 'mock', warnings: [MOCK_NOTE], lastError: errMsg(e) });
-      void get().refreshAssetManagerCoverage();
+      set({ lastError: '样例解析失败 · ' + errMsg(e) });
+      throw e;
     } finally {
       set({ analyzing: false });
+    }
+  },
+
+  scanSample: async (file) => {
+    // Real rough scan: upload → async VLM job → poll → real structure timeline.
+    set({ scanning: true, scanStage: '上传视频…', lastError: null });
+    try {
+      const { jobId } = await startScan(file);
+      for (let i = 0; i < 150; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        const s = await getScanStatus(jobId);
+        if (s.status === 'running') {
+          set({ scanStage: (s.stage ?? '扫描中') + (s.elapsedSec ? ` · ${s.elapsedSec}s` : '') });
+          continue;
+        }
+        if (s.status === 'error') throw new Error(s.error || '粗扫描失败');
+        if (!s.sourceVideo) throw new Error('扫描完成但未返回结构');
+        set({ sourceVideo: s.sourceVideo, mode: 'live', warnings: s.warnings ?? [], scanning: false, scanStage: '', segmentDetails: {} });
+        void get().refreshAssetManagerCoverage();
+        return;
+      }
+      throw new Error('粗扫描超时（>5 分钟）');
+    } catch (e) {
+      set({ scanning: false, scanStage: '', lastError: '粗扫描失败 · ' + errMsg(e) });
+      throw e;
+    }
+  },
+
+  fineScanSegment: async (segmentIndex, segmentId) => {
+    // Deep per-segment analysis: visual peak detection + per-peak VLM on the raw video.
+    set({ fineScanningSegId: segmentId, fineScanStage: '排队中', lastError: null });
+    try {
+      const { jobId } = await startFineScan(get().sourceVideo.id, segmentIndex);
+      for (let i = 0; i < 180; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        const s = await getFineScanStatus(jobId);
+        if (s.status === 'running') {
+          set({ fineScanStage: (s.stage ?? '精扫描中') + (s.elapsedSec ? ` · ${s.elapsedSec}s` : '') });
+          continue;
+        }
+        if (s.status === 'error') throw new Error(s.error || '精扫描失败');
+        if (!s.detail) throw new Error('精扫描完成但未返回明细');
+        const detail = s.detail;
+        set((st) => ({ segmentDetails: { ...st.segmentDetails, [segmentId]: detail }, fineScanningSegId: null, fineScanStage: '' }));
+        return;
+      }
+      throw new Error('精扫描超时（>6 分钟）');
+    } catch (e) {
+      set({ fineScanningSegId: null, fineScanStage: '', lastError: '精扫描失败 · ' + errMsg(e) });
+      throw e;
     }
   },
 
@@ -180,18 +302,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       set({ materials, mode: 'live', warnings: warnings ?? [] });
       void get().refreshAssetManagerCoverage();
     } catch (e) {
-      // Fallback: synthesize material cards from the file list.
-      const existing = get().materials;
-      const synthesized: Material[] = files.map((f, i) => ({
-        id: `u${existing.length + i + 1}`,
-        kind: f.type.startsWith('image') || /\.(png|jpe?g|webp)$/i.test(f.name) ? 'photo' : 'text',
-        subject: f.name.replace(/\.[^.]+$/, ''),
-        slot: null,
-        quality: 0.7,
-        color: '#3d4a3a',
-      }));
-      set({ materials: [...existing, ...synthesized], mode: 'mock', warnings: [MOCK_NOTE], lastError: errMsg(e) });
-      void get().refreshAssetManagerCoverage();
+      set({ lastError: '素材上传失败 · ' + errMsg(e) });
+      throw e;
     } finally {
       set({ uploading: false });
     }
@@ -217,8 +329,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       set({ materials, mode: 'live', warnings: warnings ?? [] });
       void get().refreshAssetManagerCoverage();
     } catch (e) {
-      set({ materials: local, mode: 'mock', warnings: [MOCK_NOTE], lastError: errMsg(e) });
-      void get().refreshAssetManagerCoverage();
+      set({ lastError: '素材匹配失败 · ' + errMsg(e) });
+      throw e;
     } finally {
       set({ matching: false });
     }
@@ -240,7 +352,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       });
       set({ diagnosis, mode: 'live', warnings: warnings ?? [] });
     } catch (e) {
-      set({ diagnosis: SLOT_DIAGNOSIS, mode: 'mock', warnings: [MOCK_NOTE], lastError: errMsg(e) });
+      set({ lastError: '缺口诊断失败 · ' + errMsg(e) });
+      throw e;
     } finally {
       set({ diagnosing: false });
     }
@@ -260,7 +373,10 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       appliedSlots.forEach((s) => (applied[s] = true));
       set({ diagnosis, appliedSlots: applied, mode: 'live', warnings: warnings ?? [] });
     } catch (e) {
-      set({ mode: 'mock', warnings: [MOCK_NOTE], lastError: errMsg(e) });
+      // Roll back the optimistic "applied" flag — the strategy did NOT apply.
+      set((state) => ({ appliedSlots: { ...state.appliedSlots, [slotId]: false } }));
+      set({ lastError: '补全策略应用失败 · ' + errMsg(e) });
+      throw e;
     }
   },
 
@@ -277,7 +393,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       });
       set({ timeline, selectedVersionId: version.id, mode: 'live', warnings: warnings ?? [] });
     } catch (e) {
-      set({ timeline: deriveTimeline(get().sourceVideo, get().diagnosis), mode: 'mock', warnings: [MOCK_NOTE], lastError: errMsg(e) });
+      set({ lastError: '成片编译失败 · ' + errMsg(e) });
+      throw e;
     } finally {
       set({ compiling: false });
     }
@@ -296,8 +413,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       set({ timeline: res.timeline, mode: 'live', warnings: res.warnings ?? [] });
       return res.patchSummary;
     } catch (e) {
-      set({ timeline, mode: 'mock', warnings: [MOCK_NOTE], lastError: errMsg(e) });
-      return `已记录改片指令：${instruction}`;
+      set({ lastError: '自然语言改片失败 · ' + errMsg(e) });
+      throw e;
     } finally {
       set({ nlApplying: false });
     }
@@ -311,13 +428,126 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       set({ exportResult: result, mode: 'live', warnings: result.warnings ?? [] });
       return result;
     } catch (e) {
-      const result: ExportResult = { jobId: `mock-${Date.now()}`, status: 'done', progress: 100 };
-      set({ exportResult: result, mode: 'mock', warnings: [MOCK_NOTE], lastError: errMsg(e) });
-      return result;
+      set({ lastError: '导出失败 · ' + errMsg(e) });
+      throw e;
     } finally {
       set({ exporting: false });
     }
   },
 
+  evaluateQuality: async () => {
+    set({ insightLoading: 'quality', lastError: null });
+    try {
+      const { qualityReport, warnings } = await evaluateQualityApi(buildInsightRequest(get()));
+      set({ qualityReport, mode: 'live', warnings: warnings ?? [] });
+    } catch (e) {
+      set({ lastError: '质量评估失败 · ' + errMsg(e) });
+      throw e;
+    } finally {
+      set({ insightLoading: null });
+    }
+  },
+
+  estimatePerformance: async () => {
+    set({ insightLoading: 'estimate', lastError: null });
+    try {
+      const { demoEstimate, warnings } = await estimatePerformanceApi(buildInsightRequest(get()));
+      set({ demoEstimate, mode: 'live', warnings: warnings ?? [] });
+    } catch (e) {
+      set({ lastError: '预测评分失败 · ' + errMsg(e) });
+      throw e;
+    } finally {
+      set({ insightLoading: null });
+    }
+  },
+
+  checkSafety: async () => {
+    set({ insightLoading: 'safety', lastError: null });
+    try {
+      const { safetyStatus } = await checkSafetyApi(buildInsightRequest(get()));
+      set({ safetyStatus, mode: 'live' });
+    } catch (e) {
+      set({ lastError: '安全检查失败 · ' + errMsg(e) });
+      throw e;
+    } finally {
+      set({ insightLoading: null });
+    }
+  },
+
+  planStoryboard: async () => {
+    set({ insightLoading: 'storyboard', lastError: null });
+    try {
+      const { frames, warnings } = await planStoryboardApi(buildInsightRequest(get()));
+      set({ storyboardFrames: frames, mode: 'live', warnings: warnings ?? [] });
+    } catch (e) {
+      set({ lastError: '分镜规划失败 · ' + errMsg(e) });
+      throw e;
+    } finally {
+      set({ insightLoading: null });
+    }
+  },
+
+  planMaterialJobs: async () => {
+    set({ insightLoading: 'materialJobs', lastError: null });
+    try {
+      const { jobs, warnings } = await planMaterialJobsApi(buildInsightRequest(get()));
+      set({ materialJobs: jobs, mode: 'live', warnings: warnings ?? [] });
+    } catch (e) {
+      set({ lastError: 'AIGC 生成规划失败 · ' + errMsg(e) });
+      throw e;
+    } finally {
+      set({ insightLoading: null });
+    }
+  },
+
+  loadLibrary: async (libraryId) => {
+    set({ uploading: true, lastError: null });
+    try {
+      const { materials, warnings } = await loadLibraryMaterialsApi(libraryId);
+      set({ materials, mode: 'live', warnings: warnings ?? [] });
+      void get().refreshAssetManagerCoverage();
+    } catch (e) {
+      set({ lastError: '示例素材库加载失败 · ' + errMsg(e) });
+      throw e;
+    } finally {
+      set({ uploading: false });
+    }
+  },
+
+  runDemo: async () => {
+    set({ loadingDemo: true, lastError: null });
+    try {
+      const bundle = await runDemoApi();
+      set({
+        sourceVideo: bundle.sourceVideo,
+        product: bundle.product,
+        materials: bundle.materials,
+        diagnosis: bundle.diagnosis,
+        timeline: bundle.timeline,
+        selectedVersionId: bundle.version?.id ?? get().selectedVersionId,
+        appliedSlots: {},
+        mode: 'live',
+        warnings: bundle.warnings ?? [],
+      });
+      void get().refreshAssetManagerCoverage();
+    } catch (e) {
+      set({ lastError: '一键演示失败 · ' + errMsg(e) });
+      throw e;
+    } finally {
+      set({ loadingDemo: false });
+    }
+  },
+
   reset: () => set({ ...initialState }),
 }));
+
+/** Build the shared evaluation/generation request from current store state. */
+function buildInsightRequest(state: ProjectState): InsightRequest {
+  return {
+    sourceVideo: state.sourceVideo,
+    materials: state.materials,
+    product: state.product,
+    timeline: state.timeline ?? undefined,
+    versionId: state.selectedVersionId,
+  };
+}

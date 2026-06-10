@@ -3,8 +3,15 @@
 // viz.tsx — Heavy visualizations for the 3 P0 concept upgrades
 // (Ported from viz.jsx; React/window globals replaced with imports.)
 
-import { Fragment, type CSSProperties } from 'react';
-import { ROLES, type Seg, type StateKey } from './data';
+import { Fragment, useState, type CSSProperties } from 'react';
+import {
+  ROLES,
+  TRANSITION_TYPES,
+  type Seg,
+  type StateKey,
+  type Transition,
+  type TransitionTypeKey,
+} from './data';
 import { useProjectStore } from './store/useProjectStore';
 
 /* ============================================================
@@ -16,24 +23,36 @@ export const AbstractStructureBand = ({
   segments,
   total,
   onSegHover,
+  onSegClick,
+  selectedId,
   height = 64,
 }: {
   segments: Seg[];
   total: number;
   onSegHover?: (seg: Seg) => void;
+  onSegClick?: (seg: Seg) => void;
+  selectedId?: string;
   height?: number;
 }) =>
 <div className="sband abstract" style={{ height }}>
     {segments.map((seg, i) => {
     const dur = seg.end !== undefined ? seg.end - (seg.start ?? 0) : (seg.dur ?? 0);
     const w = dur / total * 100;
+    const isSel = selectedId !== undefined && seg.id === selectedId;
     return (
       <div
         key={seg.id || i}
-        className={`sband-seg role-${seg.role}`}
-        style={{ width: `${w}%` }}
+        className={`sband-seg role-${seg.role}${isSel ? ' selected' : ''}`}
+        style={{
+          width: `${w}%`,
+          cursor: onSegClick ? 'pointer' : undefined,
+          outline: isSel ? '2px solid var(--accent)' : undefined,
+          outlineOffset: isSel ? '-2px' : undefined,
+          zIndex: isSel ? 2 : undefined,
+        }}
         onMouseEnter={() => onSegHover && onSegHover(seg)}
-        title={`${ROLES[seg.role]?.code} · ${ROLES[seg.role]?.name} · ${dur.toFixed(1)}s`}>
+        onClick={() => onSegClick && onSegClick(seg)}
+        title={`${ROLES[seg.role]?.code} · ${ROLES[seg.role]?.name} · ${dur.toFixed(1)}s（点击查看明细）`}>
 
           <span className="sband-abs-meta top">
             {String(i + 1).padStart(2, '0')} · {ROLES[seg.role]?.code || seg.role.toUpperCase()}
@@ -591,4 +610,148 @@ export const GapHeatmap = ({
       </div>
     </div>);
 
+};
+
+/* ============================================================
+   TRANSITION SEAMS · Slot 之间的转场层
+   不是独立 Slot —— 坐在共享时间轴的接缝上，按真实时长 straddle 边界。
+   硬切=细虚线节点（无过渡素材）；叠化/推镜/卡点=实节点 + 时长带。
+   复用四态色把"转场撑不撑得起"接回诊断。
+   ============================================================ */
+
+export const TransitionGlyph = ({
+  type,
+  color = 'var(--text-2)',
+  size = 16,
+}: {
+  type: TransitionTypeKey | string;
+  color?: string;
+  size?: number;
+}) => {
+  switch (type) {
+    case '硬切':
+      return (
+        <svg width={size} height={size} viewBox="0 0 16 16">
+          <line x1="8" y1="2.5" x2="8" y2="13.5" stroke={color} strokeWidth="2" strokeLinecap="round" />
+        </svg>);
+    case '叠化':
+      return (
+        <svg width={size} height={size} viewBox="0 0 16 16">
+          <circle cx="6" cy="8" r="3.6" fill="none" stroke={color} strokeWidth="1.3" />
+          <circle cx="10" cy="8" r="3.6" fill="none" stroke={color} strokeWidth="1.3" />
+        </svg>);
+    case '推镜':
+      return (
+        <svg width={size} height={size} viewBox="0 0 16 16">
+          <rect x="2.5" y="2.5" width="11" height="11" rx="1.5" fill="none" stroke={color} strokeWidth="1.2" />
+          <path d="M6 5.5l4 2.5-4 2.5z" fill={color} />
+        </svg>);
+    case '卡点':
+      return (
+        <svg width={size} height={size} viewBox="0 0 16 16">
+          <path d="M8 2l3.2 6L8 14 4.8 8z" fill={color} />
+        </svg>);
+    default:
+      return null;
+  }
+};
+
+export const TransitionSeams = ({
+  transitions,
+  total,
+  height = 46,
+  showHardCuts = true,
+  selected,
+  onSelect,
+}: {
+  segments?: Seg[];
+  transitions: Transition[];
+  total: number;
+  height?: number;
+  showHardCuts?: boolean;
+  selected?: string;
+  onSelect?: (id: string) => void;
+}) => {
+  const [hover, setHover] = useState<number | null>(null);
+  const stateColor: Record<string, string> = {
+    filled: 'var(--st-filled)',
+    weakly: 'var(--st-weakly)',
+  };
+  if (!transitions || !transitions.length) return null;
+
+  return (
+    <div className="tseam-track" style={{ height }}>
+      <div className="tseam-baseline" />
+
+      {/* duration bands (straddle the boundary) — only when a rich transition is APPLIED */}
+      {transitions.map((tr, i) => {
+        if (tr.applied === '硬切' || tr.dur <= 0) return null;
+        const left = ((tr.at - tr.dur / 2) / total) * 100;
+        const w = (tr.dur / total) * 100;
+        const c = stateColor[tr.state] || 'var(--accent)';
+        return (
+          <div
+            key={`band-${i}`}
+            className="tseam-band"
+            style={{
+              left: `${left}%`, width: `${w}%`,
+              opacity: hover === i ? 1 : 0.7,
+              background: `color-mix(in oklab, ${c} 14%, transparent)`,
+              borderColor: `color-mix(in oklab, ${c} 40%, transparent)`,
+            }}
+          />);
+      })}
+
+      {/* seam nodes + labels */}
+      {transitions.map((tr, i) => {
+        const isCut = tr.applied === '硬切';
+        if (isCut && !showHardCuts) return null;
+        const xPct = (tr.at / total) * 100;
+        const color = stateColor[tr.state] || 'var(--text-2)';
+        const degraded = tr.applied !== tr.type;
+        const isSel = selected === tr.id;
+        return (
+          <div
+            key={`seam-${i}`}
+            className={`tseam ${isCut ? 'is-cut' : ''} ${isSel ? 'sel' : ''}`}
+            style={{ left: `${xPct}%`, cursor: onSelect ? 'pointer' : 'default' }}
+            onMouseEnter={() => setHover(i)}
+            onMouseLeave={() => setHover(null)}
+            onClick={() => onSelect && onSelect(tr.id)}
+          >
+            {hover === i &&
+            <div className="tseam-tip">
+                <div className="tseam-tip-head">
+                  <span className="mono">{tr.id.toUpperCase()}</span>
+                  <span>{tr.from.toUpperCase()} → {tr.to.toUpperCase()}</span>
+                  <span className="mono dim">{tr.state === 'filled' ? '已满足' : '弱满足'}</span>
+                </div>
+                <div className="tseam-tip-body">
+                  {degraded ?
+                <span>原 <b style={{ color: 'var(--text-2)' }}>{tr.type}</b> → 现 <b style={{ color }}>{tr.applied}</b>　{tr.note}</span> :
+                <span><b style={{ color: 'var(--text-2)' }}>{tr.applied}</b>　{tr.note}</span>}
+                </div>
+                {tr.state === 'weakly' &&
+              <div className="tseam-tip-risk" style={{ color: tr.upgradable ? 'var(--st-weakly)' : 'var(--text-mute)' }}>
+                    {tr.upgradable ?
+                `⤓ 可升级：${tr.fix?.kind || '补素材'} → 已满足` :
+                '硬切兜底 · 已是原结构天花板，无需升级'}
+                  </div>
+              }
+              </div>
+            }
+            <div
+              className="tseam-node"
+              style={{ borderColor: color, boxShadow: isSel ? `0 0 0 3px color-mix(in oklab, ${color} 22%, transparent)` : 'none' }}>
+
+              <TransitionGlyph type={tr.applied} color={color} size={14} />
+            </div>
+            <div className="tseam-label">
+              <b>{tr.applied}</b>
+              {tr.dur > 0 && <span className="mono">{tr.dur}s</span>}
+              {degraded && <span className="mono" style={{ color: 'var(--text-faint)', textDecoration: 'line-through' }}>{tr.type}</span>}
+            </div>
+          </div>);
+      })}
+    </div>);
 };

@@ -6,15 +6,17 @@ Asset Manager gives UI and downstream services deterministic material-supply evi
 
 It does not own final matching, final gap creation, repair strategy, fallback card rendering, timeline composition, or MP4 rendering.
 
-## 2. Pages That May Consume This Data
+## 2. Steps That May Consume This Data
 
-| Page | Data to consume | Intended use |
+All steps live in the single-page app at route `/`; switch between them via the left-side step navigation.
+
+| Step | Data to consume | Intended use |
 | --- | --- | --- |
-| `/adapt` | `AssetCard.analysis`, `AssetLibraryReport`, `ContextualAssetCoverageReport` | Show asset count, quality, affordance, warnings, weak/missing roles. |
-| `/gaps` | `ContextualSlotCoverage`, `MaterialCoverageObservation`, `SlotAssetCandidate` | Explain why material supply is covered, weak, or insufficient before final gap repair. |
-| `/result` | `SlotMatch.assetEvidence`, optional `ContextualSlotCoverage` join | Enrich migration evidence with quality, keyframes, affordance, and weak/missing reasons. |
+| 02 Materials (素材输入) | `AssetCard.analysis`, `AssetLibraryReport`, `ContextualAssetCoverageReport` | Show asset count, quality, affordance, warnings, weak/missing roles. |
+| 03 Diagnose (缺口诊断) | `ContextualSlotCoverage`, `MaterialCoverageObservation`, `SlotAssetCandidate` | Explain why material supply is covered, weak, or insufficient before final gap repair. |
+| 04 Compile (成片编译) | `SlotMatch.assetEvidence`, optional `ContextualSlotCoverage` join | Enrich migration evidence with quality, keyframes, affordance, and weak/missing reasons. |
 
-Asset Manager now also exposes scenario-level handoff fields that these pages may display when useful:
+Asset Manager now also exposes scenario-level handoff fields that these steps may display when useful:
 
 - `assetSupplyContext.materialScenario`
 - `assetSupplyContext.missingMaterialBriefs`
@@ -134,7 +136,7 @@ Response:
 
 Not implemented. UI should filter returned `assetCards` client-side for now.
 
-## 4. Field Mapping for `/adapt`
+## 4. Field Mapping for 02 Materials (素材输入)
 
 | UI field | Source field |
 | --- | --- |
@@ -154,7 +156,7 @@ Not implemented. UI should filter returned `assetCards` client-side for now.
 | completion feasibility | `materialScenario.completionFeasibilityScore` |
 | recommended downstream mode | `materialScenario.recommendedDownstreamMode` |
 
-## 5. Field Mapping for `/gaps`
+## 5. Field Mapping for 03 Diagnose (缺口诊断)
 
 | UI field | Source field |
 | --- | --- |
@@ -184,7 +186,7 @@ Backend helpers for downstream data joins:
 
 These helpers are pure functions and return evidence only. UI should not present their result as final repair strategy.
 
-## 6. Field Mapping for `/result` Migration Evidence
+## 6. Field Mapping for 04 Compile (成片编译) Migration Evidence
 
 | Evidence field | Source field |
 | --- | --- |

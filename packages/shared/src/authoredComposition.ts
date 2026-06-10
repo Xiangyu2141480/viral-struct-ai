@@ -108,6 +108,9 @@ export const MediaAssetSchema = z
     if (a.type === 'aigc_image_to_video' && !a.disclosureText) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'aigc_image_to_video requires disclosureText (burned AIGC watermark)' });
     }
+    if (a.startSec != null && a.endSec != null && a.endSec <= a.startSec) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'endSec must be greater than startSec (source sub-range)' });
+    }
   });
 export type MediaAsset = z.infer<typeof MediaAssetSchema>;
 

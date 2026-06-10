@@ -63,6 +63,104 @@ seed_assets/analysis/<video_id>/fine_scan_*/
 
 ---
 
+## 1.1 Fine Scan 性能验证口径 — quick/full + resume + timing
+
+Fine Scan 现在有两种运行口径:
+
+| 模式 | 用途 | 质量边界 |
+|---|---|---|
+| `--scan-preset full` | 最终产物 / 提交 artifact | 保持现有默认质量参数, 不降采样预算 |
+| `--scan-preset quick` | 日常开发 / demo 前快速反馈 | 降低 candidate 预算和上传 fps, 但保留 hook / CTA / kinetic / transition / high-motion block 的优先预算 |
+
+`quick` 的默认值只在用户**没有显式传参**时生效。比如用户手动传了
+`--max-peaks 9`, quick preset 不会覆盖它。
+
+默认 quick 参数:
+
+```bash
+--max-peaks 5
+--max-total-candidates 8
+--max-candidate-ceiling 12
+--peak-upload-fps 1.0
+--block-upload-fps 1.0
+--candidate-workers 6
+--block-workers 4
+```
+
+### Resume 规则
+
+`--resume` 不只看 `block_xxx_fine_scan.json` 是否存在。每个 block 输出都会写入:
+
+- `scanConfigFingerprint`
+- `scanConfig`
+
+只有 fingerprint 完全匹配时才跳过该 block。fingerprint 覆盖:
+
+- `promptVersion`
+- `videoId`
+- block `timeRange`
+- block context hash
+- fine prompt path + prompt file hash
+- peak micro prompt path + prompt file hash
+- fps / candidate / worker / hard-cut config
+- `scanPreset`
+
+因此 prompt 改了、block 时间变了、candidate 参数变了、fps 改了, 都不会误用旧缓存。
+
+### Timing report
+
+`--timing-report` 会输出 `fine_scan_timing.json`, 用来定位到底是本地切片慢、峰值检测慢、上传慢、等待文件状态慢, 还是模型响应慢。
+
+当前 stage:
+
+```txt
+block_clip_cut
+peak_score
+hard_cut_detect
+block_upload
+block_wait
+block_response
+candidate_window_cut
+candidate_upload
+candidate_wait
+candidate_response
+aggregate
+write_json
+```
+
+### Candidate benchmark
+
+`scripts/benchmark_fine_scan.py` 用于无 LLM 的 quick/full candidate 和 timing 对比:
+
+```bash
+python scripts/benchmark_fine_scan.py \
+  --structure-graph seed_assets/analysis/macbook_neo/structure_graph.json \
+  --video seed_assets/raw_videos/macbook_neo.mp4 \
+  --video-id macbook_neo \
+  --out-dir tmp/fine_scan_benchmark_macbook_structure_graph \
+  --work-dir tmp/fine_scan_benchmark_macbook_structure_graph_clips \
+  --no-hard-cut
+```
+
+输出:
+
+```txt
+tmp/fine-scan-benchmark-*/fine_scan_candidate_benchmark.json
+tmp/fine-scan-benchmark-*/fine_scan_candidate_benchmark.md
+tmp/fine-scan-benchmark-*/full/fine_scan_timing.json
+tmp/fine-scan-benchmark-*/quick/fine_scan_timing.json
+```
+
+benchmark 会检查 quality guardrail:
+
+- quick 不得丢 block
+- quick 不得丢 hard-cut candidates
+- hook / CTA / kinetic / transition / high-motion 等重要 block 在 full 有足够 candidate 时, quick 至少保留关键候选下限
+
+如果使用 `--structure-graph`, benchmark 会从 `structure_graph.json` 派生 rough-scan-like content blocks。这个路径只用于**无 LLM 的 candidate/timing benchmark**; 它不能替代 fresh `rough_scan` artifact, 也不能作为最终 Fine Scan 质量结论。
+
+---
+
 ## 2. 团队协议期望 — `ViralStructureGraph` (in `packages/shared/src/types.ts:211`)
 
 ```typescript

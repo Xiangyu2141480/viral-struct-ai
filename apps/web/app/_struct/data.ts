@@ -6,6 +6,12 @@
 export type RoleKey = 'hook' | 'pain' | 'emotion' | 'product' | 'compare' | 'social' | 'cta';
 export type StateKey = 'filled' | 'weakly' | 'missing' | 'critical';
 
+// Transitions are first-class "special slots" with a hard floor: a transition can
+// NEVER be 缺失/关键缺失 because 硬切(hard cut) is a free, unconditional fallback.
+// So a transition's state is only ever 已满足(filled) or 弱满足(weakly).
+export type TransitionState = 'filled' | 'weakly';
+export type TransitionTypeKey = '硬切' | '叠化' | '推镜' | '卡点';
+
 // Permissive segment shape shared by the band/timeline components, which
 // accept either {start,end} (source video) or {dur} (library/history) forms.
 export interface Seg {
@@ -45,6 +51,27 @@ export interface SourceSegment {
   caption: string;
 }
 
+// A transition seam between two segments (a "special slot").
+// `type` = what the source structure intended; `applied` = what we can actually do now.
+export interface Transition {
+  id: string;
+  from: string;
+  to: string;
+  at: number;
+  type: TransitionTypeKey;
+  applied: TransitionTypeKey;
+  state: TransitionState;
+  upgradable: boolean;
+  dur: number;
+  intendedDur: number;
+  need: string[];
+  have: string[];
+  gap_reason: string;
+  impact: { dim: string; pct: number; note: string };
+  fix: { kind: string; desc: string } | null;
+  note: string;
+}
+
 export interface SourceVideo {
   id: string;
   title: string;
@@ -57,6 +84,7 @@ export interface SourceVideo {
   cvr: number;
   protocol_version: string;
   segments: SourceSegment[];
+  transitions: Transition[];
   rhythm: {
     avg_shot: number;
     cuts: number;
@@ -100,6 +128,50 @@ export const SOURCE_VIDEO: SourceVideo = {
     { id: 's7', role: 'cta',     start: 24.6, end: 28.4, label: '行动收口',
       shot: '倒计时 + 下单按钮闪动', caption: '母亲节最后 12 小时 · 立即下单' },
   ],
+  // Transitions are first-class "special slots". A transition can NEVER be 缺失/关键缺失:
+  // 硬切(hard cut) is a free, unconditional fallback, so the floor is always 弱满足.
+  //   已满足(filled)  = a rich transition (叠化/推镜/卡点) is actually applied
+  //   弱满足(weakly)  = only 硬切 applied — either intended, or a degraded fallback
+  // `type` = what the source structure intended; `applied` = what we can actually do now.
+  transitions: [
+    { id: 't1', from: 's1', to: 's2', at: 2.8,  type: '硬切', applied: '硬切',
+      state: 'weakly', upgradable: false, dur: 0.0, intendedDur: 0.0,
+      need: ['硬切'], have: ['硬切'],
+      gap_reason: '原结构此处即为硬切，已达原意 —— 弱满足是它的天花板，不是缺口',
+      impact: { dim: 'rhythm', pct: 0, note: '符合原结构，无损失' },
+      fix: null, note: '钩子结束硬切入痛点，制造节奏顿挫' },
+    { id: 't2', from: 's2', to: 's3', at: 6.2,  type: '叠化', applied: '硬切',
+      state: 'weakly', upgradable: true, dur: 0.0, intendedDur: 0.4,
+      need: ['s2 出帧', 's3 入帧'], have: ['s3 入帧'],
+      gap_reason: '原结构用叠化柔化痛点→情绪；但 s2 素材缺失，叠化无源可化，降级为硬切',
+      impact: { dim: 'emotion', pct: -15, note: '情绪过渡变生硬，emotion 衰减约 15%' },
+      fix: { kind: '补邻槽素材 / 合成过渡帧', desc: '补 s2 出帧 → 叠化成立(升为已满足)；或合成一帧闪白过渡顶替硬切' },
+      note: '原：叠化 0.4s → 现：硬切' },
+    { id: 't3', from: 's3', to: 's4', at: 11.4, type: '推镜', applied: '推镜',
+      state: 'filled', upgradable: false, dur: 0.3, intendedDur: 0.5,
+      need: ['产品起幅(宽景)'], have: ['产品特写'],
+      gap_reason: '—',
+      impact: { dim: 'rhythm', pct: 0, note: '推镜成立(起幅略受限，行程 0.3s)' },
+      fix: { kind: '可选增强', desc: '补 1 张产品宽景 → 推镜行程拉满 0.5s' }, note: '情绪推近，揭示产品' },
+    { id: 't4', from: 's4', to: 's5', at: 17.2, type: '硬切', applied: '硬切',
+      state: 'weakly', upgradable: false, dur: 0.0, intendedDur: 0.0,
+      need: ['硬切'], have: ['硬切'],
+      gap_reason: '原结构此处即为硬切，强调产品→价格反差 —— 符合原意',
+      impact: { dim: 'rhythm', pct: 0, note: '符合原结构，无损失' },
+      fix: null, note: '产品硬切到价格对比，强调反差' },
+    { id: 't5', from: 's5', to: 's6', at: 21.0, type: '卡点', applied: '卡点',
+      state: 'filled', upgradable: false, dur: 0.3, intendedDur: 0.3,
+      need: ['BGM 鼓点', '干脆切换'], have: ['BGM 88BPM', '证书→买家秀切换'],
+      gap_reason: '—',
+      impact: { dim: 'rhythm', pct: 0, note: '卡点成立，节奏锁定' },
+      fix: null, note: '随 BGM 鼓点卡点切到证言' },
+    { id: 't6', from: 's6', to: 's7', at: 24.6, type: '叠化', applied: '叠化',
+      state: 'filled', upgradable: false, dur: 0.3, intendedDur: 0.3,
+      need: ['s6 出帧', 's7 入帧'], have: ['s6 出帧', 's7 入帧'],
+      gap_reason: '—',
+      impact: { dim: 'emotion', pct: 0, note: '叠化成立，平稳落地' },
+      fix: null, note: '证言叠化收束到 CTA' },
+  ],
   rhythm: {
     avg_shot: 1.6,          // seconds
     cuts: 17,
@@ -131,6 +203,22 @@ export const ROLES: Record<string, RoleMeta> = {
   compare: { code: 'VALUE',    name: '价值放大',  desc: '价值锚定 / 锚价对比' },
   social:  { code: 'TRUST',    name: '信任补强',  desc: '社会证明 / 评价滚动' },
   cta:     { code: 'CTA',      name: '行动收口',  desc: '下单指令 / 紧迫感' },
+};
+
+export interface TransitionMeta {
+  code: string;
+  glyph: string;
+  desc: string;
+}
+
+// Transition-type metadata — the visual + semantic vocabulary of seams.
+// Kept neutral (no role colors, no four-state colors) to protect the color budget;
+// only the accent cyan is used for emphasis.
+export const TRANSITION_TYPES: Record<TransitionTypeKey, TransitionMeta> = {
+  硬切: { code: 'CUT',      glyph: 'cut',      desc: '硬切 · 无过渡素材，节奏顿挫' },
+  叠化: { code: 'DISSOLVE', glyph: 'dissolve', desc: '叠化 · 两镜半透明交叠' },
+  推镜: { code: 'PUSH',     glyph: 'push',     desc: '推镜 · 镜头推近承接' },
+  卡点: { code: 'BEAT',     glyph: 'beat',     desc: '卡点 · 随 BGM 鼓点切换' },
 };
 
 export interface TargetProduct {
@@ -171,6 +259,16 @@ export const TARGET_MATERIALS: Material[] = [
   { id: 'm6', kind: 'text',  subject: '商品标题/卖点', slot: null, quality: 0.5 },
 ];
 
+// Method-specific fill payloads for the GapFillStudio (补全工作台):
+//   reshoot    → 补拍建议 (shooting guide + suggested shots)
+//   hyperframes→ HyperFrames 复用合成 (which owned materials to reuse)
+//   aigc       → AIGC 生成 (the prompt to copy)
+export interface DiagnosisFill {
+  reshoot: { guide: string; shots: string[] };
+  hyperframes: { uses: string[]; desc: string };
+  aigc: { prompt: string };
+}
+
 export interface Diagnosis {
   state: StateKey;
   have: string[];
@@ -179,6 +277,8 @@ export interface Diagnosis {
   impact: { dim: string; pct: number; note: string };
   fix: { kind: string; desc: string } | null;
   strategy: string | null;
+  /** Present on non-filled slots that offer a fill workbench (s1/s2/s3/s6). */
+  fill?: DiagnosisFill;
 }
 
 // Diagnostic state per slot
@@ -191,6 +291,19 @@ export const SLOT_DIAGNOSIS: Record<string, Diagnosis> = {
     impact: { dim: 'hook', pct: -38, note: '若不补全，预计完播率从 38% 跌至 19%' },
     fix: { kind: '复用+合成', desc: '用 m4 佩戴上手图前 0.6s 反差剪辑 + 文案钩子' },
     strategy: 'hyperframes',
+    fill: {
+      reshoot: {
+        guide: '补拍一个能在 0-3 秒制造好奇或反差的开场镜头，竖屏 9:16、侧逆光。',
+        shots: ['手腕佩戴手镯特写，自然侧光', '0.5s 内一个动作反差：摘下 / 戴上'],
+      },
+      hyperframes: {
+        uses: ['m4'],
+        desc: '抽 m4 佩戴图前 0.6s，叠文案钩子 + 快速变焦反差，凑出一个开场镜头。',
+      },
+      aigc: {
+        prompt: '母亲手腕佩戴和田玉手镯的特写，温暖侧逆光，皮肤有岁月感，镜头缓慢推近，情绪克制，9:16 竖屏，真实纪录片质感',
+      },
+    },
   },
   s2: {
     state: 'critical',
@@ -200,6 +313,19 @@ export const SLOT_DIAGNOSIS: Record<string, Diagnosis> = {
     impact: { dim: 'trust', pct: -42, note: '情感共鸣链路断裂，跳过情感直入卖点会让 trust 大幅下降' },
     fix: { kind: '补拍 / 文案替代', desc: '建议 1 张磨损细节图 + 文案条' },
     strategy: 'aigc',
+    fill: {
+      reshoot: {
+        guide: '补拍能承接痛点、体现『戴了二十年』的磨损细节，最能救这个关键缺口。',
+        shots: ['旧手镯磨损 / 包浆细节微距', '母亲手部劳作日常一镜'],
+      },
+      hyperframes: {
+        uses: ['m6'],
+        desc: '无可复用图像，仅能用 m6 文案做纯字幕条兜底 —— 效果弱，强烈建议补拍或 AIGC。',
+      },
+      aigc: {
+        prompt: '一只戴了二十年的旧玉镯，表面有自然磨损与包浆，微距特写，暖调，背景虚化，怀旧情绪，9:16 竖屏',
+      },
+    },
   },
   s3: {
     state: 'weakly',
@@ -209,6 +335,19 @@ export const SLOT_DIAGNOSIS: Record<string, Diagnosis> = {
     impact: { dim: 'emotion', pct: -18, note: '可由 m4 + 慢摇动效兜底，强度略减' },
     fix: { kind: '素材复用', desc: '复用 m4 + 加缓慢 Ken Burns 推近' },
     strategy: 'hyperframes',
+    fill: {
+      reshoot: {
+        guide: '补拍母亲的日常生活片段，建立情感代入与信任。',
+        shots: ['母亲切菜 / 浇花的侧影', '母亲自然微笑特写'],
+      },
+      hyperframes: {
+        uses: ['m4'],
+        desc: '复用 m4 + Ken Burns 缓慢推近 + 暖色情绪滤镜，托住情感铺垫。',
+      },
+      aigc: {
+        prompt: '一位年长母亲在厨房做家务的温暖生活场景，自然光，侧影，温馨克制，9:16 竖屏',
+      },
+    },
   },
   s4: {
     state: 'filled',
@@ -236,6 +375,19 @@ export const SLOT_DIAGNOSIS: Record<string, Diagnosis> = {
     impact: { dim: 'social', pct: -22, note: '可生成评分卡片 + 评论文本墙补足' },
     fix: { kind: '包装合成', desc: '生成评分卡片 + 评论滚动墙' },
     strategy: 'aigc',
+    fill: {
+      reshoot: {
+        guide: '收集真实买家秀与评分截图，证言密度越高越可信。',
+        shots: ['3+ 张不同买家佩戴实拍', '店铺 4.9 分评分截图'],
+      },
+      hyperframes: {
+        uses: ['m4'],
+        desc: '用 m4 + 合成评分卡片 + 评论滚动墙，凑出证言密度（包装合成）。',
+      },
+      aigc: {
+        prompt: '多位不同年龄女性佩戴玉镯的买家秀拼贴，真实手机拍摄质感，生活化背景，9:16 竖屏',
+      },
+    },
   },
   s7: {
     state: 'filled',

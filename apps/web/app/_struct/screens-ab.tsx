@@ -9,6 +9,7 @@ import { useProjectStore } from './store/useProjectStore';
 import { AssetAffordanceChips, AssetManagerEvidencePanel } from './AssetManagerEvidence';
 import {
   DropZone,
+  EmptyState,
   Icon,
   MatThumb,
   Modal,
@@ -19,6 +20,79 @@ import {
   Toast,
 } from './components';
 import { AbstractStructureBand, ConcreteFilmStrip, MigrationFlow, SyncRails } from './viz';
+import type { FineBlockDetail } from './api/scan';
+
+/* ─── Fine-scan deep detail for one segment ───────────────────────────── */
+const FineDetailView = ({ fine }: { fine: FineBlockDetail }) => {
+  const rc = fine.roleConfirmation;
+  const overlays = fine.textOverlayBehavior?.textElements ?? [];
+  const beats = fine.actionBeats ?? [];
+  const motifs = fine.transferableMotifs ?? [];
+  const assets = fine.requiredAssetType ?? [];
+  const peaks = fine.peakDetectionStats;
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div className="eyebrow" style={{ marginBottom: 8 }}>精扫描明细 · FINE SCAN</div>
+      <dl className="kv">
+        {rc?.role && (
+          <><dt>确认角色</dt><dd>{rc.role}{rc.confidence != null && ` · 置信度 ${Math.round(rc.confidence * 100)}%`}{rc.correctionFromCoarse && rc.coarseRoleWas ? `（由粗扫 ${rc.coarseRoleWas} 修正）` : ''}</dd></>
+        )}
+        {fine.dominantTone && <><dt>主导情绪</dt><dd>{fine.dominantTone}</dd></>}
+        {fine.transitionOut?.type && (
+          <><dt>转场出</dt><dd>{fine.transitionOut.type}{fine.transitionOut.incomingHintForNextBlock ? ` → ${fine.transitionOut.incomingHintForNextBlock}` : ''}</dd></>
+        )}
+      </dl>
+      {overlays.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <div className="eyebrow" style={{ marginBottom: 6 }}>字幕 / 文字行为</div>
+          {overlays.map((t, i) => (
+            <div key={i} className="mono" style={{ fontSize: 11.5, color: 'var(--text-2)', marginBottom: 3 }}>
+              「{t.content}」 <span className="dim">· {t.type}{t.animationIn ? ` · ${t.animationIn}` : ''}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {beats.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <div className="eyebrow" style={{ marginBottom: 6 }}>动作节拍 · {beats.length}</div>
+          {beats.map((b, i) => (
+            <div key={b.beatId || i} style={{ fontSize: 12, marginBottom: 6, lineHeight: 1.55 }}>
+              <span style={{ color: 'var(--accent)' }}>▸</span> {b.semanticAction}
+              {(b.beforeState || b.afterState) && (
+                <div className="mono dim" style={{ fontSize: 10.5, marginLeft: 14 }}>{b.beforeState} → {b.afterState}</div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {motifs.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <div className="eyebrow" style={{ marginBottom: 6 }}>可迁移母题</div>
+          {motifs.map((m, i) => (
+            <div key={i} style={{ fontSize: 12, marginBottom: 5, lineHeight: 1.55 }}>
+              <span className="tag" style={{ fontSize: 10, marginRight: 6 }}>{m.motifType}</span>{m.description}
+            </div>
+          ))}
+        </div>
+      )}
+      {assets.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <div className="eyebrow" style={{ marginBottom: 6 }}>所需素材</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {assets.map((a, i) => (
+              <span key={i} className="tag" style={{ fontSize: 10.5 }}>{a.assetType}{a.criticality ? ` · ${a.criticality}` : ''}</span>
+            ))}
+          </div>
+        </div>
+      )}
+      {peaks && (
+        <div className="mono dim" style={{ fontSize: 10.5, marginTop: 10 }}>
+          视觉峰值：候选 {peaks.candidatePeakCount ?? '—'} · 采用 {peaks.selectedPeakCount ?? '—'} · 硬切 {peaks.hardCutCount ?? '—'}
+        </div>
+      )}
+    </div>
+  );
+};
 
 /* ============================================================
    屏 1 · 样例结构拆解 (Source)
@@ -28,9 +102,18 @@ import { AbstractStructureBand, ConcreteFilmStrip, MigrationFlow, SyncRails } fr
 export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
   const v = useProjectStore((s) => s.sourceVideo);
   const analyzing = useProjectStore((s) => s.analyzing);
-  const analyzeSample = useProjectStore((s) => s.analyzeSample);
+  const scanning = useProjectStore((s) => s.scanning);
+  const scanStage = useProjectStore((s) => s.scanStage);
+  const scanSample = useProjectStore((s) => s.scanSample);
+  const fineScanningSegId = useProjectStore((s) => s.fineScanningSegId);
+  const fineScanStage = useProjectStore((s) => s.fineScanStage);
+  const segmentDetails = useProjectStore((s) => s.segmentDetails);
+  const fineScanSegment = useProjectStore((s) => s.fineScanSegment);
+  const runDemo = useProjectStore((s) => s.runDemo);
+  const loadingDemo = useProjectStore((s) => s.loadingDemo);
   const T = v.duration;
-  const [hoveredSeg, setHoveredSeg] = useState<Seg>(v.segments[0]);
+  const [hoveredSeg, setHoveredSeg] = useState<Seg | undefined>(v.segments[0]);
+  const [selectedSegId, setSelectedSegId] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -40,6 +123,67 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
     setToastVisible(true);
     setTimeout(() => setToastVisible(false), 2200);
   };
+
+  const uploadModal = (
+    <Modal open={uploadOpen} onClose={() => setUploadOpen(false)} title="上传样例视频" width={520}>
+      <DropZone
+        accept="video/*"
+        multiple={false}
+        onFiles={(files) => {
+          setUploadOpen(false);
+          showToast(`样例视频已上传: ${files[0].name} · 开始粗扫描…`);
+          void scanSample(files[0]).catch(() => {});
+        }}
+        label="拖拽视频到此处，或点击选择"
+      />
+      <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-mute)', marginTop: 12, textAlign: 'center' }}>
+        上传后将自动解析结构 · 支持 MP4 / MOV / AVI
+      </div>
+    </Modal>
+  );
+
+  // Rough scan running → live progress (real VLM shot-by-shot analysis).
+  if (scanning) {
+    return (
+      <>
+        <EmptyState
+          icon="diagnose"
+          eyebrow="01 · 样例解析 / SOURCE"
+          title="正在粗扫描 · Rough Scan"
+          hint={scanStage || 'VLM 正在逐镜头解析视频结构，通常 30–90 秒'}
+        />
+        {uploadModal}
+        <Toast message={toastMsg} visible={toastVisible} />
+      </>
+    );
+  }
+
+  // No real sample yet → no mock data; prompt the user to upload or run the real demo.
+  if (v.segments.length === 0) {
+    return (
+      <>
+        <EmptyState
+          icon="upload"
+          eyebrow="01 · 样例解析 / SOURCE"
+          title="上传一个爆款样例视频以开始"
+          hint="拖入或选择一个抖音/短视频样例 — 系统会解析其镜头·节奏·包装并抽取可迁移的结构协议 (StructureIR)。还没有素材？点「一键演示」直接载入真实后端的完整案例。"
+        >
+          <button className="btn primary" disabled={analyzing} onClick={() => setUploadOpen(true)}>
+            <Icon name="upload" size={13} /> {analyzing ? '解析中…' : '上传样例视频'}
+          </button>
+          <button
+            className="btn"
+            disabled={loadingDemo}
+            onClick={() => { void runDemo().then(() => showToast('一键演示已载入 · 真实后端全流程数据')).catch(() => {}); }}
+          >
+            <Icon name="sparkle" size={13} /> {loadingDemo ? '运行中…' : '一键演示'}
+          </button>
+        </EmptyState>
+        {uploadModal}
+        <Toast message={toastMsg} visible={toastVisible} />
+      </>
+    );
+  }
 
   return (
     <div className="screen">
@@ -54,6 +198,11 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
           </div>
         </div>
         <div className="screen-head-r">
+          <button className="btn primary" style={{ padding: '5px 12px', fontSize: 11.5 }}
+            disabled={loadingDemo}
+            onClick={() => { void runDemo().then(() => showToast('一键演示已载入 · 真实后端全流程数据')).catch(() => {}); }}>
+            <Icon name="sparkle" size={12} /> {loadingDemo ? '运行中…' : '一键演示'}
+          </button>
           <span className="pill"><span className="dot" style={{ background: 'var(--accent)' }} /> {analyzing ? '解析中…' : '已解析'}</span>
           <span>{v.protocol_version}</span>
         </div>
@@ -78,20 +227,20 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
               <SvgHookShape />
               <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, transparent 40%, rgba(0,0,0,0.6))' }} />
               <div style={{ position: 'absolute', bottom: 6, left: 6, right: 6, fontSize: 9, color: '#fff', fontFamily: 'var(--ff-mono)' }}>
-                28.4s · 9:16
+                {v.duration}s · 9:16
               </div>
               <Icon name="play" size={18} />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 2 }}>{v.title}</div>
               <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-mute)', marginBottom: 10 }}>
-                {v.platform} · douyin_{v.id.split('_')[1]}
+                {v.platform || '—'} · {v.id}
               </div>
               <dl className="kv">
-                <dt>时长</dt><dd><b>{v.duration}s</b> · 7 段落</dd>
-                <dt>播放</dt><dd><b>{v.views}</b> 播放</dd>
-                <dt>离线点击潜力</dt><dd><b>8.1</b> · 完播潜力 42</dd>
-                <dt>BGM</dt><dd>{v.rhythm.bgm_bpm} BPM · 钢琴慢板</dd>
+                <dt>时长</dt><dd><b>{v.duration}s</b> · {v.segments.length} 段落</dd>
+                <dt>播放</dt><dd><b>{v.views || '—'}</b> 播放</dd>
+                <dt>平均镜头</dt><dd><b>{v.rhythm.avg_shot}s</b></dd>
+                <dt>BGM</dt><dd>{v.rhythm.bgm_bpm ? `${v.rhythm.bgm_bpm} BPM` : '节拍未检测'}</dd>
               </dl>
             </div>
           </div>
@@ -104,8 +253,8 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
           </div>
           <div className="panel-body">
             <dl className="kv">
-              <dt>段落数</dt><dd><b>7</b> <span className="dim">· 角色覆盖率 100%</span></dd>
-              <dt>平均镜头</dt><dd><b>{v.rhythm.avg_shot}s</b> <span className="dim">· 17 个剪切点</span></dd>
+              <dt>段落数</dt><dd><b>{v.segments.length}</b> <span className="dim">· 角色 {new Set(v.segments.map(s => s.role)).size} 类</span></dd>
+              <dt>平均镜头</dt><dd><b>{v.rhythm.avg_shot}s</b> <span className="dim">· {v.rhythm.cuts} 个剪切点</span></dd>
               <dt>字幕风格</dt><dd>{v.packaging.captions}</dd>
               <dt>BGM</dt><dd>{v.packaging.bgm}</dd>
               <dt>封面</dt><dd>{v.packaging.cover}</dd>
@@ -120,7 +269,7 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
         <div className="panel-head">
           <h4>上下对位 · 抽象结构 ↔ 真实时间线</h4>
           <span className="mono" style={{ fontSize: 11, color: 'var(--text-dim)' }}>
-            sequence = <span style={{ color: 'var(--accent)' }}>[HOOK → PROBLEM → EMPATHY → SOLUTION → VALUE → TRUST → CTA]</span>
+            sequence = <span style={{ color: 'var(--accent)' }}>[{v.segments.map(s => s.role.toUpperCase()).join(' → ')}]</span>
             <span style={{ marginLeft: 10, color: 'var(--text-faint)' }}>· {v.protocol_version}</span>
           </span>
         </div>
@@ -141,7 +290,7 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
               共享时间轴 0 ~ {v.duration}s
             </span>
           </div>
-          <AbstractStructureBand segments={v.segments} total={T} onSegHover={setHoveredSeg} />
+          <AbstractStructureBand segments={v.segments} total={T} onSegHover={setHoveredSeg} onSegClick={(seg) => setSelectedSegId(seg.id ?? null)} selectedId={selectedSegId ?? undefined} />
 
           {/* prominent dashed sync rails connecting the two layers */}
           <SyncRails segments={v.segments} total={T} height={32} />
@@ -185,45 +334,60 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
         </div>
       </div>
 
-      {/* row 3: segment detail + packaging */}
-      <div className="panel">
-        <div className="panel-head">
-          <h4>段落明细 · {hoveredSeg?.label}</h4>
-          <span className="tag">
-            <span className={`role-dot role-${hoveredSeg?.role}`} />
-            {ROLES[hoveredSeg?.role]?.name}
-          </span>
-        </div>
-        <div className="panel-body">
-          <dl className="kv">
-            <dt>段落</dt><dd className="mono"><b>{hoveredSeg?.id}</b> · {hoveredSeg?.start?.toFixed(1)} → {hoveredSeg?.end?.toFixed(1)}s</dd>
-            <dt>角色</dt><dd>{ROLES[hoveredSeg?.role]?.name} <span className="dim">— {ROLES[hoveredSeg?.role]?.desc}</span></dd>
-            <dt>镜头</dt><dd>{hoveredSeg?.shot}</dd>
-            <dt>字幕</dt><dd style={{ fontStyle: 'italic' }}>&quot;{hoveredSeg?.caption}&quot;</dd>
-          </dl>
-        </div>
-      </div>
+      {/* row 3: per-segment detail — click a segment in the timeline above */}
+      {(() => {
+        const seg = (selectedSegId ? v.segments.find((s) => s.id === selectedSegId) : undefined)
+          ?? (hoveredSeg ? v.segments.find((s) => s.id === hoveredSeg.id) : undefined)
+          ?? v.segments[0];
+        const idx = v.segments.indexOf(seg);
+        const dur = (seg.end ?? 0) - (seg.start ?? 0);
+        const fine = seg.id ? segmentDetails[seg.id] : undefined;
+        const isFineScanning = fineScanningSegId === seg.id;
+        return (
+          <div className="panel">
+            <div className="panel-head">
+              <h4>段落明细 · {String(idx + 1).padStart(2, '0')} {ROLES[seg.role]?.name ?? seg.label}</h4>
+              <span className="mono dim" style={{ fontSize: 10.5 }}>点击上方时间轴的任一段落查看明细</span>
+            </div>
+            <div className="panel-body">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+                <span className="tag" style={{ color: `var(--r-${seg.role})`, borderColor: `var(--r-${seg.role})55` }}>
+                  <span className={`role-dot role-${seg.role}`} /> {ROLES[seg.role]?.name ?? seg.role}
+                </span>
+                <span className="mono dim" style={{ fontSize: 11 }}>{seg.start?.toFixed(1)} → {seg.end?.toFixed(1)}s · {dur.toFixed(1)}s</span>
+                <span className="mono dim" style={{ fontSize: 11 }}>{seg.id}</span>
+              </div>
+              <dl className="kv">
+                <dt>角色定位</dt><dd>{ROLES[seg.role]?.name ?? seg.role} <span className="dim">— {ROLES[seg.role]?.desc ?? ''}</span></dd>
+                <dt>镜头内容</dt><dd style={{ lineHeight: 1.65 }}>{seg.caption || '—'}</dd>
+                <dt>迁移规则</dt><dd style={{ lineHeight: 1.65 }}>{seg.shot || '—'}</dd>
+              </dl>
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <button
+                    className="btn primary"
+                    disabled={isFineScanning}
+                    onClick={() => { if (seg.id) void fineScanSegment(idx, seg.id).catch(() => {}); }}
+                  >
+                    <Icon name="sparkle" size={12} /> {isFineScanning ? (fineScanStage || '精扫描中…') : fine ? '重新精扫描此段' : '深度分析 · 精扫描此段'}
+                  </button>
+                  {!fine && !isFineScanning && (
+                    <span className="mono dim" style={{ fontSize: 10.5 }}>视觉峰值 + 逐峰 VLM · 字幕行为 / 动作节拍 / 转场 / 可迁移母题（约 30–60 秒）</span>
+                  )}
+                </div>
+                {fine && <FineDetailView fine={fine} />}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       <ScreenFooter
-        status="样例已解析 · 7 段角色 + 节奏 + 包装"
+        status={`样例已解析 · ${v.segments.length} 段角色 + 节奏 + 包装`}
         statusTone="ok"
         primary={{ label: '进入素材输入', onClick: onNext }}
       />
 
-      <Modal open={uploadOpen} onClose={() => setUploadOpen(false)} title="上传样例视频" width={520}>
-        <DropZone
-          accept="video/*"
-          multiple={false}
-          onFiles={(files) => {
-            setUploadOpen(false);
-            showToast(`样例视频已上传: ${files[0].name} · 解析中…`);
-            void analyzeSample({ file: files[0] });
-          }}
-          label="拖拽视频到此处，或点击选择"
-        />
-        <div className="mono" style={{ fontSize: 10.5, color: 'var(--text-mute)', marginTop: 12, textAlign: 'center' }}>
-          上传后将自动解析结构 · 支持 MP4 / MOV / AVI
-        </div>
-      </Modal>
+      {uploadModal}
 
       <Toast message={toastMsg} visible={toastVisible} />
     </div>
@@ -245,6 +409,8 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
   const assetManagerWarnings = useProjectStore((s) => s.assetManagerWarnings);
   const assetManagerLastError = useProjectStore((s) => s.assetManagerLastError);
   const addMaterials = useProjectStore((s) => s.addMaterials);
+  const loadLibrary = useProjectStore((s) => s.loadLibrary);
+  const uploading = useProjectStore((s) => s.uploading);
   const applyAssignments = useProjectStore((s) => s.applyAssignments);
   const updateProduct = useProjectStore((s) => s.updateProduct);
   const runDiagnosis = useProjectStore((s) => s.runDiagnosis);
@@ -271,7 +437,7 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
     const names = files.map(f => f.name).join(', ');
     setUploadedFiles(prev => [...prev, ...files.map(f => f.name)]);
     setUploadOpen(false);
-    void addMaterials(files);
+    void addMaterials(files).catch(() => {});
     showToast(`已上传 ${files.length} 个文件: ${names}`);
   };
 
@@ -289,13 +455,12 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
   const handleBatchConfirm = () => {
     const assignments: Record<string, string | null> = {};
     for (const [id, slot] of Object.entries(assignDraft)) assignments[id] = slot || null;
-    void applyAssignments(assignments);
+    void applyAssignments(assignments).then(() => showToast('槽位分配已更新')).catch(() => {});
     setBatchOpen(false);
-    showToast('槽位分配已更新');
   };
 
   const handleNext = () => {
-    void runDiagnosis();
+    void runDiagnosis().catch(() => {});
     onNext();
   };
 
@@ -310,6 +475,20 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
     { key: 'industry', label: '定位' },
   ];
 
+  // No source structure yet → materials can't be matched; send the user back to 01.
+  if (v.segments.length === 0) {
+    return (
+      <EmptyState
+        icon="film"
+        eyebrow="02 · 素材输入 / ASSETS"
+        title="先解析一个样例视频"
+        hint="素材适配需要先有可迁移的结构。请回到「样例解析」上传样例或运行一键演示，再回来输入新商品与素材。"
+      >
+        <button className="btn primary" onClick={onBack}>← 返回样例解析</button>
+      </EmptyState>
+    );
+  }
+
   return (
     <div className="screen">
       <div className="screen-head">
@@ -323,6 +502,11 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
           </div>
         </div>
         <div className="screen-head-r">
+          <button className="btn" style={{ padding: '5px 12px', fontSize: 11.5 }}
+            disabled={uploading}
+            onClick={() => { void loadLibrary('kangshifu_demo').then(() => showToast('已加载示例素材库 · 康师傅 demo')).catch(() => {}); }}>
+            <Icon name="upload" size={11} /> {uploading ? '加载中…' : '加载示例素材库'}
+          </button>
           <span className="mono">{materials.length} 个素材</span>
           <span className="pill"><span className="dot" style={{ background: 'var(--accent)' }} /> 已适配</span>
         </div>

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import io
 import json
 import subprocess
@@ -21,6 +22,7 @@ if str(SCRIPT_DIR) not in sys.path:
 
 from llm_client import (  # noqa: E402
     create_response,
+    delete_file,
     env_value,
     extract_json_object,
     configure_http_semaphore,
@@ -52,6 +54,117 @@ from visual_peak_detector import (  # noqa: E402
 SOURCE_CLIP_MODE = "source_quality_clip"
 SOURCE_UPLOAD_SAMPLING = "provider_default_source_video"
 SOURCE_CLIP_RESOLUTION = "source"
+
+QUICK_SCAN_PRESET_DEFAULTS = {
+    "max_peaks": 5,
+    "max_total_candidates": 8,
+    "max_candidate_ceiling": 12,
+    "peak_upload_fps": 1.0,
+    "block_upload_fps": 1.0,
+    "candidate_workers": 6,
+    "block_workers": 4,
+}
+
+FINE_SCAN_TIMING_STAGES = [
+    "block_clip_cut",
+    "peak_score",
+    "hard_cut_detect",
+    "block_upload",
+    "block_wait",
+    "block_response",
+    "candidate_window_cut",
+    "candidate_upload",
+    "candidate_wait",
+    "candidate_response",
+    "aggregate",
+    "write_json",
+]
+
+
+class TrackingArgumentParser(argparse.ArgumentParser):
+    """ArgumentParser that remembers which options the user set explicitly."""
+
+    def parse_args(self, args: list[str] | None = None, namespace: Any | None = None) -> argparse.Namespace:
+        raw_args = list(sys.argv[1:] if args is None else args)
+        explicit_options = _explicit_option_strings(raw_args)
+        parsed = super().parse_args(args, namespace)
+        explicit_dests = {
+            self._option_string_actions[opt].dest
+            for opt in explicit_options
+            if opt in self._option_string_actions
+        }
+        setattr(parsed, "_explicit_options", sorted(explicit_options))
+        setattr(parsed, "_explicit_dests", sorted(explicit_dests))
+        apply_scan_preset(parsed, explicit_dests)
+        return parsed
+
+
+def _explicit_option_strings(args: list[str]) -> set[str]:
+    options: set[str] = set()
+    for token in args:
+        if token == "--":
+            break
+        if not token.startswith("--"):
+            continue
+        option = token.split("=", 1)[0]
+        options.add(option)
+    return options
+
+
+def apply_scan_preset(args: argparse.Namespace, explicit_dests: set[str]) -> None:
+    if getattr(args, "scan_preset", "full") != "quick":
+        return
+    for dest, value in QUICK_SCAN_PRESET_DEFAULTS.items():
+        if dest not in explicit_dests:
+            setattr(args, dest, value)
+
+
+def _repo_relative_path(path: str | Path) -> Path:
+    candidate = Path(path)
+    if candidate.is_absolute():
+        return candidate
+    repo_path = SCRIPT_DIR.parent / candidate
+    if repo_path.exists():
+        return repo_path
+    return candidate
+
+
+def _file_sha256(path: str | Path) -> str:
+    resolved = _repo_relative_path(path)
+    if not resolved.exists():
+        return f"missing:{path}"
+    digest = hashlib.sha256()
+    with resolved.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _stable_hash(payload: dict[str, Any]) -> str:
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _timing_entry(stage: str, elapsed_ms: float, **extra: Any) -> dict[str, Any]:
+    entry = {"stage": stage, "elapsedMs": round(float(elapsed_ms), 3)}
+    entry.update({key: value for key, value in extra.items() if value is not None})
+    return entry
+
+
+class StageTimer:
+    def __init__(self, entries: list[dict[str, Any]], stage: str, **extra: Any) -> None:
+        self.entries = entries
+        self.stage = stage
+        self.extra = extra
+        self.started = 0.0
+
+    def __enter__(self) -> "StageTimer":
+        self.started = time.monotonic()
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        elapsed_ms = (time.monotonic() - self.started) * 1000
+        self.entries.append(_timing_entry(self.stage, elapsed_ms, **self.extra))
 
 
 # W1.2: per-block buffered logger; flushes atomically under a process-wide lock
@@ -368,6 +481,234 @@ def selected_blocks(blocks: list[dict[str, Any]], block_ids: str) -> list[dict[s
     return [block for block in blocks if block["id"] in wanted]
 
 
+_IMPORTANT_BUDGET_TERMS = {
+    "attention",
+    "hook",
+    "opening",
+    "intro",
+    "cta",
+    "closing",
+    "end card",
+    "kinetic",
+    "assembly",
+    "reveal",
+    "transition",
+    "burst",
+    "montage",
+    "高潮",
+    "开头",
+    "结尾",
+    "转场",
+    "爆发",
+    "组装",
+}
+
+_STATIC_BUDGET_TERMS = {
+    "static",
+    "explainer",
+    "details",
+    "text explanation",
+    "low motion",
+    "still",
+    "说明",
+    "静态",
+    "低运动",
+}
+
+
+def _block_budget_text(block: dict[str, Any]) -> str:
+    parts = [
+        str(block.get("coarseRoleGuess", "")),
+        str(block.get("boundaryReason", "")),
+        str(block.get("observableSummary", "")),
+        " ".join(str(item) for item in block.get("fineScanFocusQuestions", []) or []),
+    ]
+    return " ".join(parts).lower()
+
+
+def candidate_budget_class_for_block(block: dict[str, Any]) -> str:
+    budget_text = _block_budget_text(block)
+    if any(term in budget_text for term in _IMPORTANT_BUDGET_TERMS):
+        return "important_structure"
+    if any(term in budget_text for term in _STATIC_BUDGET_TERMS):
+        return "static_low_motion"
+    return "default"
+
+
+def candidate_budget_for_block(block: dict[str, Any], args: argparse.Namespace, *, hard_cut_count: int) -> int:
+    base = min(
+        int(args.max_candidate_ceiling),
+        max(int(args.max_total_candidates), int(hard_cut_count)),
+    )
+    if getattr(args, "scan_preset", "full") != "quick":
+        return base
+
+    budget_class = candidate_budget_class_for_block(block)
+    if budget_class == "important_structure":
+        return min(int(args.max_candidate_ceiling), max(base, 10, int(hard_cut_count)))
+    if budget_class == "static_low_motion":
+        return min(int(args.max_candidate_ceiling), max(5, int(hard_cut_count)))
+    return base
+
+
+def count_candidate_sources(candidates: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for candidate in candidates:
+        source = str(candidate.get("anchorSource") or "unknown")
+        counts[source] = counts.get(source, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def _candidate_blocks_by_id(scan: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    blocks = scan.get("contentBlocks") or []
+    return {
+        str(block.get("blockId")): block
+        for block in blocks
+        if isinstance(block, dict) and block.get("blockId")
+    }
+
+
+def _total_candidates(blocks: list[dict[str, Any]]) -> int:
+    return sum(int(block.get("totalCandidateCount") or 0) for block in blocks)
+
+
+def build_candidate_benchmark_report(
+    *,
+    video_id: str,
+    full_scan: dict[str, Any],
+    quick_scan: dict[str, Any],
+) -> dict[str, Any]:
+    full_blocks = _candidate_blocks_by_id(full_scan)
+    quick_blocks = _candidate_blocks_by_id(quick_scan)
+    missing_quick_blocks = sorted(set(full_blocks) - set(quick_blocks))
+    hard_cut_loss_blocks: list[str] = []
+    important_blocks_under_floor: list[str] = []
+    per_block: list[dict[str, Any]] = []
+
+    for block_id in sorted(full_blocks):
+        full = full_blocks[block_id]
+        quick = quick_blocks.get(block_id)
+        if quick is None:
+            continue
+        full_count = int(full.get("totalCandidateCount") or 0)
+        quick_count = int(quick.get("totalCandidateCount") or 0)
+        full_hard_cuts = int(full.get("selectedHardCutCount") or 0)
+        quick_hard_cuts = int(quick.get("selectedHardCutCount") or 0)
+        budget_class = str(quick.get("candidateBudgetClass") or full.get("candidateBudgetClass") or "default")
+        if quick_hard_cuts < full_hard_cuts:
+            hard_cut_loss_blocks.append(block_id)
+        if budget_class == "important_structure" and full_count > 0 and quick_count < min(full_count, 5):
+            important_blocks_under_floor.append(block_id)
+        per_block.append(
+            {
+                "blockId": block_id,
+                "candidateBudgetClass": budget_class,
+                "fullCandidates": full_count,
+                "quickCandidates": quick_count,
+                "reductionPct": round(((full_count - quick_count) / full_count) * 100, 3) if full_count else 0.0,
+                "fullHardCuts": full_hard_cuts,
+                "quickHardCuts": quick_hard_cuts,
+                "fullSourceCounts": full.get("candidateSourceCounts") or {},
+                "quickSourceCounts": quick.get("candidateSourceCounts") or {},
+            }
+        )
+
+    full_total = _total_candidates(list(full_blocks.values()))
+    quick_total = _total_candidates(list(quick_blocks.values()))
+    guardrail = {
+        "passed": not missing_quick_blocks and not hard_cut_loss_blocks and not important_blocks_under_floor,
+        "missingQuickBlocks": missing_quick_blocks,
+        "hardCutLossBlocks": hard_cut_loss_blocks,
+        "importantBlocksUnderFloor": important_blocks_under_floor,
+        "notes": [
+            "candidate-only benchmark: no LLM/VLM calls are made",
+            "hard cuts must not be dropped by quick preset",
+            "important structure blocks must retain at least five candidates when full has five or more",
+        ],
+    }
+    return {
+        "videoId": video_id,
+        "summary": {
+            "fullBlockCount": len(full_blocks),
+            "quickBlockCount": len(quick_blocks),
+            "fullTotalCandidates": full_total,
+            "quickTotalCandidates": quick_total,
+            "candidateReductionPct": round(((full_total - quick_total) / full_total) * 100, 3) if full_total else 0.0,
+        },
+        "qualityGuardrail": guardrail,
+        "perBlock": per_block,
+    }
+
+
+def render_candidate_benchmark_markdown(report: dict[str, Any]) -> str:
+    summary = report.get("summary", {})
+    guardrail = report.get("qualityGuardrail", {})
+    timing_reports = report.get("timingReports") or {}
+    timing_summary = report.get("timingSummary") or {}
+    full_timing = timing_summary.get("full") or {}
+    quick_timing = timing_summary.get("quick") or {}
+    benchmark_source = report.get("benchmarkSource") or {}
+    lines = [
+        "# Fine Scan Candidate Benchmark",
+        "",
+        f"- videoId: `{report.get('videoId', 'unknown')}`",
+        f"- full candidates: `{summary.get('fullTotalCandidates', 0)}`",
+        f"- quick candidates: `{summary.get('quickTotalCandidates', 0)}`",
+        f"- candidate reduction: `{summary.get('candidateReductionPct', 0)}%`",
+        "",
+        "## Benchmark Source",
+        "",
+        f"- source type: `{benchmark_source.get('sourceType', 'unknown')}`",
+        f"- effective rough scan: `{benchmark_source.get('effectiveRoughScan', 'not recorded')}`",
+    ]
+    for limitation in benchmark_source.get("limitations") or []:
+        lines.append(f"- limitation: {limitation}")
+    lines.extend(
+        [
+            "",
+            "## Quality Guardrail",
+            "",
+            f"- passed: `{bool(guardrail.get('passed'))}`",
+            f"- missing quick blocks: `{', '.join(guardrail.get('missingQuickBlocks') or []) or 'none'}`",
+            f"- hard-cut loss blocks: `{', '.join(guardrail.get('hardCutLossBlocks') or []) or 'none'}`",
+            f"- important blocks under floor: `{', '.join(guardrail.get('importantBlocksUnderFloor') or []) or 'none'}`",
+            "",
+            "## Timing report",
+            "",
+            "Run this benchmark with `--timing-report` outputs from each preset to inspect local stage timing.",
+            f"- full timing: `{timing_reports.get('full', 'not recorded')}`",
+            f"- quick timing: `{timing_reports.get('quick', 'not recorded')}`",
+            f"- full total: `{full_timing.get('totalMs', 0.0)}ms`",
+            f"- quick total: `{quick_timing.get('totalMs', 0.0)}ms`",
+            f"- timing reduction: `{timing_summary.get('reductionPct', 0.0)}%`",
+            "",
+            "### Slowest stages",
+            "",
+            "| preset | stage | total ms |",
+            "|---|---|---:|",
+        ]
+    )
+    for preset_name, timing in [("full", full_timing), ("quick", quick_timing)]:
+        for stage in timing.get("topStages") or []:
+            lines.append(f"| {preset_name} | {stage.get('stage', 'unknown')} | {stage.get('totalMs', 0.0)} |")
+    lines.extend(
+        [
+            "",
+            "## Per Block",
+            "",
+            "| block | class | full | quick | reduction | hard cuts |",
+            "|---|---|---:|---:|---:|---|",
+        ]
+    )
+    for block in report.get("perBlock") or []:
+        lines.append(
+            "| {blockId} | {candidateBudgetClass} | {fullCandidates} | {quickCandidates} | {reductionPct}% | {fullHardCuts}->{quickHardCuts} |".format(
+                **block
+            )
+        )
+    return "\n".join(lines) + "\n"
+
+
 PROMPT_BY_VERSION = {
     "v0": "prompts/video_understanding/fine_structure_scan_v0.md",
     "v1": "prompts/video_understanding/fine_structure_scan_v1.md",
@@ -388,6 +729,127 @@ def resolve_prompt_path(args: argparse.Namespace) -> str:
     return PROMPT_BY_VERSION[args.prompt_version]
 
 
+def build_scan_config_fingerprint(
+    block: dict[str, Any],
+    args: argparse.Namespace,
+    *,
+    video_id: str,
+) -> dict[str, Any]:
+    start, end = block_time_range(block)
+    prompt_path = args.prompt or resolve_prompt_path(args)
+    block_context = {
+        "coarseRoleGuess": block.get("coarseRoleGuess", ""),
+        "boundaryReason": block.get("boundaryReason", ""),
+        "observableSummary": block.get("observableSummary", ""),
+        "fineScanFocusQuestions": block.get("fineScanFocusQuestions", []) or [],
+    }
+    config = {
+        "schemaVersion": "fine_scan_config_v1",
+        "videoId": video_id,
+        "blockId": str(block["id"]),
+        "blockTimeRange": {"start": float(start), "end": float(end)},
+        "blockContextHash": _stable_hash(block_context),
+        "promptVersion": args.prompt_version,
+        "promptPath": prompt_path,
+        "promptFileHash": _file_sha256(prompt_path),
+        "peakMicroPromptPath": args.peak_micro_prompt,
+        "peakMicroPromptFileHash": _file_sha256(args.peak_micro_prompt),
+        "model": str(getattr(args, "model", "") or ""),
+        "fps": {
+            "peakSampleFps": float(args.peak_sample_fps),
+            "peakUploadFps": float(args.peak_upload_fps),
+            "blockUploadFps": float(args.block_upload_fps),
+        },
+        "candidateConfig": {
+            "peakMinDistanceMs": int(args.peak_min_distance_ms),
+            "peakMinProminence": float(args.peak_min_prominence),
+            "peaksPerSecond": float(args.peaks_per_second),
+            "maxPeaks": int(args.max_peaks),
+            "minBlockSeconds": float(args.min_block_seconds),
+            "peakBoundaryGuardMs": int(args.peak_boundary_guard_ms),
+            "peakPreContext": float(args.peak_pre_context),
+            "peakPostContext": float(args.peak_post_context),
+            "alignmentToleranceMs": int(args.alignment_tolerance_ms),
+            "regimePenalty": float(args.regime_penalty),
+            "regimeDedupWindowMs": int(args.regime_dedup_window_ms),
+            "maxTotalCandidates": int(args.max_total_candidates),
+            "hardCutEnabled": not bool(getattr(args, "no_hard_cut", False)),
+            "hardCutThreshold": float(args.hard_cut_threshold),
+            "hardCutProminence": float(args.hard_cut_prominence),
+            "hardCutDedupWindowMs": int(args.hard_cut_dedup_window_ms),
+            "maxCandidateCeiling": int(args.max_candidate_ceiling),
+        },
+        "scanPreset": getattr(args, "scan_preset", "full"),
+    }
+    return {"hash": _stable_hash(config), "config": config}
+
+
+def load_resumable_block_output(
+    block: dict[str, Any],
+    *,
+    args: argparse.Namespace,
+    video_id: str,
+    out_dir: Path,
+) -> dict[str, Any] | None:
+    if not getattr(args, "resume", False):
+        return None
+    block_id = str(block["id"])
+    block_out_path = out_dir / f"{block_id}_fine_scan.json"
+    if not block_out_path.exists():
+        return None
+    try:
+        cached = json.loads(block_out_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return None
+    expected = build_scan_config_fingerprint(block, args, video_id=video_id)
+    if cached.get("scanConfigFingerprint") != expected["hash"]:
+        return None
+    if cached.get("blockId") != block_id or cached.get("videoId") != video_id:
+        return None
+    if cached.get("schemaVersion") != "fine_content_block_semantic_v0_3":
+        return None
+    if not isinstance(cached.get("actionBeats"), list):
+        return None
+    cached.setdefault("scanConfig", expected["config"])
+    cached.setdefault("scanConfigFingerprint", expected["hash"])
+    return cached
+
+
+def write_timing_report(out_dir: Path, *, video_id: str, block_results: list[dict[str, Any]]) -> Path:
+    stage_summary: dict[str, dict[str, Any]] = {
+        stage: {"count": 0, "totalMs": 0.0, "maxMs": 0.0}
+        for stage in FINE_SCAN_TIMING_STAGES
+    }
+    block_timings: list[dict[str, Any]] = []
+    for block in block_results:
+        block_id = str(block.get("blockId", "unknown"))
+        timings = block.get("timingInfo") or []
+        block_timings.append({"blockId": block_id, "stages": timings})
+        for entry in timings:
+            stage = str(entry.get("stage", "unknown"))
+            elapsed_ms = float(entry.get("elapsedMs", 0.0))
+            if stage not in stage_summary:
+                stage_summary[stage] = {"count": 0, "totalMs": 0.0, "maxMs": 0.0}
+            summary = stage_summary[stage]
+            summary["count"] += 1
+            summary["totalMs"] = round(float(summary["totalMs"]) + elapsed_ms, 3)
+            summary["maxMs"] = round(max(float(summary["maxMs"]), elapsed_ms), 3)
+    for summary in stage_summary.values():
+        count = int(summary["count"])
+        summary["avgMs"] = round(float(summary["totalMs"]) / count, 3) if count else 0.0
+    report_path = out_dir / "fine_scan_timing.json"
+    write_json(
+        report_path,
+        {
+            "videoId": video_id,
+            "blockCount": len(block_results),
+            "stageSummary": stage_summary,
+            "blocks": block_timings,
+        },
+    )
+    return report_path
+
+
 def run_fine_scan(args: argparse.Namespace) -> int:
     # In-place resolve so all downstream args.prompt reads — and tests that
     # call run_fine_scan directly — see the concrete prompt path.
@@ -401,7 +863,8 @@ def run_fine_scan(args: argparse.Namespace) -> int:
         for name, value in {"LLM_BASE_URL": base_url, "LLM_API_KEY": api_key, "LLM_MODEL": model}.items()
         if not value
     ]
-    if missing:
+    llm_free_mode = bool(getattr(args, "candidates_only", False) or getattr(args, "dry_run", False))
+    if missing and not llm_free_mode:
         raise SystemExit(f"Missing required config: {', '.join(missing)}")
 
     # Initialize global HTTP semaphore from CLI before any worker is spawned.
@@ -440,7 +903,7 @@ def run_fine_scan(args: argparse.Namespace) -> int:
     if not video_path.exists():
         raise SystemExit(f"Source video file not found: {video_path}")
 
-    rough_scan = json.loads(rough_scan_path.read_text(encoding="utf-8"))
+    rough_scan = json.loads(rough_scan_path.read_text(encoding="utf-8-sig"))
     video_id = args.video_id or rough_scan.get("videoId", "video")
     all_blocks = rough_scan.get("contentBlocks")
     if not isinstance(all_blocks, list):
@@ -462,34 +925,43 @@ def run_fine_scan(args: argparse.Namespace) -> int:
 
     results: list[dict[str, Any]] = []
     failures: list[dict[str, Any]] = []
+    blocks_to_process: list[dict[str, Any]] = []
+    for block in blocks:
+        cached = load_resumable_block_output(block, args=args, video_id=video_id, out_dir=out_dir)
+        if cached is not None:
+            print(f"   [resume] {block['id']} fingerprint match -> skip LLM calls")
+            results.append(cached)
+        else:
+            blocks_to_process.append(block)
 
     # L2: cross-block ThreadPoolExecutor. Multiple blocks process in parallel.
     # All HTTP calls inside still go through the global semaphore + retry layer,
     # so concurrency cap is enforced regardless of block_workers × candidate_workers.
-    block_workers = max(1, min(int(args.block_workers), len(blocks)))
-    with ThreadPoolExecutor(max_workers=block_workers, thread_name_prefix="block") as block_pool:
-        block_futures = {
-            block_pool.submit(
-                process_block_with_peak_micro,
-                block,
-                args=args,
-                video_id=video_id,
-                video_duration=video_duration,
-                beat_map=beat_map,
-                base_url=base_url,
-                api_key=api_key,
-                model=model,
-                out_dir=out_dir,
-                work_dir=work_dir,
-            ): block
-            for block in blocks
-        }
-        for fut in as_completed(block_futures):
-            block_outcome, block_failure = fut.result()
-            if block_outcome is not None:
-                results.append(block_outcome)
-            if block_failure is not None:
-                failures.append(block_failure)
+    if blocks_to_process:
+        block_workers = max(1, min(int(args.block_workers), len(blocks_to_process)))
+        with ThreadPoolExecutor(max_workers=block_workers, thread_name_prefix="block") as block_pool:
+            block_futures = {
+                block_pool.submit(
+                    process_block_with_peak_micro,
+                    block,
+                    args=args,
+                    video_id=video_id,
+                    video_duration=video_duration,
+                    beat_map=beat_map,
+                    base_url=base_url,
+                    api_key=api_key,
+                    model=model,
+                    out_dir=out_dir,
+                    work_dir=work_dir,
+                ): block
+                for block in blocks_to_process
+            }
+            for fut in as_completed(block_futures):
+                block_outcome, block_failure = fut.result()
+                if block_outcome is not None:
+                    results.append(block_outcome)
+                if block_failure is not None:
+                    failures.append(block_failure)
 
     if results:
         combined_path = out_dir / "fine_structure_scan.json"
@@ -504,6 +976,10 @@ def run_fine_scan(args: argparse.Namespace) -> int:
             },
         )
         print(f"\nSaved combined scan -> {combined_path}")
+
+    if getattr(args, "timing_report", False):
+        timing_path = write_timing_report(out_dir, video_id=video_id, block_results=results)
+        print(f"Saved timing report -> {timing_path}")
 
     # Diagnostic: confirm the keepalive pool actually served light-call traffic
     # (vs. silently falling back to curl / tripping the breaker).
@@ -531,6 +1007,28 @@ def run_fine_scan(args: argparse.Namespace) -> int:
     return 0
 
 
+def _best_effort_delete_file(
+    file_id: str | None,
+    *,
+    args: argparse.Namespace,
+    base_url: str,
+    api_key: str,
+    logger: "BlockLogger",
+) -> None:
+    """Release Ark file-storage quota once a clip/window has been scanned.
+
+    Best-effort: a failed (or skipped via --keep-uploads) delete must NEVER fail
+    the scan it belongs to. Without this the pipeline leaks ~150 files/run and
+    eventually hits HTTP 403 OperationDenied.FileQuotaExceeded.
+    """
+    if not file_id or getattr(args, "keep_uploads", False):
+        return
+    try:
+        gated_call(delete_file, base_url=base_url, api_key=api_key, file_id=file_id)
+    except Exception as exc:  # noqa: BLE001 — cleanup is best-effort by design
+        logger.log(f"   [warn] file cleanup failed for {file_id}: {exc}")
+
+
 def _process_one_candidate(
     candidate: dict[str, Any],
     *,
@@ -544,7 +1042,7 @@ def _process_one_candidate(
     model: str,
     peak_window_dir: Path,
     logger: "BlockLogger",
-) -> tuple[dict[str, Any], dict[str, Any] | None, dict[str, Any] | None]:
+) -> tuple[dict[str, Any], dict[str, Any] | None, dict[str, Any] | None, list[dict[str, Any]]]:
     """Process one peak/regime candidate: cut window + LLM peak_micro_scan.
 
     Designed to run concurrently inside a ThreadPoolExecutor. All HTTP calls
@@ -553,6 +1051,7 @@ def _process_one_candidate(
     captured as dicts, never raised, so one bad candidate cannot kill the block.
     """
     candidate_id = str(candidate.get("sourceId") or "")
+    timing: list[dict[str, Any]] = []
     candidate_block_rel_ms = int(candidate["tMs"])
     candidate_abs_s = block_start_s + (candidate_block_rel_ms / 1000.0)
     window_clip = peak_window_dir / f"{candidate_id}.mp4"
@@ -588,21 +1087,23 @@ def _process_one_candidate(
     # the worker and crashing the whole block/run.
     if not window_clip.exists():
         try:
-            run_ffmpeg(
-                build_peak_window_command(
-                    args.video,
-                    window_clip,
-                    block_start=block_start_s,
-                    block_end=block_end_s,
-                    peak_time=candidate_abs_s,
-                    pre_context=args.peak_pre_context,
-                    post_context=args.peak_post_context,
+            with StageTimer(timing, "candidate_window_cut", candidateId=candidate_id):
+                run_ffmpeg(
+                    build_peak_window_command(
+                        args.video,
+                        window_clip,
+                        block_start=block_start_s,
+                        block_end=block_end_s,
+                        peak_time=candidate_abs_s,
+                        pre_context=args.peak_pre_context,
+                        post_context=args.peak_post_context,
+                    )
                 )
-            )
         except Exception as exc:
             logger.log(f"   [WARN] {candidate_id} window-clip cut failed: {exc}")
-            return visual_peak_record, None, {"peakId": candidate_id, "error": f"window_cut_failed: {exc}"}
+            return visual_peak_record, None, {"peakId": candidate_id, "error": f"window_cut_failed: {exc}"}, timing
 
+    file_id: str | None = None
     try:
         peak_vars = {
             "peakId": candidate_id,
@@ -612,35 +1113,43 @@ def _process_one_candidate(
         peak_instructions, peak_text = load_prompt_sections(args.peak_micro_prompt, peak_vars)
 
         logger.log(f"   [{candidate_id}] ({event_type}) uploading window...")
-        pf = gated_call(
-            upload_file,
-            base_url=base_url, api_key=api_key,
-            video_path=window_clip, fps=args.peak_upload_fps,
-            semaphore=get_upload_semaphore(),
-        )
-        wait_for_file(
-            base_url=base_url, api_key=api_key, file_id=pf["id"],
-            poll_interval=args.poll_interval, max_wait_seconds=args.max_wait_seconds,
-            poll_backoff=args.poll_backoff, poll_max_interval=args.poll_max_interval,
-        )
-        resp = gated_call(
-            create_response,
-            base_url=base_url, api_key=api_key,
-            payload=build_responses_payload(
-                model=model, file_id=pf["id"],
-                prompt_text=peak_text, instructions=peak_instructions, store=True,
-            ),
-            timeout=args.response_timeout,
-        )
+        with StageTimer(timing, "candidate_upload", candidateId=candidate_id):
+            pf = gated_call(
+                upload_file,
+                base_url=base_url, api_key=api_key,
+                video_path=window_clip, fps=args.peak_upload_fps,
+                semaphore=get_upload_semaphore(),
+            )
+        file_id = pf["id"]
+        with StageTimer(timing, "candidate_wait", candidateId=candidate_id):
+            wait_for_file(
+                base_url=base_url, api_key=api_key, file_id=pf["id"],
+                poll_interval=args.poll_interval, max_wait_seconds=args.max_wait_seconds,
+                poll_backoff=args.poll_backoff, poll_max_interval=args.poll_max_interval,
+            )
+        with StageTimer(timing, "candidate_response", candidateId=candidate_id):
+            resp = gated_call(
+                create_response,
+                base_url=base_url, api_key=api_key,
+                payload=build_responses_payload(
+                    model=model, file_id=pf["id"],
+                    prompt_text=peak_text, instructions=peak_instructions, store=True,
+                ),
+                timeout=args.response_timeout,
+            )
         parsed = extract_json_object(extract_response_text(resp))
         if not isinstance(parsed, dict):
             raise ValueError("peak_micro response is not a JSON object")
         parsed.setdefault("peakId", candidate_id)
         logger.log(f"      [{candidate_id}] → {str(parsed.get('semanticAction', '?'))[:40]}")
-        return visual_peak_record, parsed, None
+        return visual_peak_record, parsed, None, timing
     except Exception as exc:
         logger.log(f"   [WARN] {candidate_id} peak_micro failed: {exc}")
-        return visual_peak_record, None, {"peakId": candidate_id, "error": str(exc)}
+        return visual_peak_record, None, {"peakId": candidate_id, "error": str(exc)}, timing
+    finally:
+        _best_effort_delete_file(
+            file_id, args=args, base_url=base_url, api_key=api_key, logger=logger
+        )
 
 
 def _process_block_metadata(
@@ -654,13 +1163,14 @@ def _process_block_metadata(
     video_id: str,
     video_duration: float,
     logger: "BlockLogger",
-) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None, list[dict[str, Any]]]:
     """Run block-level fine_structure_scan v0.3.
 
     Returns (block_metadata_or_None, failure_or_None). Designed to run as a
     peer task in the same ThreadPoolExecutor as the peak-micro calls.
     """
     block_id = str(block["id"])
+    timing: list[dict[str, Any]] = []
     block_variables = build_block_prompt_variables(
         block, video_id=video_id, video_duration=video_duration,
     )
@@ -671,33 +1181,42 @@ def _process_block_metadata(
     # time, and inference frames. fps=0 is the escape hatch back to provider default.
     block_upload_fps = args.block_upload_fps if args.block_upload_fps and args.block_upload_fps > 0 else None
     logger.log(f"   [{block_id}] uploading block clip for fine_structure_scan (fps={block_upload_fps})...")
+    file_id: str | None = None
     try:
-        block_file_info = gated_call(
-            upload_file,
-            base_url=base_url, api_key=api_key, video_path=clip_path, fps=block_upload_fps,
-            semaphore=get_upload_semaphore(),
-        )
-        wait_for_file(
-            base_url=base_url, api_key=api_key, file_id=block_file_info["id"],
-            poll_interval=args.poll_interval, max_wait_seconds=args.max_wait_seconds,
-            poll_backoff=args.poll_backoff, poll_max_interval=args.poll_max_interval,
-        )
-        block_response = gated_call(
-            create_response,
-            base_url=base_url, api_key=api_key,
-            payload=build_responses_payload(
-                model=model, file_id=block_file_info["id"],
-                prompt_text=block_prompt_text, instructions=block_instructions, store=True,
-            ),
-            timeout=args.response_timeout,
-        )
+        with StageTimer(timing, "block_upload"):
+            block_file_info = gated_call(
+                upload_file,
+                base_url=base_url, api_key=api_key, video_path=clip_path, fps=block_upload_fps,
+                semaphore=get_upload_semaphore(),
+            )
+        file_id = block_file_info["id"]
+        with StageTimer(timing, "block_wait"):
+            wait_for_file(
+                base_url=base_url, api_key=api_key, file_id=block_file_info["id"],
+                poll_interval=args.poll_interval, max_wait_seconds=args.max_wait_seconds,
+                poll_backoff=args.poll_backoff, poll_max_interval=args.poll_max_interval,
+            )
+        with StageTimer(timing, "block_response"):
+            block_response = gated_call(
+                create_response,
+                base_url=base_url, api_key=api_key,
+                payload=build_responses_payload(
+                    model=model, file_id=block_file_info["id"],
+                    prompt_text=block_prompt_text, instructions=block_instructions, store=True,
+                ),
+                timeout=args.response_timeout,
+            )
         block_metadata = extract_json_object(extract_response_text(block_response))
         if not isinstance(block_metadata, dict):
             raise ValueError("fine_structure_scan response is not a JSON object")
-        return block_metadata, None
+        return block_metadata, None, timing
     except Exception as exc:
         logger.log(f"   [ERROR] [{block_id}] block-level fine_structure_scan failed: {exc}")
-        return None, {"blockId": block_id, "stage": "fine_structure_scan", "error": str(exc)}
+        return None, {"blockId": block_id, "stage": "fine_structure_scan", "error": str(exc)}, timing
+    finally:
+        _best_effort_delete_file(
+            file_id, args=args, base_url=base_url, api_key=api_key, logger=logger
+        )
 
 
 def process_block_with_peak_micro(
@@ -722,6 +1241,7 @@ def process_block_with_peak_micro(
     block_start_ms = int(round(start * 1000))
     block_end_ms = int(round(end * 1000))
     block_duration_ms = block_end_ms - block_start_ms
+    timing: list[dict[str, Any]] = []
 
     print(f"\n-- {block_id} ({start}s ~ {end}s, coarseRole={block.get('coarseRoleGuess')}) --")
 
@@ -733,7 +1253,8 @@ def process_block_with_peak_micro(
 
     # Step 1: cut block clip
     try:
-        clip_path = prepare_block_clip(args.video, block, work_dir)
+        with StageTimer(timing, "block_clip_cut"):
+            clip_path = prepare_block_clip(args.video, block, work_dir)
     except Exception as exc:
         print(f"   [ERROR] {block_id} block-clip cut failed: {exc}")
         return None, {"blockId": block_id, "stage": "block_clip", "error": str(exc)}
@@ -741,9 +1262,10 @@ def process_block_with_peak_micro(
 
     # Step 2: visual peak detection (code-only, no API)
     try:
-        samples = compute_visual_score_series_from_clip(
-            str(clip_path), target_fps=args.peak_sample_fps,
-        )
+        with StageTimer(timing, "peak_score"):
+            samples = compute_visual_score_series_from_clip(
+                str(clip_path), target_fps=args.peak_sample_fps,
+            )
     except Exception as exc:
         msg = f"peak score extraction failed: {exc}"
         print(f"   [ERROR] {msg}")
@@ -787,7 +1309,8 @@ def process_block_with_peak_micro(
     hard_cut_count = 0
     if not getattr(args, "no_hard_cut", False):
         try:
-            cut_times_s = detect_cuts(clip_path, threshold=args.hard_cut_threshold)
+            with StageTimer(timing, "hard_cut_detect"):
+                cut_times_s = detect_cuts(clip_path, threshold=args.hard_cut_threshold)
         except Exception as exc:
             print(f"   [WARN] {block_id} hard-cut detect failed: {exc}")
             cut_times_s = []
@@ -814,8 +1337,7 @@ def process_block_with_peak_micro(
     # Density-aware budget (Phase 2): a dense block earns up to (detected hard
     # cuts) candidates, bounded by a ceiling to cap LLM cost — replaces the flat
     # max_total_candidates that throttled dense montages to ~16 regardless.
-    effective_cap = min(int(args.max_candidate_ceiling),
-                        max(int(args.max_total_candidates), hard_cut_count))
+    effective_cap = candidate_budget_for_block(block, args, hard_cut_count=hard_cut_count)
     if len(candidates) > effective_cap:
         # Keep hard cuts first, then highest-prominence peaks/regimes.
         capped = sorted(
@@ -838,14 +1360,19 @@ def process_block_with_peak_micro(
         return {
             "blockId": block_id,
             "candidatesOnly": True,
+            "coarseRoleGuess": block.get("coarseRoleGuess", "unknown"),
+            "candidateBudgetClass": candidate_budget_class_for_block(block),
             "sourceTimeRangeMs": {"start": block_start_ms, "end": block_end_ms},
             "candidatePeakCount": len(all_peaks),
             "selectedPeakCount": len(selected_peaks),
             "regimeCount": len(regimes),
             "hardCutCount": hard_cut_count,
             "totalCandidateCount": len(candidates),
+            "selectedHardCutCount": count_candidate_sources(candidates).get("hard_cut", 0),
+            "candidateSourceCounts": count_candidate_sources(candidates),
             "effectiveCap": effective_cap,
             "candidateAbsMs": sorted(int(block_start_ms + int(c["tMs"])) for c in candidates),
+            "timingInfo": timing,
         }, None
 
     # Step 3: audio beats (absolute ms; only used by code-side alignment)
@@ -904,14 +1431,16 @@ def process_block_with_peak_micro(
         }
 
         for fut in as_completed(candidate_futures):
-            vp_record, semantic, failure = fut.result()
+            vp_record, semantic, failure, candidate_timing = fut.result()
             visual_peaks_with_windows.append(vp_record)
+            timing.extend(candidate_timing)
             if semantic is not None:
                 semantic_results.append(semantic)
             if failure is not None:
                 peak_failures.append(failure)
 
-        block_metadata, block_failure = block_future.result()
+        block_metadata, block_failure, block_timing = block_future.result()
+        timing.extend(block_timing)
 
     # Block-level scan failure aborts the block.
     if block_failure is not None:
@@ -925,12 +1454,13 @@ def process_block_with_peak_micro(
         )
 
     # Step 6: aggregate code-owned timing with model semantics
-    action_beats = aggregate_peak_semantics(
-        visual_peaks=visual_peaks_with_windows,
-        semantic_results=semantic_results,
-        audio_beats_ms=audio_beats_ms,
-        tolerance_ms=args.alignment_tolerance_ms,
-    )
+    with StageTimer(timing, "aggregate"):
+        action_beats = aggregate_peak_semantics(
+            visual_peaks=visual_peaks_with_windows,
+            semantic_results=semantic_results,
+            audio_beats_ms=audio_beats_ms,
+            tolerance_ms=args.alignment_tolerance_ms,
+        )
 
     # Step 7: assemble v0.3 block output
     block_output = {
@@ -970,18 +1500,30 @@ def process_block_with_peak_micro(
         },
         "audioBeatsUsedAbsMs": audio_beats_ms,
         "alignmentToleranceMs": args.alignment_tolerance_ms,
+        "scanConfigFingerprint": build_scan_config_fingerprint(block, args, video_id=video_id)["hash"],
+        "scanConfig": build_scan_config_fingerprint(block, args, video_id=video_id)["config"],
+        "timingInfo": timing,
     }
 
     block_out_path = out_dir / f"{block_id}_fine_scan.json"
+    write_started = time.monotonic()
     write_json(block_out_path, block_output)
+    timing.append(_timing_entry("write_json", (time.monotonic() - write_started) * 1000))
+    block_output["timingInfo"] = timing
     logger.log(f"   [{block_id}] saved -> {block_out_path}")
     logger.flush()
     return block_output, None
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Stage 2 fine content-block analysis using the configured LLM/VLM provider.")
+    parser = TrackingArgumentParser(description="Stage 2 fine content-block analysis using the configured LLM/VLM provider.")
     _paths = analysis_paths(DEFAULT_VIDEO_ID)
+    parser.add_argument(
+        "--scan-preset",
+        choices=["quick", "full"],
+        default="full",
+        help="Speed/quality preset. full keeps existing defaults; quick applies safer lower candidate budgets unless explicitly overridden.",
+    )
     parser.add_argument("--rough-scan", default=str(_paths.rough_scan))
     parser.add_argument("--video", default=str(_paths.raw_video))
     parser.add_argument("--beat-map", default=str(_paths.audio_beat_map))
@@ -1071,6 +1613,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-http-pool", dest="http_pool", action="store_false",
                         help="Disable the keepalive connection pool; every call spawns "
                              "a fresh curl (legacy behaviour).")
+    parser.add_argument("--keep-uploads", action="store_true",
+                        help="Do NOT delete uploaded clips/windows after scanning them. "
+                             "By default each file is deleted (best-effort) once its "
+                             "block/peak is scanned, to release Ark file-storage quota — "
+                             "the pipeline uploads ~150 files/run and would otherwise "
+                             "exhaust the account (HTTP 403 FileQuotaExceeded). Use this "
+                             "to keep files for debugging.")
     parser.add_argument("--env", default=".env")
     parser.add_argument("--base-url", default="")
     parser.add_argument("--api-key", default="")
@@ -1099,6 +1648,16 @@ def build_parser() -> argparse.ArgumentParser:
                              "Default 1.0 (was provider-default/None). Set 0 to fall back to it.")
     parser.add_argument("--response-timeout", type=int, default=600)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Skip content blocks whose block output has a matching scanConfigFingerprint.",
+    )
+    parser.add_argument(
+        "--timing-report",
+        action="store_true",
+        help="Write fine_scan_timing.json with per-stage block/candidate timing summaries.",
+    )
     return parser
 
 

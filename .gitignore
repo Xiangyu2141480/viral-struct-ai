@@ -59,8 +59,16 @@ docs/superpowers/
 # Requirement/spec docs may embed live API keys — treat as secrets, never commit.
 GOAL.pdf
 *.pdf
+# Cloud provider API-key exports (Aliyun / DashScope / Wan etc.) — never commit.
+*apiKey*.csv
+*api-key*.csv
 # Local dev logs / scratch artifacts (not for commit)
 *.log
 demo-output*.json
 fine_scan_compare/
 scripts/_dump_demo.py
+
+# Debug screenshots dropped at repo root (UI/devtools captures, not product assets).
+# Root-anchored: seed/product images under seed_assets/ are unaffected.
+/*.png
+.playwright-mcp/

@@ -18,8 +18,8 @@ Viral Struct AI 是“爆款结构迁移引擎：从样例拆解、素材补全�
 
 当前主线已经形成可演示闭环：
 
-- `/demo` 主评审链路：macbook_neo 样例结构迁移到康师傅冰红茶 demo 素材。
-- `/analyze -> /graph -> /adapt -> /gaps -> /result` 标准产品流程。
+- 一键演示 主评审链路：macbook_neo 样例结构迁移到康师傅冰红茶 demo 素材。
+- 01 样例解析 → 02 素材输入 → 03 缺口诊断 → 04 成片编译（同一页面 / 路由 `/`，左侧步骤导航切换） 标准产品流程。
 - API 标准强链路：slots/gaps/timeline 都使用 fallback-capable services。
 - Web 可解释层：Generation Trace、Migration Evidence、Variant Diff、Edit Summary。
 - Natural Language Edit Patch：`/api/timeline/apply-edit` rule-based timeline patch。
@@ -83,7 +83,7 @@ Now that the product demo is stable, the next phase should focus on delivery:
 
 1. Final documentation and submission package.
 2. 3-5 minute recording script and screenshots.
-3. Manual QA checklist for `/demo` and standard flow.
+3. Manual QA checklist for 一键演示 (one-click demo) and standard flow.
 4. Optional: make quality re-evaluation run automatically after natural-language edits.
 5. Optional: improve visual preview polish.
 

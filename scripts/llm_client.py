@@ -554,6 +554,38 @@ def retrieve_file(*, base_url: str, api_key: str, file_id: str, timeout: int = 6
     )
 
 
+def delete_file(*, base_url: str, api_key: str, file_id: str, timeout: int = 60) -> dict[str, Any]:
+    """Delete an uploaded file (OpenAI-compatible DELETE /files/{id}).
+
+    Used to release Ark file-storage quota once a clip/window has been scanned.
+    Callers treat failures as non-fatal (best-effort cleanup) — a failed delete
+    must never fail the scan it belongs to.
+    """
+    return request_json(
+        method="DELETE",
+        url=api_url(base_url, f"/files/{file_id}"),
+        api_key=api_key,
+        timeout=timeout,
+    )
+
+
+def list_files(
+    *, base_url: str, api_key: str, limit: int = 0, timeout: int = 60
+) -> dict[str, Any]:
+    """List uploaded files (OpenAI-compatible GET /files).
+
+    Returns the raw envelope; file objects are under ``data``. ``limit`` (when
+    > 0) is passed through as a query param for providers that support paging.
+    """
+    path = "/files" if limit <= 0 else f"/files?limit={int(limit)}"
+    return request_json(
+        method="GET",
+        url=api_url(base_url, path),
+        api_key=api_key,
+        timeout=timeout,
+    )
+
+
 def wait_for_file(
     *,
     base_url: str,

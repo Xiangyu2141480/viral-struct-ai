@@ -1,4 +1,5 @@
 export * from './authoring';
+export * from './aigc/aigcHelper';
 export * from './context/VideoEditContext';
 export * from './gap-fill/GapFillPlan';
 export * from './gap-fill/gapFillPlanner';

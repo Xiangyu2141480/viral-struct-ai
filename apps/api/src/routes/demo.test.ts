@@ -74,8 +74,9 @@ test('POST /api/demo/run returns a complete judge-facing workflow result', async
   );
   assert.ok(body.assetCards.some((card: { url?: string }) => card.url?.includes('kangshifu_iced_tea')));
   assert.ok(body.materialGaps.length >= 1);
-  // ③ video-agent: gap fills replace ①'s repairs; authored timeline replaces the per-slot timeline.
-  assert.ok(body.gapFills.length >= 1);
+  // ② director → ③ video-agent: the orchestrated plan is projected into the authored timeline.
+  assert.ok(body.orchestratedTimeline.slots.length >= 4);
+  assert.equal(body.orchestratedTimeline.meta.planOnly, true);
   assert.ok(body.authoredTimeline.beats.length >= 4);
   assert.ok(body.timeline.length >= 4);
   assert.ok(body.qualityReport.structureMatch > 0);

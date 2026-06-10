@@ -14,6 +14,7 @@ import { safetyRouter } from './routes/safety';
 import { storyboardRouter } from './routes/storyboard';
 import { demoRouter } from './routes/demo';
 import { directorRouter } from './routes/director';
+import { structRouter } from './routes/struct';
 import { getCoverDir, getDemoAssetDir, getFrameDir, getRenderDir, getUploadDir } from './services/videoPaths';
 
 const app = express();
@@ -68,6 +69,7 @@ app.use('/api/quality', qualityRouter);
 app.use('/api/safety', safetyRouter);
 app.use('/api/demo', demoRouter);
 app.use('/api/director', directorRouter);
+app.use('/api/struct', structRouter);
 
 app.listen(port, () => {
   console.log(`ViralStruct API listening on http://localhost:${port}`);

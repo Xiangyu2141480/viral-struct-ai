@@ -6,16 +6,16 @@
 
 | 评分项 | 分值 | 目标分 | 产品证据 | 代码/文档证据 |
 |---|---:|---:|---|---|
-| 样例输入与基础解析 | 5 | 5 | `/analyze` 上传样例，展示时长、分辨率、封面、关键帧、镜头数、字幕/语音概览 | `apps/api` video analyzer；`VideoAnalysis` schema；`docs/TASK_BREAKDOWN.md` T01 |
-| 结构拆解能力 | 10 | 9-10 | `/graph` 展示脚本结构、节奏结构、包装结构 | `ViralStructureGraph`；`docs/ARCHITECTURE.md`；T02 |
-| 结构迁移生成能力 | 10 | 9-10 | `/result` 展示脚本、分镜、时间线草案、包装建议/preview | `TimelineItem` protocol；`docs/TOOL_PROTOCOL.md`；T04 |
+| 样例输入与基础解析 | 5 | 5 | 步骤 01 · 样例解析 上传样例，展示时长、分辨率、封面、关键帧、镜头数、字幕/语音概览 | `apps/api` video analyzer；`VideoAnalysis` schema；`docs/TASK_BREAKDOWN.md` T01 |
+| 结构拆解能力 | 10 | 9-10 | 步骤 01 · 样例解析 展示脚本结构、节奏结构、包装结构 | `ViralStructureGraph`；`docs/ARCHITECTURE.md`；T02 |
+| 结构迁移生成能力 | 10 | 9-10 | 步骤 04 · 成片编译 展示脚本、分镜、时间线草案、包装建议/preview | `TimelineItem` protocol；`docs/TOOL_PROTOCOL.md`；T04 |
 
 ## 2. 素材缺口处理能力，20 分
 
 | 评分项 | 分值 | 目标分 | 产品证据 | 代码/文档证据 |
 |---|---:|---:|---|---|
-| 素材缺口识别 | 8 | 7-8 | `/gaps` 按结构槽位展示 matched / partial / missing、原因、影响 | `SlotMatch`、`MaterialGap`；T05 |
-| 素材缺口补全 | 12 | 10-12 | `/gaps` 展示标题卡、卖点卡、对比卡、CTA 卡、字幕补全、裁切复用 | `GapRepair`；`Gap Repair Planner`；T06 |
+| 素材缺口识别 | 8 | 7-8 | 步骤 03 · 缺口诊断 按结构槽位展示 matched / partial / missing、原因、影响 | `SlotMatch`、`MaterialGap`；T05 |
+| 素材缺口补全 | 12 | 10-12 | 步骤 03 · 缺口诊断 展示标题卡、卖点卡、对比卡、CTA 卡、字幕补全、裁切复用 | `GapRepair`；`Gap Repair Planner`；T06 |
 
 ## 3. 结果展示与可验证性，20 分
 

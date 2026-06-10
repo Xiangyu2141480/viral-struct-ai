@@ -19,6 +19,8 @@ export function buildAuthoringPrompt(context: VideoEditContext): { system: strin
     '   每个 segment 带有 transferRule，它是把该段意图迁移到新产品的【约束】，请遵守它。',
     '2) 只用真实素材承载事实：每个 mediaLayer 必须引用一个真实 AssetCard（media.assetId = 资产 id）。',
     '   若某个槽位没有合适的真实素材，不要编造——把该 beat 标记 unresolvedReason（系统会渲染为「替代卡片 · 素材缺失」）。',
+    '   视频素材可裁切到「最佳片段」：在该 layer 的 media 上设 startSec/endSec（秒），需满足 0 ≤ startSec < endSec ≤ 该素材 durationSec，',
+    '   且时长≈本 beat 的 (endSeconds-startSeconds)。不设则从头播放。图片素材不要设 startSec/endSec。',
     '3) 诚实红线：proof / 对比 等需要真实证据的段落，禁止用 AIGC 图生视频伪造；AIGC(image_to_video) 只能用于',
     '   非证据性的氛围/运动镜头，且必须带 disclosureText（如「【AI 生成动画】」）。绝不虚构评价、数据、效果。',
     '4) 创意在调色板内：motion.kind 只能从 {static,ken_burns,crop_zoom,pan,push_in,pop_scale,custom} 选，',
@@ -80,9 +82,13 @@ function compactGraph(context: VideoEditContext): unknown {
 }
 
 function compactAsset(a: VideoEditContext['assetCards'][number]): unknown {
+  const durationSec = a.type === 'video' ? a.analysis?.media?.durationSec : undefined;
   return {
     id: a.id,
     type: a.type,
+    // For video assets, the full source length. The author MAY trim to the best moment by setting
+    // media.startSec/endSec on the layer (0 ≤ startSec < endSec ≤ durationSec); length ≈ the beat duration.
+    ...(durationSec != null ? { durationSec: Number(durationSec.toFixed(2)) } : {}),
     suitableSlots: a.suitableSlots,
     qualityScore: a.qualityScore,
     detectedObjects: a.detectedObjects,
