@@ -12,13 +12,18 @@
 // shared↔UI translation lives in one place.
 
 import type {
+  AigcOption,
   AssetCard,
   Boundary,
   ContentBrief,
   CreativeIngredientType,
   GapRepair,
   GapRepairStrategy,
+  GapResolutionOption,
+  GapResolutionOptionId,
+  HyperframesOption,
   MaterialGap,
+  ReshootOption,
   SegmentRole,
   ShotSlotNode,
   ShotSlotRole,
@@ -32,6 +37,7 @@ import type {
   Diagnosis,
   DiagnosisFill,
   Material,
+  ResolutionMethod,
   RoleKey,
   SourceSegment,
   SourceVideo,
@@ -41,6 +47,12 @@ import type {
   TransitionTypeKey,
   TargetProduct,
 } from './structTypes';
+
+/** The real per-gap 3-option resolution menu the Director Agent produced for one slot. */
+export interface SlotGapResolution {
+  options: GapResolutionOption[];
+  recommendedOptionId: GapResolutionOptionId;
+}
 
 /* ─── small helpers ─────────────────────────────────────────── */
 
@@ -181,11 +193,24 @@ function uiTypeToBoundaryType(type: TransitionTypeKey): Boundary['transitionType
    FORWARD · shared → UI
    ============================================================ */
 
-/** ViralStructureGraph (+ optional analysis meta) → UI SourceVideo. */
+/**
+ * ViralStructureGraph (+ optional analysis meta) → UI SourceVideo.
+ *
+ * T6: rhythm/packaging fields that the source analysis did NOT detect are filled with
+ * NEUTRAL sentinels (bgm_bpm:0 → UI shows '节拍未检测'; captions:'—'; avg_shot:0;
+ * hook_density/caption_density:'—') rather than fabricated values shown as real analysis.
+ * When `opts.defaultedFields` is supplied, the names of any sentinel-filled fields are
+ * pushed into it so the caller can surface an honest "未检测" warning.
+ */
 export function graphToSourceVideo(
   graph: ViralStructureGraph,
-  opts: { videoId?: string; title?: string } = {},
+  opts: { videoId?: string; title?: string; defaultedFields?: string[] } = {},
 ): SourceVideo {
+  const defaulted = opts.defaultedFields;
+  const markDefaulted = (field: string) => {
+    if (defaulted && !defaulted.includes(field)) defaulted.push(field);
+  };
+
   const segments: SourceSegment[] = graph.segments.map((seg, i) => {
     const role = segmentRoleToRole(seg.role as string);
     const start = round01(seg.start ?? 0);
@@ -200,6 +225,28 @@ export function graphToSourceVideo(
       caption: seg.caption ?? seg.narration ?? seg.purpose ?? '',
     };
   });
+
+  // Rhythm — only use detected values; otherwise neutral sentinels (no invention).
+  const avgShot = graph.rhythm?.avgShotDuration;
+  if (avgShot == null) markDefaulted('avg_shot');
+  const cutFrequency = graph.rhythm?.cutFrequency;
+  // cuts: segment count is a real lower bound (the structure has this many seams),
+  // not an invented "high=16/medium=9" tier. Only the tier guess is dropped.
+  const detectedBpm = extractBpm(graph.rhythm?.pattern);
+  if (detectedBpm == null) markDefaulted('bgm_bpm');
+  const captionDensity = graph.packaging?.captionDensity;
+  if (captionDensity == null) markDefaulted('caption_density');
+  if (cutFrequency == null) markDefaulted('hook_density');
+
+  // Packaging — '—' sentinel when undetected; do NOT fabricate '白底黑字' captions.
+  const titleTemplate = graph.packaging?.titleStyle;
+  if (titleTemplate == null) markDefaulted('title_template');
+  const detectedCardTypes = (graph.packaging?.cardTypes ?? []).join(' / ');
+  if (!detectedCardTypes) markDefaulted('captions');
+  const bgmPattern = graph.rhythm?.pattern;
+  if (bgmPattern == null) markDefaulted('bgm');
+  const coverStyle = graph.packaging?.coverStyle;
+  if (coverStyle == null) markDefaulted('cover');
 
   return {
     id: opts.videoId ?? 'struct_source',
@@ -216,17 +263,17 @@ export function graphToSourceVideo(
     segments,
     transitions: graphToTransitions(graph, segments),
     rhythm: {
-      avg_shot: round01(graph.rhythm?.avgShotDuration ?? 1.6),
-      cuts: Math.max(segments.length, (graph.rhythm?.cutFrequency === 'high' ? 16 : graph.rhythm?.cutFrequency === 'medium' ? 9 : 4)),
-      hook_density: graph.rhythm?.cutFrequency === 'high' ? '高' : '中',
-      bgm_bpm: extractBpm(graph.rhythm?.pattern) ?? 88,
-      caption_density: graph.packaging?.captionDensity === 'high' ? '高' : graph.packaging?.captionDensity === 'low' ? '低' : '中',
+      avg_shot: avgShot != null ? round01(avgShot) : 0,
+      cuts: segments.length,
+      hook_density: cutFrequency === 'high' ? '高' : cutFrequency === 'medium' || cutFrequency === 'low' ? '中' : '—',
+      bgm_bpm: detectedBpm ?? 0,
+      caption_density: captionDensity === 'high' ? '高' : captionDensity === 'low' ? '低' : captionDensity === 'medium' ? '中' : '—',
     },
     packaging: {
-      title_template: graph.packaging?.titleStyle ?? '—',
-      captions: (graph.packaging?.cardTypes ?? []).join(' / ') || '白底黑字',
-      bgm: graph.rhythm?.pattern ?? '—',
-      cover: graph.packaging?.coverStyle ?? '—',
+      title_template: titleTemplate ?? '—',
+      captions: detectedCardTypes || '—',
+      bgm: bgmPattern ?? '—',
+      cover: coverStyle ?? '—',
     },
   };
 }
@@ -386,8 +433,10 @@ export function toDiagnosisRecord(input: {
   gaps: MaterialGap[];
   repairs: GapRepair[];
   materials: Material[];
+  /** Real Director-Agent 3-option resolution menus, keyed by slot/segment id (T1). */
+  slotResolutions?: Record<string, SlotGapResolution>;
 }): Record<string, Diagnosis> {
-  const { sourceVideo, matches, gaps, repairs, materials } = input;
+  const { sourceVideo, matches, gaps, repairs, materials, slotResolutions } = input;
   const out: Record<string, Diagnosis> = {};
 
   for (const seg of sourceVideo.segments) {
@@ -396,6 +445,7 @@ export function toDiagnosisRecord(input: {
     const repair = repairs.find((r) => r.slotId === seg.id);
     const assigned = materials.filter((m) => m.slot === seg.id);
     const matchedAsset = match?.assetId ? materials.find((m) => m.id === match.assetId) : undefined;
+    const resolution = slotResolutions?.[seg.id];
 
     const state = projectState(match, gap, assigned.length);
 
@@ -408,14 +458,25 @@ export function toDiagnosisRecord(input: {
       ? [gap.gapSpec.ideal, ...(gap.gapSpec.minimalAcceptable ? [gap.gapSpec.minimalAcceptable] : [])]
       : tokenizeSubject(seg.shot).slice(0, 3);
 
-    const fix =
-      repair != null
-        ? { kind: strategyKindLabel(repair.strategy), desc: repair.explanation }
-        : state === 'filled'
-          ? null
-          : { kind: '补全', desc: gap?.reason ?? '建议补拍或合成以满足该槽位' };
+    // Prefer the recommended real option's title for the fix label; fall back to repair / synthesized.
+    const recommended = resolution ? (resolution.recommendedOptionId as ResolutionMethod) : undefined;
+    const recommendedOption = resolution?.options.find((o) => o.id === resolution.recommendedOptionId);
 
-    const strategy = repair != null ? strategyToUiStrategy(repair.strategy) : null;
+    const fix =
+      recommendedOption != null
+        ? { kind: resolutionMethodLabel(recommendedOption.id), desc: resolutionOptionSummary(recommendedOption) }
+        : repair != null
+          ? { kind: strategyKindLabel(repair.strategy), desc: repair.explanation }
+          : state === 'filled'
+            ? null
+            : { kind: '补全', desc: gap?.reason ?? '建议补拍或合成以满足该槽位' };
+
+    const strategy =
+      recommended != null
+        ? recommended
+        : repair != null
+          ? strategyToUiStrategy(repair.strategy)
+          : null;
 
     const diagnosis: Diagnosis = {
       state,
@@ -431,7 +492,13 @@ export function toDiagnosisRecord(input: {
       strategy,
     };
 
-    if (state !== 'filled') {
+    if (recommended != null) diagnosis.recommended = recommended;
+
+    // Real 3-option menu wins; only fall back to the thin synthesized fill when no
+    // Director options exist for this slot (e.g. options omitted by the caller).
+    if (resolution) {
+      diagnosis.fill = optionsToDiagnosisFill(resolution.options, seg, gap, repair, assigned);
+    } else if (state !== 'filled') {
       diagnosis.fill = synthesizeFill(seg, gap, repair, assigned);
     }
 
@@ -439,6 +506,77 @@ export function toDiagnosisRecord(input: {
   }
 
   return out;
+}
+
+const RESOLUTION_METHOD_LABELS: Record<GapResolutionOptionId, string> = {
+  reshoot: '补拍',
+  hyperframes: 'HyperFrames 卡片',
+  aigc: 'AIGC 生成',
+};
+function resolutionMethodLabel(id: GapResolutionOptionId): string {
+  return RESOLUTION_METHOD_LABELS[id] ?? String(id);
+}
+
+/** One-line human summary of the recommended option for the diagnosis `fix.desc`. */
+function resolutionOptionSummary(option: GapResolutionOption): string {
+  if (option.id === 'reshoot') return option.guidanceNL;
+  if (option.id === 'hyperframes') return option.editingGuidanceNL;
+  return option.prompt;
+}
+
+/**
+ * Project the Director Agent's real GapResolutionOption[] into the UI DiagnosisFill,
+ * carrying the FULL option payload (reshoot / hyperframes / aigc) AND the legacy
+ * synthesized fields (so the existing UI mirror keeps rendering). When a channel is
+ * absent from the menu, its legacy synthesized value is used as the fallback.
+ */
+function optionsToDiagnosisFill(
+  options: GapResolutionOption[],
+  seg: SourceSegment,
+  gap: MaterialGap | undefined,
+  repair: GapRepair | undefined,
+  assigned: Material[],
+): DiagnosisFill {
+  const base = synthesizeFill(seg, gap, repair, assigned);
+  const reshoot = options.find((o): o is ReshootOption => o.id === 'reshoot');
+  const hyperframes = options.find((o): o is HyperframesOption => o.id === 'hyperframes');
+  const aigc = options.find((o): o is AigcOption => o.id === 'aigc');
+
+  return {
+    reshoot: reshoot
+      ? {
+          guide: reshoot.guidanceNL,
+          shots: reshoot.mustCapture.length ? reshoot.mustCapture : base.reshoot.shots,
+          guidanceNL: reshoot.guidanceNL,
+          framing: reshoot.framing,
+          durationSec: reshoot.durationSec,
+          mustCapture: reshoot.mustCapture,
+          avoid: reshoot.avoid,
+        }
+      : base.reshoot,
+    hyperframes: hyperframes
+      ? {
+          uses: hyperframes.referencedAssetIds,
+          desc: hyperframes.editingGuidanceNL,
+          editingGuidanceNL: hyperframes.editingGuidanceNL,
+          cardType: hyperframes.cardType,
+          copy: hyperframes.copy,
+          referencedAssetIds: hyperframes.referencedAssetIds,
+          durationMs: hyperframes.durationMs,
+        }
+      : base.hyperframes,
+    aigc: aigc
+      ? {
+          prompt: aigc.prompt,
+          negativePrompt: aigc.negativePrompt,
+          referenceAssetIds: aigc.referenceAssetIds,
+          aspectRatio: aigc.aspectRatio,
+          expectedDurationSec: aigc.expectedDurationSec,
+          providerHint: aigc.providerHint,
+          ownership: aigc.ownership,
+        }
+      : base.aigc,
+  };
 }
 
 function synthesizeFill(
