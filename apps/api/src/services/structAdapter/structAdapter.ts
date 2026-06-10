@@ -296,14 +296,35 @@ export function assetCardsToMaterials(cards: AssetCard[]): Material[] {
       (card.detectedObjects?.length ? card.detectedObjects.join(' · ') : undefined) ??
       card.id;
     const isText = card.type === 'text';
-    return {
+    const seg = card.segmentSource;
+    // A sliced video clip (PR#73) carries segmentSource; treat it as a 'video' material
+    // and preserve its provenance/timing so the produce renderer can resolve real clips.
+    const kind: Material['kind'] = isText ? 'text' : card.type === 'video' ? 'video' : 'photo';
+    const material: Material = {
       id: card.id,
-      kind: isText ? 'text' : 'photo',
+      kind,
       subject,
       slot: isText ? null : CANONICAL_ROLE_SLOT[role],
       quality: clamp01(card.qualityScore ?? 0.6),
       color: isText ? undefined : PHOTO_PALETTE[i % PHOTO_PALETTE.length],
+      // Always carry the real file/asset url (AssetCard.url = file path from assetAnalyzer).
+      url: card.url,
     };
+    if (seg) {
+      return {
+        ...material,
+        kind: 'video',
+        parentAssetId: seg.parentAssetId,
+        segmentIndex: seg.segmentIndex,
+        startSec: seg.startSec,
+        endSec: seg.endSec,
+        durationSec: seg.durationSec,
+        label: seg.label,
+        roleHints: seg.roleHints,
+        source: seg.source,
+      };
+    }
+    return material;
   });
 }
 
@@ -605,16 +626,20 @@ export function materialToAssetCard(material: Material, sourceVideo: SourceVideo
   const primaryRole = assignedSegment ? ROLE_TO_SHOTSLOT[assignedSegment.role] : inferRoleFromMaterial(material);
   const suitableSlots = Array.from(new Set([primaryRole, inferRoleFromMaterial(material)].filter(Boolean))) as ShotSlotRole[];
   const description = [material.subject, assignedSegment?.label, product.name, product.category].filter(Boolean).join(' · ');
-  return {
+  const cardType: AssetCard['type'] = material.kind === 'video' ? 'video' : material.kind === 'photo' ? 'image' : 'text';
+  const isVisual = material.kind === 'photo' || material.kind === 'video';
+  const card: AssetCard = {
     id: material.id,
-    type: material.kind === 'photo' ? 'image' : 'text',
+    type: cardType,
+    // Round-trip the real file/asset url so the produce renderer can resolve real clips.
+    url: material.url,
     text: material.kind === 'text' ? material.subject : undefined,
-    spatialDescription: material.kind === 'photo' ? description : undefined,
+    spatialDescription: isVisual ? description : undefined,
     detectedObjects: tokenizeSubject(material.subject),
     suitableSlots,
     qualityScore: clamp01(material.quality),
     detectedIngredients: ingredientsForMaterial(material, primaryRole),
-    visualStyleTags: material.kind === 'photo' ? ['clean_background', 'premium_visual'] : ['professional_review'],
+    visualStyleTags: isVisual ? ['clean_background', 'premium_visual'] : ['professional_review'],
     candidateSlotRoles: suitableSlots.map((role) => ({
       role,
       confidence: clamp01(material.quality),
@@ -622,6 +647,22 @@ export function materialToAssetCard(material: Material, sourceVideo: SourceVideo
     })),
     analysisSource: 'deterministic',
   };
+  // Re-emit clip provenance when this Material was a sliced video segment, so the
+  // Material → AssetCard round-trip preserves segmentSource (real-clip resolution).
+  if (material.parentAssetId !== undefined && material.segmentIndex !== undefined) {
+    card.segmentSource = {
+      parentAssetId: material.parentAssetId,
+      startSec: material.startSec ?? 0,
+      endSec: material.endSec ?? material.startSec ?? 0,
+      durationSec: material.durationSec ?? Math.max(0, (material.endSec ?? 0) - (material.startSec ?? 0)),
+      segmentIndex: material.segmentIndex,
+      label: material.label ?? material.subject,
+      roleHints: (material.roleHints as ShotSlotRole[] | undefined) ?? suitableSlots,
+      actionTags: [],
+      source: material.source ?? 'deterministic',
+    };
+  }
+  return card;
 }
 
 export function materialsToAssetCards(materials: Material[], sourceVideo: SourceVideo, product: TargetProduct): AssetCard[] {

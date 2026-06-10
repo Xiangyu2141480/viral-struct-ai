@@ -242,11 +242,29 @@ export const TARGET_PRODUCT: TargetProduct = {
 
 export interface Material {
   id: string;
-  kind: 'photo' | 'text';
+  kind: 'photo' | 'text' | 'video';
   subject: string;
   slot: string | null;
   quality: number;
   color?: string;
+  /** Real file/asset URL (file path set by the analyzer). Enables real-clip resolution. */
+  url?: string;
+  /** Provenance: id of the parent asset this clip was sliced from (PR#73). */
+  parentAssetId?: string;
+  /** Ordinal index of this clip within the parent asset. */
+  segmentIndex?: number;
+  /** Clip start offset within the parent asset, in seconds. */
+  startSec?: number;
+  /** Clip end offset within the parent asset, in seconds. */
+  endSec?: number;
+  /** Clip duration in seconds. */
+  durationSec?: number;
+  /** Human-readable clip label. */
+  label?: string;
+  /** Suggested slot roles for this clip (from segment analysis). */
+  roleHints?: string[];
+  /** How this clip's segmentation was derived. */
+  source?: 'deterministic' | 'vlm' | 'hybrid';
 }
 
 // User-uploaded materials (just 5 photos + 1 text)

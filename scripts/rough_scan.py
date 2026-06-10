@@ -25,6 +25,7 @@ from llm_client import (  # noqa: E402
     env_value,
     extract_json_object,
     extract_response_text,
+    gated_call,
     load_dotenv,
     load_prompt_sections,
     upload_file,
@@ -271,7 +272,8 @@ def run_scan(args: argparse.Namespace) -> int:
         file_info = {"id": file_id, "source": "provided"}
     else:
         print(f"Uploading video: {args.video}")
-        file_info = upload_file(
+        file_info = gated_call(
+            upload_file,
             base_url=base_url,
             api_key=api_key,
             video_path=args.video,
@@ -281,7 +283,8 @@ def run_scan(args: argparse.Namespace) -> int:
         print(f"Uploaded file_id: {file_id}")
 
     print(f"Waiting for file preprocessing: {file_id}")
-    ready_file = wait_for_file(
+    ready_file = gated_call(
+        wait_for_file,
         base_url=base_url,
         api_key=api_key,
         file_id=file_id,
@@ -298,7 +301,8 @@ def run_scan(args: argparse.Namespace) -> int:
         store=True,
     )
     print("Calling Responses API for rough structure scan...")
-    response = create_response(
+    response = gated_call(
+        create_response,
         base_url=base_url,
         api_key=api_key,
         payload=payload,
