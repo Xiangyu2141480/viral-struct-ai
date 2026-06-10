@@ -1,8 +1,21 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { MissingMaterialBrief, ShotSlotNode } from '@viral-struct/shared';
+import type { ContentBrief, MissingMaterialBrief, ShotSlotNode } from '@viral-struct/shared';
 import { buildGapResolutionOptions } from './gapResolutionOptionsBuilder';
 import { makeContentBrief } from './testFixtures';
+import { EARPHONE_VOCAB_FIXTURE } from './vocabularyFixture';
+
+/** Non-beverage content brief for no-leak assertions; selling points contain no beverage terms. */
+function makeEarphoneContentBrief(): ContentBrief {
+  return {
+    productName: '无线蓝牙耳机',
+    targetAudience: 'commuters and remote workers',
+    scenario: 'daily commute and focus work',
+    sellingPoints: ['主动降噪', '长续航', '轻量舒适'],
+    cta: '立即选购',
+    category: 'electronics'
+  };
+}
 
 function makeSlot(role: ShotSlotNode['role'] = 'usage_demo'): ShotSlotNode {
   return {
@@ -72,7 +85,8 @@ test('gap tier can offer three options: reshoot / hyperframes / aigc', () => {
     tier: 'gap',
     missingBrief: makeBrief(),
     contentBrief: makeContentBrief(),
-    referenceAssetIds: ['asset_usage']
+    referenceAssetIds: ['asset_usage'],
+    vocab: EARPHONE_VOCAB_FIXTURE
   });
   assert.deepEqual(options.map((o) => o.id).sort(), ['aigc', 'hyperframes', 'reshoot']);
 });
@@ -85,7 +99,8 @@ test('partial tier offers all three channels and still recommends hyperframes', 
     contentBrief: makeContentBrief(),
     referenceAssetIds: ['asset_usage'],
     chosenAssetId: 'asset_usage',
-    fillStatus: 'partial_asset_support'
+    fillStatus: 'partial_asset_support',
+    vocab: EARPHONE_VOCAB_FIXTURE
   });
   assert.equal(recommendedOptionId, 'hyperframes'); // §6.4: edit the real asset, don't auto-replace it
   assert.deepEqual(options.map((o) => o.id).sort(), ['aigc', 'hyperframes', 'reshoot']);
@@ -99,7 +114,8 @@ test('matched/covered tier offers all three channels as alternatives and recomme
     contentBrief: makeContentBrief(),
     referenceAssetIds: ['asset_usage'],
     chosenAssetId: 'asset_usage',
-    fillStatus: 'matched'
+    fillStatus: 'matched',
+    vocab: EARPHONE_VOCAB_FIXTURE
   });
   assert.deepEqual(options.map((o) => o.id).sort(), ['aigc', 'hyperframes', 'reshoot']);
   // covered → the channels are alternatives; HyperFrames (edit the placed asset) is the safe default.
@@ -112,7 +128,8 @@ test('gap tier recommends aigc, but falls back to hyperframes when aigc is not e
     tier: 'gap',
     missingBrief: makeBrief(true),
     contentBrief: makeContentBrief(),
-    referenceAssetIds: ['asset_usage']
+    referenceAssetIds: ['asset_usage'],
+    vocab: EARPHONE_VOCAB_FIXTURE
   });
   assert.equal(eligible.recommendedOptionId, 'aigc');
 
@@ -121,7 +138,8 @@ test('gap tier recommends aigc, but falls back to hyperframes when aigc is not e
     tier: 'gap',
     missingBrief: makeBrief(false),
     contentBrief: makeContentBrief(),
-    referenceAssetIds: ['asset_usage']
+    referenceAssetIds: ['asset_usage'],
+    vocab: EARPHONE_VOCAB_FIXTURE
   });
   assert.equal(ineligible.recommendedOptionId, 'hyperframes');
 });
@@ -132,16 +150,33 @@ test('reshoot option is Chinese and carries framing + mustCapture in its guidanc
     tier: 'gap',
     missingBrief: makeBrief(),
     contentBrief: makeContentBrief(),
-    referenceAssetIds: ['asset_usage']
+    referenceAssetIds: ['asset_usage'],
+    vocab: EARPHONE_VOCAB_FIXTURE
   });
   const reshoot = options.find((o) => o.id === 'reshoot')!;
   assert.ok(reshoot.id === 'reshoot');
   assert.ok(reshoot.framing.length > 0);
   assert.ok(reshoot.mustCapture.length >= 1);
-  // usage role -> Chinese must-capture, surfaced in the guidance
+  // usage role -> Chinese must-capture from injected vocab, surfaced in the guidance
   assert.match(reshoot.guidanceNL, /补拍/);
   assert.match(reshoot.guidanceNL, /务必拍到/);
-  assert.match(reshoot.guidanceNL, /开盖/);
+  // vocab-driven mustCapture item appears in guidanceNL (earphone fixture: 耳机外形完整)
+  assert.match(reshoot.guidanceNL, /耳机/);
+});
+
+test('no beverage strings leak into a non-beverage product when earphone vocab is injected', () => {
+  // Use an earphone-native content brief (no beverage selling points) to ensure the no-leak
+  // assertion is only testing the vocab/template layer, not the content brief's own selling points.
+  const { options } = buildGapResolutionOptions({
+    slot: makeSlot(),
+    tier: 'gap',
+    missingBrief: makeBrief(),
+    contentBrief: makeEarphoneContentBrief(),
+    referenceAssetIds: ['asset_usage'],
+    vocab: EARPHONE_VOCAB_FIXTURE
+  });
+  const blob = JSON.stringify(options);
+  assert.doesNotMatch(blob, /冰块|柠檬|瓶身|红茶|倒茶|喝一口/, 'no beverage leaks into a non-beverage product');
 });
 
 test('hyperframes option is Chinese and references card type + assets', () => {
@@ -150,7 +185,8 @@ test('hyperframes option is Chinese and references card type + assets', () => {
     tier: 'partial',
     missingBrief: makeBrief(),
     contentBrief: makeContentBrief(),
-    referenceAssetIds: ['asset_usage']
+    referenceAssetIds: ['asset_usage'],
+    vocab: EARPHONE_VOCAB_FIXTURE
   });
   const hyper = options.find((o) => o.id === 'hyperframes')!;
   assert.ok(hyper.id === 'hyperframes');
@@ -168,7 +204,8 @@ test('aigc option prompt is Chinese and stays a leak-safe job card', () => {
     tier: 'gap',
     missingBrief: makeBrief(),
     contentBrief: makeContentBrief(),
-    referenceAssetIds: ['asset_usage']
+    referenceAssetIds: ['asset_usage'],
+    vocab: EARPHONE_VOCAB_FIXTURE
   });
   const aigc = options.find((o) => o.id === 'aigc')!;
   assert.ok(aigc.id === 'aigc');
@@ -183,14 +220,15 @@ test('aigc prompt carries a per-slot Chinese abstract-transfer line from the mot
     tier: 'gap',
     contentBrief: makeContentBrief(),
     referenceAssetIds: ['asset_usage'],
-    motionTokens: ['chaos_to_order', 'snap_open']
+    motionTokens: ['chaos_to_order', 'component_cascade'],
+    vocab: EARPHONE_VOCAB_FIXTURE
   });
   const aigc = options.find((o) => o.id === 'aigc')!;
   if (aigc.id === 'aigc') {
     assert.match(aigc.prompt, /保留源片可迁移的动作语法/);
-    assert.match(aigc.prompt, /由乱到序/); // chaos_to_order -> Chinese
-    assert.match(aigc.prompt, /利落开启/); // snap_open -> Chinese
-    assert.ok(!/chaos_to_order|snap_open/.test(aigc.prompt), 'raw tokens must be translated, not leaked');
+    assert.match(aigc.prompt, /由散到聚/); // chaos_to_order -> earphone vocab translation
+    assert.match(aigc.prompt, /单元零件归位/); // component_cascade -> earphone vocab translation
+    assert.ok(!/chaos_to_order|component_cascade/.test(aigc.prompt), 'raw tokens must be translated, not leaked');
   }
 });
 
@@ -202,7 +240,8 @@ test('收敛: options reference only the single chosen asset, not a pool', () =>
     contentBrief: makeContentBrief(),
     referenceAssetIds: ['asset_usage', 'asset_other_1', 'asset_other_2'],
     chosenAssetId: 'asset_usage',
-    fillStatus: 'partial_asset_support'
+    fillStatus: 'partial_asset_support',
+    vocab: EARPHONE_VOCAB_FIXTURE
   });
   const hyper = options.find((o) => o.id === 'hyperframes')!;
   if (hyper.id === 'hyperframes') assert.deepEqual(hyper.referencedAssetIds, ['asset_usage']);
@@ -216,7 +255,8 @@ test('aigc option is job-card only', () => {
     tier: 'gap',
     missingBrief: makeBrief(),
     contentBrief: makeContentBrief(),
-    referenceAssetIds: ['asset_usage']
+    referenceAssetIds: ['asset_usage'],
+    vocab: EARPHONE_VOCAB_FIXTURE
   });
   const aigc = options.find((o) => o.id === 'aigc')!;
   assert.ok(aigc.id === 'aigc');
@@ -230,13 +270,14 @@ test('synthesizes all three options from the role template when no brief exists'
     contentBrief: makeContentBrief(),
     referenceAssetIds: ['asset_usage'],
     chosenAssetId: 'asset_usage',
-    fillStatus: 'needs_hyperframes_enhancement'
+    fillStatus: 'needs_hyperframes_enhancement',
+    vocab: EARPHONE_VOCAB_FIXTURE
   });
   assert.deepEqual(options.map((o) => o.id).sort(), ['aigc', 'hyperframes', 'reshoot']);
   assert.equal(recommendedOptionId, 'hyperframes');
 });
 
-test('kinetic assembly brief produces beverage-native reshoot, hyperframes and AIGC prompts', () => {
+test('kinetic assembly brief produces vocab-native reshoot, hyperframes and AIGC prompts', () => {
   const slot: ShotSlotNode = {
     ...makeSlot('usage_demo'),
     id: 'slot_block_004_asset_001',
@@ -284,7 +325,8 @@ test('kinetic assembly brief produces beverage-native reshoot, hyperframes and A
       'interaction_activation',
       'spectacle_burst',
       'cta_reveal'
-    ]
+    ],
+    vocab: EARPHONE_VOCAB_FIXTURE
   });
 
   const allPositiveText = options
@@ -296,11 +338,12 @@ test('kinetic assembly brief produces beverage-native reshoot, hyperframes and A
     .filter(Boolean)
     .join('\n');
 
-  assert.match(allPositiveText, /级联|汇聚|由散到聚|由乱到序/);
+  // Structural kinetic grammar terms (product-neutral)
+  assert.match(allPositiveText, /级联|汇聚|由散到聚/);
   assert.match(allPositiveText, /激活/);
-  assert.match(allPositiveText, /冷雾|茶滴|水汽|茶花|爆发/);
   assert.match(allPositiveText, /CTA|收口|锁定/);
-  assert.match(allPositiveText, /冰块|柠檬|红茶/);
+  // Earphone-native kinetic actions from vocab fixture
+  assert.match(allPositiveText, /单元汇聚揭示|单元入仓|降噪激活|零件由散到聚/);
   assert.doesNotMatch(allPositiveText, /MacBook|keyboard|laptop|touchpad|rocket|hardware|键盘|笔记本|触控板|火箭|硬件/);
 });
 
@@ -405,7 +448,8 @@ test('source-specific slots are abstracted into distinct beverage equivalents in
       tier: 'partial',
       contentBrief: makeContentBrief(),
       referenceAssetIds: ['plain_002_hand_pickup'],
-      chosenAssetId: 'plain_002_hand_pickup'
+      chosenAssetId: 'plain_002_hand_pickup',
+      vocab: EARPHONE_VOCAB_FIXTURE
     });
     const positiveText = options
       .flatMap((option) => {
