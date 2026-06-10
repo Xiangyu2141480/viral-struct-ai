@@ -79,3 +79,6 @@ scripts/_dump_demo.py
 # Root-anchored: seed/product images under seed_assets/ are unaffected.
 /*.png
 .playwright-mcp/
+
+# user-saved structures (结构样例库 persistence — runtime data, not seed)
+seed_assets/struct_library/

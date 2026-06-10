@@ -39,7 +39,10 @@ export default function App() {
         <StatusBanner />
         <div className="main" data-screen-label={screenLabel}>
           {toolView === 'library' && (
-            <ScreenLibrary onBack={() => setToolView(null)} />
+            <ScreenLibrary
+              onBack={() => setToolView(null)}
+              onOpenStructure={() => { setToolView(null); setStep('source'); }}
+            />
           )}
           {toolView === 'history' && (
             <ScreenHistory onReEdit={() => { setToolView(null); setStep('source'); }} />

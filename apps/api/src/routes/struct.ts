@@ -41,6 +41,12 @@ import { planMissingMaterialGenerationJobs } from '../services/missingMaterialGe
 import { loadAssetLibrary } from '../services/assetLibraryLoader';
 import { getDemoShowcase } from '../services/demoShowcase';
 import { getRenderDir, getUploadDir } from '../services/videoPaths';
+import {
+  deleteStructure,
+  getStructure,
+  listStructures,
+  saveStructure,
+} from '../services/structLibraryStore';
 import type { RenderProfile } from '@viral-struct/render-executor';
 import type {
   AuthoredComposition,
@@ -1178,6 +1184,73 @@ structRouter.get('/materials/library/:libraryId', async (req, res) => {
     res.json({ materials: assetCardsToMaterials(assetCards), warnings: [`已加载素材库：${req.params.libraryId}`] });
   } catch (error) {
     res.status(400).json({ error: `素材库加载失败：${errorMessage(error)}` });
+  }
+});
+
+/* ============================================================
+   STRUCT LIBRARY ROUTES — persist a scanned SourceVideo structure into the
+   real "结构样例库" (a JSON-file-backed store under getStructLibraryDir(), which
+   persists across server restarts) so it can be reopened later.
+   ============================================================ */
+
+/* ─── POST /api/struct/structures — save a scanned structure into the library ─── */
+structRouter.post('/structures', async (req, res) => {
+  try {
+    const sourceVideo = req.body?.sourceVideo as SourceVideo | undefined;
+    if (!sourceVideo?.segments?.length) {
+      res.status(400).json({ error: 'sourceVideo with a non-empty segments array is required' });
+      return;
+    }
+    const segmentDetails = req.body?.segmentDetails as Record<string, FineBlockDetail> | undefined;
+    const title = typeof req.body?.title === 'string' ? req.body.title : undefined;
+
+    try {
+      const summary = await saveStructure({ sourceVideo, segmentDetails, title });
+      res.status(201).json(summary);
+    } catch (validationError) {
+      // saveStructure throws on invalid input (e.g. no segments) → honest 400.
+      res.status(400).json({ error: errorMessage(validationError) });
+    }
+  } catch (error) {
+    res.status(500).json({ error: errorMessage(error) });
+  }
+});
+
+/* ─── GET /api/struct/structures — list saved structures (summaries) ─── */
+structRouter.get('/structures', async (_req, res) => {
+  try {
+    const structures = await listStructures();
+    res.json({ structures });
+  } catch (error) {
+    res.status(500).json({ error: errorMessage(error) });
+  }
+});
+
+/* ─── GET /api/struct/structures/:id — load one full saved structure ─── */
+structRouter.get('/structures/:id', async (req, res) => {
+  try {
+    const structure = await getStructure(req.params.id);
+    if (!structure) {
+      res.status(404).json({ error: '结构样例不存在（可能已被删除）。' });
+      return;
+    }
+    res.json(structure);
+  } catch (error) {
+    res.status(500).json({ error: errorMessage(error) });
+  }
+});
+
+/* ─── DELETE /api/struct/structures/:id — remove a saved structure ─── */
+structRouter.delete('/structures/:id', async (req, res) => {
+  try {
+    const ok = await deleteStructure(req.params.id);
+    if (!ok) {
+      res.status(404).json({ ok: false, error: '结构样例不存在（无法删除）。' });
+      return;
+    }
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(500).json({ error: errorMessage(error) });
   }
 });
 

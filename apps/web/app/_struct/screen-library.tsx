@@ -3,8 +3,9 @@
 // screen-library.tsx — 结构样例库 (merged Structure + Example library)
 // (Ported from screen-library.jsx; React/window globals replaced with imports.)
 
-import { createElement, useState, type CSSProperties, type FC } from 'react';
+import { createElement, useEffect, useState, type CSSProperties, type FC } from 'react';
 import { LIBRARY_VIDEOS, ROLES, type LibSegment, type LibraryVideo } from './data';
+import { useProjectStore } from './store/useProjectStore';
 import {
   Icon,
   RoleLegend,
@@ -22,7 +23,14 @@ import { SyncRails } from './viz';
 
 type RailSegment = LibSegment & { start: number; end: number; id: string };
 
-export const ScreenLibrary = ({ onBack }: { onBack?: () => void }) => {
+interface ScreenLibraryProps {
+  onBack?: () => void;
+  /** Called after a saved structure is loaded into the store, so the shell can
+   *  navigate back to the migration flow (01 样例) with the loaded structure. */
+  onOpenStructure?: () => void;
+}
+
+export const ScreenLibrary = ({ onBack, onOpenStructure }: ScreenLibraryProps) => {
   const [selectedVideo, setSelectedVideo] = useState<LibraryVideo | null>(null);
   const [filterFamily, setFilterFamily] = useState('all');
   const [filterPlatform, setFilterPlatform] = useState('all');
@@ -30,10 +38,40 @@ export const ScreenLibrary = ({ onBack }: { onBack?: () => void }) => {
   const [toastMsg, setToastMsg] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
 
+  // ── 我的结构库 · real saved structures (backed by /api/struct/structures) ──
+  const savedStructures = useProjectStore((s) => s.savedStructures);
+  const loadSavedStructures = useProjectStore((s) => s.loadSavedStructures);
+  const openSavedStructure = useProjectStore((s) => s.openSavedStructure);
+  const deleteSavedStructure = useProjectStore((s) => s.deleteSavedStructure);
+
+  useEffect(() => {
+    void loadSavedStructures();
+  }, [loadSavedStructures]);
+
   const showToast = (msg: string) => {
     setToastMsg(msg);
     setToastVisible(true);
     setTimeout(() => setToastVisible(false), 2200);
+  };
+
+  const handleOpenStructure = (id: string) => {
+    void openSavedStructure(id)
+      .then(() => {
+        showToast('已载入结构 · 进入迁移流程');
+        onOpenStructure?.();
+      })
+      .catch(() => showToast(useProjectStore.getState().lastError ?? '载入失败'));
+  };
+
+  const handleDeleteStructure = (id: string) => {
+    void deleteSavedStructure(id)
+      .then(() => showToast('已删除'))
+      .catch(() => showToast(useProjectStore.getState().lastError ?? '删除失败'));
+  };
+
+  const fmtSavedAt = (iso: string): string => {
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
   };
 
   const families = [...new Set(LIBRARY_VIDEOS.map(v => v.family))];
@@ -313,10 +351,77 @@ export const ScreenLibrary = ({ onBack }: { onBack?: () => void }) => {
           </div>
         </div>
         <div className="screen-head-r">
-          <span className="mono">{LIBRARY_VIDEOS.length} 个样例</span>
+          <span className="mono">{savedStructures.length} 个已保存 · {LIBRARY_VIDEOS.length} 个示例</span>
         </div>
       </div>
 
+      {/* ── 我的结构库 · REAL saved structures (above the reference 示例库) ── */}
+      <div className="panel" style={{ marginBottom: 18 }}>
+        <div className="panel-head">
+          <h4>我的结构库 · 已保存</h4>
+          <span className="eyebrow">真实数据 · 由你扫描的样例保存而来</span>
+        </div>
+        <div className="panel-body">
+          {savedStructures.length === 0 ? (
+            <div style={{
+              padding: '28px 20px', textAlign: 'center',
+              color: 'var(--text-mute)', fontSize: 12.5, lineHeight: 1.6,
+            }}>
+              <Icon name="library" size={26} />
+              <div style={{ marginTop: 10 }}>
+                还没有保存的结构 — 在 01 样例扫描后点「保存到结构样例库」
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+              {savedStructures.map((rec) => (
+                <div key={rec.id} style={{
+                  background: 'var(--surface)', border: '1px solid var(--border)',
+                  borderRadius: 8, padding: '14px 16px',
+                  display: 'flex', flexDirection: 'column', gap: 10,
+                }}>
+                  <div>
+                    <div style={{
+                      fontSize: 13.5, fontWeight: 600, lineHeight: 1.3,
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                    }}>
+                      {rec.title || '未命名结构'}
+                    </div>
+                    <div className="mono dim" style={{ fontSize: 10, marginTop: 4 }}>
+                      {fmtSavedAt(rec.savedAt)}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: 11 }}>
+                    <span className="tag" style={{ fontSize: 10, padding: '1px 6px' }}>
+                      {rec.segmentCount} 段
+                    </span>
+                    <span className="tag" style={{ fontSize: 10, padding: '1px 6px' }}>
+                      {rec.durationSec}s
+                    </span>
+                    {rec.platform && (
+                      <span className="tag" style={{ fontSize: 10, padding: '1px 6px' }}>
+                        {rec.platform}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 'auto' }}>
+                    <button className="btn primary" style={{ flex: 1, justifyContent: 'center', padding: '5px 10px', fontSize: 11.5 }}
+                      onClick={() => handleOpenStructure(rec.id)}>
+                      <Icon name="bolt" size={12} /> 载入
+                    </button>
+                    <button className="btn ghost" style={{ justifyContent: 'center', padding: '5px 10px', fontSize: 11.5 }}
+                      onClick={() => handleDeleteStructure(rec.id)}>
+                      <Icon name="close" size={12} /> 删除
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── 示例库 · reference gallery below (clearly separated) ── */}
       {/* Honesty banner — these are reference cases, not live measurements */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 10,

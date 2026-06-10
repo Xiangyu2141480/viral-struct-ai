@@ -32,6 +32,13 @@ import { matchMaterials as matchMaterialsApi, uploadMaterials as uploadMaterials
 import { analyzeSample as analyzeSampleApi } from '../api/sample';
 import { getFineScanStatus, getScanStatus, startFineScan, startScan, type FineBlockDetail } from '../api/scan';
 import {
+  deleteStructure as deleteStructureApi,
+  getStructure as getStructureApi,
+  listStructures as listStructuresApi,
+  saveStructure as saveStructureApi,
+  type SavedStructureSummary,
+} from '../api/library';
+import {
   type InsightRequest,
   checkSafety as checkSafetyApi,
   estimatePerformance as estimatePerformanceApi,
@@ -69,6 +76,8 @@ interface ProjectState {
   /** Product reference image url (defaults to the first image material's url).
    *  Used as the produce anchor so AIGC stays close to the real packaging. */
   productImageUrl: string | null;
+  /** Saved structures from 结构样例库 (newest first). Empty until loaded/saved. */
+  savedStructures: SavedStructureSummary[];
 
   // ── insights / generation (capability buttons) ─────────────
   qualityReport: QualityReport | null;
@@ -141,6 +150,13 @@ interface ProjectState {
   planMaterialJobs: () => Promise<void>;
   loadLibrary: (libraryId: string) => Promise<void>;
   runDemo: () => Promise<void>;
+
+  // ── 结构样例库 persistence actions ─────────────────────────
+  loadSavedStructures: () => Promise<void>;
+  saveCurrentStructure: (title?: string) => Promise<SavedStructureSummary>;
+  openSavedStructure: (id: string) => Promise<void>;
+  deleteSavedStructure: (id: string) => Promise<void>;
+
   reset: () => void;
 }
 
@@ -203,6 +219,7 @@ const initialState = {
   exportResult: null as ExportResult | null,
   assetSupplyContext: null as AssetSupplyContext | null,
   productImageUrl: null as string | null,
+  savedStructures: [] as SavedStructureSummary[],
   qualityReport: null as QualityReport | null,
   demoEstimate: null as DemoEstimate | null,
   safetyStatus: null as SafetyStatus | null,
@@ -656,6 +673,74 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       throw e;
     } finally {
       set({ loadingDemo: false });
+    }
+  },
+
+  loadSavedStructures: async () => {
+    try {
+      const structures = await listStructuresApi();
+      set({ savedStructures: structures });
+    } catch (e) {
+      // Don't crash the library screen — surface the error but keep the prior list.
+      set({ lastError: '结构样例库加载失败 · ' + errMsg(e) });
+    }
+  },
+
+  saveCurrentStructure: async (title) => {
+    // FAIL-FAST: nothing scanned yet → don't POST an empty structure.
+    if (get().sourceVideo.segments.length === 0) {
+      const msg = '请先扫描一个视频再保存';
+      set({ lastError: msg });
+      throw new Error(msg);
+    }
+    set({ lastError: null });
+    try {
+      const summary = await saveStructureApi({
+        sourceVideo: get().sourceVideo,
+        segmentDetails: get().segmentDetails,
+        title,
+      });
+      set((st) => ({ savedStructures: [summary, ...st.savedStructures] }));
+      return summary;
+    } catch (e) {
+      set({ lastError: '保存结构失败 · ' + errMsg(e) });
+      throw e;
+    }
+  },
+
+  openSavedStructure: async (id) => {
+    set({ lastError: null });
+    try {
+      const rec = await getStructureApi(id);
+      // Load the saved structure as a FRESH migration start: keep its source +
+      // fine-scan detail, but reset all downstream working state (materials,
+      // diagnosis, applied slots, timeline, export, in-flight fine scans).
+      set({
+        sourceVideo: rec.sourceVideo,
+        segmentDetails: rec.segmentDetails ?? {},
+        mode: 'live',
+        materials: [],
+        diagnosis: {},
+        appliedSlots: {},
+        timeline: null,
+        exportResult: null,
+        fineScanStages: {},
+      });
+      void get().refreshAssetManagerCoverage();
+    } catch (e) {
+      set({ lastError: '载入结构失败 · ' + errMsg(e) });
+      throw e;
+    }
+  },
+
+  deleteSavedStructure: async (id) => {
+    set({ lastError: null });
+    try {
+      await deleteStructureApi(id);
+      set((st) => ({ savedStructures: st.savedStructures.filter((s) => s.id !== id) }));
+    } catch (e) {
+      set({ lastError: '删除结构失败 · ' + errMsg(e) });
+      throw e;
     }
   },
 

@@ -111,7 +111,15 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
   const fineScanSegment = useProjectStore((s) => s.fineScanSegment);
   const runDemo = useProjectStore((s) => s.runDemo);
   const loadingDemo = useProjectStore((s) => s.loadingDemo);
+  const saveCurrentStructure = useProjectStore((s) => s.saveCurrentStructure);
   const T = v.duration;
+  const hasStructure = v.segments.length > 0;
+
+  const handleSaveStructure = () => {
+    void saveCurrentStructure()
+      .then(() => showToast('已保存到结构样例库'))
+      .catch(() => showToast(useProjectStore.getState().lastError ?? '保存失败'));
+  };
   const [hoveredSeg, setHoveredSeg] = useState<Seg | undefined>(v.segments[0]);
   const [selectedSegId, setSelectedSegId] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState('');
@@ -198,6 +206,12 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
           </div>
         </div>
         <div className="screen-head-r">
+          <button className="btn" style={{ padding: '5px 12px', fontSize: 11.5 }}
+            disabled={!hasStructure}
+            title={hasStructure ? '把当前已解析的结构保存到结构样例库' : '先扫描一个视频再保存'}
+            onClick={handleSaveStructure}>
+            <Icon name="library" size={12} /> 保存到结构样例库
+          </button>
           <button className="btn primary" style={{ padding: '5px 12px', fontSize: 11.5 }}
             disabled={loadingDemo}
             onClick={() => { void runDemo().then(() => showToast('一键演示已载入 · 真实后端全流程数据')).catch(() => {}); }}>
