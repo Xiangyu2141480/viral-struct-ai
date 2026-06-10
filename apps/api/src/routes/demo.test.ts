@@ -3,11 +3,13 @@ import { createServer, type Server } from 'node:http';
 import { after, before, test } from 'node:test';
 import express from 'express';
 import { demoRouter } from './demo';
+import { installRouteLlmMock, uninstallRouteLlmMock } from '../testSupport/routeLlmMock';
 
 let server: Server;
 let baseUrl = '';
 
 before(async () => {
+  installRouteLlmMock();
   const app = express();
   app.use(express.json({ limit: '1mb' }));
   app.use('/api/demo', demoRouter);
@@ -24,6 +26,7 @@ before(async () => {
 });
 
 after(async () => {
+  uninstallRouteLlmMock();
   await new Promise<void>((resolveServer, reject) => {
     server.close((error) => {
       if (error) {
