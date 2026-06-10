@@ -71,7 +71,7 @@ export function splitRejectIfForTransfer(args: SplitRejectIfForTransferInput): S
 }
 
 export function isSourceSpecificReject(text: string, sourceBannedTerms: readonly string[], slotText = ''): boolean {
-  if (sourceBannedTerms.length === 0) return false;
+  if (!sourceBannedTerms || sourceBannedTerms.length === 0) return false;
   const combined = `${text}\n${slotText}`.toLowerCase();
   return sourceBannedTerms.some((term) => term && combined.includes(term.toLowerCase()));
 }

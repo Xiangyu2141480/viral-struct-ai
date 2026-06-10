@@ -45,6 +45,11 @@ export interface RunDirectorAgentInput {
      * mandatory LLM translator (no deterministic fallback) using clientFactory/model.
      */
     vocabulary?: CategoryEquivalentVocabulary;
+    /**
+     * Injected source-identity banlist. When omitted, buildOrchestratedTimeline derives it from the scanned
+     * source graph via the mandatory LLM (deriveSourceIdentityBanlist, no deterministic fallback).
+     */
+    sourceBannedTerms?: readonly string[];
   };
 }
 
@@ -63,6 +68,7 @@ export async function runDirectorAgent(input: RunDirectorAgentInput): Promise<Or
     useLlmMatcher: input.options?.useLlmMatcher,
     clientFactory: input.options?.clientFactory,
     model: input.options?.model,
-    vocabulary: input.options?.vocabulary
+    vocabulary: input.options?.vocabulary,
+    sourceBannedTerms: input.options?.sourceBannedTerms
   });
 }

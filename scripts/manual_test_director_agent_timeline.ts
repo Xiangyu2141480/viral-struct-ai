@@ -25,7 +25,7 @@ import { splitRejectIfForTransfer } from '../packages/shared/src/index';
 import { normalizeAssetCards } from '../apps/api/src/services/assetManager/assetNormalizer';
 import { buildAssetSupplyContext } from '../apps/api/src/services/assetManager/assetSupplyContextBuilder';
 import { buildDeterministicPreset } from '../apps/api/src/services/motifs/categoryPresetProvider';
-import { SOURCE_SPECIFIC_TERMS } from '../apps/api/src/services/motifs/motionGrammarSanitizer';
+import { deriveSourceIdentityBanlist } from '../apps/api/src/services/directorAgent/sourceIdentityBanlist';
 import { runDirectorAgent } from '../apps/api/src/services/directorAgent/index';
 import { authorTimelineOptions } from '../apps/api/src/services/directorAgent/authorTimelineOptions';
 import { analyzeProductIntelligence } from '../apps/api/src/services/productIntelligence/productIntelligenceAnalyzer';
@@ -97,14 +97,26 @@ async function main(): Promise<void> {
   // borrowed MacBook graph penalized them on the source script, not the asset). PRODUCT_NATIVE_GRAPH=false
   // falls back to the borrowed MacBook source graph for comparison.
   const useNativeGraph = process.env.PRODUCT_NATIVE_GRAPH !== 'false';
+  const borrowedSourcePath = process.env.SOURCE_GRAPH ?? INPUTS.structureGraph;
   const structureGraph = useNativeGraph
     ? buildProductNativeStructureGraph({ contentBrief, productIntelligence })
-    : readJson<ViralStructureGraph>(INPUTS.structureGraph);
+    : readJson<ViralStructureGraph>(borrowedSourcePath);
   console.log(
     `- structure skeleton: ${useNativeGraph
       ? `product-native arc (${structureGraph.shotSlots.length} slots, PI-derived)`
-      : 'macbook_neo (legacy borrowed source graph)'}`
+      : `borrowed source graph: ${borrowedSourcePath} (${structureGraph.shotSlots.length} slots)`}`
   );
+
+  // Source-leak banlist: only a BORROWED source can leak its product identity into the target output. In
+  // product-native mode the skeleton IS the target product, so there is nothing to ban. In borrow mode we
+  // derive the banned terms from the actual scanned source (no hardcoded MacBook list) and use them both to
+  // drive the guardrails and to audit the output below.
+  const sourceBannedTerms = useNativeGraph
+    ? []
+    : (await deriveSourceIdentityBanlist({ structureGraph })).terms;
+  if (!useNativeGraph) {
+    console.log(`- source-identity banlist (${sourceBannedTerms.length}): ${sourceBannedTerms.slice(0, 16).join('、')}${sourceBannedTerms.length > 16 ? ' …' : ''}`);
+  }
 
   // ② kept: produce the supply-context evidence the Director consumes read-only.
   const assetSupplyContext = buildAssetSupplyContext({
@@ -131,7 +143,8 @@ async function main(): Promise<void> {
     options: {
       useLlmMatcher: true,
       targetDurationMode: productIntelligence.targetDurationRecommendation.preferred,
-      structuralCompression: useCompression ? { productIntelligence } : undefined
+      structuralCompression: useCompression ? { productIntelligence } : undefined,
+      sourceBannedTerms
     }
   });
 
@@ -151,11 +164,11 @@ async function main(): Promise<void> {
   // Handoff: map to the Video Agent's AuthoredTimeline (a TIMELINE — never rendered here).
   const authored = orchestratedToAuthored(timeline, { assetCards });
 
-  const leakage = checkSourceLeakage(timeline);
+  const leakage = checkSourceLeakage(timeline, sourceBannedTerms);
 
   writeText(OUTPUTS.timelineJson, `${JSON.stringify(timeline, null, 2)}\n`);
   writeText(OUTPUTS.authoredJson, `${JSON.stringify(authored, null, 2)}\n`);
-  writeText(OUTPUTS.report, buildReport(timeline, authored, leakage, productIntelligence, structureGraph));
+  writeText(OUTPUTS.report, buildReport(timeline, authored, leakage, productIntelligence, structureGraph, sourceBannedTerms));
 
   const counts = countFills(timeline);
   console.log('Director Agent orchestrated-timeline manual test complete.');
@@ -212,13 +225,13 @@ interface LeakageResult {
 // string except these negative-direction keys.
 const NEGATIVE_DIRECTION_KEYS = new Set(['negativePrompt', 'avoid']);
 
-function checkSourceLeakage(timeline: OrchestratedTimeline): LeakageResult {
+function checkSourceLeakage(timeline: OrchestratedTimeline, sourceBannedTerms: readonly string[]): LeakageResult {
   const hits = new Set<string>();
   const walk = (value: unknown, key?: string): void => {
     if (key && NEGATIVE_DIRECTION_KEYS.has(key)) return;
     if (typeof value === 'string') {
       const lower = value.toLowerCase();
-      for (const term of SOURCE_SPECIFIC_TERMS) {
+      for (const term of sourceBannedTerms) {
         if (lower.includes(term.toLowerCase())) hits.add(term);
       }
     } else if (Array.isArray(value)) {
@@ -265,7 +278,8 @@ function buildReport(
   authored: ReturnType<typeof orchestratedToAuthored>,
   leakage: LeakageResult,
   productIntelligence: ProductIntelligence,
-  sourceGraph: ViralStructureGraph
+  sourceGraph: ViralStructureGraph,
+  sourceBannedTerms: readonly string[]
 ): string {
   const counts = countFills(timeline);
   const modes = countModes(timeline);
@@ -375,6 +389,7 @@ function buildReport(
         const sourceSlot = findSourceSlot(slot.slotId);
         const split = splitRejectIfForTransfer({
           ...sourceSlot?.acceptanceCriteria,
+          sourceBannedTerms,
           slotText: [
             sourceSlot?.intent?.purpose,
             sourceSlot?.sourceInstance?.specificAction,
