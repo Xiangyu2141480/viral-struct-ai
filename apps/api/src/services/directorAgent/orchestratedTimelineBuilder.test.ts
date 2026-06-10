@@ -643,11 +643,13 @@ test('Director Agent emits a reusable asset-pack plan for Video Agent handoff', 
   assert.ok(reusableAssetPacks.length <= 12);
   const packTypes = reusableAssetPacks.map((pack) => pack.packType);
   assert.ok(packTypes.includes('product_hero_reveal'));
-  assert.ok(packTypes.includes('cap_open_usage'));
-  assert.ok(packTypes.includes('pour_or_drink_usage'));
-  assert.ok(packTypes.includes('cold_condensation_macro'));
+  assert.ok(packTypes.includes('usage_action_pack'));
+  assert.ok(packTypes.includes('continuous_usage_pack'));
+  assert.ok(packTypes.includes('texture_proof_macro'));
   assert.ok(packTypes.includes('motif_assembly_reveal'));
   assert.ok(packTypes.includes('cta_lockup'));
+  // no beverage stem survives in any packType enum value
+  assert.doesNotMatch(packTypes.join(' '), /cap_open|pour_or_drink|cold_condensation|ice_lemon|cold_refresh/);
   assert.ok(reusableAssetPacks.every((pack) => /[\u4e00-\u9fff]/.test(pack.promptSummary)));
   assert.doesNotMatch(JSON.stringify(timeline), /\u51b0\u5757|\u67e0\u6aac\u7247|\u7ea2\u8336\u6c34\u6ef4|\u5012\u8336|\u559d\u4e00\u53e3/);
 });

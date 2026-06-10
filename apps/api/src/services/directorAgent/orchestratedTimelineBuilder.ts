@@ -783,8 +783,8 @@ function buildReusableAssetPacks(args: {
       ownership: 'director_handoff_plan_only'
     },
     {
-      id: 'pack_cap_open_usage',
-      packType: 'cap_open_usage',
+      id: 'pack_usage_action',
+      packType: 'usage_action_pack',
       title: '使用动作包',
       status: 'required',
       recommendedChannel: 'reshoot',
@@ -794,8 +794,8 @@ function buildReusableAssetPacks(args: {
       ownership: 'director_handoff_plan_only'
     },
     {
-      id: 'pack_pour_or_drink_usage',
-      packType: 'pour_or_drink_usage',
+      id: 'pack_continuous_usage',
+      packType: 'continuous_usage_pack',
       title: '连续使用动作包',
       status: 'required',
       recommendedChannel: 'reshoot',
@@ -805,8 +805,8 @@ function buildReusableAssetPacks(args: {
       ownership: 'director_handoff_plan_only'
     },
     {
-      id: 'pack_cold_condensation_macro',
-      packType: 'cold_condensation_macro',
+      id: 'pack_texture_proof',
+      packType: 'texture_proof_macro',
       title: '质感证明包',
       status: 'required',
       recommendedChannel: 'hyperframes',
@@ -827,8 +827,8 @@ function buildReusableAssetPacks(args: {
       ownership: 'director_handoff_plan_only'
     },
     {
-      id: 'pack_transition_ice_lemon',
-      packType: 'transition_ice_lemon_pack',
+      id: 'pack_transition_element',
+      packType: 'transition_element_pack',
       title: '转场元素包',
       status: 'optional',
       recommendedChannel: 'hyperframes',
