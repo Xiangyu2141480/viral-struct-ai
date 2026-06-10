@@ -56,10 +56,30 @@ export interface ScanStatus {
   elapsedSec?: number;
 }
 
-export function startScan(file: File): Promise<ScanStartResponse> {
-  const form = new FormData();
-  form.append('video', file);
-  return structPostForm<ScanStartResponse>('/api/struct/scan', form);
+/**
+ * Start a rough scan by uploading the video (multipart). Wrapped in a small
+ * bounded retry (3 attempts, 1s/2s/4s backoff) so a flaky upload connection
+ * retries before failing. Same signature — callers see no new surface; it just
+ * becomes resilient. After attempts are exhausted it re-throws (fail-fast).
+ */
+export async function startScan(file: File): Promise<ScanStartResponse> {
+  const maxAttempts = 3;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    if (attempt > 0) {
+      // 1s, 2s, 4s backoff before each retry.
+      await new Promise((resolve) => setTimeout(resolve, 1000 * 2 ** (attempt - 1)));
+    }
+    try {
+      // Rebuild the FormData each attempt so the body is fresh on retry.
+      const form = new FormData();
+      form.append('video', file);
+      return await structPostForm<ScanStartResponse>('/api/struct/scan', form);
+    } catch (e) {
+      lastError = e;
+    }
+  }
+  throw lastError;
 }
 
 export function getScanStatus(jobId: string): Promise<ScanStatus> {

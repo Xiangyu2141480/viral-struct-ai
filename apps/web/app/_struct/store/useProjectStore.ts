@@ -20,7 +20,13 @@ import type {
   StoryboardFrame,
 } from '@viral-struct/shared';
 import { analyzeStructAssetManagerCoverage } from '../api/assetManager';
-import { compile as compileApi, exportVideo as exportApi, nlEdit as nlEditApi } from '../api/compile';
+import {
+  compile as compileApi,
+  exportVideo as exportApi,
+  getProduceStatus as getProduceStatusApi,
+  nlEdit as nlEditApi,
+  startProduce as startProduceApi,
+} from '../api/compile';
 import { applyStrategy as applyStrategyApi, diagnose as diagnoseApi } from '../api/diagnose';
 import { matchMaterials as matchMaterialsApi, uploadMaterials as uploadMaterialsApi } from '../api/materials';
 import { analyzeSample as analyzeSampleApi } from '../api/sample';
@@ -41,6 +47,7 @@ import {
   type CompileVersion,
   type Diagnosis,
   type Material,
+  type ResolutionMethod,
   type SourceVideo,
   type TargetProduct,
 } from '../data';
@@ -59,6 +66,9 @@ interface ProjectState {
   timeline: TimelineSeg[] | null;
   exportResult: ExportResult | null;
   assetSupplyContext: AssetSupplyContext | null;
+  /** Product reference image url (defaults to the first image material's url).
+   *  Used as the produce anchor so AIGC stays close to the real packaging. */
+  productImageUrl: string | null;
 
   // ── insights / generation (capability buttons) ─────────────
   qualityReport: QualityReport | null;
@@ -86,6 +96,10 @@ interface ProjectState {
   compiling: boolean;
   nlApplying: boolean;
   exporting: boolean;
+  /** REAL AIGC produce job in progress (run Director → Wan2.7 render). */
+  producing: boolean;
+  /** Human-readable produce progress label (stage + elapsed). */
+  produceStage: string;
   assetManagerLoading: boolean;
   assetManagerWarnings: string[];
   assetManagerLastError: string | null;
@@ -109,11 +123,15 @@ interface ProjectState {
   applyAssignments: (assignments: Record<string, string | null>) => Promise<void>;
   updateProduct: (product: TargetProduct) => void;
   runDiagnosis: () => Promise<void>;
-  applyStrategy: (slotId: string) => Promise<void>;
+  applyStrategy: (slotId: string, method?: ResolutionMethod, payload?: unknown) => Promise<void>;
   selectVersion: (versionId: string) => void;
   compile: () => Promise<void>;
   applyNlEdit: (instruction: string) => Promise<string>;
   exportVideo: (format: string) => Promise<ExportResult>;
+  /** Set the product reference image url used as the produce anchor. */
+  setProductImageUrl: (url: string | null) => void;
+  /** Run the REAL AIGC produce job (Director → Wan2.7); polls until done/error. */
+  produce: () => Promise<void>;
 
   // ── insights / generation actions ─────────────────────────
   evaluateQuality: () => Promise<void>;
@@ -129,6 +147,21 @@ interface ProjectState {
 /** Normalize a thrown value into a human-readable message. */
 function errMsg(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
+}
+
+/** The first image material's url, used as the produce anchor (productImageUrl).
+ *  Returns null when no image material carries a usable url. */
+function firstImageMaterialUrl(materials: Material[]): string | null {
+  const img = materials.find((m) => m.kind === 'photo' && typeof m.url === 'string' && m.url.length > 0);
+  return img?.url ?? null;
+}
+
+/** Resolve the productImageUrl after materials change: keep an explicit existing
+ *  anchor if it's still present among the materials, otherwise default to the
+ *  first image material's url (so produce always has an anchor when one exists). */
+function resolveProductImageUrl(materials: Material[], current: string | null): string | null {
+  if (current && materials.some((m) => m.url === current)) return current;
+  return firstImageMaterialUrl(materials);
 }
 
 /** Derive a playable timeline from the structure + diagnosis (mock fallback). */
@@ -169,6 +202,7 @@ const initialState = {
   timeline: null as TimelineSeg[] | null,
   exportResult: null as ExportResult | null,
   assetSupplyContext: null as AssetSupplyContext | null,
+  productImageUrl: null as string | null,
   qualityReport: null as QualityReport | null,
   demoEstimate: null as DemoEstimate | null,
   safetyStatus: null as SafetyStatus | null,
@@ -187,6 +221,8 @@ const initialState = {
   compiling: false,
   nlApplying: false,
   exporting: false,
+  producing: false,
+  produceStage: '',
   assetManagerLoading: false,
   assetManagerWarnings: [] as string[],
   assetManagerLastError: null as string | null,
@@ -298,8 +334,15 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     if (files.length === 0) return;
     set({ uploading: true, lastError: null });
     try {
+      // Pass materials VERBATIM from the API (they carry .url + clip fields) —
+      // do NOT strip them. Default the produce anchor to the first image url.
       const { materials, warnings } = await uploadMaterialsApi(files, get().product);
-      set({ materials, mode: 'live', warnings: warnings ?? [] });
+      set({
+        materials,
+        productImageUrl: resolveProductImageUrl(materials, get().productImageUrl),
+        mode: 'live',
+        warnings: warnings ?? [],
+      });
       void get().refreshAssetManagerCoverage();
     } catch (e) {
       set({ lastError: '素材上传失败 · ' + errMsg(e) });
@@ -326,7 +369,12 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         materials: local,
         assignments,
       });
-      set({ materials, mode: 'live', warnings: warnings ?? [] });
+      set({
+        materials,
+        productImageUrl: resolveProductImageUrl(materials, get().productImageUrl),
+        mode: 'live',
+        warnings: warnings ?? [],
+      });
       void get().refreshAssetManagerCoverage();
     } catch (e) {
       set({ lastError: '素材匹配失败 · ' + errMsg(e) });
@@ -359,12 +407,14 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     }
   },
 
-  applyStrategy: async (slotId) => {
+  applyStrategy: async (slotId, method, payload) => {
     // Mark applied immediately for responsiveness.
     set((state) => ({ appliedSlots: { ...state.appliedSlots, [slotId]: true }, lastError: null }));
     try {
       const { diagnosis, appliedSlots, warnings } = await applyStrategyApi({
         slotId,
+        method,
+        payload,
         sourceVideo: get().sourceVideo,
         materials: get().materials,
         diagnosis: get().diagnosis,
@@ -432,6 +482,49 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       throw e;
     } finally {
       set({ exporting: false });
+    }
+  },
+
+  setProductImageUrl: (url) => set({ productImageUrl: url }),
+
+  produce: async () => {
+    // REAL AIGC produce: start the job → poll until done (downloadUrl when rendered)
+    // or error. FAIL-FAST: on error record lastError verbatim and re-throw — never
+    // a fake download link. Honors the DASHSCOPE-missing honest error from backend.
+    set({ producing: true, produceStage: '排队中', lastError: null });
+    try {
+      const { jobId } = await startProduceApi({
+        sourceVideo: get().sourceVideo,
+        materials: get().materials,
+        product: get().product,
+        productImageUrl: get().productImageUrl ?? undefined,
+        versionId: get().selectedVersionId,
+      });
+      // Poll every ~3s. Wan2.7 generation takes minutes → ceiling of 200 polls (~10min).
+      const maxPolls = 200;
+      for (let i = 0; i < maxPolls; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        const s = await getProduceStatusApi(jobId);
+        if (s.status === 'running') {
+          set({ produceStage: (s.stage ?? '生成中') + (s.elapsedSec ? ` · ${s.elapsedSec}s` : '') });
+          continue;
+        }
+        if (s.status === 'error') throw new Error(s.error || '成片生成失败');
+        // status === 'done': may or may not have a real downloadUrl (honest gate).
+        const result: ExportResult = {
+          jobId,
+          status: s.downloadUrl ? 'done' : 'failed',
+          progress: 100,
+          downloadUrl: s.downloadUrl,
+          warnings: s.warnings ?? [],
+        };
+        set({ exportResult: result, mode: 'live', warnings: s.warnings ?? [], producing: false, produceStage: '' });
+        return;
+      }
+      throw new Error('成片生成超时（>10 分钟）');
+    } catch (e) {
+      set({ producing: false, produceStage: '', lastError: '成片生成失败 · ' + errMsg(e) });
+      throw e;
     }
   },
 
@@ -504,7 +597,12 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     set({ uploading: true, lastError: null });
     try {
       const { materials, warnings } = await loadLibraryMaterialsApi(libraryId);
-      set({ materials, mode: 'live', warnings: warnings ?? [] });
+      set({
+        materials,
+        productImageUrl: resolveProductImageUrl(materials, get().productImageUrl),
+        mode: 'live',
+        warnings: warnings ?? [],
+      });
       void get().refreshAssetManagerCoverage();
     } catch (e) {
       set({ lastError: '示例素材库加载失败 · ' + errMsg(e) });
@@ -522,6 +620,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         sourceVideo: bundle.sourceVideo,
         product: bundle.product,
         materials: bundle.materials,
+        productImageUrl: resolveProductImageUrl(bundle.materials, get().productImageUrl),
         diagnosis: bundle.diagnosis,
         timeline: bundle.timeline,
         selectedVersionId: bundle.version?.id ?? get().selectedVersionId,
