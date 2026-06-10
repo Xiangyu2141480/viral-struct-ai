@@ -3,5 +3,7 @@ export * from './schemas';
 export * from './packagingVocabulary';
 export * from './authoredComposition';
 export * from './orchestratedTimeline';
+export * from './categoryEquivalentVocabulary';
+export * from './aigcJob';
 export * from './productIntelligence';
 export * from './transferSafeAcceptance';
