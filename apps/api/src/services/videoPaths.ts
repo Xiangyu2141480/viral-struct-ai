@@ -41,6 +41,15 @@ export function getRenderDir(): string {
   return resolveRepoPath(process.env.RENDER_DIR, './renders');
 }
 
+/**
+ * PERSISTENT dir for the file-backed pipeline database (scan results, slot matches,
+ * and other records that previously lived only in memory). Sits next to the other
+ * persistent seed_assets stores so records survive server restarts.
+ */
+export function getDbDir(): string {
+  return resolveRepoPath(process.env.DB_DIR, './seed_assets/db');
+}
+
 export function getSeedVideoDir(): string {
   return resolveRepoPath(process.env.SEED_VIDEO_DIR, './seed_assets/raw_videos');
 }

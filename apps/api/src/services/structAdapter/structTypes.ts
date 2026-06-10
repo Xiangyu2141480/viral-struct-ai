@@ -19,8 +19,15 @@ export interface SourceSegment {
   start: number;
   end: number;
   label: string;
+  /** Source SHOT/visual description — what the source segment actually shows. */
   shot: string;
   caption: string;
+  /**
+   * Migration directive for THIS segment ("how to re-express this beat on the target
+   * product"). Distinct from `shot` (the source visual) — kept separate so the source
+   * analysis screen never displays a migration rule as if it were the source's shot.
+   */
+  transferRule?: string;
 }
 
 export interface Transition {

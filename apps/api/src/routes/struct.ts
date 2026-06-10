@@ -44,6 +44,9 @@ import { estimateDemoAnalytics } from '../services/demoScoringEstimator';
 import { planStoryboardFrames } from '../services/storyboardPromptPlanner';
 import { planMissingMaterialGenerationJobs } from '../services/missingMaterialGenerationPlanner';
 import { loadAssetLibrary } from '../services/assetLibraryLoader';
+import { saveScan, listScans, getScan } from '../services/db/scanRepository';
+import { saveMatchSet, getMatchSet } from '../services/db/matchRepository';
+import { appendLibraryCards, readLibraryCards, listLibraries } from '../services/db/assetLibraryRepository';
 import { getDemoShowcase } from '../services/demoShowcase';
 import { getRenderDir, getUploadDir } from '../services/videoPaths';
 import {
@@ -345,11 +348,20 @@ structRouter.post('/scan', withUploadGuard(upload.single('video')), (req, res) =
       const sourceVideo = graphToSourceVideo(graph, { videoId, title, defaultedFields });
       // Retain the raw video + rough output so a follow-up fine scan can reuse them.
       scanArtifacts.set(videoId, { videoPath: filePath, roughScanPath, workDir, createdAt: Date.now() });
+      // Persist the scan result (sourceVideo + structure graph) so the case-video
+      // structure survives restart and is queryable via /api/struct/db/scans.
+      const persistWarnings: string[] = [];
+      try {
+        await saveScan({ videoId, title, sourceVideo, source: 'rough_scan', structureGraph: graph, videoPath: filePath, roughScanPath });
+      } catch (e) {
+        persistWarnings.push(`扫描结果入库失败：${errorMessage(e)}`);
+      }
       scanJobs.set(jobId, {
         status: 'done',
         sourceVideo,
         warnings: [
           ...warnings,
+          ...persistWarnings,
           '结构来自真实 rough scan（VLM 逐镜头解析），非启发式模板',
           '播放数据（点击率/完播/点赞）非真实测量',
           ...(defaultedFields.length ? ['部分节奏/包装字段未检测，已留空'] : []),
@@ -608,6 +620,112 @@ structRouter.post('/materials/upload', withUploadGuard(upload.array('assets')), 
   }
 });
 
+/* ─── POST /api/struct/materials/reshoot — 补拍视频入素材库 + 解析 ───────────────
+   A reshoot/补拍 clip is analyzed into AssetCard(s) and APPENDED into a named asset
+   library (renumbered ids, stable urls). The clip now lives in the library, so a
+   re-load (loadAssetLibrary / GET /db/libraries/:id) re-reads the re-analyzed set.
+   Body (multipart): assets[] (files), libraryId (target), textBrief? */
+structRouter.post('/materials/reshoot', withUploadGuard(upload.array('assets')), async (req, res) => {
+  try {
+    const files = (req.files ?? []) as Express.Multer.File[];
+    const libraryId = String(req.body?.libraryId ?? '').trim();
+    if (!libraryId) {
+      res.status(400).json({ error: 'libraryId（目标素材库）必填' });
+      return;
+    }
+    if (!files.length) {
+      res.status(400).json({ error: '请上传至少一个补拍素材' });
+      return;
+    }
+    const textBrief = typeof req.body?.textBrief === 'string' ? req.body.textBrief : undefined;
+
+    // Analyze the reshoot clips into AssetCards (deterministic local analysis first).
+    const result = await analyzeAssetsWithFallbackResult({ files, textBrief });
+    const warnings = [...(result.warnings ?? [])];
+
+    // Stabilize each uploaded file so the card url survives (mirror /materials/upload).
+    const pathRewrites = new Map<string, string>();
+    sweepAssetSessionDirs();
+    const sessionDir = getAssetSessionDir(randomUUID());
+    mkdirSync(sessionDir, { recursive: true });
+    assetSessionDirs.set(sessionDir, { dir: sessionDir, createdAt: Date.now() });
+    for (const file of files) {
+      const ext = path.extname(file.originalname) || path.extname(file.path);
+      const stablePath = path.join(sessionDir, `${path.basename(file.path)}${ext}`);
+      try {
+        await copyFile(file.path, stablePath);
+        pathRewrites.set(file.path, stablePath);
+        void unlink(file.path).catch(() => {});
+      } catch (copyError) {
+        warnings.push(`补拍素材落盘失败（${file.originalname}）：${errorMessage(copyError)}`);
+      }
+    }
+    const stabilizedCards = result.assetCards.map((c) =>
+      c.url && pathRewrites.has(c.url) ? { ...c, url: pathRewrites.get(c.url)! } : c,
+    );
+
+    // Append (renumbered) into the library + persist.
+    const updated = await appendLibraryCards(libraryId, stabilizedCards);
+    res.json({
+      libraryId,
+      added: stabilizedCards.length,
+      cardCount: updated.length,
+      materials: assetCardsToMaterials(updated),
+      warnings: [...warnings, `已将 ${stabilizedCards.length} 个补拍素材并入素材库 ${libraryId}（共 ${updated.length} 个）`],
+    });
+  } catch (error) {
+    res.status(500).json({ error: errorMessage(error) });
+  }
+});
+
+/* ─── GET /api/struct/db/* — read the file-backed pipeline DB ─────────────────── */
+structRouter.get('/db/scans', async (_req, res) => {
+  try {
+    res.json({ scans: await listScans() });
+  } catch (error) {
+    res.status(500).json({ error: errorMessage(error) });
+  }
+});
+structRouter.get('/db/scans/:id', async (req, res) => {
+  try {
+    const scan = await getScan(req.params.id);
+    if (!scan) {
+      res.status(404).json({ error: 'scan not found' });
+      return;
+    }
+    res.json({ scan });
+  } catch (error) {
+    res.status(500).json({ error: errorMessage(error) });
+  }
+});
+structRouter.get('/db/libraries', async (_req, res) => {
+  try {
+    res.json({ libraries: await listLibraries() });
+  } catch (error) {
+    res.status(500).json({ error: errorMessage(error) });
+  }
+});
+structRouter.get('/db/libraries/:id', async (req, res) => {
+  try {
+    const cards = await readLibraryCards(req.params.id);
+    res.json({ libraryId: req.params.id, cardCount: cards.length, materials: assetCardsToMaterials(cards) });
+  } catch (error) {
+    res.status(500).json({ error: errorMessage(error) });
+  }
+});
+structRouter.get('/db/matches/:projectId', async (req, res) => {
+  try {
+    const matchSet = await getMatchSet(req.params.projectId);
+    if (!matchSet) {
+      res.status(404).json({ error: 'match set not found' });
+      return;
+    }
+    res.json({ matchSet });
+  } catch (error) {
+    res.status(500).json({ error: errorMessage(error) });
+  }
+});
+
 /* ─── POST /api/struct/materials/match — auto-match + apply assignments ─── */
 structRouter.post('/materials/match', async (req, res) => {
   try {
@@ -692,6 +810,21 @@ structRouter.post('/diagnose', async (req, res) => {
 
     if (matchResult.warning) warnings.push(matchResult.warning);
     if (matchResult.alignmentSource === 'rule_based') warnings.push('槽位对齐使用规则降级（非 LLM judge）');
+
+    // Persist the slot↔asset matching for this project (素材匹配字段 store; idempotent upsert).
+    try {
+      await saveMatchSet({
+        projectId: sourceVideo.id,
+        matches: matchResult.matches.map((m) => ({
+          slotId: m.slotId,
+          assetId: m.assetId ?? null,
+          quality: m.quality ?? m.score,
+          fillStatus: m.status,
+        })),
+      });
+    } catch (e) {
+      warnings.push(`匹配结果入库失败：${errorMessage(e)}`);
+    }
 
     res.json({ diagnosis, warnings });
   } catch (error) {

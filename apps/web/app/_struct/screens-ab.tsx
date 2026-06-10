@@ -378,8 +378,8 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
               </div>
               <dl className="kv">
                 <dt>角色定位</dt><dd>{ROLES[seg.role]?.name ?? seg.role} <span className="dim">— {ROLES[seg.role]?.desc ?? ''}</span></dd>
-                <dt>镜头内容</dt><dd style={{ lineHeight: 1.65 }}>{seg.caption || '—'}</dd>
-                <dt>迁移规则</dt><dd style={{ lineHeight: 1.65 }}>{seg.shot || '—'}</dd>
+                <dt>镜头内容</dt><dd style={{ lineHeight: 1.65 }}>{seg.shot || seg.caption || '—'}</dd>
+                <dt>迁移规则</dt><dd style={{ lineHeight: 1.65 }}>{seg.transferRule || '—'}</dd>
               </dl>
               <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>

@@ -287,8 +287,12 @@ export function graphToSourceVideo(
       start,
       end,
       label: seg.purpose ?? `${role} 段`,
-      shot: seg.transferRule ?? seg.purpose ?? '',
+      // `shot` = the source's VISUAL description (graph.caption), NOT the migration
+      // rule. The migration directive lives in its own `transferRule` field below so
+      // the source-analysis screen never shows "替换为新商品…" as if it were the shot.
+      shot: seg.caption ?? seg.narration ?? seg.purpose ?? '',
       caption: seg.caption ?? seg.narration ?? seg.purpose ?? '',
+      transferRule: seg.transferRule,
     };
   });
 
@@ -725,7 +729,9 @@ export function buildStructureGraph(sourceVideo: SourceVideo): ViralStructureGra
       duration: round01(segment.end - segment.start),
       purpose: segment.label,
       caption: segment.caption,
-      transferRule: segment.shot,
+      // Prefer the dedicated migration field; fall back to legacy `shot` for old
+      // payloads that still carried the transfer rule in `shot`.
+      transferRule: segment.transferRule ?? segment.shot,
       importance: importanceForRole(segment.role),
     })),
     shotSlots: sourceVideo.segments.map(segmentToShotSlot),
