@@ -565,7 +565,7 @@ export const ScreenFooter = ({
   status,                     // string — left status text
   statusTone = 'neutral',     // 'ok' | 'warn' | 'critical' | 'neutral'
 }: {
-  primary?: FooterAction & { hint?: string };
+  primary?: FooterAction & { hint?: string; disabled?: boolean; busy?: boolean };
   secondary?: FooterAction[];
   status?: string;
   statusTone?: 'ok' | 'warn' | 'critical' | 'neutral';
@@ -588,9 +588,16 @@ export const ScreenFooter = ({
         </button>
       ))}
       {primary && (
-        <button className="btn-cta" onClick={primary.onClick}>
+        <button
+          className="btn-cta"
+          onClick={primary.disabled ? undefined : primary.onClick}
+          disabled={primary.disabled}
+          aria-busy={primary.busy}
+          style={primary.disabled ? { opacity: 0.6, cursor: 'not-allowed' } : undefined}
+        >
+          {primary.busy && <span className="cta-spinner" aria-hidden />}
           <span>{primary.label}</span>
-          <Icon name="arrow" size={14} />
+          {!primary.busy && <Icon name="arrow" size={14} />}
         </button>
       )}
     </div>

@@ -13,6 +13,7 @@ import type {
   SourceVideo,
   TargetProduct,
 } from '../data';
+import type { FineBlockDetail } from './scan';
 
 /** POST /api/struct/sample/analyze */
 export interface AnalyzeSampleResponse {
@@ -43,6 +44,10 @@ export interface DiagnoseRequest {
   sourceVideo: SourceVideo;
   materials: Material[];
   product: TargetProduct;
+  /** Per-segment FINE-SCAN detail (keyed by segment id). When present the backend folds the abstract
+   *  structure (transferableMotifs / exploded_assembly / revealMode) into the matcher + director so the
+   *  prompts reflect motifs like 散落到聚合 / 部件展示. Omitted when no fine scan was run. */
+  segmentDetails?: Record<string, FineBlockDetail>;
 }
 export interface DiagnoseResponse {
   diagnosis: Record<string, Diagnosis>;

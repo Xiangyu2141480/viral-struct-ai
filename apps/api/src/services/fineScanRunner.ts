@@ -113,3 +113,67 @@ export async function runFineScan(
     releaseFineScanSlot();
   }
 }
+
+export interface FineScanBatchResult {
+  /** Per-block detail, keyed by block id (== source segment id). */
+  details: Record<string, FineBlockDetail>;
+  warnings: string[];
+}
+
+/**
+ * Fine-scan MANY blocks in ONE python process. fine_scan.py already parallelizes ACROSS blocks
+ * (block_workers, default 4) and WITHIN a block (candidate_workers, default 6) behind a shared HTTP
+ * semaphore — so one batch process is far faster than N serial single-block processes AND uses roughly the
+ * memory of a single process (no N× PyAV/OpenCV/HTTP fan-out from N separate interpreters). This consumes a
+ * single fine-scan concurrency slot regardless of how many blocks it covers.
+ */
+export async function runFineScanBatch(
+  videoPath: string,
+  roughScanPath: string,
+  videoId: string,
+  blockIds: string[],
+  workDir: string,
+  onProgress?: ScanProgress
+): Promise<FineScanBatchResult> {
+  const ids = Array.from(new Set(blockIds.filter(Boolean)));
+  if (ids.length === 0) return { details: {}, warnings: [] };
+  const python = resolvePython();
+  if (fineScanActive >= FINE_SCAN_MAX_CONCURRENCY) {
+    onProgress?.('排队中 · 前面还有精扫描任务（内存保护，逐个运行）');
+  }
+  await acquireFineScanSlot();
+  try {
+    onProgress?.(`精扫描中 · ${ids.length} 段并发（视觉峰值 + 逐峰 VLM）`);
+
+    await runScanCommand(
+      python,
+      [
+        path.join(SCRIPTS_DIR, 'fine_scan.py'),
+        '--rough-scan', roughScanPath,
+        '--video', videoPath,
+        '--video-id', videoId,
+        '--block-ids', ids.join(','),
+        '--skip-audio',
+        '--env', '.env',
+        '--out-dir', workDir,
+        '--work-dir', path.join(workDir, 'clips'),
+      ],
+      // Batch covers several blocks → a longer ceiling than the single-block timeout.
+      { cwd: REPO_ROOT, timeoutMs: Number(process.env.SCAN_FINE_BATCH_TIMEOUT_MS ?? 900_000), label: 'fine_scan.py (batch)' }
+    );
+
+    const details: Record<string, FineBlockDetail> = {};
+    const warnings: string[] = [];
+    for (const blockId of ids) {
+      try {
+        const raw = await readFile(path.join(workDir, `${blockId}_fine_scan.json`), 'utf-8');
+        details[blockId] = JSON.parse(raw) as FineBlockDetail;
+      } catch (e) {
+        warnings.push(`精扫描结果缺失（${blockId}）：${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+    return { details, warnings };
+  } finally {
+    releaseFineScanSlot();
+  }
+}

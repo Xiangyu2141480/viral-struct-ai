@@ -33,9 +33,11 @@ import { analyzeSample as analyzeSampleApi } from '../api/sample';
 import {
   getBoundaryScanStatus,
   getFineScanStatus,
+  getFineScanAllStatus,
   getScanStatus,
   startBoundaryScan,
   startFineScan,
+  startFineScanAll,
   startScan,
   type FineBlockDetail,
 } from '../api/scan';
@@ -107,6 +109,9 @@ interface ProjectState {
    *  segment is in progress). Multiple segments fine-scan CONCURRENTLY and each keeps
    *  its own progress, so analyzing one segment never clobbers another's state. */
   fineScanStages: Record<string, string>;
+  /** Batch fine-scan (all segments in one process) in progress + its progress label. */
+  fineScanningAll: boolean;
+  fineScanAllStage: string;
   /** Per-transition boundary-scan progress label, keyed by transition id (a key present
    *  = that seam is being re-scanned). Independent per seam, like fineScanStages. */
   boundaryScanStages: Record<string, string>;
@@ -145,6 +150,8 @@ interface ProjectState {
   analyzeSample: (input: { file?: File; sampleId?: string }) => Promise<void>;
   scanSample: (file: File) => Promise<void>;
   fineScanSegment: (segmentIndex: number, segmentId: string) => Promise<void>;
+  /** Fine-scan ALL segments in ONE backend process (concurrent across blocks — far faster than one-by-one). */
+  fineScanAll: () => Promise<void>;
   /** Re-scan ONE transition seam (boundary_scan.py) to recover its real type. */
   boundaryScanTransition: (transitionIndex: number, transitionId: string) => Promise<void>;
   /** Render ONE slot with the HyperFrames Agent in the background → a real preview MP4. */
@@ -323,6 +330,8 @@ const initialState = {
   scanning: false,
   scanStage: '',
   fineScanStages: {} as Record<string, string>,
+  fineScanningAll: false,
+  fineScanAllStage: '',
   boundaryScanStages: {} as Record<string, string>,
   hyperframesStages: {} as Record<string, string>,
   hyperframesPreviews: {} as Record<string, { url: string; source: string }>,
@@ -446,6 +455,38 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         delete rest[segmentId];
         return { fineScanStages: rest, lastError: '精扫描失败 · ' + errMsg(e) };
       });
+      throw e;
+    }
+  },
+
+  fineScanAll: async () => {
+    // ONE backend process fine-scans every segment concurrently (block_workers) — much faster than clicking
+    // each. Merges the returned per-segment detail into segmentDetails so the diagnose step migrates it.
+    const videoId = get().sourceVideo.id;
+    if (!videoId || get().sourceVideo.segments.length === 0) return;
+    set({ fineScanningAll: true, fineScanAllStage: '排队中', lastError: null });
+    try {
+      const { jobId } = await startFineScanAll(videoId);
+      for (let i = 0; i < 360; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 2500));
+        const s = await getFineScanAllStatus(jobId);
+        if (s.status === 'running') {
+          set({ fineScanAllStage: (s.stage ?? '精扫描中') + (s.elapsedSec ? ` · ${s.elapsedSec}s` : '') });
+          continue;
+        }
+        if (s.status === 'error') throw new Error(s.error || '批量精扫描失败');
+        const details = s.details ?? {};
+        set((st) => ({
+          segmentDetails: { ...st.segmentDetails, ...details },
+          fineScanningAll: false,
+          fineScanAllStage: '',
+          warnings: s.warnings ?? [],
+        }));
+        return;
+      }
+      throw new Error('批量精扫描超时（>15 分钟）');
+    } catch (e) {
+      set({ fineScanningAll: false, fineScanAllStage: '', lastError: '批量精扫描失败 · ' + errMsg(e) });
       throw e;
     }
   },
@@ -678,6 +719,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         sourceVideo: get().sourceVideo,
         materials: get().materials,
         product: get().product,
+        // Pass fine-scan detail so the backend reflects each beat's migrated abstract structure in the prompts.
+        segmentDetails: get().segmentDetails,
       });
       set({ diagnosis, mode: 'live', warnings: warnings ?? [] });
     } catch (e) {

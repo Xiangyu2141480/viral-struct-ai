@@ -50,6 +50,11 @@ export function getDbDir(): string {
   return resolveRepoPath(process.env.DB_DIR, './seed_assets/db');
 }
 
+/** Folder where the live pipeline drops per-run data for sharing (see pipeline_data/README.md). */
+export function getPipelineDataDir(): string {
+  return resolveRepoPath(process.env.PIPELINE_DATA_DIR, './pipeline_data');
+}
+
 export function getSeedVideoDir(): string {
   return resolveRepoPath(process.env.SEED_VIDEO_DIR, './seed_assets/raw_videos');
 }
