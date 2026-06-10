@@ -439,7 +439,7 @@ function buildReport(
     '',
     sourceSpecificSlots.length
       ? markdownTable(
-          ['slotId', 'role', 'fillStatus', 'source subtype', 'beverage equivalent'],
+          ['slotId', 'role', 'fillStatus', 'source subtype', 'target equivalent'],
           sourceSpecificSlots.slice(0, 12).map((slot) => [
             slot.slotId,
             slot.role,

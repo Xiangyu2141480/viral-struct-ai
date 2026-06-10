@@ -271,9 +271,9 @@ function buildAigcOption(
     ? (args.motionTokens ?? []).filter((token) => !CASCADE_MOTION_TOKENS.has(token))
     : (args.motionTokens ?? []);
   const grammar = gatedTokens.map((token) => args.vocab.tokenActions[token] ?? token).filter(Boolean);
-  const variableLine = context.transferVariables.length
-    ? `迁移变量：${context.transferVariables.map((entry) => `${entry.name}→${zhList(entry.targetValue ? [entry.targetValue] : entry.allowedTargetValues ?? [])}`).join('；')}。`
-    : '';
+  // NOTE: the motif's transferVariables carry SOURCE-authored target values (the borrowed demo's, often
+  // another category), so they are intentionally NOT emitted into the prompt. The motion grammar is already
+  // conveyed product-natively via `grammar` (vocab.tokenActions) and `targetMappingLine` (vocab actions).
   const targetMappingLine = targetActionLine(context, spec);
   const transferLine = grammar.length
     ? `保留源片可迁移的动作语法（${grammar.join('、')}），用目标品类的等效动作重新演绎，不照搬源产品或源场景。`
@@ -292,7 +292,6 @@ function buildAigcOption(
     + `画面描述：${spec.aigcScene}。`
     + (spec.motifLine ? `${spec.motifLine}。` : '')
     + transferLine
-    + variableLine
     + sellingLine
     + '只允许使用 contentBrief 中的卖点，不得编造价格、促销、医疗功效、明星代言或其它品牌。禁止出现源片电子设备元素。';
 
@@ -415,7 +414,10 @@ function buildDirectorSpec(args: BuildGapResolutionOptionsArgs, brief?: MissingM
     reshootShot: roleVocab.reshootShot,
     mustCapture: roleVocab.mustCapture,
     animationHints: roleVocab.animationHints,
-    aigcScene: roleVocab.aigcScene
+    aigcScene: roleVocab.aigcScene,
+    // Vocab-derived target actions so targetActionLine never has to fall back to a motif's source-authored
+    // (potentially other-category) preferredEquivalents. This is the product-native source of truth.
+    targetEquivalentActions: roleVocab.animationHints
   };
 
   if (isKineticAssemblyContext(args, brief)) {
@@ -434,7 +436,8 @@ function buildDirectorSpec(args: BuildGapResolutionOptionsArgs, brief?: MissingM
       animationHints: kinetic.actions,
       aigcScene: `${kinetic.actions.join('、')} 围绕产品形成由散到聚的级联组装，完成激活后进入产品 CTA 收口`,
       cardType: brief?.hyperframesBrief?.cardType ?? 'timeline_bridge_card',
-      motifLine: `迁移的是抽象运动语法：级联、汇聚、激活、爆发、CTA 收口；目标画面只使用 ${kinetic.label} 相关元素和产品尾帧`
+      motifLine: `迁移的是抽象运动语法：级联、汇聚、激活、爆发、CTA 收口；目标画面只使用 ${kinetic.label} 相关元素和产品尾帧`,
+      targetEquivalentActions: kinetic.actions
     };
   }
 
@@ -466,11 +469,10 @@ function buildDirectorPromptContext(
     allowedTargetValues: entry.allowedTargetValues,
     notes: entry.notes
   })) ?? [];
-  const preferredEquivalents =
-    args.motif?.targetCategoryMapping.preferredEquivalents
-    ?? brief?.motifContext?.targetMotifHints
-    ?? spec.targetEquivalentActions
-    ?? [];
+  // Vocab-derived target actions are authoritative. We deliberately do NOT seed this from the motif's
+  // source-authored targetCategoryMapping.preferredEquivalents (the borrowed demo's other-category values);
+  // the vocab has already re-expressed that grammar for THIS product.
+  const preferredEquivalents = spec.targetEquivalentActions ?? [];
 
   return {
     slotId: args.slot.id,
@@ -530,11 +532,15 @@ function assetGapLine(context: DirectorPromptContext): string {
 }
 
 function targetActionLine(context: DirectorPromptContext, spec: ZhRoleSpec): string {
+  // The category-equivalent vocabulary (spec.targetEquivalentActions, now always set) is the SINGLE source
+  // of truth for this product's target actions. The motif's preferredEquivalents / transferVariables.targetValue
+  // are SOURCE-authored artifacts (the borrowed demo's, often another category), so they are NOT emitted here
+  // — the vocab already re-expresses that structural grammar in THIS product's language. context.preferred is
+  // kept only as a vocab-derived secondary (see buildDirectorPromptContext), never the raw motif values.
   const preferred = context.targetCategoryMapping?.preferredEquivalents ?? [];
   const values = [
-    ...preferred,
-    ...context.transferVariables.flatMap((entry) => [entry.targetValue, ...(entry.allowedTargetValues ?? [])]),
-    ...(spec.targetEquivalentActions ?? [])
+    ...(spec.targetEquivalentActions ?? []),
+    ...preferred
   ].filter((entry): entry is string => Boolean(entry));
   const resolved = uniqueNonEmpty(values).slice(0, 8);
   return zhList(resolved.length ? resolved : spec.animationHints);

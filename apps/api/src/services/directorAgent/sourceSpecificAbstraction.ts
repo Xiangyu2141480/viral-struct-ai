@@ -90,7 +90,7 @@ export function buildSourceAbstraction(input: SourceSpecificAbstractionInput): S
     abstractGrammar: profile.abstractGrammar,
     targetEquivalentLabel: equivalent.label,
     targetEquivalentActions: equivalent.actions,
-    rationale: `keep the ${subtype} structural grammar; express it as ${input.vocab.product} category-native actions. Target category: ${targetCategory}.`
+    rationale: `keep the ${subtype} structural grammar; express it as ${input.vocab.product} 本品类等价动作. Target category: ${targetCategory}.`
   };
 }
 
