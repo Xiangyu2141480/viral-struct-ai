@@ -293,10 +293,20 @@ def compute_visual_score_series_from_clip(
     import cv2
     import numpy as np
 
+    # Keep this CPU-heavy decode+vision path SINGLE-THREADED per process. OpenCV
+    # (DISOpticalFlow / cvtColor / MOG2) spins up an OpenMP/TBB thread pool, and
+    # PyAV's AUTO decode spawns FFmpeg threads — running several fine-scan blocks in
+    # PARALLEL multiplies both and exhausts the OS thread/handle/memory budget
+    # ("[Errno 11] Resource temporarily unavailable" / "[Errno 12] Cannot allocate
+    # memory"). One thread each keeps every concurrent block cheap; overall speed
+    # still comes from the blocks running in parallel, not from per-block threads.
+    cv2.setNumThreads(1)
+
     container = av.open(str(clip_path))
     try:
         stream = container.streams.video[0]
-        stream.thread_type = "AUTO"
+        stream.thread_type = "NONE"
+        stream.codec_context.thread_count = 1
 
         sample_period_s = 1.0 / float(target_fps)
         next_sample_time = 0.0
