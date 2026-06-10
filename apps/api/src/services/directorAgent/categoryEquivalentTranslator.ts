@@ -41,7 +41,7 @@ const SYSTEM_PROMPT = `你是短视频「结构迁移」的品类翻译器。给
 只输出一个 JSON 对象，结构严格为：
 {"product": "产品名",
  "bySubtype": {"<subtype>": {"label": "≤10字镜头名", "actions": ["具体动作", ...]}, ...},
- "byRole": {"<role>": {"label": "≤10字", "reshootShot": "真人可拍的补拍说明", "mustCapture": ["必拍要素"], "animationHints": ["图层/动效提示"], "aigcScene": "生成提示词画面描述"}, ...},
+ "byRole": {"<role>": {"label": "≤10字", "reshootShot": "真人可拍的补拍说明", "mustCapture": ["必拍要素"], "animationHints": ["图层/动效提示"], "aigcScene": "该镜头的画面质感与氛围（光影、材质、色调、景深、情绪等感官层面），不要写具体动作或动词"}, ...},
  "tokenActions": {"<motionToken>": "该运动手法在本品类里的等价中文动作"},
  "connective": {"afterUseResult": "用'使用之后的结果'表达利益的中文短语", "productHero": "产品 hero 定格的中文短语"}}`;
 

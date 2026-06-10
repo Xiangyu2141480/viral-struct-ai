@@ -237,6 +237,38 @@ test('aigc prompt is a clean downstream-consumable shot description: no transfer
   }
 });
 
+test('all three channels stay free of internal transfer scaffolding; aigc 画面动作 ≠ 画面质感', () => {
+  const sourceSpecificSlot: ShotSlotNode = {
+    id: 'slot_detail',
+    segmentId: 'seg_detail',
+    role: 'usage_demo',
+    requiredAsset: { type: 'video', subject: 'side port camera lens module detail scan' },
+    fallbackStrategies: []
+  };
+  const { options } = buildGapResolutionOptions({
+    slot: sourceSpecificSlot,
+    tier: 'partial',
+    contentBrief: makeContentBrief(),
+    referenceAssetIds: ['asset_usage'],
+    chosenAssetId: 'asset_usage',
+    fillStatus: 'source_specific_not_transferable',
+    vocab: EARPHONE_VOCAB_FIXTURE
+  });
+  // none of reshoot / hyperframes / aigc may expose the system's internal structure-transfer reasoning
+  const scaffolding = /只迁移「|抽象结构节奏|目标等价物|结构迁移作用|目标品类元素|把源片的|抽象成目标品类/;
+  for (const option of options) {
+    const text = option.id === 'reshoot' ? option.guidanceNL : option.id === 'hyperframes' ? option.editingGuidanceNL : option.prompt;
+    assert.doesNotMatch(text, scaffolding, `${option.id} must not expose internal transfer scaffolding`);
+  }
+  const aigc = options.find((o) => o.id === 'aigc')!;
+  if (aigc.id === 'aigc') {
+    const action = (aigc.prompt.match(/画面动作：([^。]*)。/) ?? [])[1];
+    const texture = (aigc.prompt.match(/画面质感：([^。]*)。/) ?? [])[1];
+    assert.ok(action && texture, 'both 画面动作 and 画面质感 are present');
+    assert.notEqual(action, texture, '画面质感 (sensory mood) must differ from 画面动作 (concrete actions)');
+  }
+});
+
 test('收敛: options reference only the single chosen asset, not a pool', () => {
   const { options } = buildGapResolutionOptions({
     slot: makeSlot(),

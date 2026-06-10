@@ -179,11 +179,10 @@ function buildReshootOption(
     `补拍一个约 ${durationSec} 秒的竖屏「${spec.label}」镜头。`
     + `该槽位目标：${contextGoalLine(context, spec)}。`
     + `当前素材不足：${assetGapLine(context)}。`
-    + `目标品类等价动作：${targetActionLine(context, spec)}。`
+    + `画面动作：${targetActionLine(context, spec)}。`
     + `镜头方案：${spec.reshootShot}。`
     + `拍摄构图：${spec.framing}。`
     + `务必拍到：${mustCapture.join('、')}。`
-    + `结构迁移作用：${structureSupportLine(context, spec)}。`
     + `注意避免：${avoid.slice(0, 4).join('、')}。`
     + `保持 ${product} 的包装与标签清晰可见、背景干净。`;
   return {
@@ -212,7 +211,6 @@ function buildHyperframesOption(
   const durationMs = positive(Math.round((brief?.hyperframesBrief?.durationSec ?? 3) * 1000), 3000);
   const refLine = referencedAssetIds.length ? `复用现有素材：${referencedAssetIds.join('、')}。` : '';
 
-  const motifLine = spec.motifLine ? `${spec.motifLine}。` : '';
   const layerLine = buildLayerLine(context, spec);
   const stepLine = buildAnimationStepLine(durationMs, context, spec);
   const bridgeLine = buildBridgeLine(context);
@@ -222,7 +220,6 @@ function buildHyperframesOption(
     + layerLine
     + stepLine
     + bridgeLine
-    + motifLine
     + `用${spec.animationHints.join('、')}等动效承接「${spec.label}」。`
     + refLine
     + `文字安全区保留在画面上方或侧边，产品包装与标签清晰可见。`
@@ -423,9 +420,10 @@ function buildDirectorSpec(args: BuildGapResolutionOptionsArgs, brief?: MissingM
       ],
       framing: '竖屏产品居中，前半段留出级联运动空间，尾帧留出 CTA 文案安全区',
       durationSec: positive(brief?.manualShootBrief?.durationSec ?? 4, 4),
-      hyperframesIntent: '把源片的”部件级联 -> 由散到聚 -> 激活爆发 -> CTA 揭示”抽象成目标品类语境的结构动效',
+      hyperframesIntent: '用由散到聚的级联动效完成产品的组装式揭示，收束到干净 CTA 尾帧',
       animationHints: kinetic.actions,
-      aigcScene: `${kinetic.actions.join('、')} 围绕产品形成由散到聚的级联组装，完成激活后进入产品 CTA 收口`,
+      // Keep the role-level sensory/atmosphere scene; the concrete kinetic actions live in animationHints.
+      aigcScene: base.aigcScene,
       cardType: brief?.hyperframesBrief?.cardType ?? 'timeline_bridge_card',
       motifLine: `迁移的是抽象运动语法：级联、汇聚、激活、爆发、CTA 收口；目标画面只使用 ${kinetic.label} 相关元素和产品尾帧`,
       targetEquivalentActions: kinetic.actions
@@ -515,7 +513,7 @@ function contextGoalLine(context: DirectorPromptContext, spec: ZhRoleSpec): stri
 
 function assetGapLine(context: DirectorPromptContext): string {
   if (context.fillStatus === 'source_specific_not_transferable') {
-    return context.sourceSpecificMeaning ?? '当前素材能做底图，但源片动作属于源品类，需要迁移成目标品类等价动作';
+    return '当前素材可作参考底图，但需要补拍出本产品自己的真实动作。';
   }
   if (context.assetEvidence?.qualityNotes?.length) return context.assetEvidence.qualityNotes.join('；');
   if (context.chosenAssetId) return `已有素材 ${context.chosenAssetId} 可做真实参考，但动作、时长或结构表达不足`;
@@ -535,13 +533,6 @@ function targetActionLine(context: DirectorPromptContext, spec: ZhRoleSpec): str
   ].filter((entry): entry is string => Boolean(entry));
   const resolved = uniqueNonEmpty(values).slice(0, 8);
   return zhList(resolved.length ? resolved : spec.animationHints);
-}
-
-function structureSupportLine(context: DirectorPromptContext, spec: ZhRoleSpec): string {
-  if (context.motifType === 'kinetic_assembly_reveal') {
-    return '保留源片”级联、由散到聚、激活、爆发、CTA 收口”的结构节奏，但全部替换为目标品类原生动作';
-  }
-  return spec.motifLine ?? `支撑「${spec.label}」的结构节奏，并把源片可迁移意图转成目标商品画面`;
 }
 
 function buildLayerLine(context: DirectorPromptContext, spec: ZhRoleSpec): string {
@@ -564,7 +555,7 @@ function buildAnimationStepLine(durationMs: number, context: DirectorPromptConte
 
 function buildBridgeLine(context: DirectorPromptContext): string {
   if (context.motifType === 'kinetic_assembly_reveal') {
-    return '前后衔接：上一镜头的动势接入目标品类元素级联，下一镜头以产品居中或 CTA 尾帧承接。';
+    return '前后衔接：承接上一镜头的动势，以产品居中或 CTA 尾帧收束。';
   }
   return '前后衔接：保留上一镜头运动方向，用产品定格或卖点卡承接到下一槽位。';
 }
@@ -595,7 +586,7 @@ function safePromptText(text: string | undefined): string | undefined {
 function targetSafeSlotIntent(slot: ShotSlotNode, spec: ZhRoleSpec): string | undefined {
   const raw = slot.intent?.purpose;
   if (!raw) {
-    return spec.motifLine ?? `围绕「${spec.label}」完成目标品类等价表达`;
+    return `围绕「${spec.label}」完成该镜头的核心画面表达`;
   }
   if (!containsDirectorSourceSpecificTerm(raw)) {
     return raw;
@@ -604,7 +595,7 @@ function targetSafeSlotIntent(slot: ShotSlotNode, spec: ZhRoleSpec): string | un
   if (sanitized && !containsDirectorSourceSpecificTerm(sanitized)) {
     return sanitized;
   }
-  return spec.motifLine ?? `围绕「${spec.label}」完成目标品类等价表达`;
+  return `围绕「${spec.label}」完成该镜头的核心画面表达`;
 }
 
 function sanitizeSourceSpecificText(text: string): string {
@@ -682,7 +673,10 @@ function buildSourceSpecificSpec(base: ZhRoleSpec, subtype: SourceSpecificTransf
     reshootShot: `用 ${eq.actions.join('、')} 完成「${eq.label}」的结构化呈现，产品标签保持清晰`,
     mustCapture: [...eq.actions, '产品标签清晰可见'],
     animationHints: eq.actions,
-    aigcScene: `${eq.actions.join('、')}，完成「${eq.label}」，产品清晰、画面干净`,
+    // Keep base.aigcScene (the role-level sensory/atmosphere description from the vocab) — the concrete
+    // actions live in targetEquivalentActions/animationHints, so aigcScene stays the "画面质感/氛围" layer,
+    // not a repeat of the actions.
+    aigcScene: base.aigcScene,
     cardType: base.cardType,
     motifLine: `只迁移「${subtype}」的抽象结构节奏；目标等价物：${eq.actions.join('、')}`,
     targetEquivalentActions: eq.actions
