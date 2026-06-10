@@ -398,17 +398,29 @@ function zhRoleSpec(role: string): ZhStructuralSpec {
 function buildDirectorSpec(args: BuildGapResolutionOptionsArgs, brief?: MissingMaterialBrief): ZhRoleSpec {
   const structuralBase = zhRoleSpec(args.slot.role);
   const roleVocab = args.vocab.byRole[roleToVocabKey(args.slot.role)]!;
+  // CONCRETE per-beat actions come from the per-SUBTYPE vocab (vocab.bySubtype[subtype].actions), which the
+  // translator is required to keep mutually distinct — NOT from roleVocab.animationHints. The latter are
+  // role-generic "图层/动效提示" (layer/effect hints, IDENTICAL for every same-role slot). Feeding those layer
+  // hints into the action lines is what made every same-role slot's reshoot/hyperframes/AIGC prompt雷同 AND
+  // surfaced raw "…图层" layer jargon (e.g. "液体流动粒子图层") to the user. The subtype is inferred from the
+  // slot text, so distinct beats (摄像头模组 vs 配色芯片 vs 多窗口) resolve to distinct subtypes → distinct
+  // concrete actions even when the source-leak gate is disabled (sourceBannedTerms: [] in the adapter path).
+  const subtype = inferSourceSpecificTransferSubtype(args.slot, args.motif);
+  const subtypeActions = args.vocab.bySubtype[subtype]?.actions?.length
+    ? args.vocab.bySubtype[subtype]!.actions
+    : roleVocab.animationHints;
   // Merge structural fields from the local template with product fields from the injected vocab.
   const base: ZhRoleSpec = {
     ...structuralBase,
     label: roleVocab.label,
     reshootShot: roleVocab.reshootShot,
     mustCapture: roleVocab.mustCapture,
-    animationHints: roleVocab.animationHints,
+    // Concrete, subtype-distinct actions (NOT the role-generic layer hints) drive every action/animation/AIGC
+    // line and the per-beat layer composition. roleVocab.animationHints (the "…图层" jargon) is intentionally
+    // no longer read here.
+    animationHints: subtypeActions,
     aigcScene: roleVocab.aigcScene,
-    // Vocab-derived target actions so targetActionLine never has to fall back to a motif's source-authored
-    // (potentially other-category) preferredEquivalents. This is the product-native source of truth.
-    targetEquivalentActions: roleVocab.animationHints
+    targetEquivalentActions: subtypeActions
   };
 
   if (isKineticAssemblyContext(args, brief)) {
@@ -437,7 +449,7 @@ function buildDirectorSpec(args: BuildGapResolutionOptionsArgs, brief?: MissingM
     return base;
   }
 
-  return buildSourceSpecificSpec(base, inferSourceSpecificTransferSubtype(args.slot, args.motif), args.vocab);
+  return buildSourceSpecificSpec(base, subtype, args.vocab);
 }
 
 function buildDirectorPromptContext(

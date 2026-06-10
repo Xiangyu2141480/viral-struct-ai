@@ -19,6 +19,24 @@ import { useProjectStore } from './store/useProjectStore';
    两条带子视觉分离:抽象=高对比色块+协议感,具体=灰阶+film perforation
    ============================================================ */
 
+/** A short, DISTINCT title for an abstract-structure beat, derived from its source caption so that
+ *  consecutive segments sharing the same coarse role (e.g. several 产品 beats) stay visually
+ *  distinguishable — they show their actual content (摄像头模组 vs 配色芯片 vs 多窗口), not an identical
+ *  role name. Picks the first clause carrying a "payoff" verb, else the longest of the first two
+ *  clauses; trims to keep the band readable. Returns undefined when there's no caption (→ role name). */
+const BEAT_PAYOFF_VERB = /展示|演示|切换|安装|组合|拆分|弹出|运行|操作|点亮|揭示|亮相|排列|分屏|渐变|拿出|翻转/;
+function conciseBeatTitle(seg: Seg): string | undefined {
+  const caption = seg.shot || seg.caption;
+  if (!caption) return undefined;
+  const clauses = caption.split(/[，,。、；;]+/).map((c) => c.trim()).filter(Boolean);
+  if (clauses.length === 0) return undefined;
+  const pick =
+    clauses.find((c) => BEAT_PAYOFF_VERB.test(c)) ??
+    [...clauses.slice(0, 2)].sort((a, b) => b.length - a.length)[0] ??
+    clauses[0];
+  return pick.length > 16 ? `${pick.slice(0, 15)}…` : pick;
+}
+
 export const AbstractStructureBand = ({
   segments,
   total,
@@ -75,7 +93,7 @@ export const AbstractStructureBand = ({
             {String(i + 1).padStart(2, '0')} · {ROLES[seg.role]?.code || seg.role.toUpperCase()}
           </span>
           {w > 5 &&
-        <span className="sband-abs-name">{ROLES[seg.role]?.name || seg.label}</span>
+        <span className="sband-abs-name">{conciseBeatTitle(seg) || ROLES[seg.role]?.name || seg.label}</span>
         }
           <span className="sband-abs-meta bot">{dur.toFixed(1)}s</span>
         </div>);

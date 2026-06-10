@@ -64,6 +64,7 @@ import {
   type Diagnosis,
   type Material,
   type ResolutionMethod,
+  type RoleKey,
   type SourceVideo,
   type TargetProduct,
 } from '../data';
@@ -201,6 +202,33 @@ function firstImageMaterialUrl(materials: Material[]): string | null {
 function resolveProductImageUrl(materials: Material[], current: string | null): string | null {
   if (current && materials.some((m) => m.url === current)) return current;
   return firstImageMaterialUrl(materials);
+}
+
+/** Canonical role→slot ids the backend (assetCardsToMaterials / CANONICAL_ROLE_SLOT) assigns to
+ *  freshly uploaded materials. These are placeholders that do NOT match a real scanned segment id
+ *  (e.g. a rough scan produces `seg_block_001…`), so we invert them to remap onto a real segment. */
+const CANONICAL_SLOT_ROLE: Record<string, RoleKey> = {
+  s1: 'hook', s2: 'pain', s3: 'emotion', s4: 'product', s5: 'compare', s6: 'social', s7: 'cta',
+};
+
+/** Align freshly-uploaded materials' placeholder slot ids (s1..s7, role-assigned by the backend)
+ *  onto the CURRENT source structure's real segment ids, so the structure-migration connections
+ *  render immediately after upload — before /materials/match refines them against the real graph.
+ *  A material keeps a slot that already names a real segment; a placeholder maps to the first real
+ *  segment of the same role; if no segment of that role exists, the slot is cleared so the UI never
+ *  draws a connection to a non-existent slot. */
+function alignMaterialSlotsToSource(materials: Material[], sourceVideo: SourceVideo): Material[] {
+  const segments = sourceVideo.segments;
+  if (segments.length === 0) return materials;
+  const realIds = new Set(segments.map((s) => s.id));
+  const firstByRole = new Map<RoleKey, string>();
+  for (const s of segments) if (!firstByRole.has(s.role)) firstByRole.set(s.role, s.id);
+  return materials.map((m) => {
+    if (!m.slot || realIds.has(m.slot)) return m; // unassigned, or already a real segment id
+    const role = CANONICAL_SLOT_ROLE[m.slot];
+    const target = role ? firstByRole.get(role) : undefined;
+    return { ...m, slot: target ?? null };
+  });
 }
 
 /** Derive a playable timeline from the structure + diagnosis (mock fallback). */
@@ -541,9 +569,12 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       // Pass materials VERBATIM from the API (they carry .url + clip fields) —
       // do NOT strip them. Default the produce anchor to the first image url.
       const { materials, warnings } = await uploadMaterialsApi(files, get().product);
+      // Remap the backend's placeholder slot ids (s1..s7) onto this source's real segment ids so
+      // the migration connections appear right away (match refines them later).
+      const aligned = alignMaterialSlotsToSource(materials, get().sourceVideo);
       set({
-        materials,
-        productImageUrl: resolveProductImageUrl(materials, get().productImageUrl),
+        materials: aligned,
+        productImageUrl: resolveProductImageUrl(aligned, get().productImageUrl),
         mode: 'live',
         warnings: warnings ?? [],
       });
@@ -816,9 +847,11 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     set({ uploading: true, lastError: null });
     try {
       const { materials, warnings } = await loadLibraryMaterialsApi(libraryId);
+      // Same placeholder-slot remap as upload, so a loaded library lights up the migration view.
+      const aligned = alignMaterialSlotsToSource(materials, get().sourceVideo);
       set({
-        materials,
-        productImageUrl: resolveProductImageUrl(materials, get().productImageUrl),
+        materials: aligned,
+        productImageUrl: resolveProductImageUrl(aligned, get().productImageUrl),
         mode: 'live',
         warnings: warnings ?? [],
       });

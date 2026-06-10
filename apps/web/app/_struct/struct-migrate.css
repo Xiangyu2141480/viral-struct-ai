@@ -1222,10 +1222,16 @@ button { font-family: inherit; }
 .sband-abs-name {
   position: relative;
   z-index: 1;
-  font-size: 13.5px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.01em;
   color: rgba(0,0,0,0.88);
+  /* Distinct per-beat titles can be longer than a role name — clip cleanly instead of wrapping. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: calc(100% - 14px);
+  text-align: center;
 }
 
 .tline.concrete {
