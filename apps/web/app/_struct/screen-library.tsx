@@ -83,6 +83,20 @@ export const ScreenLibrary = ({ onBack }: { onBack?: () => void }) => {
           </div>
         </div>
 
+        {/* Honesty banner — reference case, not live measurement */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '8px 12px', marginBottom: 14,
+          background: 'var(--accent-dim)', border: '1px solid var(--accent-line)',
+          borderRadius: 8, color: 'var(--text-dim)', fontSize: 11.5,
+        }}>
+          <Icon name="diagnose" size={13} />
+          <span>
+            <b style={{ color: 'var(--accent)' }}>示例库 · 参考案例（非实时数据）</b>
+            <span style={{ marginLeft: 8 }}>以下播放 / 点赞 / 点击 / 完播为参考示例，非实时测量。</span>
+          </span>
+        </div>
+
         {/* Top: meta + stats */}
         <div className="grid-2" style={{ marginBottom: 16, gridTemplateColumns: '1fr 1fr' }}>
           <div className="panel">
@@ -301,6 +315,22 @@ export const ScreenLibrary = ({ onBack }: { onBack?: () => void }) => {
         <div className="screen-head-r">
           <span className="mono">{LIBRARY_VIDEOS.length} 个样例</span>
         </div>
+      </div>
+
+      {/* Honesty banner — these are reference cases, not live measurements */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '10px 14px', marginBottom: 14,
+        background: 'var(--accent-dim)', border: '1px solid var(--accent-line)',
+        borderRadius: 8, color: 'var(--text-2)', fontSize: 12,
+      }}>
+        <Icon name="diagnose" size={14} />
+        <span>
+          <b style={{ color: 'var(--accent)' }}>示例库 · 参考案例（非实时数据）</b>
+          <span style={{ marginLeft: 8, color: 'var(--text-dim)' }}>
+            以下播放 / 点赞 / 点击 / 完播均为公开爆款的参考示例，非本工具的实时测量结果。
+          </span>
+        </span>
       </div>
 
       {/* Filter bar */}

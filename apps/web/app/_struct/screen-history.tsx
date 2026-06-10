@@ -114,13 +114,15 @@ export const ScreenHistory = ({ onReEdit }: { onReEdit?: () => void }) => {
                 }}>{r.duration}</span>
               </div>
               <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                <button className="btn" style={{ flex: 1, justifyContent: 'center' }}
-                  onClick={() => showToast('开始下载 MP4…')}>
-                  <Icon name="upload" size={12} /> 下载 MP4
+                <button className="btn" disabled aria-disabled="true"
+                  title="示例记录，无真实成片可下载"
+                  style={{ flex: 1, justifyContent: 'center', opacity: 0.5, cursor: 'not-allowed' }}>
+                  <Icon name="upload" size={12} /> 下载 MP4 · 示例（不可用）
                 </button>
-                <button className="btn ghost" style={{ flex: 1, justifyContent: 'center' }}
-                  onClick={() => showToast('已复制分享链接')}>
-                  分享
+                <button className="btn ghost" disabled aria-disabled="true"
+                  title="示例记录，暂无可分享的真实成片"
+                  style={{ flex: 1, justifyContent: 'center', opacity: 0.5, cursor: 'not-allowed' }}>
+                  分享 · 示例（不可用）
                 </button>
               </div>
             </div>
@@ -158,25 +160,32 @@ export const ScreenHistory = ({ onReEdit }: { onReEdit?: () => void }) => {
               </div>
             </div>
 
-            {/* Stats */}
+            {/* Stats — illustrative demo numbers, NOT real measured metrics */}
             <div className="panel">
               <div className="panel-head">
-                <h4>离线诊断</h4>
-                <span className="eyebrow">Offline estimate</span>
+                <h4>参考指标</h4>
+                <span className="eyebrow" style={{ color: 'var(--st-weakly)' }}>示例数据 · 非真实测量</span>
               </div>
               <div className="panel-body">
+                <div style={{
+                  fontSize: 11, color: 'var(--text-dim)', marginBottom: 10,
+                  padding: '6px 8px', borderRadius: 6,
+                  background: 'var(--st-weakly-bg)', border: '1px solid var(--st-weakly-line)',
+                }}>
+                  以下数值为演示示例，尚未接入真实成片的测量或预测，仅供布局参考。
+                </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
                   <div className="stat">
-                    <div className="stat-label">离线点击潜力</div>
-                    <div className="stat-value" style={{ color: r.color }}>{r.stats.ctr}</div>
+                    <div className="stat-label">点击（示例）</div>
+                    <div className="stat-value" style={{ color: 'var(--text-mute)' }}>{r.stats.ctr}</div>
                   </div>
                   <div className="stat">
-                    <div className="stat-label">完播率</div>
-                    <div className="stat-value" style={{ color: r.color }}>{r.stats.finish}</div>
+                    <div className="stat-label">完播（示例）</div>
+                    <div className="stat-value" style={{ color: 'var(--text-mute)' }}>{r.stats.finish}</div>
                   </div>
                   <div className="stat">
-                    <div className="stat-label">离线转化潜力</div>
-                    <div className="stat-value" style={{ color: r.color }}>{r.stats.convert}</div>
+                    <div className="stat-label">转化（示例）</div>
+                    <div className="stat-value" style={{ color: 'var(--text-mute)' }}>{r.stats.convert}</div>
                   </div>
                 </div>
               </div>
@@ -242,6 +251,22 @@ export const ScreenHistory = ({ onReEdit }: { onReEdit?: () => void }) => {
         <div className="screen-head-r">
           <span className="mono">{HISTORY_RECORDS.length} 条记录</span>
         </div>
+      </div>
+
+      {/* Honesty banner — no real saved-project persistence yet */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '10px 14px', marginBottom: 14,
+        background: 'var(--st-weakly-bg)', border: '1px solid var(--st-weakly-line)',
+        borderRadius: 8, color: 'var(--text-2)', fontSize: 12,
+      }}>
+        <Icon name="layers" size={14} />
+        <span>
+          <b style={{ color: 'var(--st-weakly)' }}>示例 · DEMO（暂未接入真实历史记录）</b>
+          <span style={{ marginLeft: 8, color: 'var(--text-dim)' }}>
+            下方为演示用占位记录，尚未接入真实的项目持久化；卡片上的数字为示例数据，非真实测量。
+          </span>
+        </span>
       </div>
 
       {/* Filter bar */}
@@ -349,19 +374,15 @@ export const ScreenHistory = ({ onReEdit }: { onReEdit?: () => void }) => {
                   <span className="mono dim" style={{ fontSize: 10 }}>{r.version}</span>
                 </div>
 
-                {/* Stats row */}
-                <div style={{ display: 'flex', gap: 12, fontSize: 11 }}>
+                {/* Segment count — real structural fact (no fabricated metrics shown as real) */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
+                  <span className="tag" style={{
+                    fontSize: 9.5, padding: '1px 6px',
+                    color: 'var(--text-mute)', borderColor: 'var(--border-2)',
+                  }}>示例数据</span>
                   <div>
-                    <span className="mono" style={{ color: 'var(--text-mute)', fontSize: 9.5 }}>离线点击潜力</span>
-                    <div style={{ fontWeight: 600, color: r.color, marginTop: 1 }}>{r.stats.ctr}</div>
-                  </div>
-                  <div>
-                    <span className="mono" style={{ color: 'var(--text-mute)', fontSize: 9.5 }}>完播</span>
-                    <div style={{ fontWeight: 600, color: 'var(--text)', marginTop: 1 }}>{r.stats.finish}</div>
-                  </div>
-                  <div>
-                    <span className="mono" style={{ color: 'var(--text-mute)', fontSize: 9.5 }}>转化</span>
-                    <div style={{ fontWeight: 600, color: 'var(--text)', marginTop: 1 }}>{r.stats.convert}</div>
+                    <span className="mono" style={{ color: 'var(--text-mute)', fontSize: 9.5 }}>段落</span>
+                    <span style={{ fontWeight: 600, color: 'var(--text)', marginLeft: 6 }}>{segCount}</span>
                   </div>
                 </div>
 
