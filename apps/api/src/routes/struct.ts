@@ -21,7 +21,7 @@ import { nanoid } from 'nanoid';
 import type { Request } from 'express';
 import { analyzeVideoFile, getSeedVideoPath, getUploadedVideoPath, listSeedVideos } from '../services/videoAnalyzer';
 import { extractStructureFromVideoAnalysis } from '../services/structureExtractor';
-import { runRoughScan } from '../services/roughScanRunner';
+import { runRoughScan, getScanDataDir } from '../services/roughScanRunner';
 import { runFineScan, type FineBlockDetail } from '../services/fineScanRunner';
 import { analyzeAssetsWithFallbackResult } from '../services/assetAnalyzer';
 import { matchSlotsWithFallback } from '../services/slotMatcher';
@@ -44,6 +44,7 @@ import { getRenderDir, getUploadDir } from '../services/videoPaths';
 import {
   deleteStructure,
   getStructure,
+  getStructureArtifacts,
   listStructures,
   saveStructure,
 } from '../services/structLibraryStore';
@@ -233,6 +234,12 @@ interface ScanArtifacts {
   roughScanPath: string;
   workDir: string;
   createdAt: number;
+  /**
+   * When true, the entry's files are LIBRARY-OWNED (persisted under getStructLibraryDir
+   * via a reopened structure). The TTL sweep evicts the in-memory entry but must NOT
+   * unlink/delete its files — otherwise reopening would destroy the persisted source.
+   */
+  keepFiles?: boolean;
 }
 /** Retained per-video scan inputs (raw video + rough output) for follow-up fine scans. */
 const scanArtifacts = new Map<string, ScanArtifacts>();
@@ -257,9 +264,12 @@ function sweepScanJobs(): void {
     if (job.finishedAt && now - job.finishedAt > 30 * 60_000) fineJobs.delete(id);
   }
   // Evict retained scan inputs after 60 min (free disk: raw video + work dir).
+  // LIBRARY-OWNED entries (keepFiles) are evicted from the Map but their files are
+  // NEVER deleted — those source.<ext>/rough.json live under getStructLibraryDir().
   for (const [id, art] of scanArtifacts) {
     if (now - art.createdAt > 60 * 60_000) {
       scanArtifacts.delete(id);
+      if (art.keepFiles) continue;
       void unlink(art.videoPath).catch(() => {});
       void rm(art.workDir, { recursive: true, force: true }).catch(() => {});
     }
@@ -1204,9 +1214,28 @@ structRouter.post('/structures', async (req, res) => {
     const segmentDetails = req.body?.segmentDetails as Record<string, FineBlockDetail> | undefined;
     const title = typeof req.body?.title === 'string' ? req.body.title : undefined;
 
+    // Persist the ORIGINAL source video + rough.json alongside the structure when the
+    // scan's retained inputs are still available — this lets a reopened structure run
+    // 精扫描 again. If they've already expired, the structure still saves (without the
+    // video) and the response carries an honest warning.
+    const artifacts = scanArtifacts.get(sourceVideo.id);
+
     try {
-      const summary = await saveStructure({ sourceVideo, segmentDetails, title });
-      res.status(201).json(summary);
+      const summary = await saveStructure({
+        sourceVideo,
+        segmentDetails,
+        title,
+        sourceVideoPath: artifacts?.videoPath,
+        roughScanPath: artifacts?.roughScanPath,
+      });
+      if (summary.hasVideo) {
+        res.status(201).json(summary);
+      } else {
+        res.status(201).json({
+          ...summary,
+          warning: '原视频已不可用，未随结构持久化；载入后将无法重新精扫描',
+        });
+      }
     } catch (validationError) {
       // saveStructure throws on invalid input (e.g. no segments) → honest 400.
       res.status(400).json({ error: errorMessage(validationError) });
@@ -1234,6 +1263,27 @@ structRouter.get('/structures/:id', async (req, res) => {
       res.status(404).json({ error: '结构样例不存在（可能已被删除）。' });
       return;
     }
+
+    // Re-register the persisted source video + rough.json into the in-memory scan-
+    // artifacts map (keyed by the structure's sourceVideo.id) so a reopened structure
+    // can run 精扫描 on any segment again. The fine-scan workDir is a FRESH writable tmp
+    // dir under getScanDataDir() (sweepable) — NOT the library subdir — and keepFiles
+    // protects the library-owned source.<ext>/rough.json from the TTL sweep's unlink.
+    if (structure.hasVideo) {
+      const artifacts = await getStructureArtifacts(req.params.id);
+      if (artifacts) {
+        const workDir = path.join(getScanDataDir(), structure.sourceVideo.id);
+        mkdirSync(workDir, { recursive: true });
+        scanArtifacts.set(structure.sourceVideo.id, {
+          videoPath: artifacts.videoPath,
+          roughScanPath: artifacts.roughScanPath,
+          workDir,
+          createdAt: Date.now(),
+          keepFiles: true,
+        });
+      }
+    }
+
     res.json(structure);
   } catch (error) {
     res.status(500).json({ error: errorMessage(error) });
