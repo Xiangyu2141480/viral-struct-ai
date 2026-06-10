@@ -18,6 +18,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { copyFile, mkdir, readFile, rename, rm, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { nanoid } from 'nanoid';
+import { z } from 'zod';
 import type { Request } from 'express';
 import { analyzeVideoFile, getSeedVideoPath, getUploadedVideoPath, listSeedVideos } from '../services/videoAnalyzer';
 import { extractStructureFromVideoAnalysis } from '../services/structureExtractor';
@@ -70,6 +71,7 @@ import type {
   TimelineItem,
   ViralMotifAnnotation,
 } from '@viral-struct/shared';
+import { ContentBriefSchema, ProductIntelligenceSchema } from '@viral-struct/shared';
 import {
   assetCardsToMaterials,
   boundaryToUiTransition,
@@ -164,6 +166,80 @@ function stubProduct(sourceVideo: SourceVideo, materials: Material[]): TargetPro
   };
 }
 
+const ProductParseRequestSchema = z.object({
+  rawInput: z.string().trim().min(10, 'rawInput must be at least 10 characters'),
+});
+
+function contentBriefToProduct(contentBrief: ContentBrief, rawProductDescription?: string): TargetProduct {
+  return {
+    name: contentBrief.productName,
+    category: contentBrief.category ?? contentBrief.scenario,
+    price: '',
+    stock: 0,
+    asset_count: 0,
+    industry: contentBrief.targetAudience,
+    description: rawProductDescription,
+    sellingPoints: contentBrief.sellingPoints,
+    cta: contentBrief.cta,
+    stylePreference: contentBrief.stylePreference,
+  };
+}
+
+function parseJsonMaybe(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+function parseContentBriefPayload(value: unknown, warnings: string[]): ContentBrief | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  const parsed = ContentBriefSchema.safeParse(parseJsonMaybe(value));
+  if (!parsed.success) {
+    warnings.push(`contentBrief 无效，已回退到 product 推断：${parsed.error.issues[0]?.message ?? 'invalid'}`);
+    return undefined;
+  }
+  return parsed.data;
+}
+
+function parseProductIntelligencePayload(value: unknown, warnings: string[]): ProductIntelligence | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  const parsed = ProductIntelligenceSchema.safeParse(parseJsonMaybe(value));
+  if (!parsed.success) {
+    warnings.push(`productIntelligence 无效，已忽略：${parsed.error.issues[0]?.message ?? 'invalid'}`);
+    return undefined;
+  }
+  return parsed.data;
+}
+
+function resolveProductAndBrief(
+  body: {
+    product?: TargetProduct;
+    contentBrief?: unknown;
+    productIntelligence?: unknown;
+    rawProductDescription?: unknown;
+  },
+  sourceVideo: SourceVideo,
+  materials: Material[],
+  warnings: string[]
+) {
+  const contentBriefFromBody = parseContentBriefPayload(body.contentBrief, warnings);
+  const rawProductDescription =
+    typeof body.rawProductDescription === 'string' && body.rawProductDescription.trim()
+      ? body.rawProductDescription.trim()
+      : undefined;
+  const product =
+    body.product ??
+    (contentBriefFromBody
+      ? contentBriefToProduct(contentBriefFromBody, rawProductDescription)
+      : stubProduct(sourceVideo, materials));
+  const contentBrief = contentBriefFromBody ?? buildContentBrief(product, sourceVideo);
+  const productIntelligence = parseProductIntelligencePayload(body.productIntelligence, warnings);
+  return { product, contentBrief, productIntelligence };
+}
+
 /* ─── GET /api/struct/sample/seeds — list seed videos for the picker ─── */
 structRouter.get('/sample/seeds', async (_req, res) => {
   try {
@@ -175,6 +251,34 @@ structRouter.get('/sample/seeds', async (_req, res) => {
 });
 
 /* ─── POST /api/struct/sample/analyze — video → SourceVideo (StructureIR) ─── */
+/* POST /api/struct/product/parse — user's natural-language product brief -> structured brief. */
+structRouter.post('/product/parse', async (req, res) => {
+  const parsedRequest = ProductParseRequestSchema.safeParse(req.body);
+  if (!parsedRequest.success) {
+    res.status(400).json({ error: parsedRequest.error.issues[0]?.message ?? 'rawInput is invalid' });
+    return;
+  }
+
+  try {
+    const { rawInput } = parsedRequest.data;
+    const parsedBrief = await parseContentBrief({ rawInput });
+    const product = contentBriefToProduct(parsedBrief.contentBrief, rawInput);
+    const productIntel = await analyzeProductIntelligence({ contentBrief: parsedBrief.contentBrief });
+    const warnings = [...parsedBrief.warnings, ...productIntel.warnings];
+
+    res.json({
+      product,
+      contentBrief: parsedBrief.contentBrief,
+      productIntelligence: productIntel.productIntelligence,
+      warnings,
+      parseWarnings: warnings,
+      source: parsedBrief.source,
+    });
+  } catch (error) {
+    res.status(500).json({ error: errorMessage(error) });
+  }
+});
+
 structRouter.post('/sample/analyze', withUploadGuard(upload.single('video')), async (req, res) => {
   try {
     const warnings: string[] = [];
@@ -668,13 +772,33 @@ structRouter.post('/materials/upload', withUploadGuard(upload.array('assets')), 
     } catch {
       product = undefined;
     }
-    const textBrief = product
-      ? [product.name, product.category, product.industry, product.price].filter(Boolean).join(' · ')
-      : undefined;
+    const uploadWarnings: string[] = [];
+    const contentBrief = parseContentBriefPayload(req.body?.contentBrief, uploadWarnings);
+    const rawProductDescription =
+      typeof req.body?.rawProductDescription === 'string' && req.body.rawProductDescription.trim()
+        ? req.body.rawProductDescription.trim()
+        : undefined;
+    const textBrief =
+      rawProductDescription ??
+      (contentBrief
+        ? [
+            contentBrief.productName,
+            contentBrief.category,
+            contentBrief.targetAudience,
+            contentBrief.scenario,
+            ...(contentBrief.sellingPoints ?? []),
+            contentBrief.cta,
+            contentBrief.stylePreference,
+          ].filter(Boolean).join(' · ')
+        : product
+          ? [product.description, product.name, product.category, product.industry, ...(product.sellingPoints ?? []), product.cta, product.price]
+              .filter(Boolean)
+              .join(' · ')
+          : undefined);
 
     const result = await analyzeAssetsWithFallbackResult({ files, textBrief });
     const materials = assetCardsToMaterials(result.assetCards);
-    const warnings = [...(result.warnings ?? [])];
+    const warnings = [...uploadWarnings, ...(result.warnings ?? [])];
 
     // T4: persist each uploaded file into a STABLE per-session dir so its url
     // survives to /produce (multer's temp dest could be reused/cleaned). Rewrite
@@ -828,7 +952,8 @@ structRouter.post('/materials/match', async (req, res) => {
       return;
     }
 
-    const product = stubProduct(sourceVideo, incoming);
+    const warnings: string[] = [];
+    const { product } = resolveProductAndBrief(req.body ?? {}, sourceVideo, incoming, warnings);
     const graph = buildStructureGraph(sourceVideo);
     const assetCards = materialsToAssetCards(incoming, sourceVideo, product);
     const matchResult = await matchSlotsWithFallback({ graph, assets: assetCards, boundaries: graph.boundaries });
@@ -845,51 +970,13 @@ structRouter.post('/materials/match', async (req, res) => {
       return auto ? { ...m, slot: auto } : m;
     });
 
-    const warnings = matchResult.warning ? [matchResult.warning] : [];
+    if (matchResult.warning) warnings.push(matchResult.warning);
     if (matchResult.alignmentSource === 'rule_based') warnings.push('槽位对齐使用规则降级（非 LLM judge）');
     res.json({ materials, warnings });
   } catch (error) {
     res.status(500).json({ error: errorMessage(error) });
   }
 });
-
-/** Resolve the rich ContentBrief + ProductIntelligence that drive product-native prompts. When the user
- *  supplied a free-form product paragraph (product.description), parse it (LLM + deterministic fallback)
- *  into a real ContentBrief and analyze ProductIntelligence (grounded in the asset cards); otherwise fall
- *  back to the thin brief synthesized from the structured product fields. Both feed the category-equivalent
- *  translator, so a real description yields specific, product-native actions/scenes instead of the
- *  category-stuffed placeholders the structured-fields brief produces. */
-async function resolveBriefAndIntelligence(
-  product: TargetProduct,
-  sourceVideo: SourceVideo,
-  assetCards: ReturnType<typeof materialsToAssetCards>,
-): Promise<{ contentBrief: ContentBrief; productIntelligence?: ProductIntelligence; warnings: string[] }> {
-  const warnings: string[] = [];
-  const description = (product?.description ?? '').trim();
-  let contentBrief: ContentBrief;
-  if (description) {
-    const parsed = await parseContentBrief({ rawInput: description });
-    warnings.push(...parsed.warnings);
-    contentBrief = {
-      ...parsed.contentBrief,
-      category: parsed.contentBrief.category || product.category || undefined,
-      stylePreference:
-        parsed.contentBrief.stylePreference ?? `${sourceVideo.packaging.captions} · ${sourceVideo.packaging.cover}`,
-    };
-  } else {
-    contentBrief = buildContentBrief(product, sourceVideo);
-    warnings.push('未提供产品描述，使用结构化字段合成的基础 brief（生成的 prompt 可能较笼统）');
-  }
-  let productIntelligence: ProductIntelligence | undefined;
-  try {
-    const pi = await analyzeProductIntelligence({ contentBrief, assetCards });
-    productIntelligence = pi.productIntelligence;
-    warnings.push(...pi.warnings);
-  } catch (e) {
-    warnings.push(`产品理解分析失败，将仅用 brief：${errorMessage(e)}`);
-  }
-  return { contentBrief, productIntelligence, warnings };
-}
 
 /** Best-effort: drop a complete diagnose bundle into pipeline_data/04_diagnoses/<projectId>.json so the
  *  teammate's sample-data demo can consume real link output. Never throws (a capture failure must not break
@@ -920,32 +1007,34 @@ structRouter.post('/diagnose', async (req, res) => {
   try {
     const rawSourceVideo = req.body?.sourceVideo as SourceVideo;
     const materials = (req.body?.materials ?? []) as Material[];
-    const product = (req.body?.product as TargetProduct) ?? stubProduct(rawSourceVideo, materials);
     const segmentDetails = req.body?.segmentDetails as Record<string, FineBlockDetail> | undefined;
     if (!rawSourceVideo?.segments) {
       res.status(400).json({ error: 'sourceVideo with segments is required' });
       return;
     }
 
-    // Fold the FINE-SCAN detail (transferableMotifs / exploded_assembly / revealMode) into the source so the
-    // matcher + director see the abstract structure: each fine-scanned segment's shot text is enriched and
-    // assembly/cascade beats get a kinetic motif (→ 由散到聚 prompts). No-op when no fine scan was run.
+    const warnings: string[] = [];
+    // Trunk (#79): product + brief + product intelligence threaded from /product/parse (parse-once;
+    // consistent with upload/match/compile/produce, no repeated LLM parse in the diagnose hot path).
+    const { product, contentBrief, productIntelligence } = resolveProductAndBrief(
+      req.body ?? {},
+      rawSourceVideo,
+      materials,
+      warnings,
+    );
+
+    // Grafted from main: fold the FINE-SCAN detail (transferableMotifs / exploded_assembly / revealMode) into
+    // the source so the matcher + director see the abstract structure — each fine-scanned segment's shot text
+    // is enriched and assembly/cascade beats get a kinetic motif (→ 由散到聚 prompts). No-op without a fine scan.
     const { sourceVideo, motifBySegmentId, motionTokensBySegmentId, enrichedSegmentCount } =
       enrichSourceVideoWithFineScan(rawSourceVideo, segmentDetails, product.category);
+    if (enrichedSegmentCount > 0) warnings.push(`已用精扫描结果增强 ${enrichedSegmentCount} 个镜头的迁移结构`);
 
     const graph = buildStructureGraph(sourceVideo);
     const assetCards = materialsToAssetCards(materials, sourceVideo, product);
-    // Rich brief + product intelligence from the user's product paragraph (or thin fallback).
-    const { contentBrief, productIntelligence, warnings: briefWarnings } = await resolveBriefAndIntelligence(
-      product,
-      sourceVideo,
-      assetCards,
-    );
 
     const matchResult = await matchSlotsWithFallback({ graph, assets: assetCards, boundaries: graph.boundaries });
 
-    const warnings: string[] = [...briefWarnings];
-    if (enrichedSegmentCount > 0) warnings.push(`已用精扫描结果增强 ${enrichedSegmentCount} 个镜头的迁移结构`);
 
     // Real per-gap 3-option resolution (T1): for each slot derive its tier
     // (matched/partial/gap) and ask the Director Agent for the full
@@ -1076,10 +1165,10 @@ structRouter.post('/compile', async (req, res) => {
       return;
     }
 
-    const product = stubProduct(sourceVideo, materials);
+    const payloadWarnings: string[] = [];
+    const { product, contentBrief, productIntelligence } = resolveProductAndBrief(req.body ?? {}, sourceVideo, materials, payloadWarnings);
     const graph = buildStructureGraph(sourceVideo);
     const assetCards = materialsToAssetCards(materials, sourceVideo, product);
-    const contentBrief: ContentBrief = buildContentBrief(product, sourceVideo);
 
     // ② Director Agent (plan-only) → ③ Video Agent handoff: transfer the source
     // structure onto the product, then project the plan into the flat TimelineItem[]
@@ -1093,6 +1182,7 @@ structRouter.post('/compile', async (req, res) => {
       options: {
         targetDurationMode: variantToTargetDurationMode(versionIdToVariant(versionId)),
         useLlmMatcher: false,
+        ...(productIntelligence ? { structuralCompression: { productIntelligence } } : {}),
         // The UI-synthesized graph (buildStructureGraph) carries no borrowed-source identity
         // — productInSource is a placeholder — so there is nothing to ban. Pass [] to skip the
         // mandatory-LLM source-identity banlist (which would otherwise return empty and throw),
@@ -1105,7 +1195,7 @@ structRouter.post('/compile', async (req, res) => {
 
     const timeline = timelineItemsToSegs(timelineItems, { sourceVideo, diagnosis });
     const version = versionFromId(versionId);
-    const warnings = [...new Set(orchestrated.warnings)];
+    const warnings = [...new Set([...payloadWarnings, ...orchestrated.warnings])];
 
     res.json({ version, timeline, warnings });
   } catch (error) {
@@ -1318,7 +1408,8 @@ structRouter.post('/produce', (req, res) => {
     return;
   }
   const materials = (req.body?.materials ?? []) as Material[];
-  const product = (req.body?.product as TargetProduct) ?? stubProduct(sourceVideo, materials);
+  const payloadWarnings: string[] = [];
+  const { product, contentBrief, productIntelligence } = resolveProductAndBrief(req.body ?? {}, sourceVideo, materials, payloadWarnings);
   const productImageUrl =
     typeof req.body?.productImageUrl === 'string' && req.body.productImageUrl ? req.body.productImageUrl : undefined;
   const versionId = String(req.body?.versionId ?? 'click');
@@ -1349,13 +1440,12 @@ structRouter.post('/produce', (req, res) => {
         return;
       }
 
-      const warnings: string[] = [];
+      const warnings: string[] = [...payloadWarnings];
       // (b) rebuild graph/assetCards/contentBrief, then run the Director Agent →
       // OrchestratedTimeline (the asset-bearing plan, NOT the UI-stripped segs).
       setStage('准备结构与素材');
       const graph = buildStructureGraph(sourceVideo);
       const assetCards = materialsToAssetCards(materials, sourceVideo, product);
-      const contentBrief = buildContentBrief(product, sourceVideo);
       if (assetCards.every((c) => !c.url)) {
         warnings.push('无可用真实素材（素材均无 url），AIGC 将以纯生成兜底，效果可能下降');
       }
@@ -1373,6 +1463,7 @@ structRouter.post('/produce', (req, res) => {
         options: {
           targetDurationMode: variantToTargetDurationMode(versionIdToVariant(versionId)),
           useLlmMatcher: false,
+          ...(productIntelligence ? { structuralCompression: { productIntelligence } } : {}),
           // Synthesized UI graph carries no borrowed-source identity → skip the mandatory-LLM
           // banlist (empty result would throw). See /compile for the full rationale.
           sourceBannedTerms: [],

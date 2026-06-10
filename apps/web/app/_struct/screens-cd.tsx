@@ -6,7 +6,6 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type ReactElement } from 'react';
 import {
-  NL_PROMPTS,
   ROLES,
   type Diagnosis,
   type ResolutionMethod,
@@ -20,6 +19,8 @@ import { InsightsPanel } from './InsightsPanel';
 import {
   EmptyState,
   FramePlaceholder,
+  firstFrameSrc,
+  paintFirstFrame,
   Icon,
   Modal,
   SatisfactionRing,
@@ -348,9 +349,11 @@ const GapFillStudio = ({
               {hfPreview && !hfRendering && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <video
-                    src={hfPreview.url}
+                    src={firstFrameSrc(hfPreview.url)}
                     controls
                     playsInline
+                    preload="metadata"
+                    onLoadedMetadata={(e) => paintFirstFrame(e.currentTarget)}
                     style={{ width: '100%', maxHeight: 360, borderRadius: 6, background: '#000', aspectRatio: '9 / 16' }}
                   />
                   <div className="mono dim" style={{ fontSize: 10 }}>
@@ -572,9 +575,11 @@ const TransitionFillStudio = ({
             {hfPreview && !hfRendering ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <video
-                  src={hfPreview.url}
+                  src={firstFrameSrc(hfPreview.url)}
                   controls
                   playsInline
+                  preload="metadata"
+                  onLoadedMetadata={(e) => paintFirstFrame(e.currentTarget)}
                   style={{ width: '100%', maxHeight: 320, borderRadius: 6, background: '#000', aspectRatio: '9 / 16' }}
                 />
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1269,11 +1274,10 @@ export const ScreenCompile = ({ onBack }: { onBack: () => void }) => {
   const assetManagerLastError = useProjectStore((s) => s.assetManagerLastError);
   const selectVersion = useProjectStore((s) => s.selectVersion);
   const compile = useProjectStore((s) => s.compile);
-  const applyNlEdit = useProjectStore((s) => s.applyNlEdit);
   const exportVideo = useProjectStore((s) => s.exportVideo);
   const produce = useProjectStore((s) => s.produce);
   const compiling = useProjectStore((s) => s.compiling);
-  const nlApplying = useProjectStore((s) => s.nlApplying);
+  const compilePhaseHint = useProjectStore((s) => s.compilePhaseHint);
   const exporting = useProjectStore((s) => s.exporting);
   const producing = useProjectStore((s) => s.producing);
   const produceStage = useProjectStore((s) => s.produceStage);
@@ -1282,7 +1286,6 @@ export const ScreenCompile = ({ onBack }: { onBack: () => void }) => {
   const warnings = useProjectStore((s) => s.warnings);
   const productImageUrl = useProjectStore((s) => s.productImageUrl);
   const T = v.duration;
-  const [nlText, setNlText] = useState('');
   const [playingSeg, setPlayingSeg] = useState<string | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
   const [autoPlaying, setAutoPlaying] = useState(false);
@@ -1371,7 +1374,7 @@ export const ScreenCompile = ({ onBack }: { onBack: () => void }) => {
           <div>
             <h1>缺口补全与成片编译</h1>
             <div className="screen-head-sub">
-              对每个缺口给出修复方案 → 编译为可播放时间线 → Remotion 渲染输出
+              对每个缺口给出修复方案 → 编译为只读时间线 → 渲染/导出交接状态
             </div>
           </div>
         </div>
@@ -1585,15 +1588,20 @@ export const ScreenCompile = ({ onBack }: { onBack: () => void }) => {
           </div>
         </div>
 
-        {/* RIGHT: timeline + NL edit */}
+        {/* RIGHT: read-only generated timeline */}
         <div className="col">
-          {/* timeline editor */}
+          {/* read-only timeline */}
           <div className="panel">
             <div className="panel-head">
-              <h4>时间线编辑器</h4>
-              <span className="eyebrow">重排序 · v3</span>
+              <h4>生成时间线概览</h4>
+              <span className="eyebrow">只读 · Director 输出</span>
             </div>
             <div className="panel-body">
+              {(compiling || compilePhaseHint) && (
+                <div className="mono" style={{ marginBottom: 8, fontSize: 10.5, color: 'var(--accent-2)' }}>
+                  {compilePhaseHint || '正在请求 Director 编排接口'}
+                </div>
+              )}
               <div className="eyebrow" style={{ marginBottom: 6 }}>▲ 结构带 (原序保留)</div>
               <StructureBand segments={v.segments} total={T} />
               <div className="sync-link" style={{ marginTop: 4 }}>
@@ -1631,7 +1639,7 @@ export const ScreenCompile = ({ onBack }: { onBack: () => void }) => {
                         width: `${w}%`,
                         '--role-color': `var(--r-${seg.role})`,
                         position: 'relative',
-                        cursor: 'pointer',
+                        cursor: 'default',
                         outline: isPlaying ? '2px solid var(--accent)' : 'none',
                         outlineOffset: -1,
                         zIndex: isPlaying ? 2 : 1,
@@ -1688,92 +1696,6 @@ export const ScreenCompile = ({ onBack }: { onBack: () => void }) => {
                 })}
               </div>
               <TimeRuler duration={T} intervals={7} />
-            </div>
-          </div>
-
-          {/* NATURAL LANGUAGE prompt — beta */}
-          <div className="panel">
-            <div className="panel-head">
-              <h4>自然语言改片</h4>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span className="eyebrow">自然语言 · 对话改片</span>
-              </div>
-            </div>
-            <div className="panel-body">
-              <div style={{ position: 'relative' }}>
-                <textarea
-                  rows={3}
-                  value={nlText}
-                  onChange={(e) => setNlText(e.target.value)}
-                  placeholder="说一句话改这条视频。例如:把商品信息提前 / 开头更抓人 / 减少字幕,节奏更快"
-                  style={{
-                    width: '100%',
-                    padding: '12px 14px',
-                    paddingRight: 56,
-                    background: 'var(--bg-2)',
-                    border: '1px solid var(--border)',
-                    borderRadius: 6,
-                    color: 'var(--text)',
-                    fontFamily: 'inherit',
-                    fontSize: 12.5,
-                    resize: 'vertical',
-                    outline: 'none',
-                    lineHeight: 1.5,
-                  }}
-                />
-                <button
-                  className="btn-cta"
-                  onClick={() => {
-                    const instruction = nlText;
-                    void applyNlEdit(instruction).then((summary) => {
-                      setNlText('');
-                      showToast(summary || 'NL 改片已应用 · 新草稿已生成');
-                    }).catch(() => {});
-                  }}
-                  disabled={!nlText.trim() || nlApplying}
-                  style={{
-                    position: 'absolute',
-                    bottom: 10, right: 10,
-                    padding: '6px 14px',
-                    fontSize: 11.5,
-                    opacity: nlText.trim() ? 1 : 0.4,
-                  }}
-                >
-                  <Icon name="sparkle" size={11} />
-                  {nlApplying ? '生成中…' : '应用'}
-                </button>
-              </div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
-                <span className="mono dim" style={{ fontSize: 10.5, padding: '3px 0' }}>常用 →</span>
-                {NL_PROMPTS.map((p, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setNlText(p)}
-                    className="btn ghost"
-                    style={{
-                      padding: '3px 9px',
-                      fontSize: 11,
-                      borderRadius: 14,
-                      background: 'transparent',
-                      color: 'var(--text-2)',
-                    }}
-                  >
-                    {p}
-                  </button>
-                ))}
-              </div>
-              <div style={{
-                marginTop: 12,
-                padding: '8px 10px',
-                background: 'var(--bg-2)',
-                border: '1px dashed var(--border-2)',
-                borderRadius: 4,
-                fontSize: 10.5, color: 'var(--text-mute)', lineHeight: 1.5,
-              }}>
-                <Icon name="diagnose" size={10} />
-                &nbsp;NL 改片会基于当前选中的 <b style={{ color: 'var(--accent-2)' }}>{currentVersion.name}</b> 版本生成新草稿,
-                不影响原结构和原素材
-              </div>
             </div>
           </div>
         </div>

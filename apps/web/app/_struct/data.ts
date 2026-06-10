@@ -237,6 +237,12 @@ export interface TargetProduct {
   /** Free-form product paragraph (the production "front door"). Parsed downstream into a rich
    *  ContentBrief + ProductIntelligence that drive SPECIFIC, product-native prompts. */
   description?: string;
+  /** Parsed selling points from the natural-language product brief. */
+  sellingPoints?: string[];
+  /** Parsed action goal / CTA. */
+  cta?: string;
+  /** Parsed style preference. */
+  stylePreference?: string;
 }
 
 // Target product (the merchant's new product)

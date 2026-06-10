@@ -696,18 +696,23 @@ export function timelineItemsToSegs(
    ============================================================ */
 
 export function buildContentBrief(product: TargetProduct, sourceVideo: SourceVideo): ContentBrief {
+  const sellingPoints =
+    Array.isArray(product.sellingPoints) && product.sellingPoints.length
+      ? product.sellingPoints
+      : [
+          product.category,
+          product.price,
+          product.industry,
+          product.stock > 0 ? `${(product.stock ?? 0).toLocaleString()} 件库存可用于限时转化` : '',
+        ].filter(Boolean);
+
   return {
     productName: product.name,
     targetAudience: product.industry,
     scenario: product.category,
-    sellingPoints: [
-      product.category,
-      product.price,
-      product.industry,
-      `${(product.stock ?? 0).toLocaleString()} 件库存可用于限时转化`,
-    ].filter(Boolean) as string[],
-    cta: `${product.name} · 立即了解`,
-    stylePreference: `${sourceVideo.packaging.captions} · ${sourceVideo.packaging.cover}`,
+    sellingPoints,
+    cta: product.cta?.trim() || `${product.name} · 立即了解`,
+    stylePreference: product.stylePreference?.trim() || `${sourceVideo.packaging.captions} · ${sourceVideo.packaging.cover}`,
   };
 }
 
