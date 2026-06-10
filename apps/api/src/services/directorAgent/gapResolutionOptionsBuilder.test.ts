@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { MissingMaterialBrief, ShotSlotNode } from '@viral-struct/shared';
+import type { ContextualSlotCoverage, MissingMaterialBrief, ShotSlotNode } from '@viral-struct/shared';
 import { buildGapResolutionOptions } from './gapResolutionOptionsBuilder';
 import { makeContentBrief } from './testFixtures';
 
 const USER_VISIBLE_META_GUARDRAIL_RE =
-  /品牌安全|合规|未授权品牌|其它可见品牌|明星|公众人物|医疗|功效保证|价格|促销|宣称|禁止出现|不得加入|只允许使用|仅为生成提示词|非成片|source|电子设备元素/i;
+  /品牌安全|合规|未授权品牌|其它可见品牌|明星|公众人物|医疗|功效保证|价格|促销|宣称|禁止出现|不得加入|只允许使用|仅为生成提示词|非成片|source|电子设备元素|maxRecommendedDurationSec|needsOverlaySupport|notEnoughForStandaloneShot/i;
 
 function makeSlot(role: ShotSlotNode['role'] = 'usage_demo'): ShotSlotNode {
   return {
@@ -69,6 +69,88 @@ function makeBrief(aigcEligible = true): MissingMaterialBrief {
   };
 }
 
+function makeCoverage(role = 'opening_attention'): ContextualSlotCoverage {
+  return {
+    slotId: `slot_${role}`,
+    slotRole: role as ContextualSlotCoverage['slotRole'],
+    slotIntent: 'use the current asset to support a beverage-native shot',
+    requiredIngredients: [
+      {
+        id: 'ing_product',
+        kind: 'product_evidence',
+        label: '清晰产品与包装',
+        requiredBy: { slotId: `slot_${role}` },
+        importance: 'high'
+      },
+      {
+        id: 'ing_safe_area',
+        kind: 'text_safe_area',
+        label: '文字安全区',
+        requiredBy: { slotId: `slot_${role}` },
+        importance: 'medium'
+      }
+    ],
+    availableIngredients: [
+      {
+        requiredIngredientId: 'ing_product',
+        assetId: 'plain_001_table_product_pan',
+        score: 72,
+        evidence: [
+          '画面可见瓶身冷凝水珠',
+          '同框有冰块和柠檬片',
+          '镜头有稳定平移运动轨迹',
+          'ranking=0.30*roleAffordance(87.3) + 0.20*quality(74)'
+        ]
+      }
+    ],
+    missingIngredients: [
+      {
+        requiredIngredientId: 'ing_safe_area',
+        label: '文字安全区',
+        reason: '现有素材需要定格或卡片层补足文字空间',
+        evidence: ['主体占画面较满']
+      }
+    ],
+    weakIngredients: [],
+    coverageStatus: 'weak',
+    candidateAssets: [
+      {
+        assetId: 'plain_001_table_product_pan',
+        score: 64,
+        fitStatus: 'usable',
+        usableAs: 'video_clip',
+        constraints: {
+          maxRecommendedDurationSec: 10,
+          needsOverlaySupport: true,
+          notEnoughForStandaloneShot: true
+        },
+        evidence: {
+          affordanceScore: 66,
+          qualityScore: 72,
+          semanticSignals: ['清晰瓶身', '冷凝水珠', '冰块', '柠檬片', '平移运动轨迹', '可定格尾帧'],
+          reasons: [
+            '画面可见瓶身冷凝水珠',
+            '同框有冰块和柠檬片',
+            '镜头有稳定平移轨迹可裁切推近',
+            'plain_001_table_product_pan -> slot_native_02_reveal: 可覆盖; role=87.3, intent/criteria fit included.'
+          ],
+          warnings: []
+        },
+        mediaReadiness: {
+          hasUsableUrl: true,
+          hasLocalPath: false,
+          hasThumbnail: true,
+          hasKeyframe: true,
+          hasDuration: true
+        }
+      }
+    ],
+    confidence: 'medium',
+    evidence: ['existing asset supports cooling product evidence but needs edit layers'],
+    limitations: []
+  };
+}
+
 test('gap tier can offer three options: reshoot / hyperframes / aigc', () => {
   const { options } = buildGapResolutionOptions({
     slot: makeSlot(),
@@ -94,6 +176,34 @@ test('partial tier offers all three channels and still recommends hyperframes', 
   assert.deepEqual(options.map((o) => o.id).sort(), ['aigc', 'hyperframes', 'reshoot']);
 });
 
+test('partial opening prompt is asset-evidence-first and recommends HyperFrames instead of AIGC', () => {
+  const { options, recommendedOptionId } = buildGapResolutionOptions({
+    slot: makeSlot('opening_attention'),
+    tier: 'partial',
+    missingBrief: makeBrief(),
+    coverage: makeCoverage('opening_attention'),
+    contentBrief: makeContentBrief(),
+    referenceAssetIds: ['plain_001_table_product_pan'],
+    chosenAssetId: 'plain_001_table_product_pan',
+    fillStatus: 'partial_asset_support'
+  });
+
+  assert.equal(recommendedOptionId, 'hyperframes');
+  const hyper = options.find((option) => option.id === 'hyperframes')!;
+  assert.ok(hyper.id === 'hyperframes');
+  assert.match(hyper.editingGuidanceNL, /复用素材 plain_001_table_product_pan/);
+  assert.match(hyper.editingGuidanceNL, /冷凝水|冰块|柠檬|液滴|冷雾/);
+  assert.match(hyper.editingGuidanceNL, /裁切|推近/);
+  assert.match(hyper.editingGuidanceNL, /运动轨迹/);
+  assert.match(hyper.editingGuidanceNL, /定格/);
+  assert.match(hyper.editingGuidanceNL, /文字安全区|图层/);
+
+  const aigc = options.find((option) => option.id === 'aigc')!;
+  assert.ok(aigc.id === 'aigc');
+  assert.match(aigc.prompt, /可选替代|可作为替代/);
+  assert.doesNotMatch(aigc.prompt, /recommended|推荐/i);
+});
+
 test('matched/covered tier offers all three channels as alternatives and recommends hyperframes', () => {
   const { options, recommendedOptionId } = buildGapResolutionOptions({
     slot: makeSlot(),
@@ -107,6 +217,26 @@ test('matched/covered tier offers all three channels as alternatives and recomme
   assert.deepEqual(options.map((o) => o.id).sort(), ['aigc', 'hyperframes', 'reshoot']);
   // covered → the channels are alternatives; HyperFrames (edit the placed asset) is the safe default.
   assert.equal(recommendedOptionId, 'hyperframes');
+});
+
+test('matched prompts are optional alternatives and do not claim the material is insufficient', () => {
+  const { options } = buildGapResolutionOptions({
+    slot: makeSlot('product_closeup'),
+    tier: 'matched',
+    coverage: { ...makeCoverage('product_closeup'), coverageStatus: 'covered' },
+    contentBrief: makeContentBrief(),
+    referenceAssetIds: ['plain_001_table_product_pan'],
+    chosenAssetId: 'plain_001_table_product_pan',
+    fillStatus: 'matched'
+  });
+  const visibleText = options.map((option) => {
+    if (option.id === 'reshoot') return option.guidanceNL;
+    if (option.id === 'hyperframes') return option.editingGuidanceNL;
+    return option.prompt;
+  }).join('\n');
+
+  assert.match(visibleText, /可选|替代|增强/);
+  assert.doesNotMatch(visibleText, /当前素材不足|素材不足/);
 });
 
 test('gap tier recommends aigc, but falls back to hyperframes when aigc is not eligible', () => {
@@ -127,6 +257,22 @@ test('gap tier recommends aigc, but falls back to hyperframes when aigc is not e
     referenceAssetIds: ['asset_usage']
   });
   assert.equal(ineligible.recommendedOptionId, 'hyperframes');
+});
+
+test('true missing generation does not claim reusable real media unless it is only a visual reference', () => {
+  const { options, recommendedOptionId } = buildGapResolutionOptions({
+    slot: makeSlot('opening_attention'),
+    tier: 'gap',
+    missingBrief: makeBrief(),
+    contentBrief: makeContentBrief(),
+    referenceAssetIds: ['plain_001_table_product_pan'],
+    fillStatus: 'missing_generation_required'
+  });
+  assert.equal(recommendedOptionId, 'aigc');
+  const hyper = options.find((option) => option.id === 'hyperframes')!;
+  assert.ok(hyper.id === 'hyperframes');
+  assert.doesNotMatch(hyper.editingGuidanceNL, /复用现有素材|复用素材/);
+  assert.match(hyper.editingGuidanceNL, /视觉参考|参考/);
 });
 
 test('reshoot option is Chinese and carries framing + mustCapture in its guidance', () => {
@@ -197,6 +343,57 @@ test('user-facing resolution prompts do not expose brand-safety or compliance wo
 
   assert.match(visibleText, /康师傅冰红茶/);
   assert.doesNotMatch(visibleText, USER_VISIBLE_META_GUARDRAIL_RE);
+});
+
+test('resolution prompts translate internal diagnostics into human-readable gaps', () => {
+  const { options } = buildGapResolutionOptions({
+    slot: makeSlot('benefit_visual'),
+    tier: 'partial',
+    coverage: makeCoverage('benefit_visual'),
+    contentBrief: makeContentBrief(),
+    referenceAssetIds: ['plain_001_table_product_pan'],
+    chosenAssetId: 'plain_001_table_product_pan',
+    fillStatus: 'partial_asset_support'
+  });
+  const visibleText = options.map((option) => {
+    if (option.id === 'reshoot') return option.guidanceNL;
+    if (option.id === 'hyperframes') return option.editingGuidanceNL;
+    return option.prompt;
+  }).join('\n');
+
+  assert.match(visibleText, /只取|截取|最强片段|图层|局部镜头|底板/);
+  assert.doesNotMatch(visibleText, USER_VISIBLE_META_GUARDRAIL_RE);
+});
+
+test('core roles produce concrete shot language instead of slot-template reports', () => {
+  const cases: Array<[ShotSlotNode['role'], RegExp]> = [
+    ['opening_attention', /冷凝水|冰块|柠檬|液滴|冷雾/],
+    ['product_closeup', /标签|瓶身|冷凝水|瓶盖/],
+    ['benefit_visual', /冰块|柠檬|茶色|卖点|场景/],
+    ['usage_demo', /开盖|倒入|喝|手部|饮用/],
+    ['social_proof' as ShotSlotNode['role'], /分享|多人|聚餐|同框|场景/],
+    ['cta_visual', /尾帧|CTA|留白|定格|收口/]
+  ];
+
+  for (const [role, expected] of cases) {
+    const { options } = buildGapResolutionOptions({
+      slot: makeSlot(role),
+      tier: 'partial',
+      coverage: makeCoverage(role),
+      contentBrief: makeContentBrief(),
+      referenceAssetIds: ['plain_001_table_product_pan'],
+      chosenAssetId: 'plain_001_table_product_pan',
+      fillStatus: 'partial_asset_support'
+    });
+    const visibleText = options.map((option) => {
+      if (option.id === 'reshoot') return option.guidanceNL;
+      if (option.id === 'hyperframes') return option.editingGuidanceNL;
+      return option.prompt;
+    }).join('\n');
+
+    assert.match(visibleText, expected, `${role} should contain concrete category-native shot language`);
+    assert.doesNotMatch(visibleText, /maxRecommendedDurationSec|needsOverlaySupport|notEnoughForStandaloneShot|当前素材不足：|ranking=|roleAffordance|intent\/criteria/);
+  }
 });
 
 test('aigc prompt carries a per-slot Chinese abstract-transfer line from the motion grammar', () => {

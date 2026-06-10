@@ -100,6 +100,10 @@ export interface DirectorPromptContext {
     semanticSummary?: string;
     actionHints?: string[];
     qualityNotes?: string[];
+    matchedIngredients?: string[];
+    missingIngredients?: string[];
+    observations?: string[];
+    hasSafeArea?: boolean;
     keyframes?: unknown[];
   };
   fillStatus?: DirectorFillStatus;
@@ -160,12 +164,16 @@ function buildReshootOption(
 ): ReshootOption {
   const durationSec = positive(brief?.manualShootBrief?.durationSec ?? spec.durationSec, spec.durationSec);
   const mustCapture = spec.mustCapture;
+  const opener = reshootOpeningLine(context, spec, durationSec);
+  const existingLine = existingAssetEvidenceLine(context, spec);
+  const gapLine = humanGapLine(context);
   const guidanceNL =
-    `补拍一个约 ${durationSec} 秒的竖屏「${spec.label}」镜头。`
-    + `该槽位目标：${contextGoalLine(context, spec)}。`
-    + `当前素材不足：${assetGapLine(context)}。`
+    opener
+    + sentenceLine('该槽位目标', contextGoalLine(context, spec))
+    + existingLine
+    + gapLine
     + `目标品类等价动作：${targetActionLine(context, spec)}。`
-    + `镜头方案：${spec.reshootShot}。`
+    + `镜头方案：${reshootShotLine(context, spec)}。`
     + `拍摄构图：${spec.framing}。`
     + `务必拍到：${mustCapture.join('、')}。`
     + `结构迁移作用：${structureSupportLine(context, spec)}。`
@@ -194,21 +202,23 @@ function buildHyperframesOption(
   const referencedAssetIds = singleReference(args);
   const cardType = brief?.hyperframesBrief?.cardType ?? spec.cardType;
   const durationMs = positive(Math.round((brief?.hyperframesBrief?.durationSec ?? 3) * 1000), 3000);
-  const refLine = referencedAssetIds.length ? `复用现有素材：${referencedAssetIds.join('、')}。` : '';
+  const refLine = hyperframesReferenceLine(context, referencedAssetIds);
 
   const motifLine = spec.motifLine ? `${spec.motifLine}。` : '';
   const layerLine = buildLayerLine(context, spec);
-  const stepLine = buildAnimationStepLine(durationMs, context, spec);
+  const stepLine = buildAnimationStepLine(durationMs, context, spec, referencedAssetIds.length > 0);
   const bridgeLine = buildBridgeLine(context);
   const editingGuidanceNL =
-    `以 ${product} 为画面主体，${spec.hyperframesIntent}。`
-    + `槽位目标：${contextGoalLine(context, spec)}。`
+    `${channelPositioningLine(context, 'hyperframes')}以 ${product} 为画面主体，${hyperframesIntentLine(context, spec)}。`
+    + sentenceLine('槽位目标', contextGoalLine(context, spec))
+    + existingAssetEvidenceLine(context, spec)
+    + humanGapLine(context)
+    + refLine
     + layerLine
     + stepLine
     + bridgeLine
     + motifLine
-    + `用${spec.animationHints.join('、')}等动效承接「${spec.label}」。`
-    + refLine
+    + `用${targetActionLine(context, spec)}等画面动作承接「${spec.label}」。`
     + `文字留白区保留在画面上方或侧边，产品包装与标签清晰可见，节奏干净。`;
 
   const copy = buildCopy(args);
@@ -257,6 +267,7 @@ function buildAigcOption(
     ? `迁移变量：${context.transferVariables.map((entry) => `${entry.name}→${zhList(entry.targetValue ? [entry.targetValue] : entry.allowedTargetValues ?? [])}`).join('；')}。`
     : '';
   const targetMappingLine = targetActionLine(context, spec);
+  const channelLine = channelPositioningLine(context, 'aigc');
   const transferLine = grammar.length
     ? `保留源片可迁移的动作语法（${grammar.join('、')}），用目标品类的等效动作重新演绎。`
     : '';
@@ -265,12 +276,13 @@ function buildAigcOption(
   const sellingLine = sellingPoints.length ? `卖点围绕：${sellingPoints.join('、')}。` : '';
 
   const prompt =
-    `竖屏 9:16，${expectedDurationSec} 秒，普通手机广告质感的「${spec.label}」镜头。`
+    channelLine
+    + `竖屏 9:16，${expectedDurationSec} 秒，普通手机广告质感的「${spec.label}」镜头。`
     + `主体产品：${product}，包装和标签必须保持清晰。`
-    + `槽位目标：${contextGoalLine(context, spec)}。`
+    + sentenceLine('槽位目标', contextGoalLine(context, spec))
     + `目标品类等价动作：${targetMappingLine}。`
     + `分镜动作步骤：${buildAigcActionSteps(context, spec)}。`
-    + `画面描述：${spec.aigcScene}。`
+    + `画面描述：${aigcSceneLine(context, spec)}。`
     + (spec.motifLine ? `${spec.motifLine}。` : '')
     + transferLine
     + variableLine
@@ -351,8 +363,8 @@ const ZH_ROLE_SPECS: Record<string, ZhRoleSpec> = {
     framing: '竖屏中近景，产品居中，上下留出文字留白区',
     durationSec: 3,
     hyperframesIntent: '用强开场动效抓住前 3 秒注意力',
-    animationHints: ['快速推近', '冰感微光', '大标题揭示'],
-    aigcScene: '高能量开场动作，产品清晰可见，带冰爽或夏日氛围',
+    animationHints: ['冷凝水珠推近', '冰块和柠檬快速入画', '冷雾定格'],
+    aigcScene: '冷凝水珠、清透冰块、鲜切柠檬、红茶液滴和淡白冷雾快速堆叠成开场冰爽冲击',
     cardType: 'hook_card'
   },
   product_closeup: {
@@ -409,6 +421,17 @@ const ZH_ROLE_SPECS: Record<string, ZhRoleSpec> = {
     animationHints: ['CTA 揭示', '产品定格', '轻微弹动'],
     aigcScene: '干净的竖屏 CTA 底图，产品可见，留出文案空白区，不加文字',
     cardType: 'cta_card'
+  },
+  social: {
+    label: '社交证明',
+    reshootShot: '拍摄朋友聚餐、通勤分享或多人同框拿起饮料的真实场景，用自然动作证明产品适合分享和即时饮用',
+    mustCapture: ['产品同框可见', '多人或分享场景', '自然拿起/递出动作', '画面干净不遮挡标签'],
+    framing: '竖屏中景，人物可只露手或颈部以下，产品与分享关系清楚',
+    durationSec: 3,
+    hyperframesIntent: '把真实素材做成分享氛围和社交证明卡',
+    animationHints: ['分享场景接力', '多人同框定格', '轻卡片标注'],
+    aigcScene: '朋友聚餐、通勤或夏日户外分享冰红茶的真实场景，产品标签清晰，同框关系自然',
+    cardType: 'benefit_card'
   },
   instruction: {
     label: '说明卡',
@@ -476,6 +499,7 @@ function buildDirectorPromptContext(
   spec: ZhRoleSpec,
   brief?: MissingMaterialBrief
 ): DirectorPromptContext {
+  const primaryCandidate = args.coverage?.candidateAssets?.[0];
   const split = splitRejectIfForTransfer({
     ...args.slot.acceptanceCriteria,
     slotText: buildSlotText(args.slot),
@@ -530,7 +554,18 @@ function buildDirectorPromptContext(
       qualityNotes: [
         ...(args.coverage?.candidateAssets?.flatMap((candidate) => candidateConstraintNotes(candidate.constraints)) ?? []),
         ...(args.coverage?.limitations ?? [])
-      ].filter(Boolean).slice(0, 5)
+      ].filter(Boolean).slice(0, 5),
+      matchedIngredients: [
+        ...(args.coverage?.availableIngredients?.flatMap((ingredient) => ingredient.evidence.length ? ingredient.evidence : [ingredient.requiredIngredientId]) ?? []),
+        ...(primaryCandidate?.evidence.semanticSignals ?? []),
+        ...(primaryCandidate?.evidence.reasons ?? [])
+      ].filter(Boolean).slice(0, 6),
+      missingIngredients: [
+        ...(args.coverage?.missingIngredients?.map((ingredient) => ingredient.label || ingredient.reason) ?? []),
+        ...(args.coverage?.weakIngredients?.map((ingredient) => ingredient.label || ingredient.reason) ?? [])
+      ].filter(Boolean).slice(0, 6),
+      observations: args.coverage?.evidence?.slice(0, 4) ?? [],
+      hasSafeArea: !primaryCandidate?.constraints.textSafeAreaRisk
     },
     fillStatus: args.fillStatus
   };
@@ -544,6 +579,118 @@ function contextGoalLine(context: DirectorPromptContext, spec: ZhRoleSpec): stri
     spec.label
   ].filter((piece): piece is string => Boolean(piece));
   return pieces[0] ?? spec.label;
+}
+
+function sentenceLine(label: string, value: string): string {
+  const clean = value.replace(/[。.!！?？\s]+$/g, '');
+  return `${label}：${clean}。`;
+}
+
+function isMissingGeneration(context: DirectorPromptContext): boolean {
+  return context.fillStatus === 'missing_generation_required';
+}
+
+function isMatched(context: DirectorPromptContext): boolean {
+  return context.fillStatus === 'matched';
+}
+
+function hasReusableAsset(context: DirectorPromptContext): boolean {
+  return Boolean(context.chosenAssetId) && !isMissingGeneration(context);
+}
+
+function existingAssetEvidenceLine(context: DirectorPromptContext, spec: ZhRoleSpec): string {
+  if (!hasReusableAsset(context)) return '';
+  const ingredients = [
+    ...(context.assetEvidence?.matchedIngredients ?? []),
+    ...(context.assetEvidence?.semanticSummary ? [context.assetEvidence.semanticSummary] : []),
+    ...(context.assetEvidence?.actionHints ?? [])
+  ];
+  const evidence = uniqueNonEmpty(ingredients.map(toCreativeEvidenceText)).slice(0, 6);
+  const evidenceText = evidence.length ? evidence.join('、') : roleNativeCues(spec).slice(0, 4).join('、');
+  const status = isMatched(context)
+    ? '已可作为主素材'
+    : '可作为真实画面底板和局部镜头';
+  return `已有素材 ${context.chosenAssetId} ${status}：${evidenceText}。`;
+}
+
+function humanGapLine(context: DirectorPromptContext): string {
+  if (isMatched(context)) {
+    return '素材状态：该槽位已有可用真实素材；以下方案均为可选替代或增强，不需要替换主素材。';
+  }
+  if (isMissingGeneration(context)) {
+    const missing = humanMissingList(context);
+    return `素材缺口：没有可直接使用的真实媒体支撑完整镜头，需要补拍或生成；${missing}。`;
+  }
+  if (context.fillStatus === 'source_specific_not_transferable') {
+    return `素材缺口：${context.sourceSpecificMeaning ?? '源片动作属于源品类，需要改写成目标品类等价动作'}。`;
+  }
+  const notes = [
+    ...(context.assetEvidence?.qualityNotes ?? []),
+    ...(context.assetEvidence?.missingIngredients ?? [])
+  ].map(toCreativeEvidenceText);
+  const readable = uniqueNonEmpty(notes).slice(0, 5);
+  if (readable.length) {
+    return `素材缺口：${readable.join('；')}。`;
+  }
+  if (context.chosenAssetId) {
+    return `素材缺口：现有素材适合做画面底板，但还需要补足动作证据、节奏收口或包装图层。`;
+  }
+  return '素材缺口：当前没有可直接覆盖该槽位的真实素材，需要补足动作证据或包装表达。';
+}
+
+function humanMissingList(context: DirectorPromptContext): string {
+  const missing = uniqueNonEmpty([
+    ...(context.assetEvidence?.missingIngredients ?? []),
+    ...roleNativeCuesForRole(context.role).slice(0, 3)
+  ].map(toCreativeEvidenceText));
+  return missing.length ? `缺少 ${missing.slice(0, 4).join('、')}` : '缺少完整动作、产品识别和收口画面';
+}
+
+function reshootOpeningLine(context: DirectorPromptContext, spec: ZhRoleSpec, durationSec: number): string {
+  if (isMatched(context)) {
+    return `可选补拍一个约 ${durationSec} 秒的竖屏「${spec.label}」增强镜头。`;
+  }
+  if (hasReusableAsset(context)) {
+    return `可选补拍一个约 ${durationSec} 秒的竖屏「${spec.label}」补足镜头，用来补齐现有素材没覆盖到的动作或情绪。`;
+  }
+  return `补拍一个约 ${durationSec} 秒的竖屏「${spec.label}」镜头。`;
+}
+
+function reshootShotLine(context: DirectorPromptContext, spec: ZhRoleSpec): string {
+  if (normalizeRole(context.role) === 'opening') {
+    return '取出刚冷藏好的瓶装饮料，瓶身布满冷凝水珠，旁边摆几块透明冰块和鲜切柠檬，镜头快速推近聚焦瓶身，水珠顺着瓶身滑落，形成前三秒冰爽冲击';
+  }
+  return spec.reshootShot;
+}
+
+function channelPositioningLine(context: DirectorPromptContext, channel: 'hyperframes' | 'aigc'): string {
+  if (channel === 'aigc') {
+    if (isMissingGeneration(context)) {
+      return context.referenceAssetIds.length
+        ? '真实素材不可直接复用；参考素材只作为产品外观和色彩的视觉参考。'
+        : '';
+    }
+    return '可选替代生成任务：已有真实素材优先，以下仅作为风格替代或补充镜头。';
+  }
+  if (isMatched(context)) {
+    return '可选 HyperFrames 增强：默认保留真实素材，只做节奏、图层和收口强化。';
+  }
+  return '';
+}
+
+function hyperframesReferenceLine(context: DirectorPromptContext, referencedAssetIds: string[]): string {
+  if (!referencedAssetIds.length) return '';
+  if (isMissingGeneration(context)) {
+    return `参考素材 ${referencedAssetIds.join('、')} 仅作产品外观和色彩的视觉参考，不作为可直接复用镜头。`;
+  }
+  return `复用素材 ${referencedAssetIds.join('、')}：优先取画面中产品清晰、运动稳定、可裁切的片段作为底板。`;
+}
+
+function hyperframesIntentLine(context: DirectorPromptContext, spec: ZhRoleSpec): string {
+  if (hasReusableAsset(context)) {
+    return `基于已有素材完成「${spec.label}」的裁切、推近、定格和图层补足`;
+  }
+  return spec.hyperframesIntent;
 }
 
 function assetGapLine(context: DirectorPromptContext): string {
@@ -576,15 +723,25 @@ function structureSupportLine(context: DirectorPromptContext, spec: ZhRoleSpec):
 function buildLayerLine(context: DirectorPromptContext, spec: ZhRoleSpec): string {
   const layers = uniqueNonEmpty([
     '产品主体图层',
-    ...targetActionLine(context, spec).split('、').slice(0, 5),
+    ...roleNativeCues(spec).slice(0, 4),
+    ...targetActionLine(context, spec).split('、').slice(0, 3),
     context.contentBrief.sellingPoints[0] ? '卖点文字图层' : undefined,
-    context.chosenAssetId ? `参考素材 ${context.chosenAssetId}` : undefined
+    hasReusableAsset(context) ? `素材底板 ${context.chosenAssetId}` : undefined
   ].filter((entry): entry is string => Boolean(entry)));
   return `需要图层：${layers.join('、')}。`;
 }
 
-function buildAnimationStepLine(durationMs: number, context: DirectorPromptContext, spec: ZhRoleSpec): string {
+function buildAnimationStepLine(durationMs: number, context: DirectorPromptContext, spec: ZhRoleSpec, hasReference: boolean): string {
   const totalSec = Math.max(1, Math.round(durationMs / 1000));
+  if (hasReusableAsset(context)) {
+    const first = Number(Math.min(1, totalSec * 0.34).toFixed(1));
+    const second = Number(Math.min(Math.max(first + 0.8, totalSec * 0.67), Math.max(1.8, totalSec - 0.6)).toFixed(1));
+    const cues = roleNativeCues(spec);
+    return `剪辑步骤：0-${first}s 对已有素材做局部裁切推近，优先聚焦${cues.slice(0, 3).join('、')}；${first}-${second}s 顺着素材自带的运动轨迹拉开或平移，让产品主体居中落定；${second}-${totalSec}s 做约0.5s微定格，在文字安全区补卖点/CTA图层并干净收口。`;
+  }
+  if (hasReference && isMissingGeneration(context)) {
+    return `动画步骤：使用参考素材校准产品外观与品牌色，不直接复用镜头；0-${Math.max(1, Math.round(totalSec * 0.45))}s 建立产品与场景，后半段补齐动作和收口图层。`;
+  }
   const mid = Math.max(0.8, Number((totalSec * 0.45).toFixed(1)));
   const late = Math.max(mid + 0.6, Number((totalSec * 0.78).toFixed(1)));
   const actions = targetActionLine(context, spec).split('、');
@@ -603,12 +760,72 @@ function buildAigcActionSteps(context: DirectorPromptContext, spec: ZhRoleSpec):
   if (context.motifType === 'kinetic_assembly_reveal') {
     return '冰块、柠檬片、红茶水滴从边缘级联飞入 → 由散到聚围绕瓶身汇聚 → 开盖或触碰瓶身完成激活 → 冷雾、茶花或水汽爆发 → 产品居中并 CTA 收口';
   }
+  if (normalizeRole(context.role) === 'opening') {
+    return '冷凝水珠快速推近 → 冰块和柠檬片向镜头逼近 → 红茶液滴划过瓶身 → 冷雾漫开 → 产品标签清晰定格';
+  }
   return [
     actions[0] ?? spec.animationHints[0],
     actions[1] ?? spec.animationHints[1],
     actions[2] ?? '产品标签清晰定格',
     '卖点或 CTA 干净收口'
   ].join(' → ');
+}
+
+function aigcSceneLine(context: DirectorPromptContext, spec: ZhRoleSpec): string {
+  if (normalizeRole(context.role) === 'opening') {
+    return '开篇满屏透亮冷凝水珠、棱角分明的清透冰块、鲜切柠檬片、琥珀色红茶液滴和淡白冷雾快速堆叠，直接制造扑面而来的冰爽体感，画面干净通透无多余杂物';
+  }
+  return spec.aigcScene;
+}
+
+function roleNativeCues(spec: ZhRoleSpec): string[] {
+  return roleNativeCuesForLabel(spec.label, spec.animationHints);
+}
+
+function roleNativeCuesForRole(role: string): string[] {
+  return roleNativeCuesForLabel(zhRoleSpec(role).label, zhRoleSpec(role).animationHints);
+}
+
+function roleNativeCuesForLabel(label: string, fallback: string[]): string[] {
+  if (/开场|英雄入场|hook/i.test(label)) return ['冷凝水珠', '清透冰块', '鲜切柠檬', '红茶液滴', '淡白冷雾', '快速入画'];
+  if (/产品特写|瓶身|细节/.test(label)) return ['瓶身标签', '瓶盖', '冷凝水', '包装高光', '瓶身微距'];
+  if (/卖点|利益|证明/.test(label)) return ['冰块', '柠檬', '茶色流动', '分享场景', '卖点卡'];
+  if (/使用|动作|饮料动作/.test(label)) return ['开盖', '倒入杯中', '喝一口', '手部动作', '产品可见'];
+  if (/社交|分享/.test(label)) return ['多人同框', '朋友分享', '聚餐场景', '手递产品', '产品同框'];
+  if (/CTA|行动|尾帧|锁定|收口/.test(label)) return ['产品定格', 'CTA 留白', '干净尾帧', '购买引导', '品牌收口'];
+  return fallback;
+}
+
+function toCreativeEvidenceText(value: string): string {
+  if (isMachineEvidenceLine(value)) return '';
+  const safe = safePromptText(value);
+  if (!safe) return '';
+  return safe
+    .replace(/safe area\s*for\s*opening hook copy/gi, '开场文案文字安全区')
+    .replace(/safe area\s*for\s*benefit caption/gi, '卖点文案文字安全区')
+    .replace(/surface\s*for\s*benefit proof copy/gi, '卖点证明文案承载画面')
+    .replace(/enough hold time\s*for\s*opening hook/gi, '开场钩子需要足够定格时长')
+    .replace(/\bfast_cut\b/gi, '快速切入节奏')
+    .replace(/1\.5s minimum duration/gi, '完整动作时长')
+    .replace(/minimum duration/gi, '完整动作时长')
+    .replace(/文字安全区\s*for\s*opening hook copy/gi, '开场文案文字安全区')
+    .replace(/文字安全区\s*for\s*benefit caption/gi, '卖点文案文字安全区')
+    .replace(/beverage bottle/gi, '瓶身与包装')
+    .replace(/contains hand or usage-action cues/gi, '有手部或使用动作线索')
+    .replace(/contains drink\/pour\/cup cues/gi, '有饮用、倒入或杯子线索')
+    .replace(/Plain user-shot Kangshifu iced tea video.*?duration\.?/gi, '普通用户实拍饮料素材')
+    .replace(/\bpartial_support\b/g, '局部可用')
+    .replace(/\bcovered\b/g, '可覆盖')
+    .replace(/\bweak\b/g, '弱覆盖')
+    .replace(/has keyframe evidence|有关键帧证据/gi, '有可定格关键帧')
+    .replace(/text safe area|safe area/gi, '文字安全区')
+    .replace(/overlay/gi, '图层')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isMachineEvidenceLine(value: string): boolean {
+  return /ranking=|roleAffordance|intent\/criteria|mediaReadiness|semantic\(|editability|quality\(|\w+_\d+.*->\s*slot_/i.test(value);
 }
 
 function safePromptText(text: string | undefined): string | undefined {
@@ -685,16 +902,30 @@ function coverageSemanticSummary(coverage?: ContextualSlotCoverage): string | un
   if (!first) return undefined;
   return [
     first.assetId,
+    ...first.evidence.semanticSignals.slice(0, 2),
     ...first.evidence.reasons.slice(0, 2),
-    first.usableAs,
     first.mediaReadiness?.hasKeyframe ? '有关键帧证据' : undefined
   ].filter(Boolean).join('，');
 }
 
 function candidateConstraintNotes(constraints: ContextualSlotCoverage['candidateAssets'][number]['constraints']): string[] {
-  return Object.entries(constraints)
-    .filter(([, value]) => Boolean(value))
-    .map(([key, value]) => value === true ? key : `${key}: ${value}`);
+  const notes: string[] = [];
+  if (constraints.maxRecommendedDurationSec) {
+    notes.push(`建议只截取其中约 ${Number(constraints.maxRecommendedDurationSec.toFixed(1))} 秒以内的最强片段`);
+  }
+  if (constraints.needsCrop) {
+    notes.push('需要裁切或推近，把注意力集中到产品和关键动作');
+  }
+  if (constraints.needsOverlaySupport) {
+    notes.push('需要标题、卖点或 CTA 图层补足表达');
+  }
+  if (constraints.notEnoughForStandaloneShot) {
+    notes.push('适合作为局部镜头或画面底板，不能单独撑完整槽位');
+  }
+  if (constraints.textSafeAreaRisk) {
+    notes.push('文字安全区不足，需要通过定格、留白或卡片层补足');
+  }
+  return notes;
 }
 
 function zhList(values: string[]): string {
@@ -747,14 +978,14 @@ function buildSourceSpecificSpec(base: ZhRoleSpec, subtype: SourceSpecificTransf
         ...base,
         label: '冰爽英雄入场',
         reshootShot: '用热浪背景被冰块和瓶身入画破开，完成从夏日闷热到冰爽入场的英雄亮相',
-        mustCapture: ['热浪或夏日场景铺垫', '产品快速入画形成冰爽入场', '标签清晰可见', '第一帧留出强 hook 标题区'],
+        mustCapture: ['热浪或夏日场景铺垫', '产品快速入画形成冰爽入场', '标签清晰可见', '尾帧留出干净文字安全区'],
         framing: '竖屏中近景，产品从侧前方或中央进入，顶部留标题留白区',
         durationSec: base.durationSec,
         hyperframesIntent: '把开场变形亮相抽象成“热到冷”的第一秒冲击',
-        animationHints: ['热浪破开', '冰块擦屏', '产品英雄亮相', '大标题定格'],
+        animationHints: ['热浪破开', '冰块擦屏', '产品英雄亮相', '冰爽尾帧定格'],
         aigcScene: '夏日热浪被冰块和产品入画破开，产品完成冰爽英雄亮相，画面清爽明亮，标签清晰',
         cardType: 'hook_card',
-        motifLine: '只迁移“强开场变换入场”的抽象节奏；目标等价物是热浪、冰块、夏日场景、产品英雄亮相和标题定格'
+        motifLine: '只迁移“强开场变换入场”的抽象节奏；目标等价物是热浪、冰块、夏日场景、产品英雄亮相和冰爽尾帧定格'
       };
     case 'interface_detail':
       return {
@@ -876,8 +1107,10 @@ function normalizeRole(role: string): keyof typeof ZH_ROLE_SPECS {
     case 'comparison':
       return 'comparison';
     case 'benefit_visual':
-    case 'testimonial':
       return 'benefit';
+    case 'social_proof':
+    case 'testimonial':
+      return 'social';
     case 'cta_visual':
       return 'cta';
     case 'instruction_card':
