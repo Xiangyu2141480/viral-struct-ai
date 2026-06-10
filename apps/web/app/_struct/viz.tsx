@@ -25,6 +25,8 @@ export const AbstractStructureBand = ({
   onSegHover,
   onSegClick,
   selectedId,
+  scannedIds,
+  scanningIds,
   height = 64,
 }: {
   segments: Seg[];
@@ -32,6 +34,8 @@ export const AbstractStructureBand = ({
   onSegHover?: (seg: Seg) => void;
   onSegClick?: (seg: Seg) => void;
   selectedId?: string;
+  scannedIds?: Set<string>;
+  scanningIds?: Set<string>;
   height?: number;
 }) =>
 <div className="sband abstract" style={{ height }}>
@@ -39,6 +43,8 @@ export const AbstractStructureBand = ({
     const dur = seg.end !== undefined ? seg.end - (seg.start ?? 0) : (seg.dur ?? 0);
     const w = dur / total * 100;
     const isSel = selectedId !== undefined && seg.id === selectedId;
+    const isScanned = seg.id !== undefined && (scannedIds?.has(seg.id) ?? false);
+    const isScanning = seg.id !== undefined && (scanningIds?.has(seg.id) ?? false);
     return (
       <div
         key={seg.id || i}
@@ -49,11 +55,22 @@ export const AbstractStructureBand = ({
           outline: isSel ? '2px solid var(--accent)' : undefined,
           outlineOffset: isSel ? '-2px' : undefined,
           zIndex: isSel ? 2 : undefined,
+          position: 'relative',
         }}
         onMouseEnter={() => onSegHover && onSegHover(seg)}
         onClick={() => onSegClick && onSegClick(seg)}
-        title={`${ROLES[seg.role]?.code} · ${ROLES[seg.role]?.name} · ${dur.toFixed(1)}s（点击查看明细）`}>
+        title={`${ROLES[seg.role]?.code} · ${ROLES[seg.role]?.name} · ${dur.toFixed(1)}s${isScanned ? ' · 已精扫描' : isScanning ? ' · 精扫描中…' : ''}（点击查看明细）`}>
 
+          {(isScanned || isScanning) &&
+        <span
+          title={isScanning ? '精扫描中…' : '已精扫描（点击查看明细）'}
+          style={{
+            position: 'absolute', top: 2, right: 2, zIndex: 3,
+            fontSize: 9, lineHeight: 1, fontWeight: 800,
+            padding: '1px 3px', borderRadius: 3,
+            background: isScanning ? 'var(--accent)' : '#2ecc71', color: '#06231a',
+          }}>{isScanning ? '⟳' : '✓'}</span>
+        }
           <span className="sband-abs-meta top">
             {String(i + 1).padStart(2, '0')} · {ROLES[seg.role]?.code || seg.role.toUpperCase()}
           </span>

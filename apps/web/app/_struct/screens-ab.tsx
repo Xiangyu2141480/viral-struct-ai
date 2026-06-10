@@ -106,8 +106,7 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
   const scanning = useProjectStore((s) => s.scanning);
   const scanStage = useProjectStore((s) => s.scanStage);
   const scanSample = useProjectStore((s) => s.scanSample);
-  const fineScanningSegId = useProjectStore((s) => s.fineScanningSegId);
-  const fineScanStage = useProjectStore((s) => s.fineScanStage);
+  const fineScanStages = useProjectStore((s) => s.fineScanStages);
   const segmentDetails = useProjectStore((s) => s.segmentDetails);
   const fineScanSegment = useProjectStore((s) => s.fineScanSegment);
   const runDemo = useProjectStore((s) => s.runDemo);
@@ -291,7 +290,7 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
               共享时间轴 0 ~ {v.duration}s
             </span>
           </div>
-          <AbstractStructureBand segments={v.segments} total={T} onSegHover={setHoveredSeg} onSegClick={(seg) => setSelectedSegId(seg.id ?? null)} selectedId={selectedSegId ?? undefined} />
+          <AbstractStructureBand segments={v.segments} total={T} onSegHover={setHoveredSeg} onSegClick={(seg) => setSelectedSegId(seg.id ?? null)} selectedId={selectedSegId ?? undefined} scannedIds={new Set(Object.keys(segmentDetails))} scanningIds={new Set(Object.keys(fineScanStages))} />
 
           {/* prominent dashed sync rails connecting the two layers */}
           <SyncRails segments={v.segments} total={T} height={32} />
@@ -343,12 +342,17 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
         const idx = v.segments.indexOf(seg);
         const dur = (seg.end ?? 0) - (seg.start ?? 0);
         const fine = seg.id ? segmentDetails[seg.id] : undefined;
-        const isFineScanning = fineScanningSegId === seg.id;
+        const stageLabel = seg.id ? fineScanStages[seg.id] : undefined;
+        const isFineScanning = stageLabel !== undefined;
         return (
           <div className="panel">
             <div className="panel-head">
               <h4>段落明细 · {String(idx + 1).padStart(2, '0')} {ROLES[seg.role]?.name ?? seg.label}</h4>
-              <span className="mono dim" style={{ fontSize: 10.5 }}>点击上方时间轴的任一段落查看明细</span>
+              <span className="mono dim" style={{ fontSize: 10.5 }}>
+                {Object.keys(segmentDetails).length > 0
+                  ? `已精扫描 ${Object.keys(segmentDetails).length}/${v.segments.length} 段 · 结果均保留，点上方任一段查看`
+                  : '点击上方时间轴的任一段落查看明细'}
+              </span>
             </div>
             <div className="panel-body">
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
@@ -370,7 +374,7 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
                     disabled={isFineScanning}
                     onClick={() => { if (seg.id) void fineScanSegment(idx, seg.id).catch(() => {}); }}
                   >
-                    <Icon name="sparkle" size={12} /> {isFineScanning ? (fineScanStage || '精扫描中…') : fine ? '重新精扫描此段' : '深度分析 · 精扫描此段'}
+                    <Icon name="sparkle" size={12} /> {isFineScanning ? (stageLabel || '精扫描中…') : fine ? '重新精扫描此段' : '深度分析 · 精扫描此段'}
                   </button>
                   {!fine && !isFineScanning && (
                     <span className="mono dim" style={{ fontSize: 10.5 }}>视觉峰值 + 逐峰 VLM · 字幕行为 / 动作节拍 / 转场 / 可迁移母题（约 30–60 秒）</span>

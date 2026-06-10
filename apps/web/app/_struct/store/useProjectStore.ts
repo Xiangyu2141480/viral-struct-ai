@@ -84,10 +84,10 @@ interface ProjectState {
   scanning: boolean;
   /** Human-readable rough-scan progress label (stage + elapsed). */
   scanStage: string;
-  /** Segment id currently being fine-scanned (null = none). */
-  fineScanningSegId: string | null;
-  /** Human-readable fine-scan progress label. */
-  fineScanStage: string;
+  /** Per-segment fine-scan progress label, keyed by segment id (a key present = that
+   *  segment is in progress). Multiple segments fine-scan CONCURRENTLY and each keeps
+   *  its own progress, so analyzing one segment never clobbers another's state. */
+  fineScanStages: Record<string, string>;
   /** Per-segment deep detail from fine scan, keyed by UI segment id. */
   segmentDetails: Record<string, FineBlockDetail>;
   uploading: boolean;
@@ -212,8 +212,7 @@ const initialState = {
   analyzing: false,
   scanning: false,
   scanStage: '',
-  fineScanningSegId: null,
-  fineScanStage: '',
+  fineScanStages: {} as Record<string, string>,
   segmentDetails: {} as Record<string, FineBlockDetail>,
   uploading: false,
   matching: false,
@@ -294,7 +293,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         }
         if (s.status === 'error') throw new Error(s.error || '粗扫描失败');
         if (!s.sourceVideo) throw new Error('扫描完成但未返回结构');
-        set({ sourceVideo: s.sourceVideo, mode: 'live', warnings: s.warnings ?? [], scanning: false, scanStage: '', segmentDetails: {} });
+        set({ sourceVideo: s.sourceVideo, mode: 'live', warnings: s.warnings ?? [], scanning: false, scanStage: '', segmentDetails: {}, fineScanStages: {} });
         void get().refreshAssetManagerCoverage();
         return;
       }
@@ -307,25 +306,33 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
 
   fineScanSegment: async (segmentIndex, segmentId) => {
     // Deep per-segment analysis: visual peak detection + per-peak VLM on the raw video.
-    set({ fineScanningSegId: segmentId, fineScanStage: '排队中', lastError: null });
+    set((st) => ({ fineScanStages: { ...st.fineScanStages, [segmentId]: '排队中' }, lastError: null }));
     try {
       const { jobId } = await startFineScan(get().sourceVideo.id, segmentIndex);
       for (let i = 0; i < 180; i++) {
         await new Promise((resolve) => setTimeout(resolve, 2000));
         const s = await getFineScanStatus(jobId);
         if (s.status === 'running') {
-          set({ fineScanStage: (s.stage ?? '精扫描中') + (s.elapsedSec ? ` · ${s.elapsedSec}s` : '') });
+          set((st) => ({ fineScanStages: { ...st.fineScanStages, [segmentId]: (s.stage ?? '精扫描中') + (s.elapsedSec ? ` · ${s.elapsedSec}s` : '') } }));
           continue;
         }
         if (s.status === 'error') throw new Error(s.error || '精扫描失败');
         if (!s.detail) throw new Error('精扫描完成但未返回明细');
         const detail = s.detail;
-        set((st) => ({ segmentDetails: { ...st.segmentDetails, [segmentId]: detail }, fineScanningSegId: null, fineScanStage: '' }));
+        set((st) => {
+          const rest = { ...st.fineScanStages };
+          delete rest[segmentId];
+          return { segmentDetails: { ...st.segmentDetails, [segmentId]: detail }, fineScanStages: rest };
+        });
         return;
       }
       throw new Error('精扫描超时（>6 分钟）');
     } catch (e) {
-      set({ fineScanningSegId: null, fineScanStage: '', lastError: '精扫描失败 · ' + errMsg(e) });
+      set((st) => {
+        const rest = { ...st.fineScanStages };
+        delete rest[segmentId];
+        return { fineScanStages: rest, lastError: '精扫描失败 · ' + errMsg(e) };
+      });
       throw e;
     }
   },
