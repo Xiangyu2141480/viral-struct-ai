@@ -213,6 +213,7 @@ export async function buildOrchestratedTimeline(input: BuildOrchestratedTimeline
     slots,
     assetCards,
     contentBrief,
+    vocab,
     hyperframesWeight: input.hyperframesTransitionWeight ?? DEFAULT_HYPERFRAMES_TRANSITION_WEIGHT
   });
 
