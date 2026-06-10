@@ -214,7 +214,7 @@ test('aigc option prompt is Chinese and stays a leak-safe job card', () => {
   assert.equal(aigc.ownership, 'external_generation_job_card_only');
 });
 
-test('aigc prompt carries a per-slot Chinese abstract-transfer line from the motion grammar', () => {
+test('aigc prompt is a clean downstream-consumable shot description: no transfer scaffolding, no raw tokens', () => {
   const { options } = buildGapResolutionOptions({
     slot: makeSlot(),
     tier: 'gap',
@@ -225,10 +225,15 @@ test('aigc prompt carries a per-slot Chinese abstract-transfer line from the mot
   });
   const aigc = options.find((o) => o.id === 'aigc')!;
   if (aigc.id === 'aigc') {
-    assert.match(aigc.prompt, /保留源片可迁移的动作语法/);
-    assert.match(aigc.prompt, /由散到聚/); // chaos_to_order -> earphone vocab translation
-    assert.match(aigc.prompt, /单元零件归位/); // component_cascade -> earphone vocab translation
-    assert.ok(!/chaos_to_order|component_cascade/.test(aigc.prompt), 'raw tokens must be translated, not leaked');
+    // raw motion-grammar tokens never leak into the downstream prompt
+    assert.ok(!/chaos_to_order|component_cascade|snap_open|object_rotation/.test(aigc.prompt), 'raw tokens must not leak');
+    // internal structure-transfer reasoning is NOT exposed to the generator
+    assert.doesNotMatch(aigc.prompt, /保留源片可迁移的动作语法|只迁移「|抽象结构节奏|源片/);
+    // the positive prompt carries clean, product-native visual content
+    assert.match(aigc.prompt, /画面动作/);
+    // guard rails (brand / claims / source-avoidance) live in negativePrompt, not the positive prompt
+    assert.match(aigc.negativePrompt, /源产品|源品类/);
+    assert.match(aigc.negativePrompt, /其它品牌/);
   }
 });
 

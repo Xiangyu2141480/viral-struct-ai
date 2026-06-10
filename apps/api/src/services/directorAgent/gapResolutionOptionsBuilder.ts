@@ -19,7 +19,6 @@ import { splitRejectIfForTransfer } from '@viral-struct/shared';
 import { DEFAULT_ASPECT_RATIO, SAFE_NEGATIVE_PROMPT_ZH } from './constants';
 import { containsSourceSpecificTerm } from '../motifs/motionGrammarSanitizer';
 import { inferSourceSpecificTransferSubtype } from './sourceSpecificAbstraction';
-import { CASCADE_MOTION_TOKENS } from './structuralCompressionPlanner';
 
 /**
  * P2 (§6) — EVERY beat (matched / partial / gap) gets all three honest resolution channels: reshoot +
@@ -264,41 +263,33 @@ function buildAigcOption(
   const providerHint = brief?.aigcGenerationBrief?.providerHint ?? inferProvider(args.slot.role);
   const expectedDurationSec = positive(brief?.aigcGenerationBrief?.expectedDurationSec ?? spec.durationSec, spec.durationSec);
 
-  // Per-slot abstract transfer (Q3): the source motion grammar (motifTokens) is what makes each slot's
-  // prompt distinct and carries the "keep the grammar, swap the objects" intent — rendered in Chinese,
-  // so no two slots with different grammar get the same prompt, and no source object leaks.
-  const gatedTokens = args.gateSourceCascade
-    ? (args.motionTokens ?? []).filter((token) => !CASCADE_MOTION_TOKENS.has(token))
-    : (args.motionTokens ?? []);
-  const grammar = gatedTokens.map((token) => args.vocab.tokenActions[token] ?? token).filter(Boolean);
-  // NOTE: the motif's transferVariables carry SOURCE-authored target values (the borrowed demo's, often
-  // another category), so they are intentionally NOT emitted into the prompt. The motion grammar is already
-  // conveyed product-natively via `grammar` (vocab.tokenActions) and `targetMappingLine` (vocab actions).
+  // The structure-transfer reasoning (which source grammar / subtype we borrowed, and the raw motion-grammar
+  // tokens) stays INTERNAL — it is never written into the prompt. The downstream generator receives only the
+  // RESULT: a clean, product-native shot description it can act on directly. Guard rails (brand / claims /
+  // source-avoidance) are routed to negativePrompt, not the positive prompt.
   const targetMappingLine = targetActionLine(context, spec);
-  const transferLine = grammar.length
-    ? `保留源片可迁移的动作语法（${grammar.join('、')}），用目标品类的等效动作重新演绎，不照搬源产品或源场景。`
-    : '';
-
   const sellingPoints = args.contentBrief.sellingPoints ?? [];
-  const sellingLine = sellingPoints.length ? `卖点仅限：${sellingPoints.join('、')}。` : '';
+  const sellingLine = sellingPoints.length ? `卖点只表现：${sellingPoints.join('、')}。` : '';
 
   const prompt =
     '仅为生成提示词，非成片。'
     + `为 ${product} 生成一个竖屏 9:16、${expectedDurationSec} 秒、普通手机广告质感的「${spec.label}」镜头。`
-    + `主体产品：${product}，包装和标签必须保持清晰。`
-    + `槽位目标：${contextGoalLine(context, spec)}。`
-    + `目标品类等价动作：${targetMappingLine}。`
-    + `分镜动作步骤：${buildAigcActionSteps(context, spec)}。`
-    + `画面描述：${spec.aigcScene}。`
-    + (spec.motifLine ? `${spec.motifLine}。` : '')
-    + transferLine
-    + sellingLine
-    + '只允许使用 contentBrief 中的卖点，不得编造价格、促销、医疗功效、明星代言或其它品牌。禁止出现源片电子设备元素。';
+    + `主体产品：${product}，包装与标签清晰可见、画面干净。`
+    + `画面动作：${targetMappingLine}。`
+    + `分镜步骤：${buildAigcActionSteps(context, spec)}。`
+    + `画面质感：${spec.aigcScene}。`
+    + sellingLine;
+
+  const negativePrompt =
+    SAFE_NEGATIVE_PROMPT_ZH
+    + '；不得出现其它品牌、明星或公众人物、价格或促销承诺、医疗或功效宣称'
+    + '；不得照搬或出现源产品/源品类的专属物体、场景或画面构图'
+    + (sellingPoints.length ? '；不得编造卖点列表之外的新卖点' : '');
 
   return {
     id: 'aigc',
     prompt,
-    negativePrompt: SAFE_NEGATIVE_PROMPT_ZH,
+    negativePrompt,
     referenceAssetIds,
     aspectRatio: DEFAULT_ASPECT_RATIO,
     expectedDurationSec,
@@ -579,9 +570,12 @@ function buildBridgeLine(context: DirectorPromptContext): string {
 }
 
 function buildAigcActionSteps(context: DirectorPromptContext, spec: ZhRoleSpec): string {
-  const actions = targetActionLine(context, spec).split('、');
+  const actions = targetActionLine(context, spec).split('、').filter(Boolean);
   if (context.motifType === 'kinetic_assembly_reveal') {
-    return '目标品类元素从边缘级联飞入 → 由散到聚围绕产品汇聚 → 完成目标品类激活动作 → 视觉爆发高潮 → 产品居中并 CTA 收口';
+    // Use the product-native kinetic actions directly (no "目标品类元素" jargon in the downstream prompt).
+    return actions.length >= 2
+      ? `${actions.join(' → ')} → 产品居中并 CTA 收口`
+      : '元素由散到聚围绕产品汇聚 → 完成激活高潮 → 产品居中并 CTA 收口';
   }
   return [
     actions[0] ?? spec.animationHints[0],
