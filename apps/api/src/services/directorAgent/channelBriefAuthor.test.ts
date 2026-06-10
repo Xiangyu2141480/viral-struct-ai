@@ -144,3 +144,21 @@ test('a thrown LLM error for one channel does not break the others', async () =>
   assert.ok(res.aigc, 'other channels still author when one throws');
   assert.ok(res.warnings.some((w) => w.includes('reshoot')));
 });
+
+test('channel author system prompts carry no hardcoded beverage examples', async () => {
+  const captured: string[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const clientFactory = () => ({
+    chat: { completions: { create: async (req: any) => {
+      captured.push(req.messages.map((m: any) => m.content).join('\n'));
+      return { choices: [{ message: { content: JSON.stringify({ prompt: 'x', negativePrompt: 'y', guidanceNL: 'g', framing: 'f', editingGuidanceNL: 'e' }) } }] };
+    } } }
+  }) as any;
+  const intent: any = {
+    slotId: 's1', role: 'product_closeup', productName: '无线蓝牙耳机', category: '电子',
+    sellingPoints: ['主动降噪'], motionTokens: [], fillStatus: 'partial_asset_support',
+    referenceAssetIds: [], assetEvidence: [], durationSec: 3, targetEquivalentBeat: '展示产品'
+  };
+  await authorChannelBriefs({ intent, channels: ['aigc', 'reshoot', 'hyperframes'], clientFactory, model: 'm' });
+  assert.doesNotMatch(captured.join('\n'), /冰块|柠檬|红茶|倒茶|开盖|瓶身|多瓶/);
+});
