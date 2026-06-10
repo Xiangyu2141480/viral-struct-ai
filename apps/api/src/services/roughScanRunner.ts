@@ -13,6 +13,7 @@ import { mkdir, readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import ffmpegStatic from 'ffmpeg-static';
 import type { ViralStructureGraph } from '@viral-struct/shared';
 import { ViralStructureGraphSchema } from '@viral-struct/shared';
 
@@ -38,8 +39,22 @@ export function resolvePython(): string {
   return 'python';
 }
 
-function resolveFfmpeg(): string {
-  return process.env.FFMPEG_PATH?.trim() || 'ffmpeg';
+export function resolveFfmpeg(): string {
+  return process.env.FFMPEG_PATH?.trim() || ffmpegStatic || 'ffmpeg';
+}
+
+export function buildScanCommandEnv(baseEnv: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const env = { ...baseEnv };
+  if (!ffmpegStatic) return env;
+
+  const pathKey = Object.keys(env).find((key) => key.toLowerCase() === 'path') ?? 'PATH';
+  const currentPath = env[pathKey] ?? '';
+  const ffmpegDir = path.dirname(ffmpegStatic);
+  const pathParts = currentPath.split(path.delimiter).filter(Boolean);
+  if (!pathParts.includes(ffmpegDir)) {
+    env[pathKey] = [ffmpegDir, ...pathParts].join(path.delimiter);
+  }
+  return env;
 }
 
 export interface ScanProgress {
@@ -56,10 +71,10 @@ interface RunResult {
 export function runScanCommand(
   command: string,
   args: string[],
-  opts: { cwd?: string; timeoutMs: number; label: string }
+  opts: { cwd?: string; timeoutMs: number; label: string; env?: NodeJS.ProcessEnv }
 ): Promise<RunResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { cwd: opts.cwd, windowsHide: true });
+    const child = spawn(command, args, { cwd: opts.cwd, windowsHide: true, env: buildScanCommandEnv(opts.env) });
     let stdout = '';
     let stderr = '';
     const timer = setTimeout(() => {
