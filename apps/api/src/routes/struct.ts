@@ -18,6 +18,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { copyFile, readFile, rm, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { nanoid } from 'nanoid';
+import { z } from 'zod';
 import type { Request } from 'express';
 import { analyzeVideoFile, getSeedVideoPath, getUploadedVideoPath, listSeedVideos } from '../services/videoAnalyzer';
 import { extractStructureFromVideoAnalysis } from '../services/structureExtractor';
@@ -49,6 +50,8 @@ import { saveMatchSet, getMatchSet } from '../services/db/matchRepository';
 import { appendLibraryCards, readLibraryCards, listLibraries } from '../services/db/assetLibraryRepository';
 import { getDemoShowcase } from '../services/demoShowcase';
 import { getRenderDir, getUploadDir } from '../services/videoPaths';
+import { parseContentBrief } from '../services/productIntelligence/contentBriefParser';
+import { analyzeProductIntelligence } from '../services/productIntelligence/productIntelligenceAnalyzer';
 import {
   deleteStructure,
   getStructure,
@@ -62,8 +65,10 @@ import type {
   AuthoredSegmentRole,
   AuthoredTimeline,
   ContentBrief,
+  ProductIntelligence,
   TimelineItem,
 } from '@viral-struct/shared';
+import { ContentBriefSchema, ProductIntelligenceSchema } from '@viral-struct/shared';
 import {
   assetCardsToMaterials,
   boundaryToUiTransition,
@@ -158,6 +163,80 @@ function stubProduct(sourceVideo: SourceVideo, materials: Material[]): TargetPro
   };
 }
 
+const ProductParseRequestSchema = z.object({
+  rawInput: z.string().trim().min(10, 'rawInput must be at least 10 characters'),
+});
+
+function contentBriefToProduct(contentBrief: ContentBrief, rawProductDescription?: string): TargetProduct {
+  return {
+    name: contentBrief.productName,
+    category: contentBrief.category ?? contentBrief.scenario,
+    price: '',
+    stock: 0,
+    asset_count: 0,
+    industry: contentBrief.targetAudience,
+    description: rawProductDescription,
+    sellingPoints: contentBrief.sellingPoints,
+    cta: contentBrief.cta,
+    stylePreference: contentBrief.stylePreference,
+  };
+}
+
+function parseJsonMaybe(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+function parseContentBriefPayload(value: unknown, warnings: string[]): ContentBrief | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  const parsed = ContentBriefSchema.safeParse(parseJsonMaybe(value));
+  if (!parsed.success) {
+    warnings.push(`contentBrief 无效，已回退到 product 推断：${parsed.error.issues[0]?.message ?? 'invalid'}`);
+    return undefined;
+  }
+  return parsed.data;
+}
+
+function parseProductIntelligencePayload(value: unknown, warnings: string[]): ProductIntelligence | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  const parsed = ProductIntelligenceSchema.safeParse(parseJsonMaybe(value));
+  if (!parsed.success) {
+    warnings.push(`productIntelligence 无效，已忽略：${parsed.error.issues[0]?.message ?? 'invalid'}`);
+    return undefined;
+  }
+  return parsed.data;
+}
+
+function resolveProductAndBrief(
+  body: {
+    product?: TargetProduct;
+    contentBrief?: unknown;
+    productIntelligence?: unknown;
+    rawProductDescription?: unknown;
+  },
+  sourceVideo: SourceVideo,
+  materials: Material[],
+  warnings: string[]
+) {
+  const contentBriefFromBody = parseContentBriefPayload(body.contentBrief, warnings);
+  const rawProductDescription =
+    typeof body.rawProductDescription === 'string' && body.rawProductDescription.trim()
+      ? body.rawProductDescription.trim()
+      : undefined;
+  const product =
+    body.product ??
+    (contentBriefFromBody
+      ? contentBriefToProduct(contentBriefFromBody, rawProductDescription)
+      : stubProduct(sourceVideo, materials));
+  const contentBrief = contentBriefFromBody ?? buildContentBrief(product, sourceVideo);
+  const productIntelligence = parseProductIntelligencePayload(body.productIntelligence, warnings);
+  return { product, contentBrief, productIntelligence };
+}
+
 /* ─── GET /api/struct/sample/seeds — list seed videos for the picker ─── */
 structRouter.get('/sample/seeds', async (_req, res) => {
   try {
@@ -169,6 +248,34 @@ structRouter.get('/sample/seeds', async (_req, res) => {
 });
 
 /* ─── POST /api/struct/sample/analyze — video → SourceVideo (StructureIR) ─── */
+/* POST /api/struct/product/parse — user's natural-language product brief -> structured brief. */
+structRouter.post('/product/parse', async (req, res) => {
+  const parsedRequest = ProductParseRequestSchema.safeParse(req.body);
+  if (!parsedRequest.success) {
+    res.status(400).json({ error: parsedRequest.error.issues[0]?.message ?? 'rawInput is invalid' });
+    return;
+  }
+
+  try {
+    const { rawInput } = parsedRequest.data;
+    const parsedBrief = await parseContentBrief({ rawInput });
+    const product = contentBriefToProduct(parsedBrief.contentBrief, rawInput);
+    const productIntel = await analyzeProductIntelligence({ contentBrief: parsedBrief.contentBrief });
+    const warnings = [...parsedBrief.warnings, ...productIntel.warnings];
+
+    res.json({
+      product,
+      contentBrief: parsedBrief.contentBrief,
+      productIntelligence: productIntel.productIntelligence,
+      warnings,
+      parseWarnings: warnings,
+      source: parsedBrief.source,
+    });
+  } catch (error) {
+    res.status(500).json({ error: errorMessage(error) });
+  }
+});
+
 structRouter.post('/sample/analyze', withUploadGuard(upload.single('video')), async (req, res) => {
   try {
     const warnings: string[] = [];
@@ -577,13 +684,33 @@ structRouter.post('/materials/upload', withUploadGuard(upload.array('assets')), 
     } catch {
       product = undefined;
     }
-    const textBrief = product
-      ? [product.name, product.category, product.industry, product.price].filter(Boolean).join(' · ')
-      : undefined;
+    const uploadWarnings: string[] = [];
+    const contentBrief = parseContentBriefPayload(req.body?.contentBrief, uploadWarnings);
+    const rawProductDescription =
+      typeof req.body?.rawProductDescription === 'string' && req.body.rawProductDescription.trim()
+        ? req.body.rawProductDescription.trim()
+        : undefined;
+    const textBrief =
+      rawProductDescription ??
+      (contentBrief
+        ? [
+            contentBrief.productName,
+            contentBrief.category,
+            contentBrief.targetAudience,
+            contentBrief.scenario,
+            ...(contentBrief.sellingPoints ?? []),
+            contentBrief.cta,
+            contentBrief.stylePreference,
+          ].filter(Boolean).join(' · ')
+        : product
+          ? [product.description, product.name, product.category, product.industry, ...(product.sellingPoints ?? []), product.cta, product.price]
+              .filter(Boolean)
+              .join(' · ')
+          : undefined);
 
     const result = await analyzeAssetsWithFallbackResult({ files, textBrief });
     const materials = assetCardsToMaterials(result.assetCards);
-    const warnings = [...(result.warnings ?? [])];
+    const warnings = [...uploadWarnings, ...(result.warnings ?? [])];
 
     // T4: persist each uploaded file into a STABLE per-session dir so its url
     // survives to /produce (multer's temp dest could be reused/cleaned). Rewrite
@@ -737,7 +864,8 @@ structRouter.post('/materials/match', async (req, res) => {
       return;
     }
 
-    const product = stubProduct(sourceVideo, incoming);
+    const warnings: string[] = [];
+    const { product } = resolveProductAndBrief(req.body ?? {}, sourceVideo, incoming, warnings);
     const graph = buildStructureGraph(sourceVideo);
     const assetCards = materialsToAssetCards(incoming, sourceVideo, product);
     const matchResult = await matchSlotsWithFallback({ graph, assets: assetCards, boundaries: graph.boundaries });
@@ -754,7 +882,7 @@ structRouter.post('/materials/match', async (req, res) => {
       return auto ? { ...m, slot: auto } : m;
     });
 
-    const warnings = matchResult.warning ? [matchResult.warning] : [];
+    if (matchResult.warning) warnings.push(matchResult.warning);
     if (matchResult.alignmentSource === 'rule_based') warnings.push('槽位对齐使用规则降级（非 LLM judge）');
     res.json({ materials, warnings });
   } catch (error) {
@@ -767,19 +895,17 @@ structRouter.post('/diagnose', async (req, res) => {
   try {
     const sourceVideo = req.body?.sourceVideo as SourceVideo;
     const materials = (req.body?.materials ?? []) as Material[];
-    const product = (req.body?.product as TargetProduct) ?? stubProduct(sourceVideo, materials);
     if (!sourceVideo?.segments) {
       res.status(400).json({ error: 'sourceVideo with segments is required' });
       return;
     }
 
+    const warnings: string[] = [];
+    const { product, contentBrief } = resolveProductAndBrief(req.body ?? {}, sourceVideo, materials, warnings);
     const graph = buildStructureGraph(sourceVideo);
     const assetCards = materialsToAssetCards(materials, sourceVideo, product);
-    const contentBrief = buildContentBrief(product, sourceVideo);
 
     const matchResult = await matchSlotsWithFallback({ graph, assets: assetCards, boundaries: graph.boundaries });
-
-    const warnings: string[] = [];
 
     // Real per-gap 3-option resolution (T1): for each slot derive its tier
     // (matched/partial/gap) and ask the Director Agent for the full
@@ -904,10 +1030,10 @@ structRouter.post('/compile', async (req, res) => {
       return;
     }
 
-    const product = stubProduct(sourceVideo, materials);
+    const payloadWarnings: string[] = [];
+    const { product, contentBrief, productIntelligence } = resolveProductAndBrief(req.body ?? {}, sourceVideo, materials, payloadWarnings);
     const graph = buildStructureGraph(sourceVideo);
     const assetCards = materialsToAssetCards(materials, sourceVideo, product);
-    const contentBrief: ContentBrief = buildContentBrief(product, sourceVideo);
 
     // ② Director Agent (plan-only) → ③ Video Agent handoff: transfer the source
     // structure onto the product, then project the plan into the flat TimelineItem[]
@@ -921,6 +1047,7 @@ structRouter.post('/compile', async (req, res) => {
       options: {
         targetDurationMode: variantToTargetDurationMode(versionIdToVariant(versionId)),
         useLlmMatcher: false,
+        ...(productIntelligence ? { structuralCompression: { productIntelligence } } : {}),
         // The UI-synthesized graph (buildStructureGraph) carries no borrowed-source identity
         // — productInSource is a placeholder — so there is nothing to ban. Pass [] to skip the
         // mandatory-LLM source-identity banlist (which would otherwise return empty and throw),
@@ -933,7 +1060,7 @@ structRouter.post('/compile', async (req, res) => {
 
     const timeline = timelineItemsToSegs(timelineItems, { sourceVideo, diagnosis });
     const version = versionFromId(versionId);
-    const warnings = [...new Set(orchestrated.warnings)];
+    const warnings = [...new Set([...payloadWarnings, ...orchestrated.warnings])];
 
     res.json({ version, timeline, warnings });
   } catch (error) {
@@ -1146,7 +1273,8 @@ structRouter.post('/produce', (req, res) => {
     return;
   }
   const materials = (req.body?.materials ?? []) as Material[];
-  const product = (req.body?.product as TargetProduct) ?? stubProduct(sourceVideo, materials);
+  const payloadWarnings: string[] = [];
+  const { product, contentBrief, productIntelligence } = resolveProductAndBrief(req.body ?? {}, sourceVideo, materials, payloadWarnings);
   const productImageUrl =
     typeof req.body?.productImageUrl === 'string' && req.body.productImageUrl ? req.body.productImageUrl : undefined;
   const versionId = String(req.body?.versionId ?? 'click');
@@ -1177,13 +1305,12 @@ structRouter.post('/produce', (req, res) => {
         return;
       }
 
-      const warnings: string[] = [];
+      const warnings: string[] = [...payloadWarnings];
       // (b) rebuild graph/assetCards/contentBrief, then run the Director Agent →
       // OrchestratedTimeline (the asset-bearing plan, NOT the UI-stripped segs).
       setStage('准备结构与素材');
       const graph = buildStructureGraph(sourceVideo);
       const assetCards = materialsToAssetCards(materials, sourceVideo, product);
-      const contentBrief = buildContentBrief(product, sourceVideo);
       if (assetCards.every((c) => !c.url)) {
         warnings.push('无可用真实素材（素材均无 url），AIGC 将以纯生成兜底，效果可能下降');
       }
@@ -1201,6 +1328,7 @@ structRouter.post('/produce', (req, res) => {
         options: {
           targetDurationMode: variantToTargetDurationMode(versionIdToVariant(versionId)),
           useLlmMatcher: false,
+          ...(productIntelligence ? { structuralCompression: { productIntelligence } } : {}),
           // Synthesized UI graph carries no borrowed-source identity → skip the mandatory-LLM
           // banlist (empty result would throw). See /compile for the full rationale.
           sourceBannedTerms: [],

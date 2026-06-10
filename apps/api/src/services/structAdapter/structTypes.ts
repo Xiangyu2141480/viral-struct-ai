@@ -86,6 +86,14 @@ export interface TargetProduct {
   stock: number;
   asset_count: number;
   industry: string;
+  /** User's original one-paragraph product brief. */
+  description?: string;
+  /** Parsed selling points from the natural-language product brief. */
+  sellingPoints?: string[];
+  /** Parsed action goal / CTA. */
+  cta?: string;
+  /** Parsed style preference. */
+  stylePreference?: string;
 }
 
 export interface Material {

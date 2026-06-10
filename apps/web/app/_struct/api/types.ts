@@ -13,6 +13,7 @@ import type {
   SourceVideo,
   TargetProduct,
 } from '../data';
+import type { ContentBrief, ProductIntelligence } from '@viral-struct/shared';
 
 /** POST /api/struct/sample/analyze */
 export interface AnalyzeSampleResponse {
@@ -30,6 +31,10 @@ export interface UploadMaterialsResponse {
 export interface MatchMaterialsRequest {
   sourceVideo: SourceVideo;
   materials: Material[];
+  product?: TargetProduct;
+  contentBrief?: ContentBrief;
+  productIntelligence?: ProductIntelligence | null;
+  rawProductDescription?: string;
   /** materialId -> slotId | null. Omit to let the backend auto-match. */
   assignments?: Record<string, string | null>;
 }
@@ -43,6 +48,9 @@ export interface DiagnoseRequest {
   sourceVideo: SourceVideo;
   materials: Material[];
   product: TargetProduct;
+  contentBrief?: ContentBrief;
+  productIntelligence?: ProductIntelligence | null;
+  rawProductDescription?: string;
 }
 export interface DiagnoseResponse {
   diagnosis: Record<string, Diagnosis>;
@@ -86,6 +94,10 @@ export interface CompileRequest {
   materials: Material[];
   diagnosis: Record<string, Diagnosis>;
   versionId: string;
+  product: TargetProduct;
+  contentBrief?: ContentBrief;
+  productIntelligence?: ProductIntelligence | null;
+  rawProductDescription?: string;
 }
 export interface CompileResponse {
   version: CompileVersion;
@@ -127,9 +139,25 @@ export interface ProduceRequest {
   sourceVideo: SourceVideo;
   materials: Material[];
   product?: TargetProduct;
+  contentBrief?: ContentBrief;
+  productIntelligence?: ProductIntelligence | null;
+  rawProductDescription?: string;
   /** Product reference image url (an uploaded image material's url). */
   productImageUrl?: string;
   versionId?: string;
+}
+
+/** POST /api/struct/product/parse */
+export interface ProductParseRequest {
+  rawInput: string;
+}
+export interface ProductParseResponse {
+  product: TargetProduct;
+  contentBrief: ContentBrief;
+  productIntelligence: ProductIntelligence | null;
+  warnings?: string[];
+  parseWarnings?: string[];
+  source: 'llm' | 'deterministic';
 }
 /** POST /api/struct/produce → 202 { jobId }. */
 export interface ProduceStartResponse {

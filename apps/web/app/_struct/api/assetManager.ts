@@ -26,6 +26,7 @@ export interface BuildStructAssetManagerRequestInput {
   sourceVideo: SourceVideo;
   materials: Material[];
   product: TargetProduct;
+  contentBrief?: ContentBrief | null;
 }
 
 export function mapStructRoleToShotSlotRole(role: RoleKey): ShotSlotRole {
@@ -42,7 +43,7 @@ export function mapStructRoleToShotSlotRole(role: RoleKey): ShotSlotRole {
 }
 
 export function buildStructAssetManagerRequest(input: BuildStructAssetManagerRequestInput): StructAssetManagerRequest {
-  const contentBrief = buildContentBrief(input.product, input.sourceVideo);
+  const contentBrief = input.contentBrief ?? buildContentBrief(input.product, input.sourceVideo);
   return {
     libraryId: 'struct_ui_input_assets',
     structureGraph: buildStructureGraph(input.sourceVideo),
@@ -58,18 +59,23 @@ export async function analyzeStructAssetManagerCoverage(
 }
 
 function buildContentBrief(product: TargetProduct, sourceVideo: SourceVideo): ContentBrief {
+  const sellingPoints =
+    Array.isArray(product.sellingPoints) && product.sellingPoints.length
+      ? product.sellingPoints
+      : [
+          product.category,
+          product.price,
+          product.industry,
+          product.stock > 0 ? `${product.stock.toLocaleString()} 件库存可用于限时转化` : '',
+        ].filter(Boolean);
+
   return {
     productName: product.name,
     targetAudience: product.industry,
     scenario: product.category,
-    sellingPoints: [
-      product.category,
-      product.price,
-      product.industry,
-      `${product.stock.toLocaleString()} 件库存可用于限时转化`,
-    ].filter(Boolean),
-    cta: `${product.name} · 立即了解`,
-    stylePreference: `${sourceVideo.packaging.captions} · ${sourceVideo.packaging.cover}`,
+    sellingPoints,
+    cta: product.cta?.trim() || `${product.name} · 立即了解`,
+    stylePreference: product.stylePreference?.trim() || `${sourceVideo.packaging.captions} · ${sourceVideo.packaging.cover}`,
   };
 }
 
