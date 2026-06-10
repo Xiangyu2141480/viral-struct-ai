@@ -5,15 +5,19 @@ import type {
   AssetCandidateSlotRole,
   AssetMediaProfile,
   AssetMotionPotential,
+  AssetVideoSegment,
   AssetVisualContent,
   CreativeIngredientType,
   ShotSlotRole,
+  VisualSegmentationProfile,
   VisualStyleTag
 } from '@viral-struct/shared';
 import { AssetCardSchema } from '@viral-struct/shared';
 import { scoreAssetQuality } from './assetQualityScorer';
 import { extractAssetKeyframes } from './keyframeExtractor';
 import { probeImage, probeVideo } from './mediaProbeService';
+import { sliceVideoIntoSegments } from './videoSegmentSlicer';
+import { scanVisualSegments } from './visualSegmentScanner';
 
 const ANALYZED_AT = '1970-01-01T00:00:00.000Z';
 
@@ -23,13 +27,14 @@ export interface DeterministicAnalyzeOptions {
   ffprobePath?: string;
   ffmpegPath?: string;
   frameDir?: string;
+  visualSegmentation?: VisualSegmentationProfile;
 }
 
 export async function analyzeAssetsDeterministic(opts: DeterministicAnalyzeOptions): Promise<AssetCard[]> {
   const cards: AssetCard[] = [];
 
   for (let index = 0; index < opts.files.length; index++) {
-    cards.push(await analyzeFileAsset(opts.files[index], index, opts));
+    cards.push(...await analyzeFileAsset(opts.files[index], index, opts));
   }
 
   if (opts.textBrief?.trim()) {
@@ -39,13 +44,13 @@ export async function analyzeAssetsDeterministic(opts: DeterministicAnalyzeOptio
   return cards.map((card) => AssetCardSchema.parse(card));
 }
 
-async function analyzeFileAsset(file: Express.Multer.File, index: number, opts: DeterministicAnalyzeOptions): Promise<AssetCard> {
+async function analyzeFileAsset(file: Express.Multer.File, index: number, opts: DeterministicAnalyzeOptions): Promise<AssetCard[]> {
   const assetId = `asset_${(index + 1).toString().padStart(3, '0')}`;
   const fileKind = classifyFileKind(file.originalname);
   if (fileKind === 'video') {
     return analyzeVideoAsset(file, assetId, opts);
   }
-  return analyzeImageAsset(file, assetId);
+  return [await analyzeImageAsset(file, assetId)];
 }
 
 async function analyzeImageAsset(file: Express.Multer.File, assetId: string): Promise<AssetCard> {
@@ -84,35 +89,60 @@ async function analyzeImageAsset(file: Express.Multer.File, assetId: string): Pr
   };
 }
 
-async function analyzeVideoAsset(file: Express.Multer.File, assetId: string, opts: DeterministicAnalyzeOptions): Promise<AssetCard> {
+async function analyzeVideoAsset(file: Express.Multer.File, assetId: string, opts: DeterministicAnalyzeOptions): Promise<AssetCard[]> {
   const probe = await probeVideo(file.path, { ffprobePath: opts.ffprobePath, originalName: file.originalname });
+  const semantic = inferSemanticFromNameAndText(`${file.originalname} video motion usage demo`);
+  const visualSegmentation = opts.visualSegmentation ?? await scanVisualSegments({
+    filePath: file.path,
+    durationSec: probe.media.durationSec,
+    ffmpegPath: opts.ffmpegPath
+  });
+  const roughSegments = sliceVideoIntoSegments({
+    assetId,
+    media: { ...probe.media, keyframes: [] },
+    semanticSummary: `${file.originalname} ${semantic.summary}`,
+    suitableSlots: semantic.suitableSlots,
+    qualityScore: 0.65,
+    segmentation: visualSegmentation
+  });
   const frameResult = await extractAssetKeyframes({
     filePath: file.path,
     assetId,
     durationSec: probe.media.durationSec,
     frameDir: opts.frameDir,
-    ffmpegPath: opts.ffmpegPath
+    ffmpegPath: opts.ffmpegPath,
+    maxFrames: Math.max(roughSegments.length, 5),
+    sampleTimesSec: roughSegments.map(segmentMidpoint)
   });
   const media: AssetMediaProfile = {
     ...probe.media,
     keyframes: frameResult.keyframes
   };
-  const semantic = inferSemanticFromNameAndText(`${file.originalname} video motion usage demo`);
   const qualityResult = scoreAssetQuality(media, {
     hasProductCue: semantic.detectedObjects.includes('product') || semantic.detectedObjects.includes('beverage bottle')
   });
   const warnings = [...probe.warnings, ...frameResult.warnings, ...qualityResult.warnings];
   const fallbackUsed = probe.fallbackUsed || frameResult.fallbackUsed || qualityResult.warnings.length > 0;
   const qualityScore = qualityResult.quality.overallScore;
+  const segments = sliceVideoIntoSegments({
+    assetId,
+    media,
+    semanticSummary: `${file.originalname} ${semantic.summary}`,
+    suitableSlots: semantic.suitableSlots,
+    qualityScore,
+    segmentation: visualSegmentation
+  });
   const analysis = buildAnalysisProfile({
     media,
     semantic,
     quality: qualityResult.quality,
     fallbackUsed,
-    warnings
+    warnings: [...warnings, ...visualSegmentation.warnings],
+    visualSegmentation,
+    videoSegments: segments
   });
 
-  return {
+  const parentCard: AssetCard = {
     id: assetId,
     type: 'video',
     url: file.path,
@@ -136,6 +166,11 @@ async function analyzeVideoAsset(file: Express.Multer.File, assetId: string, opt
     analysisSource: 'deterministic',
     analysis
   };
+  return segments.map((segment, index) => buildVideoSegmentAssetCard(parentCard, segment, index));
+}
+
+function segmentMidpoint(segment: AssetVideoSegment): number {
+  return Number((segment.startSec + segment.durationSec / 2).toFixed(3));
 }
 
 function analyzeTextAsset(text: string): AssetCard {
@@ -297,6 +332,8 @@ function buildAnalysisProfile(input: {
   quality: AssetAnalysisProfile['quality'];
   fallbackUsed: boolean;
   warnings: string[];
+  visualSegmentation?: VisualSegmentationProfile;
+  videoSegments?: AssetVideoSegment[];
 }): AssetAnalysisProfile {
   return {
     profileVersion: 'asset_analysis_v1',
@@ -314,6 +351,8 @@ function buildAnalysisProfile(input: {
       motionPotential: input.semantic.motionPotential
     },
     quality: input.quality,
+    visualSegmentation: input.visualSegmentation,
+    videoSegments: input.videoSegments,
     slotAffordance: {
       suitableSlots: input.semantic.suitableSlots,
       primaryRoles: input.semantic.candidateSlotRoles,
@@ -359,6 +398,71 @@ function buildAnalysisProfile(input: {
         input.semantic.detectedIngredients.join(' ')
       ].filter(Boolean).join(' | ')
     }
+  };
+}
+
+function buildVideoSegmentAssetCard(parent: AssetCard, segment: AssetVideoSegment, index: number): AssetCard {
+  const parentAnalysis = parent.analysis!;
+  const segmentMedia: AssetMediaProfile = {
+    ...parentAnalysis.media,
+    durationSec: segment.durationSec,
+    keyframes: parentAnalysis.media.keyframes.filter((keyframe) => segment.keyframeIds.includes(keyframe.id))
+  };
+  const segmentAnalysis: AssetAnalysisProfile = {
+    ...parentAnalysis,
+    media: segmentMedia,
+    semantic: {
+      ...parentAnalysis.semantic,
+      summary: segment.visualSummary
+    },
+    slotAffordance: {
+      ...parentAnalysis.slotAffordance,
+      suitableSlots: segment.roleHints,
+      primaryRoles: segment.roleHints.map((role) => ({
+        role,
+        confidence: segment.confidence,
+        caveat: 'Derived from long-video semantic segment slicing.'
+      })),
+      missingRoles: parentAnalysis.slotAffordance.missingRoles.filter((role) => !segment.roleHints.includes(role)),
+      rationale: `${parentAnalysis.slotAffordance.rationale} Segment ${index + 1}: ${segment.label}.`
+    },
+    search: {
+      ...parentAnalysis.search,
+      tags: unique([...parentAnalysis.search.tags, ...segment.roleHints, ...segment.actionTags]),
+      keywords: unique([...parentAnalysis.search.keywords, segment.label, segment.visualSummary, ...segment.actionTags]),
+      embeddingText: `${parentAnalysis.search.embeddingText} | ${segment.label} | ${segment.visualSummary} | ${segment.actionTags.join(' ')}`
+    },
+    videoSegments: [segment]
+  };
+
+  return {
+    ...parent,
+    id: segment.id,
+    spatialDescription: segment.visualSummary,
+    temporalDescription: `Segment ${index + 1} of ${segment.parentAssetId}: ${segment.startSec}s-${segment.endSec}s. ${segment.label}`,
+    suitableSlots: segment.roleHints,
+    qualityScore: segment.qualityScore,
+    candidateSlotRoles: segment.roleHints.map((role) => ({
+      role,
+      confidence: segment.confidence,
+      caveat: 'Derived from long-video semantic segment slicing.'
+    })),
+    segmentSource: {
+      parentAssetId: segment.parentAssetId,
+      startSec: segment.startSec,
+      endSec: segment.endSec,
+      durationSec: segment.durationSec,
+      segmentIndex: index,
+      label: segment.label,
+      visualSummary: segment.visualSummary,
+      roleHints: segment.roleHints,
+      actionTags: segment.actionTags,
+      confidence: segment.confidence,
+      source: segment.source,
+      boundaryEvidence: segment.boundaryEvidence,
+      warnings: segment.warnings ?? []
+    },
+    analysis: segmentAnalysis
   };
 }
 

@@ -228,8 +228,71 @@ export const AssetKeyframeSchema = z.object({
   id: z.string(),
   timeSec: z.number().optional(),
   url: z.string().optional(),
+  localPath: z.string().optional(),
   description: z.string().optional(),
   source: z.enum(['uploaded_video', 'sampled_frame', 'placeholder', 'manual'])
+});
+
+export const AssetVideoSegmentSourceSchema = z.enum(['deterministic', 'vlm', 'hybrid']);
+
+export const AssetVideoBoundarySourceSchema = z.enum(['hard_cut', 'motion_regime', 'visual_peak', 'fallback', 'manual']);
+
+export const AssetVideoBoundaryCandidateSchema = z.object({
+  timeSec: z.number().min(0),
+  source: AssetVideoBoundarySourceSchema,
+  confidence: z.number().min(0).max(1),
+  score: z.number().min(0),
+  reason: z.string()
+});
+
+export const VisualSegmentationProfileSchema = z.object({
+  durationSec: z.number().min(0),
+  shouldSlice: z.boolean(),
+  boundaryCandidates: z.array(AssetVideoBoundaryCandidateSchema),
+  hardCutCount: z.number().int().min(0),
+  motionChangeCount: z.number().int().min(0),
+  visualPeakCount: z.number().int().min(0),
+  boundaryConfidence: z.number().min(0).max(1),
+  warnings: z.array(z.string())
+});
+
+export const AssetVideoSegmentSchema = z.object({
+  id: z.string(),
+  parentAssetId: z.string(),
+  startSec: z.number().min(0),
+  endSec: z.number().min(0),
+  durationSec: z.number().min(0),
+  label: z.string(),
+  visualSummary: z.string(),
+  roleHints: z.array(ShotSlotRoleSchema),
+  actionTags: z.array(z.string()),
+  qualityScore: z.number().min(0).max(1),
+  confidence: z.number().min(0).max(1),
+  keyframeIds: z.array(z.string()),
+  thumbnailUrl: z.string().optional(),
+  source: AssetVideoSegmentSourceSchema,
+  boundaryEvidence: AssetVideoBoundaryCandidateSchema.optional(),
+  warnings: z.array(z.string()).optional()
+}).refine((segment) => segment.endSec >= segment.startSec, {
+  message: 'AssetVideoSegment endSec must be >= startSec'
+});
+
+export const AssetSegmentSourceSchema = z.object({
+  parentAssetId: z.string(),
+  startSec: z.number().min(0),
+  endSec: z.number().min(0),
+  durationSec: z.number().min(0),
+  segmentIndex: z.number().int().min(0),
+  label: z.string(),
+  visualSummary: z.string().optional(),
+  roleHints: z.array(ShotSlotRoleSchema).optional(),
+  actionTags: z.array(z.string()),
+  confidence: z.number().min(0).max(1).optional(),
+  source: AssetVideoSegmentSourceSchema,
+  boundaryEvidence: AssetVideoBoundaryCandidateSchema.optional(),
+  warnings: z.array(z.string()).optional()
+}).refine((segment) => segment.endSec >= segment.startSec, {
+  message: 'AssetSegmentSource endSec must be >= startSec'
 });
 
 export const AssetMediaProfileSchema = z.object({
@@ -366,6 +429,8 @@ export const AssetAnalysisProfileSchema = z.object({
   safety: AssetSafetyProfileSchema,
   search: AssetSearchProfileSchema,
   roleAffordance: z.array(RoleAffordanceScoreSchema).optional(),
+  visualSegmentation: VisualSegmentationProfileSchema.optional(),
+  videoSegments: z.array(AssetVideoSegmentSchema).optional(),
   vlm: AssetVlmAnalysisProfileSchema.optional()
 });
 
@@ -390,6 +455,7 @@ export const AssetCardSchema = z.object({
   visualContent: AssetVisualContentSchema.optional(),
   motionPotential: AssetMotionPotentialSchema.optional(),
   candidateSlotRoles: z.array(AssetCandidateSlotRoleSchema).optional(),
+  segmentSource: AssetSegmentSourceSchema.optional(),
   analysisSource: AssetAnalysisSourceSchema.optional(),
   analysis: AssetAnalysisProfileSchema.optional()
 });
@@ -869,6 +935,11 @@ export const SlotCoverageMatrixSchema = z.object({
 
 export const AssetMatchEvidenceSchema = z.object({
   assetId: z.string(),
+  parentAssetId: z.string().optional(),
+  segmentLabel: z.string().optional(),
+  mediaStartSec: z.number().min(0).optional(),
+  mediaEndSec: z.number().min(0).optional(),
+  segmentIndex: z.number().int().min(0).optional(),
   qualityScore: z.number().min(0).max(1),
   topAffordanceRole: AssetManagerRoleSchema.optional(),
   topAffordanceScore: z.number().min(0).max(100).optional(),

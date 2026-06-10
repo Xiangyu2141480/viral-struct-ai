@@ -390,6 +390,8 @@ function buildFill(args: BuildFillArgs): SlotFillMatched | SlotFillGap {
       matchedCriteria: args.slotMatch?.matchedCriteria ?? [],
       treatmentSpec: toTreatmentSpec(args.slotMatch),
       status: 'matched',
+      mediaStartSec: args.slotMatch?.mediaStartSec,
+      mediaEndSec: args.slotMatch?.mediaEndSec,
       videoEngineInstruction:
         `直接使用素材 ${assetId} 承接「${roleLabel}」槽位${treatmentSummary(args.slotMatch)}；保持原素材真实画面，不声明外部生成。`
         + `如需替代或增强，可选「${recommendedOptionId}」等方案（补拍 / HyperFrames / AIGC 任务卡），默认仍用原素材。`,
@@ -424,6 +426,8 @@ function buildFill(args: BuildFillArgs): SlotFillMatched | SlotFillGap {
       missingCriteria: missing ? [missing] : undefined,
       treatmentSpec: toTreatmentSpec(args.slotMatch),
       status: 'partial',
+      mediaStartSec: args.slotMatch?.mediaStartSec,
+      mediaEndSec: args.slotMatch?.mediaEndSec,
       videoEngineInstruction:
         `先放入素材 ${assetId} 作为真实参考，再执行推荐的「${recommendedOptionId}」方案补足结构表达`
         + `${missing ? `；需补足：${missing}` : ''}。`,

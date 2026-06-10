@@ -359,7 +359,7 @@ function buildReport(
           timeline.slots.map((slot, i) => {
             const b = slot.compressionBeat;
             return b
-              ? [String(i), b.beatId, b.preservedStructureFunction, b.targetEquivalentFamily, b.compressionDecision, String(b.mergedSourceSlotIds.length), b.targetEquivalentBeat.slice(0, 80)]
+              ? [String(i), b.beatId, b.preservedStructureFunction, b.targetEquivalentFamily, b.compressionDecision, String(b.mergedSourceSlotIds.length), b.targetEquivalentBeat]
               : [String(i), '-', '-', '-', 'legacy_1to1', '1', '-'];
           })
         )
@@ -432,7 +432,7 @@ function buildReport(
             slot.slotId,
             slot.motifType ?? '-',
             slot.fillStatus ?? '-',
-            firstOptionText(slot).slice(0, 180)
+            firstOptionText(slot)
           ])
         )
       : '_No motif slots detected._',
@@ -445,7 +445,7 @@ function buildReport(
             slot.role,
             slot.fillStatus ?? '-',
             slot.sourceAbstraction?.subtype ?? '-',
-            slot.sourceAbstraction?.targetEquivalentLabel ?? firstOptionText(slot).slice(0, 120)
+            slot.sourceAbstraction?.targetEquivalentLabel ?? firstOptionText(slot)
           ])
         )
       : '_No source-specific slots were downgraded._',
@@ -550,9 +550,9 @@ function buildReport(
 }
 
 function describeOption(option: GapResolutionOption): string {
-  if (option.id === 'reshoot') return option.guidanceNL.slice(0, 160);
-  if (option.id === 'hyperframes') return option.editingGuidanceNL.slice(0, 160);
-  return `[${option.providerHint}] ${option.prompt.slice(0, 160)}`;
+  if (option.id === 'reshoot') return option.guidanceNL;
+  if (option.id === 'hyperframes') return option.editingGuidanceNL;
+  return `[${option.providerHint}] ${option.prompt}`;
 }
 
 function firstOptionText(slot: OrchestratedTimeline['slots'][number]): string {
@@ -595,7 +595,7 @@ function thresholdNearCases(timeline: OrchestratedTimeline): string[][] {
         slot.fill.evidence.matchedIngredients.length || slot.fill.evidence.coverageStatus ? 'weak-or-better' : 'none',
         oldStatus,
         newStatus,
-        slot.fill.videoEngineInstruction.slice(0, 90)
+        slot.fill.videoEngineInstruction
       ];
     });
 }

@@ -161,13 +161,16 @@ export const SlotFillMatchedSchema = z
     missingCriteria: z.array(z.string()).optional(),
     treatmentSpec: OrchestratedTreatmentSpecSchema.optional(),
     status: z.enum(['matched', 'partial']),
+    mediaStartSec: z.number().min(0).optional(),
+    mediaEndSec: z.number().min(0).optional(),
     videoEngineInstruction: z.string(),
     /** partial slots carry asset-preserving options; true gaps may also carry an AIGC job card. */
     options: z.array(GapResolutionOptionSchema).optional(),
     recommendedOptionId: GapResolutionOptionIdSchema.optional(),
     evidence: OrchestratedSlotEvidenceSchema
   })
-  .strict();
+  .strict()
+  ;
 export type SlotFillMatched = z.infer<typeof SlotFillMatchedSchema>;
 
 export const SlotFillGapSchema = z

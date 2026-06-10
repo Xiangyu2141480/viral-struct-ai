@@ -69,6 +69,27 @@ export async function probeVideo(filePath: string, options: ProbeOptions = {}): 
   const fileStat = await safeStat(filePath);
   const format = formatFromPath(options.originalName ?? filePath);
 
+  if (options.ffprobePath?.startsWith('mock:')) {
+    const duration = Number(options.ffprobePath.slice('mock:'.length));
+    return {
+      media: {
+        kind: 'video',
+        sourceUrl: filePath,
+        fileSizeBytes: fileStat?.size,
+        format,
+        durationSec: round(Number.isFinite(duration) && duration > 0 ? duration : 0),
+        fps: 30,
+        width: 1080,
+        height: 1920,
+        aspectRatio: '9:16',
+        hasAudio: true,
+        keyframes: []
+      },
+      warnings,
+      fallbackUsed: false
+    };
+  }
+
   try {
     const { stdout } = await runProcess(resolveFfprobePath(options.ffprobePath), [
       '-v',

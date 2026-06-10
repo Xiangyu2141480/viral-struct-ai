@@ -13,6 +13,7 @@ export interface KeyframeExtractionOptions {
   frameDir?: string;
   ffmpegPath?: string;
   maxFrames?: number;
+  sampleTimesSec?: number[];
 }
 
 export interface KeyframeExtractionResult {
@@ -24,7 +25,7 @@ export interface KeyframeExtractionResult {
 export async function extractAssetKeyframes(options: KeyframeExtractionOptions): Promise<KeyframeExtractionResult> {
   const warnings: string[] = [];
   const duration = options.durationSec ?? 0;
-  const maxFrames = Math.max(1, Math.min(options.maxFrames ?? 5, 5));
+  const maxFrames = Math.max(1, Math.min(options.maxFrames ?? 5, options.sampleTimesSec?.length ? 32 : 5));
   const outputDir = path.resolve(options.frameDir ?? getFrameDir());
 
   if (!Number.isFinite(duration) || duration <= 0) {
@@ -47,9 +48,11 @@ export async function extractAssetKeyframes(options: KeyframeExtractionOptions):
   }
 
   await mkdir(outputDir, { recursive: true });
-  const times = Array.from({ length: maxFrames }, (_value, index) =>
-    round(Math.min(Math.max(((index + 1) * duration) / (maxFrames + 1), 0), Math.max(duration - 0.1, 0)))
-  );
+  const times = buildKeyframeSampleTimes({
+    durationSec: duration,
+    maxFrames,
+    sampleTimesSec: options.sampleTimesSec
+  });
   const keyframes: AssetKeyframe[] = [];
 
   for (let index = 0; index < times.length; index++) {
@@ -60,6 +63,7 @@ export async function extractAssetKeyframes(options: KeyframeExtractionOptions):
         id: `${safeAssetStem(options.assetId)}_frame_${index + 1}`,
         timeSec: times[index],
         url: `/media/frames/${path.basename(outputPath)}`,
+        localPath: outputPath,
         description: `Deterministic asset keyframe ${index + 1}`,
         source: 'sampled_frame'
       });
@@ -73,6 +77,25 @@ export async function extractAssetKeyframes(options: KeyframeExtractionOptions):
     warnings,
     fallbackUsed: keyframes.length === 0 || warnings.length > 0
   };
+}
+
+export function buildKeyframeSampleTimes(options: {
+  durationSec: number;
+  maxFrames: number;
+  sampleTimesSec?: number[];
+}): number[] {
+  const duration = options.durationSec;
+  const maxFrames = Math.max(1, Math.min(options.maxFrames, options.sampleTimesSec?.length ? 32 : 5));
+  const maxTime = Math.max(duration - 0.1, 0);
+  if (options.sampleTimesSec?.length) {
+    return uniqueNumbers(options.sampleTimesSec
+      .filter((time) => Number.isFinite(time))
+      .map((time) => round(Math.min(Math.max(time, 0), maxTime))))
+      .slice(0, maxFrames);
+  }
+  return Array.from({ length: maxFrames }, (_value, index) =>
+    round(Math.min(Math.max(((index + 1) * duration) / (maxFrames + 1), 0), maxTime))
+  );
 }
 
 export function buildKeyframeOutputPath(outputDir: string, assetId: string, index: number): string {
@@ -140,6 +163,10 @@ function extractFrame(ffmpegPath: string, filePath: string, outputPath: string, 
 
 function round(value: number): number {
   return Number(value.toFixed(3));
+}
+
+function uniqueNumbers(values: number[]): number[] {
+  return Array.from(new Set(values));
 }
 
 function errorMessage(error: unknown): string {

@@ -127,13 +127,21 @@ function toEnhancementOption(option: GapResolutionOption, recommended: boolean):
 }
 
 function buildMediaLayer(slot: OrchestratedSlot, assetId: string, asset: AssetCard | undefined): MediaLayer {
+  const segmentTiming = slot.fill.kind === 'matched'
+    ? {
+        startSec: slot.fill.mediaStartSec ?? asset?.segmentSource?.startSec,
+        endSec: slot.fill.mediaEndSec ?? asset?.segmentSource?.endSec
+      }
+    : {};
   return {
     id: `${slot.slotId}_layer`,
     media: {
       id: `${slot.slotId}_media`,
       type: mediaType(asset),
       assetId,
-      ...(asset?.url ? { resolvedPath: asset.url } : {})
+      ...(asset?.url ? { resolvedPath: asset.url } : {}),
+      ...(segmentTiming.startSec !== undefined ? { startSec: segmentTiming.startSec } : {}),
+      ...(segmentTiming.endSec !== undefined ? { endSec: segmentTiming.endSec } : {})
     },
     fit: 'cover',
     zOrder: 0,

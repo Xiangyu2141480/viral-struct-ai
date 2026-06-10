@@ -95,6 +95,98 @@ test('matchSlots applies no bonus for weak/cut boundaries', () => {
   assert.equal(noBonus.score, baseline.score);
 });
 
+test('matchSlots filters long-video parent cards and records selected segment timing', () => {
+  const graph = makeGraph();
+  graph.shotSlots[0] = {
+    ...graph.shotSlots[0],
+    role: 'usage_demo',
+    requiredAsset: { type: 'video', subject: 'usage action' }
+  };
+  const parent: AssetCard = {
+    id: 'asset_long',
+    type: 'video',
+    url: '/long.mp4',
+    detectedObjects: ['beverage bottle'],
+    suitableSlots: ['usage_demo'],
+    qualityScore: 0.8,
+    analysis: {
+      profileVersion: 'asset_analysis_v1',
+      analyzedAt: '1970-01-01T00:00:00.000Z',
+      source: 'deterministic',
+      fallbackUsed: false,
+      warnings: [],
+      media: { kind: 'video', sourceUrl: '/long.mp4', durationSec: 18, keyframes: [] },
+      semantic: { summary: 'parent video', detectedObjects: ['product'], detectedIngredients: [], visualStyleTags: [] },
+      quality: {
+        overallScore: 0.8,
+        resolution: 0.8,
+        sharpness: 0.8,
+        brightness: 0.8,
+        contrast: 0.8,
+        clarity: 0.8,
+        composition: 0.8,
+        lighting: 0.8,
+        subjectProminence: 0.8,
+        productFocus: 0.8,
+        textSafeArea: 0.6,
+        issues: []
+      },
+      slotAffordance: { suitableSlots: ['usage_demo'], primaryRoles: [{ role: 'usage_demo', confidence: 0.9 }], missingRoles: [], rationale: 'parent' },
+      editability: { canCropZoom: true, canUseAsBackground: true, canLoop: true, canExtendWithCards: true, suggestedEdits: [] },
+      safety: { status: 'passed', brandRisk: 'low', ipRisk: 'low', claimRisk: 'low', reasons: [] },
+      search: { tags: [], keywords: [], embeddingText: '' },
+      videoSegments: [{
+        id: 'asset_long_seg_001',
+        parentAssetId: 'asset_long',
+        startSec: 6,
+        endSec: 12,
+        durationSec: 6,
+        label: 'open cap and pour action',
+        visualSummary: 'hand opens cap and pours into cup',
+        roleHints: ['usage_demo'],
+        actionTags: ['open_cap', 'pour_to_cup'],
+        qualityScore: 0.82,
+        confidence: 0.82,
+        keyframeIds: [],
+        source: 'deterministic'
+      }]
+    }
+  };
+  const segment: AssetCard = {
+    ...parent,
+    id: 'asset_long_seg_001',
+    suitableSlots: ['usage_demo'],
+    segmentSource: {
+      parentAssetId: 'asset_long',
+      startSec: 6,
+      endSec: 12,
+      durationSec: 6,
+      segmentIndex: 0,
+      label: 'open cap and pour action',
+      visualSummary: 'hand opens cap and pours into cup',
+      roleHints: ['usage_demo'],
+      actionTags: ['open_cap', 'pour_to_cup'],
+      confidence: 0.82,
+      source: 'deterministic'
+    },
+    analysis: {
+      ...parent.analysis!,
+      videoSegments: parent.analysis!.videoSegments?.slice(0, 1),
+      semantic: { ...parent.analysis!.semantic, summary: 'hand opens cap and pours into cup' }
+    }
+  };
+
+  const result = matchSlots(graph, [parent, segment]);
+  const match = result.matches.find((item) => item.slotId === 'slot_a')!;
+
+  assert.equal(match.assetId, 'asset_long_seg_001');
+  assert.equal(match.assetSegmentId, 'asset_long_seg_001');
+  assert.equal(match.mediaStartSec, 6);
+  assert.equal(match.mediaEndSec, 12);
+  assert.equal(match.assetEvidence?.parentAssetId, 'asset_long');
+  assert.equal(match.assetEvidence?.segmentLabel, 'open cap and pour action');
+});
+
 test('matchSlots uses AssetAnalysis role affordance, quality and warnings as asset evidence', () => {
   const graph = makeGraph();
   graph.shotSlots[0] = {

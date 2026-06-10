@@ -59,3 +59,38 @@ test('without assetCards the timeline carries asset ids but no resolved paths (V
   assert.equal(open.mediaLayers[0].media.assetId, 'asset_open');
   assert.equal(open.mediaLayers[0].media.resolvedPath, undefined);
 });
+
+test('video segment AssetCard timing is passed through as media startSec/endSec', async () => {
+  const timeline = await makeTimeline();
+  const target = timeline.slots.find((slot) => slot.slotId === 'slot_usage')!;
+  if (target.fill.kind !== 'matched') throw new Error('fixture expected matched usage slot');
+  target.fill.assetId = 'asset_usage_seg_002';
+  target.fill.mediaStartSec = 6;
+  target.fill.mediaEndSec = 11.5;
+
+  const authored = orchestratedToAuthored(timeline, {
+    assetCards: [{
+      id: 'asset_usage_seg_002',
+      type: 'video',
+      url: '/usage.mp4',
+      detectedObjects: ['product'],
+      suitableSlots: ['usage_demo'],
+      qualityScore: 0.82,
+      segmentSource: {
+        parentAssetId: 'asset_usage',
+        startSec: 6,
+        endSec: 11.5,
+        durationSec: 5.5,
+        segmentIndex: 1,
+        label: 'open cap and pour',
+        actionTags: ['open_cap', 'pour_to_cup'],
+        source: 'deterministic'
+      }
+    }]
+  });
+
+  const usage = authored.beats.find((beat) => beat.id === 'slot_usage')!;
+  assert.equal(usage.mediaLayers[0].media.resolvedPath, '/usage.mp4');
+  assert.equal(usage.mediaLayers[0].media.startSec, 6);
+  assert.equal(usage.mediaLayers[0].media.endSec, 11.5);
+});
