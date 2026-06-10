@@ -28,6 +28,8 @@ import { analyzeAssetsWithFallbackResult } from '../services/assetAnalyzer';
 import { matchSlotsWithFallback } from '../services/slotMatcher';
 import { runDirectorAgent, buildGapResolutionOptions } from '../services/directorAgent';
 import { translateCategoryEquivalents } from '../services/directorAgent/categoryEquivalentTranslator';
+import { parseContentBrief } from '../services/productIntelligence/contentBriefParser';
+import { analyzeProductIntelligence } from '../services/productIntelligence/productIntelligenceAnalyzer';
 import { planAigcBeats } from '@viral-struct/video-agent';
 import { renderAigcTimeline } from '../services/videoAgent/aigcRenderer';
 import { wanConfigFromEnv } from '../services/videoAgent/wanVideoClient';
@@ -62,6 +64,7 @@ import type {
   AuthoredSegmentRole,
   AuthoredTimeline,
   ContentBrief,
+  ProductIntelligence,
   TimelineItem,
 } from '@viral-struct/shared';
 import {
@@ -762,6 +765,44 @@ structRouter.post('/materials/match', async (req, res) => {
   }
 });
 
+/** Resolve the rich ContentBrief + ProductIntelligence that drive product-native prompts. When the user
+ *  supplied a free-form product paragraph (product.description), parse it (LLM + deterministic fallback)
+ *  into a real ContentBrief and analyze ProductIntelligence (grounded in the asset cards); otherwise fall
+ *  back to the thin brief synthesized from the structured product fields. Both feed the category-equivalent
+ *  translator, so a real description yields specific, product-native actions/scenes instead of the
+ *  category-stuffed placeholders the structured-fields brief produces. */
+async function resolveBriefAndIntelligence(
+  product: TargetProduct,
+  sourceVideo: SourceVideo,
+  assetCards: ReturnType<typeof materialsToAssetCards>,
+): Promise<{ contentBrief: ContentBrief; productIntelligence?: ProductIntelligence; warnings: string[] }> {
+  const warnings: string[] = [];
+  const description = (product?.description ?? '').trim();
+  let contentBrief: ContentBrief;
+  if (description) {
+    const parsed = await parseContentBrief({ rawInput: description });
+    warnings.push(...parsed.warnings);
+    contentBrief = {
+      ...parsed.contentBrief,
+      category: parsed.contentBrief.category || product.category || undefined,
+      stylePreference:
+        parsed.contentBrief.stylePreference ?? `${sourceVideo.packaging.captions} · ${sourceVideo.packaging.cover}`,
+    };
+  } else {
+    contentBrief = buildContentBrief(product, sourceVideo);
+    warnings.push('未提供产品描述，使用结构化字段合成的基础 brief（生成的 prompt 可能较笼统）');
+  }
+  let productIntelligence: ProductIntelligence | undefined;
+  try {
+    const pi = await analyzeProductIntelligence({ contentBrief, assetCards });
+    productIntelligence = pi.productIntelligence;
+    warnings.push(...pi.warnings);
+  } catch (e) {
+    warnings.push(`产品理解分析失败，将仅用 brief：${errorMessage(e)}`);
+  }
+  return { contentBrief, productIntelligence, warnings };
+}
+
 /* ─── POST /api/struct/diagnose — four-state diagnosis per slot ─── */
 structRouter.post('/diagnose', async (req, res) => {
   try {
@@ -775,11 +816,16 @@ structRouter.post('/diagnose', async (req, res) => {
 
     const graph = buildStructureGraph(sourceVideo);
     const assetCards = materialsToAssetCards(materials, sourceVideo, product);
-    const contentBrief = buildContentBrief(product, sourceVideo);
+    // Rich brief + product intelligence from the user's product paragraph (or thin fallback).
+    const { contentBrief, productIntelligence, warnings: briefWarnings } = await resolveBriefAndIntelligence(
+      product,
+      sourceVideo,
+      assetCards,
+    );
 
     const matchResult = await matchSlotsWithFallback({ graph, assets: assetCards, boundaries: graph.boundaries });
 
-    const warnings: string[] = [];
+    const warnings: string[] = [...briefWarnings];
 
     // Real per-gap 3-option resolution (T1): for each slot derive its tier
     // (matched/partial/gap) and ask the Director Agent for the full
@@ -793,6 +839,7 @@ structRouter.post('/diagnose', async (req, res) => {
         matches: matchResult.matches,
         assetCards,
         contentBrief,
+        productIntelligence,
       });
     } catch (resolutionError) {
       slotResolutions = undefined;
@@ -1452,12 +1499,15 @@ async function buildSlotResolutions(input: {
   matches: SlotMatch[];
   assetCards: ReturnType<typeof materialsToAssetCards>;
   contentBrief: ContentBrief;
+  productIntelligence?: ProductIntelligence;
 }): Promise<Record<string, SlotGapResolution>> {
-  const { graph, matches, assetCards, contentBrief } = input;
+  const { graph, matches, assetCards, contentBrief, productIntelligence } = input;
   // #76: the 3-option briefs are driven by an LLM-translated category-equivalent
   // vocabulary (no deterministic fallback). Build it ONCE; if the LLM is unavailable
   // this throws and the /diagnose caller falls back to the base 4-state diagnosis.
-  const vocab = await translateCategoryEquivalents({ contentBrief, assetCards });
+  // productIntelligence (when present) grounds the vocab in the product's real benefits/
+  // sensory cues/usage rituals so the per-slot actions are specific, not category-generic.
+  const vocab = await translateCategoryEquivalents({ contentBrief, productIntelligence, assetCards });
   const matchBySlot = new Map(matches.map((m) => [m.slotId, m]));
   const referenceAssetIds = assetCards.map((c) => c.id);
   const out: Record<string, SlotGapResolution> = {};

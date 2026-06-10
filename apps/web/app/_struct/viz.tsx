@@ -188,6 +188,8 @@ export const MigrationFlow = () => {
   const segs = useProjectStore((s) => s.sourceVideo.segments);
   const mats = useProjectStore((s) => s.materials);
   const diagnosis = useProjectStore((s) => s.diagnosis);
+  const matching = useProjectStore((s) => s.matching);
+  const uploading = useProjectStore((s) => s.uploading);
   const stateOf = (id: string): StateKey => diagnosis[id]?.state ?? 'missing';
 
   const MAT_H = 54,MAT_GAP = 8;
@@ -196,6 +198,18 @@ export const MigrationFlow = () => {
     mats.length * MAT_H + (mats.length - 1) * MAT_GAP,
     segs.length * SLOT_H + (segs.length - 1) * SLOT_GAP
   ) + 20;
+
+  // While the asset analysis / real slot match runs, hide every wire + vessel and show a single
+  // on-brand "正在解析匹配中" state — the connections only mean something once matching resolves.
+  if (uploading || matching) {
+    return (
+      <div className="migrate migrate-analyzing" style={{ height: CONTAINER_H }}>
+        <span className="migrate-analyzing-orb" />
+        <span className="migrate-analyzing-text">正在解析匹配中</span>
+        <span className="migrate-analyzing-sub mono">素材 → 源结构槽位对齐中…</span>
+      </div>
+    );
+  }
 
   const matTotal = mats.length * MAT_H + (mats.length - 1) * MAT_GAP;
   const slotTotal = segs.length * SLOT_H + (segs.length - 1) * SLOT_GAP;
@@ -249,7 +263,7 @@ export const MigrationFlow = () => {
               </div>
               <div className="mat-vessel-body">
                 <div className="mat-vessel-name">{m.subject}</div>
-                <div className="mat-vessel-meta mono">{m.id.toUpperCase()} · q={m.quality.toFixed(1)}</div>
+                <div className="mat-vessel-meta mono">{m.id.toUpperCase()}</div>
               </div>
             </div>);
 
@@ -383,7 +397,7 @@ export const MigrationFlow = () => {
                     {{ filled: 'FILLED', weakly: 'WEAK', missing: 'MISS', critical: 'KEY GAP' }[state]}
                   </span>
                   <span className="mono" style={{ fontSize: 9.5, color: 'var(--text-mute)' }}>
-                    {fillPct}% · {(s.end - s.start).toFixed(1)}s
+                    {(s.end - s.start).toFixed(1)}s
                   </span>
                   {incoming.length > 0 &&
                   <span className="mono" style={{ fontSize: 9.5, color: 'var(--text-dim)' }}>

@@ -234,6 +234,9 @@ export interface TargetProduct {
   stock: number;
   asset_count: number;
   industry: string;
+  /** Free-form product paragraph (the production "front door"). Parsed downstream into a rich
+   *  ContentBrief + ProductIntelligence that drive SPECIFIC, product-native prompts. */
+  description?: string;
 }
 
 // Target product (the merchant's new product)

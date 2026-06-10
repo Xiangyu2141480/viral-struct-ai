@@ -86,6 +86,10 @@ export interface TargetProduct {
   stock: number;
   asset_count: number;
   industry: string;
+  /** Free-form product paragraph (the production "front door"). When present it is parsed into a rich
+   *  ContentBrief + ProductIntelligence that drive specific, product-native prompts — instead of the thin
+   *  brief synthesized from the structured fields above. See contentBriefParser.USER_BRIEF_INPUT_GUIDANCE. */
+  description?: string;
 }
 
 export interface Material {

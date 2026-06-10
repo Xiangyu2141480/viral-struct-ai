@@ -1305,6 +1305,51 @@ button { font-family: inherit; }
   grid-template-columns: 220px 1fr 280px;
   gap: 0;
 }
+/* "正在解析匹配中" placeholder — replaces the whole migration view while matching runs. */
+.migrate.migrate-analyzing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  background:
+    radial-gradient(120% 80% at 50% 40%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 70%),
+    var(--bg-2);
+}
+.migrate-analyzing-orb {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-top-color: var(--accent);
+  box-shadow: 0 0 18px -4px var(--accent);
+  animation: migrate-analyzing-spin 0.9s linear infinite;
+}
+.migrate-analyzing-text {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--text);
+}
+.migrate-analyzing-text::after {
+  content: '';
+  animation: migrate-analyzing-dots 1.4s steps(4, end) infinite;
+}
+.migrate-analyzing-sub {
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--text-mute);
+}
+@keyframes migrate-analyzing-spin { to { transform: rotate(360deg); } }
+@keyframes migrate-analyzing-dots {
+  0% { content: ''; }
+  25% { content: '·'; }
+  50% { content: '··'; }
+  75% { content: '···'; }
+  100% { content: ''; }
+}
 .migrate-col {
   position: relative;
 }

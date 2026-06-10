@@ -64,7 +64,7 @@ import {
   type Diagnosis,
   type Material,
   type ResolutionMethod,
-  type RoleKey,
+  type SourceSegment,
   type SourceVideo,
   type TargetProduct,
 } from '../data';
@@ -204,31 +204,61 @@ function resolveProductImageUrl(materials: Material[], current: string | null): 
   return firstImageMaterialUrl(materials);
 }
 
-/** Canonical role→slot ids the backend (assetCardsToMaterials / CANONICAL_ROLE_SLOT) assigns to
- *  freshly uploaded materials. These are placeholders that do NOT match a real scanned segment id
- *  (e.g. a rough scan produces `seg_block_001…`), so we invert them to remap onto a real segment. */
-const CANONICAL_SLOT_ROLE: Record<string, RoleKey> = {
-  s1: 'hook', s2: 'pain', s3: 'emotion', s4: 'product', s5: 'compare', s6: 'social', s7: 'cta',
-};
+/** Strip any backend-suggested placeholder slot from freshly uploaded/loaded materials. The upload
+ *  analyzer assigns a single role-derived placeholder slot (s1..s7) to every material — an unreliable
+ *  uniform guess that would clump every connection onto one segment. We clear it and instead run the
+ *  REAL slot matcher (applyAssignments), so migration lines reflect actual matching and only confidently
+ *  matched materials draw a connection (to a real segment id). */
+function clearSuggestedSlots(materials: Material[]): Material[] {
+  return materials.map((m) => (m.slot == null ? m : { ...m, slot: null }));
+}
 
-/** Align freshly-uploaded materials' placeholder slot ids (s1..s7, role-assigned by the backend)
- *  onto the CURRENT source structure's real segment ids, so the structure-migration connections
- *  render immediately after upload — before /materials/match refines them against the real graph.
- *  A material keeps a slot that already names a real segment; a placeholder maps to the first real
- *  segment of the same role; if no segment of that role exists, the slot is cleared so the UI never
- *  draws a connection to a non-existent slot. */
-function alignMaterialSlotsToSource(materials: Material[], sourceVideo: SourceVideo): Material[] {
-  const segments = sourceVideo.segments;
-  if (segments.length === 0) return materials;
-  const realIds = new Set(segments.map((s) => s.id));
-  const firstByRole = new Map<RoleKey, string>();
-  for (const s of segments) if (!firstByRole.has(s.role)) firstByRole.set(s.role, s.id);
-  return materials.map((m) => {
-    if (!m.slot || realIds.has(m.slot)) return m; // unassigned, or already a real segment id
-    const role = CANONICAL_SLOT_ROLE[m.slot];
-    const target = role ? firstByRole.get(role) : undefined;
-    return { ...m, slot: target ?? null };
-  });
+/** TEST TOGGLE (相同功能段合并) — coalesce consecutive same-role segments into ONE block.
+ *  true  = MERGE: adjacent same-function beats become a single structural slot, for BOTH the screen-01
+ *          structure display AND migration/matching (the store's sourceVideo flows to every backend call,
+ *          so the merged block is matched/migrated as one).
+ *  false = original DIFFERENTIATE design: every scanned beat stays a separate segment and the abstract
+ *          band shows a distinct caption-derived title per beat (conciseBeatTitle in viz). Flip back to
+ *          false to restore that original behavior — it is intentionally kept, not deleted. */
+const COALESCE_SAME_ROLE_SEGMENTS = false;
+
+function joinDistinct(...parts: Array<string | undefined>): string {
+  return Array.from(new Set(parts.filter((p): p is string => Boolean(p)))).join(' / ');
+}
+
+/** Merge runs of consecutive same-role segments into one block: union time span, combined shot/caption,
+ *  the first segment's id/label/role/transferRule. Transitions are remapped onto the block ids — seams
+ *  internal to a merged block are dropped, boundary seams (deduped) kept. No-op when the flag is off or
+ *  nothing is adjacent-duplicated, so callers can wrap every sourceVideo assignment unconditionally. */
+function coalesceSameRoleSegments(sv: SourceVideo): SourceVideo {
+  if (!COALESCE_SAME_ROLE_SEGMENTS || sv.segments.length < 2) return sv;
+  const merged: SourceSegment[] = [];
+  const blockIdByOrig = new Map<string, string>();
+  for (const seg of sv.segments) {
+    const last = merged[merged.length - 1];
+    if (last && last.role === seg.role) {
+      last.end = seg.end;
+      last.shot = joinDistinct(last.shot, seg.shot);
+      last.caption = joinDistinct(last.caption, seg.caption);
+      blockIdByOrig.set(seg.id, last.id);
+    } else {
+      const block: SourceSegment = { ...seg };
+      merged.push(block);
+      blockIdByOrig.set(seg.id, block.id);
+    }
+  }
+  if (merged.length === sv.segments.length) return sv; // no adjacent duplicates → unchanged
+  const seen = new Set<string>();
+  const transitions = sv.transitions
+    .map((t) => ({ ...t, from: blockIdByOrig.get(t.from) ?? t.from, to: blockIdByOrig.get(t.to) ?? t.to }))
+    .filter((t) => {
+      if (t.from === t.to) return false; // seam inside a merged block
+      const key = `${t.from}->${t.to}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  return { ...sv, segments: merged, transitions };
 }
 
 /** Derive a playable timeline from the structure + diagnosis (mock fallback). */
@@ -255,8 +285,20 @@ const EMPTY_SOURCE: SourceVideo = {
   rhythm: { avg_shot: 0, cuts: 0, hook_density: '', bgm_bpm: 0, caption_density: '' },
   packaging: { title_template: '', captions: '', bgm: '', cover: '' },
 };
-/** Blank product the user fills in — no mock product seeded. */
-const BLANK_PRODUCT: TargetProduct = { name: '', category: '', price: '', stock: 0, asset_count: 0, industry: '' };
+/** Demo default product — simulates the user's product input so the downstream rich-brief path
+ *  (parseContentBrief → analyzeProductIntelligence → category-equivalent vocab) has a real paragraph to
+ *  work with out of the box. `description` is the production "front door" (one natural paragraph); the
+ *  structured fields are convenience defaults. The user can edit all of this in 「编辑商品信息」. */
+const BLANK_PRODUCT: TargetProduct = {
+  name: '康师傅冰红茶',
+  category: '饮料',
+  price: '¥3.5',
+  stock: 50000,
+  asset_count: 0,
+  industry: '即饮茶饮料',
+  description:
+    '康师傅冰红茶，是一款柠檬味的即饮红茶饮料，主打冰爽好喝、随时畅饮。它主要卖给夏天通勤、爱和朋友聚餐的年轻人，最适合天热口渴、饭后解腻，或者三五好友聚会分享的时候来一瓶。我们最想突出的是：冰爽解腻、柠檬茶香清新、大瓶装方便分享、冰镇之后口感更清爽。希望大家看完就想现在来一瓶。整体风格偏夏日清爽、节奏明快、真实质感。',
+};
 
 const initialState = {
   sourceVideo: EMPTY_SOURCE,
@@ -340,7 +382,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     set({ analyzing: true, lastError: null });
     try {
       const { sourceVideo, warnings } = await analyzeSampleApi(input);
-      set({ sourceVideo, mode: 'live', warnings: warnings ?? [] });
+      set({ sourceVideo: coalesceSameRoleSegments(sourceVideo), mode: 'live', warnings: warnings ?? [] });
       void get().refreshAssetManagerCoverage();
     } catch (e) {
       set({ lastError: '样例解析失败 · ' + errMsg(e) });
@@ -364,7 +406,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         }
         if (s.status === 'error') throw new Error(s.error || '粗扫描失败');
         if (!s.sourceVideo) throw new Error('扫描完成但未返回结构');
-        set({ sourceVideo: s.sourceVideo, mode: 'live', warnings: s.warnings ?? [], scanning: false, scanStage: '', segmentDetails: {}, fineScanStages: {}, boundaryScanStages: {}, hyperframesStages: {}, hyperframesPreviews: {} });
+        set({ sourceVideo: coalesceSameRoleSegments(s.sourceVideo), mode: 'live', warnings: s.warnings ?? [], scanning: false, scanStage: '', segmentDetails: {}, fineScanStages: {}, boundaryScanStages: {}, hyperframesStages: {}, hyperframesPreviews: {} });
         void get().refreshAssetManagerCoverage();
         return;
       }
@@ -566,15 +608,13 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     if (files.length === 0) return;
     set({ uploading: true, lastError: null });
     try {
-      // Pass materials VERBATIM from the API (they carry .url + clip fields) —
-      // do NOT strip them. Default the produce anchor to the first image url.
+      // Materials carry .url + clip fields verbatim. Clear the upload's placeholder slot guess so the
+      // migration view doesn't draw a misleading uniform clump before real matching runs.
       const { materials, warnings } = await uploadMaterialsApi(files, get().product);
-      // Remap the backend's placeholder slot ids (s1..s7) onto this source's real segment ids so
-      // the migration connections appear right away (match refines them later).
-      const aligned = alignMaterialSlotsToSource(materials, get().sourceVideo);
+      const cleared = clearSuggestedSlots(materials);
       set({
-        materials: aligned,
-        productImageUrl: resolveProductImageUrl(aligned, get().productImageUrl),
+        materials: cleared,
+        productImageUrl: resolveProductImageUrl(cleared, get().productImageUrl),
         mode: 'live',
         warnings: warnings ?? [],
       });
@@ -584,6 +624,12 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       throw e;
     } finally {
       set({ uploading: false });
+    }
+    // Upload OK → run the REAL slot matcher so the migration connections reflect actual matching
+    // (each material → its best real segment, unmatched → no line), not the upload's uniform guess.
+    // applyAssignments owns its own `matching` loading state + error reporting.
+    if (get().sourceVideo.segments.length > 0) {
+      await get().applyAssignments({}).catch(() => {});
     }
   },
 
@@ -847,11 +893,11 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     set({ uploading: true, lastError: null });
     try {
       const { materials, warnings } = await loadLibraryMaterialsApi(libraryId);
-      // Same placeholder-slot remap as upload, so a loaded library lights up the migration view.
-      const aligned = alignMaterialSlotsToSource(materials, get().sourceVideo);
+      // Clear placeholder slots; the real matcher (below) assigns them so lines reflect actual matching.
+      const cleared = clearSuggestedSlots(materials);
       set({
-        materials: aligned,
-        productImageUrl: resolveProductImageUrl(aligned, get().productImageUrl),
+        materials: cleared,
+        productImageUrl: resolveProductImageUrl(cleared, get().productImageUrl),
         mode: 'live',
         warnings: warnings ?? [],
       });
@@ -861,6 +907,9 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       throw e;
     } finally {
       set({ uploading: false });
+    }
+    if (get().sourceVideo.segments.length > 0) {
+      await get().applyAssignments({}).catch(() => {});
     }
   },
 
@@ -929,7 +978,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       // fine-scan detail, but reset all downstream working state (materials,
       // diagnosis, applied slots, timeline, export, in-flight fine scans).
       set({
-        sourceVideo: rec.sourceVideo,
+        sourceVideo: coalesceSameRoleSegments(rec.sourceVideo),
         segmentDetails: rec.segmentDetails ?? {},
         mode: 'live',
         materials: [],

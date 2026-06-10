@@ -1057,6 +1057,24 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
               }}
             />
           </div>
+          <div>
+            <div className="eyebrow" style={{ marginBottom: 4 }}>产品描述 · 一段话(系统自动解析卖点/人群/场景/CTA)</div>
+            <textarea
+              value={productInfo.description || ''}
+              onChange={e => setProductInfo(prev => ({ ...prev, description: e.target.value }))}
+              rows={7}
+              placeholder={'用一段话介绍产品：①是什么(名字+品类) ②卖给谁 ③什么场景/时候用 ④最想突出的 3–5 个卖点 ⑤希望观众看完做什么 ⑥(可选)风格偏好。少写绝对化用语(最/第一)、医疗功效和未证实数字。'}
+              style={{
+                width: '100%', padding: '8px 12px',
+                background: 'var(--bg-2)', border: '1px solid var(--border)',
+                borderRadius: 5, color: 'var(--text)', fontSize: 13,
+                fontFamily: 'inherit', outline: 'none', resize: 'vertical', lineHeight: 1.6,
+              }}
+            />
+            <div style={{ fontSize: 10.5, color: 'var(--text-faint)', marginTop: 4, lineHeight: 1.5 }}>
+              这段描述会驱动下游补拍/HyperFrames/AIGC 的 prompt 生成 —— 越具体，建议越精准、越不雷同。
+            </div>
+          </div>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 8 }}>
             <button className="btn" onClick={() => setEditOpen(false)}>取消</button>
             <button className="btn primary" onClick={handleProductSave}>保存</button>
