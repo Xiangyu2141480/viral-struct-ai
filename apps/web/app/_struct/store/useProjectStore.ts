@@ -13,8 +13,10 @@
 import { create } from 'zustand';
 import type {
   AssetSupplyContext,
+  ContentBrief,
   DemoEstimate,
   MissingMaterialGenerationJob,
+  ProductIntelligence,
   QualityReport,
   SafetyStatus,
   StoryboardFrame,
@@ -29,6 +31,7 @@ import {
 } from '../api/compile';
 import { applyStrategy as applyStrategyApi, diagnose as diagnoseApi } from '../api/diagnose';
 import { matchMaterials as matchMaterialsApi, uploadMaterials as uploadMaterialsApi } from '../api/materials';
+import { parseProduct as parseProductApi } from '../api/product';
 import { analyzeSample as analyzeSampleApi } from '../api/sample';
 import {
   getBoundaryScanStatus,
@@ -76,7 +79,14 @@ type ApiMode = 'mock' | 'live';
 interface ProjectState {
   // ── data ──────────────────────────────────────────────────
   sourceVideo: SourceVideo;
+  /** Object URL of the just-uploaded sample video — drives its first-frame cover. */
+  sourceVideoPreviewUrl: string | null;
+  rawProductDescription: string;
   product: TargetProduct;
+  contentBrief: ContentBrief | null;
+  productIntelligence: ProductIntelligence | null;
+  parseWarnings: string[];
+  parseSource: 'llm' | 'deterministic' | null;
   materials: Material[];
   diagnosis: Record<string, Diagnosis>;
   appliedSlots: Record<string, boolean>;
@@ -123,6 +133,11 @@ interface ProjectState {
   /** Per-segment deep detail from fine scan, keyed by UI segment id. */
   segmentDetails: Record<string, FineBlockDetail>;
   uploading: boolean;
+  parsingProduct: boolean;
+  productPhaseHint: string;
+  assetPhaseHint: string;
+  diagnosisPhaseHint: string;
+  compilePhaseHint: string;
   matching: boolean;
   diagnosing: boolean;
   compiling: boolean;
@@ -162,6 +177,7 @@ interface ProjectState {
   setSlot: (materialId: string, slot: string | null) => void;
   applyAssignments: (assignments: Record<string, string | null>) => Promise<void>;
   updateProduct: (product: TargetProduct) => void;
+  parseProductDescription: (rawInput: string) => Promise<void>;
   runDiagnosis: () => Promise<void>;
   applyStrategy: (slotId: string, method?: ResolutionMethod, payload?: unknown) => Promise<void>;
   selectVersion: (versionId: string) => void;
@@ -309,7 +325,13 @@ const BLANK_PRODUCT: TargetProduct = {
 
 const initialState = {
   sourceVideo: EMPTY_SOURCE,
+  sourceVideoPreviewUrl: null as string | null,
+  rawProductDescription: '',
   product: BLANK_PRODUCT,
+  contentBrief: null as ContentBrief | null,
+  productIntelligence: null as ProductIntelligence | null,
+  parseWarnings: [] as string[],
+  parseSource: null as 'llm' | 'deterministic' | null,
   materials: [] as Material[],
   diagnosis: {} as Record<string, Diagnosis>,
   appliedSlots: {} as Record<string, boolean>,
@@ -337,6 +359,11 @@ const initialState = {
   hyperframesPreviews: {} as Record<string, { url: string; source: string }>,
   segmentDetails: {} as Record<string, FineBlockDetail>,
   uploading: false,
+  parsingProduct: false,
+  productPhaseHint: '',
+  assetPhaseHint: '',
+  diagnosisPhaseHint: '',
+  compilePhaseHint: '',
   matching: false,
   diagnosing: false,
   compiling: false,
@@ -370,6 +397,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         sourceVideo: get().sourceVideo,
         materials: get().materials,
         product: get().product,
+        contentBrief: get().contentBrief,
       });
       set({
         assetSupplyContext: assetSupplyContext ?? null,
@@ -388,6 +416,11 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   },
 
   analyzeSample: async (input) => {
+    if (input.file) {
+      const prevPreview = get().sourceVideoPreviewUrl;
+      if (prevPreview) URL.revokeObjectURL(prevPreview);
+      set({ sourceVideoPreviewUrl: URL.createObjectURL(input.file) });
+    }
     set({ analyzing: true, lastError: null });
     try {
       const { sourceVideo, warnings } = await analyzeSampleApi(input);
@@ -403,7 +436,11 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
 
   scanSample: async (file) => {
     // Real rough scan: upload → async VLM job → poll → real structure timeline.
-    set({ scanning: true, scanStage: '上传视频…', lastError: null });
+    // Keep a local object URL of the uploaded file so its first frame can be shown
+    // as the sample-video cover immediately (no wait for a server-rendered poster).
+    const prevPreview = get().sourceVideoPreviewUrl;
+    if (prevPreview) URL.revokeObjectURL(prevPreview);
+    set({ scanning: true, scanStage: '上传视频…', lastError: null, sourceVideoPreviewUrl: URL.createObjectURL(file) });
     try {
       const { jobId } = await startScan(file);
       for (let i = 0; i < 150; i++) {
@@ -647,21 +684,26 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
 
   addMaterials: async (files) => {
     if (files.length === 0) return;
-    set({ uploading: true, lastError: null });
+    set({ uploading: true, lastError: null, assetPhaseHint: '正在请求素材解析接口' });
     try {
-      // Materials carry .url + clip fields verbatim. Clear the upload's placeholder slot guess so the
-      // migration view doesn't draw a misleading uniform clump before real matching runs.
-      const { materials, warnings } = await uploadMaterialsApi(files, get().product);
+      // Materials carry .url + clip fields verbatim. Thread the parsed product brief into the upload so the
+      // parse is product-aware, then clear the upload's placeholder slot guess so the migration view doesn't
+      // draw a misleading uniform clump before the REAL matcher (applyAssignments below) runs.
+      const { materials, warnings } = await uploadMaterialsApi(files, get().product, {
+        rawProductDescription: get().rawProductDescription,
+        contentBrief: get().contentBrief,
+      });
       const cleared = clearSuggestedSlots(materials);
       set({
         materials: cleared,
         productImageUrl: resolveProductImageUrl(cleared, get().productImageUrl),
         mode: 'live',
         warnings: warnings ?? [],
+        assetPhaseHint: '素材解析接口已返回',
       });
       void get().refreshAssetManagerCoverage();
     } catch (e) {
-      set({ lastError: '素材上传失败 · ' + errMsg(e) });
+      set({ lastError: '素材上传失败 · ' + errMsg(e), assetPhaseHint: '素材解析请求失败' });
       throw e;
     } finally {
       set({ uploading: false });
@@ -680,7 +722,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     })),
 
   applyAssignments: async (assignments) => {
-    set({ matching: true, lastError: null });
+    set({ matching: true, lastError: null, assetPhaseHint: '正在请求素材槽位匹配接口' });
     // Optimistically apply locally first (keeps UI snappy + is the mock result).
     const local = get().materials.map((m) =>
       m.id in assignments ? { ...m, slot: assignments[m.id] } : m
@@ -689,6 +731,10 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       const { materials, warnings } = await matchMaterialsApi({
         sourceVideo: get().sourceVideo,
         materials: local,
+        product: get().product,
+        contentBrief: get().contentBrief ?? undefined,
+        productIntelligence: get().productIntelligence,
+        rawProductDescription: get().rawProductDescription,
         assignments,
       });
       set({
@@ -696,10 +742,11 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         productImageUrl: resolveProductImageUrl(materials, get().productImageUrl),
         mode: 'live',
         warnings: warnings ?? [],
+        assetPhaseHint: '素材槽位匹配接口已返回',
       });
       void get().refreshAssetManagerCoverage();
     } catch (e) {
-      set({ lastError: '素材匹配失败 · ' + errMsg(e) });
+      set({ lastError: '素材匹配失败 · ' + errMsg(e), assetPhaseHint: '素材槽位匹配请求失败' });
       throw e;
     } finally {
       set({ matching: false });
@@ -711,8 +758,49 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     void get().refreshAssetManagerCoverage();
   },
 
+  parseProductDescription: async (rawInput) => {
+    const rawProductDescription = rawInput.trim();
+    if (rawProductDescription.length < 10) {
+      set({
+        rawProductDescription,
+        lastError: '产品描述至少需要 10 个字符',
+        productPhaseHint: '产品描述过短，尚未提交解析',
+      });
+      return;
+    }
+    set({
+      rawProductDescription,
+      parsingProduct: true,
+      lastError: null,
+      productPhaseHint: '正在请求产品描述解析接口',
+    });
+    try {
+      const result = await parseProductApi({ rawInput: rawProductDescription });
+      set({
+        rawProductDescription,
+        product: result.product,
+        contentBrief: result.contentBrief,
+        productIntelligence: result.productIntelligence ?? null,
+        parseWarnings: result.parseWarnings ?? result.warnings ?? [],
+        parseSource: result.source,
+        warnings: result.warnings ?? [],
+        mode: 'live',
+        productPhaseHint: result.source === 'llm' ? '产品描述解析已返回（LLM）' : '产品描述解析已返回（确定性兜底）',
+      });
+      void get().refreshAssetManagerCoverage();
+    } catch (e) {
+      set({
+        lastError: '产品描述解析失败 · ' + errMsg(e),
+        productPhaseHint: '产品描述解析请求失败',
+      });
+      throw e;
+    } finally {
+      set({ parsingProduct: false });
+    }
+  },
+
   runDiagnosis: async () => {
-    set({ diagnosing: true, lastError: null });
+    set({ diagnosing: true, lastError: null, diagnosisPhaseHint: '正在请求缺口诊断接口' });
     void get().refreshAssetManagerCoverage();
     try {
       const { diagnosis, warnings } = await diagnoseApi({
@@ -721,10 +809,14 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         product: get().product,
         // Pass fine-scan detail so the backend reflects each beat's migrated abstract structure in the prompts.
         segmentDetails: get().segmentDetails,
+        // Thread the parsed product brief so /diagnose drives product-native prompts.
+        contentBrief: get().contentBrief ?? undefined,
+        productIntelligence: get().productIntelligence,
+        rawProductDescription: get().rawProductDescription,
       });
-      set({ diagnosis, mode: 'live', warnings: warnings ?? [] });
+      set({ diagnosis, mode: 'live', warnings: warnings ?? [], diagnosisPhaseHint: '缺口诊断接口已返回' });
     } catch (e) {
-      set({ lastError: '缺口诊断失败 · ' + errMsg(e) });
+      set({ lastError: '缺口诊断失败 · ' + errMsg(e), diagnosisPhaseHint: '缺口诊断请求失败' });
       throw e;
     } finally {
       set({ diagnosing: false });
@@ -757,17 +849,21 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   selectVersion: (selectedVersionId) => set({ selectedVersionId, timeline: null }),
 
   compile: async () => {
-    set({ compiling: true, lastError: null });
+    set({ compiling: true, lastError: null, compilePhaseHint: '正在请求 Director 编排接口' });
     try {
       const { version, timeline, warnings } = await compileApi({
         sourceVideo: get().sourceVideo,
         materials: get().materials,
         diagnosis: get().diagnosis,
         versionId: get().selectedVersionId,
+        product: get().product,
+        contentBrief: get().contentBrief ?? undefined,
+        productIntelligence: get().productIntelligence,
+        rawProductDescription: get().rawProductDescription,
       });
-      set({ timeline, selectedVersionId: version.id, mode: 'live', warnings: warnings ?? [] });
+      set({ timeline, selectedVersionId: version.id, mode: 'live', warnings: warnings ?? [], compilePhaseHint: 'Director 编排接口已返回' });
     } catch (e) {
-      set({ lastError: '成片编译失败 · ' + errMsg(e) });
+      set({ lastError: '成片编译失败 · ' + errMsg(e), compilePhaseHint: 'Director 编排请求失败' });
       throw e;
     } finally {
       set({ compiling: false });
@@ -821,6 +917,9 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         sourceVideo: get().sourceVideo,
         materials: get().materials,
         product: get().product,
+        contentBrief: get().contentBrief ?? undefined,
+        productIntelligence: get().productIntelligence,
+        rawProductDescription: get().rawProductDescription,
         productImageUrl: get().productImageUrl ?? undefined,
         versionId: get().selectedVersionId,
       });

@@ -90,6 +90,12 @@ export interface TargetProduct {
    *  ContentBrief + ProductIntelligence that drive specific, product-native prompts — instead of the thin
    *  brief synthesized from the structured fields above. See contentBriefParser.USER_BRIEF_INPUT_GUIDANCE. */
   description?: string;
+  /** Parsed selling points from the natural-language product brief. */
+  sellingPoints?: string[];
+  /** Parsed action goal / CTA. */
+  cta?: string;
+  /** Parsed style preference. */
+  stylePreference?: string;
 }
 
 export interface Material {

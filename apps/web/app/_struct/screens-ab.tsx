@@ -19,6 +19,7 @@ import {
   SvgHookShape,
   TimeRuler,
   Toast,
+  VideoFirstFrame,
 } from './components';
 import { AbstractStructureBand, ConcreteFilmStrip, MigrationFlow, SyncRails } from './viz';
 import type { FineBlockDetail } from './api/scan';
@@ -102,6 +103,7 @@ const FineDetailView = ({ fine }: { fine: FineBlockDetail }) => {
 
 export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
   const v = useProjectStore((s) => s.sourceVideo);
+  const sourceVideoPreviewUrl = useProjectStore((s) => s.sourceVideoPreviewUrl);
   const analyzing = useProjectStore((s) => s.analyzing);
   const scanning = useProjectStore((s) => s.scanning);
   const scanStage = useProjectStore((s) => s.scanStage);
@@ -241,12 +243,15 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
               borderRadius: 4, position: 'relative', overflow: 'hidden',
               display: 'grid', placeItems: 'center',
             }}>
-              <SvgHookShape />
+              {/* Cover = the uploaded video's own first frame; abstract glyph only as fallback. */}
+              {sourceVideoPreviewUrl ? <VideoFirstFrame url={sourceVideoPreviewUrl} /> : <SvgHookShape />}
               <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, transparent 40%, rgba(0,0,0,0.6))' }} />
-              <div style={{ position: 'absolute', bottom: 6, left: 6, right: 6, fontSize: 9, color: '#fff', fontFamily: 'var(--ff-mono)' }}>
+              <div style={{ position: 'absolute', bottom: 6, left: 6, right: 6, fontSize: 9, color: '#fff', fontFamily: 'var(--ff-mono)', zIndex: 1 }}>
                 {v.duration}s · 9:16
               </div>
-              <Icon name="play" size={18} />
+              <span style={{ position: 'relative', zIndex: 1, color: '#fff', display: 'grid', placeItems: 'center' }}>
+                <Icon name="play" size={18} />
+              </span>
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 2 }}>{v.title}</div>
@@ -602,7 +607,16 @@ const AssetGroupTile = ({
 export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack: () => void }) => {
   const v = useProjectStore((s) => s.sourceVideo);
   const materials = useProjectStore((s) => s.materials);
+  const rawProductDescription = useProjectStore((s) => s.rawProductDescription);
   const product = useProjectStore((s) => s.product);
+  const contentBrief = useProjectStore((s) => s.contentBrief);
+  const diagnosis = useProjectStore((s) => s.diagnosis);
+  const parseWarnings = useProjectStore((s) => s.parseWarnings);
+  const parseSource = useProjectStore((s) => s.parseSource);
+  const parsingProduct = useProjectStore((s) => s.parsingProduct);
+  const productPhaseHint = useProjectStore((s) => s.productPhaseHint);
+  const assetPhaseHint = useProjectStore((s) => s.assetPhaseHint);
+  const diagnosisPhaseHint = useProjectStore((s) => s.diagnosisPhaseHint);
   const matching = useProjectStore((s) => s.matching);
   const diagnosing = useProjectStore((s) => s.diagnosing);
   const assetSupplyContext = useProjectStore((s) => s.assetSupplyContext);
@@ -617,6 +631,7 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
   const productImageUrl = useProjectStore((s) => s.productImageUrl);
   const setProductImageUrl = useProjectStore((s) => s.setProductImageUrl);
   const updateProduct = useProjectStore((s) => s.updateProduct);
+  const parseProductDescription = useProjectStore((s) => s.parseProductDescription);
   const runDiagnosis = useProjectStore((s) => s.runDiagnosis);
   const refreshAssetManagerCoverage = useProjectStore((s) => s.refreshAssetManagerCoverage);
   const T = v.duration;
@@ -627,6 +642,7 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
   const [batchOpen, setBatchOpen] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
+  const [productBriefText, setProductBriefText] = useState(rawProductDescription);
   const [productInfo, setProductInfo] = useState<TargetProduct>({ ...product });
   const [assignDraft, setAssignDraft] = useState<Record<string, string>>({});
   const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
@@ -637,7 +653,22 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
     setTimeout(() => setToastVisible(false), 2200);
   };
 
+  const productReady = Boolean(
+    product.name.trim() &&
+    (contentBrief || parseSource || rawProductDescription || materials.length > 0 || Object.keys(diagnosis).length > 0)
+  );
+
+  const handleProductParse = () => {
+    void parseProductDescription(productBriefText)
+      .then(() => showToast('产品描述已解析 · 可以继续上传素材'))
+      .catch(() => {});
+  };
+
   const handleFiles = (files: File[]) => {
+    if (!productReady) {
+      showToast('请先用一段话描述要推广的产品，解析成功后再上传素材');
+      return;
+    }
     const names = files.map(f => f.name).join(', ');
     setUploadedFiles(prev => [...prev, ...files.map(f => f.name)]);
     setUploadOpen(false);
@@ -664,6 +695,11 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
   };
 
   const handleNext = () => {
+    // Precondition: the product brief must be parsed first (it drives product-native prompts).
+    if (!productReady) {
+      showToast('请先完成产品描述解析，再进入缺口诊断');
+      return;
+    }
     // Don't navigate before the diagnosis (LLM prompt generation) finishes — otherwise screen 03 renders
     // its empty "请先输入素材" state while the work is still running. Gate the button (busy + disabled) and
     // only advance once runDiagnosis resolves.
@@ -732,6 +768,10 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
     void refreshAssetManagerCoverage();
   }, [refreshAssetManagerCoverage]);
 
+  useEffect(() => {
+    setProductBriefText(rawProductDescription);
+  }, [rawProductDescription]);
+
   const editFields: { key: 'name' | 'price' | 'category' | 'industry'; label: string }[] = [
     { key: 'name', label: '商品名称' },
     { key: 'price', label: '售价' },
@@ -767,12 +807,110 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
         </div>
         <div className="screen-head-r">
           <button className="btn" style={{ padding: '5px 12px', fontSize: 11.5 }}
-            disabled={uploading}
+            disabled={uploading || !productReady}
             onClick={() => { void loadLibrary('kangshifu_demo').then(() => showToast('已加载示例素材库 · 康师傅 demo')).catch(() => {}); }}>
             <Icon name="upload" size={11} /> {uploading ? '加载中…' : '加载示例素材库'}
           </button>
           <span className="mono">{materials.length} 个素材</span>
           <span className="pill"><span className="dot" style={{ background: 'var(--accent)' }} /> 已适配</span>
+        </div>
+      </div>
+
+      <div className="panel" style={{ marginBottom: 16 }}>
+        <div className="panel-head">
+          <h4>产品描述 · 自动解析</h4>
+          <span className="eyebrow">先描述产品 · 再上传素材</span>
+        </div>
+        <div className="panel-body" style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 16 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <textarea
+              rows={5}
+              value={productBriefText}
+              onChange={(e) => setProductBriefText(e.target.value)}
+              placeholder={'用一段话介绍你要推广的产品就好（不用分点，系统会自动解析）。尽量说清楚：产品是什么、卖给谁、什么场景使用、3–5 个卖点、希望观众看完做什么，以及可选的风格偏好。'}
+              style={{
+                width: '100%',
+                padding: '12px 14px',
+                background: 'var(--bg-2)',
+                border: '1px solid var(--border)',
+                borderRadius: 6,
+                color: 'var(--text)',
+                fontFamily: 'inherit',
+                fontSize: 12.5,
+                resize: 'vertical',
+                outline: 'none',
+                lineHeight: 1.6,
+              }}
+            />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
+              <span className="mono dim" style={{ fontSize: 10.5 }}>
+                小提示：少写绝对化用语、医疗功效和未经证实的数字，系统会按广告合规自动过滤。
+              </span>
+              <button
+                className="btn primary"
+                disabled={parsingProduct || productBriefText.trim().length < 10}
+                onClick={handleProductParse}
+              >
+                <Icon name="sparkle" size={12} />
+                {parsingProduct ? '解析中…' : productReady ? '重新解析产品' : '解析产品描述'}
+              </button>
+            </div>
+            {productPhaseHint && (
+              <div className="mono" style={{ fontSize: 10.5, color: 'var(--accent-2)' }}>
+                {productPhaseHint}
+              </div>
+            )}
+          </div>
+
+          <div style={{
+            border: '1px solid var(--border)',
+            background: 'var(--surface)',
+            borderRadius: 6,
+            padding: 12,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 10,
+            minWidth: 0,
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center' }}>
+              <div className="eyebrow">解析结果</div>
+              <span className={`pill ${productReady ? 'accent' : ''}`}>
+                <span className="dot" style={{ background: productReady ? 'var(--accent)' : 'var(--text-faint)' }} />
+                {productReady ? `已解析 · ${parseSource ?? 'unknown'}` : '待解析'}
+              </span>
+            </div>
+            {productReady ? (
+              <>
+                <div>
+                  <div style={{ fontSize: 15, fontWeight: 700 }}>{product.name}</div>
+                  <div className="mono dim" style={{ marginTop: 4, fontSize: 10.5 }}>
+                    {product.category} · {contentBrief?.targetAudience || product.industry}
+                  </div>
+                </div>
+                {contentBrief?.sellingPoints?.length ? (
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {contentBrief.sellingPoints.slice(0, 5).map((point) => (
+                      <span key={point} className="tag" style={{ fontSize: 10.5 }}>{point}</span>
+                    ))}
+                  </div>
+                ) : null}
+                <dl className="kv" style={{ gridTemplateColumns: '72px 1fr' }}>
+                  <dt>场景</dt><dd>{contentBrief?.scenario || product.category}</dd>
+                  <dt>CTA</dt><dd>{contentBrief?.cta || product.cta || '—'}</dd>
+                  <dt>风格</dt><dd>{contentBrief?.stylePreference || product.stylePreference || '—'}</dd>
+                </dl>
+                {parseWarnings.length > 0 && (
+                  <div style={{ fontSize: 10.5, color: 'var(--st-weakly)', lineHeight: 1.5 }}>
+                    {parseWarnings.slice(0, 2).map((warning) => <div key={warning}>• {warning}</div>)}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.6 }}>
+                上传目标素材前，请先输入一段自然语言产品介绍。解析结果会作为素材分析、缺口诊断和 Director 编排的同一份产品语义。
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -837,12 +975,18 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
                 <span className="mono dim" style={{ fontSize: 10.5 }}>auto-classified · 已识别主体并推荐槽位</span>
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
-                <button className="btn" style={{ padding: '3px 9px', fontSize: 10.5 }} onClick={() => setUploadOpen(true)}>
+                <button className="btn" disabled={!productReady} style={{ padding: '3px 9px', fontSize: 10.5 }} onClick={() => setUploadOpen(true)}>
                   <Icon name="upload" size={11} /> 上传
                 </button>
                 <button className="btn ghost" style={{ padding: '3px 9px', fontSize: 10.5 }} onClick={openBatch}>批量分配</button>
               </div>
             </div>
+            {(assetPhaseHint || diagnosisPhaseHint) && (
+              <div className="mono" style={{ fontSize: 10.5, color: 'var(--accent-2)', lineHeight: 1.5 }}>
+                {assetPhaseHint && <div>{assetPhaseHint}</div>}
+                {diagnosisPhaseHint && <div>{diagnosisPhaseHint}</div>}
+              </div>
+            )}
 
             {/* Product hero (产品主图) anchor banner — drives AIGC generation */}
             <div style={{
@@ -895,7 +1039,7 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
                   findAffordance={findAffordance}
                 />
               ))}
-              <button className="mat-card" onClick={() => setUploadOpen(true)} style={{
+              <button className="mat-card" disabled={!productReady} onClick={() => setUploadOpen(true)} style={{
                 border: '1px dashed var(--border-2)',
                 background: 'transparent',
                 display: 'flex', flexDirection: 'row',
@@ -905,7 +1049,8 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
                 gap: 8,
                 aspectRatio: 'auto',
                 minHeight: 56,
-                cursor: 'pointer',
+                cursor: productReady ? 'pointer' : 'not-allowed',
+                opacity: productReady ? 1 : 0.55,
                 fontFamily: 'inherit',
               }}>
                 <Icon name="plus" size={18} />
@@ -1012,7 +1157,7 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
         statusTone={footerTone}
         secondary={[{ label: '返回结构', onClick: onBack }]}
         primary={{
-          label: matching ? '匹配中…' : diagnosing ? '正在诊断缺口…' : '识别并诊断缺口',
+          label: matching ? '匹配中…' : diagnosing ? '正在诊断缺口…' : !productReady ? '先解析产品描述' : '识别并诊断缺口',
           onClick: handleNext,
           disabled: matching || diagnosing,
           busy: matching || diagnosing,
