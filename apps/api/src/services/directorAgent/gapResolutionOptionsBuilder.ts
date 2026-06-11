@@ -437,14 +437,17 @@ function buildDirectorSpec(args: BuildGapResolutionOptionsArgs, brief?: MissingM
         ...kinetic.actions,
         '干净 CTA 收口画面'
       ],
-      framing: '竖屏产品居中，前半段留出级联运动空间，尾帧留出 CTA 文案安全区',
+      framing: '竖屏产品居中，前半段留出结构化动作空间，尾帧留出 CTA 文案安全区',
       durationSec: positive(brief?.manualShootBrief?.durationSec ?? 4, 4),
-      hyperframesIntent: '用由散到聚的级联动效完成产品的组装式揭示，收束到干净 CTA 尾帧',
+      // Wording is sourced from the TARGET vocab (kinetic.label / kinetic.actions), NOT a hardcoded
+      // 由散到聚/组装 source grammar — otherwise the source structure reads as surreal on a product it does
+      // not fit (e.g. an assembly reveal forced onto a fragrance).
+      hyperframesIntent: `用 ${kinetic.actions.join('、')} 完成「${kinetic.label}」，收束到干净 CTA 尾帧`,
       animationHints: kinetic.actions,
       // Keep the role-level sensory/atmosphere scene; the concrete kinetic actions live in animationHints.
       aigcScene: base.aigcScene,
       cardType: brief?.hyperframesBrief?.cardType ?? 'timeline_bridge_card',
-      motifLine: `迁移的是抽象运动语法：级联、汇聚、激活、爆发、CTA 收口；目标画面只使用 ${kinetic.label} 相关元素和产品尾帧`,
+      motifLine: `迁移的是抽象运动节奏；目标画面只用「${kinetic.label}」的本品类等价动作：${kinetic.actions.join('、')}，最后以产品尾帧收口`,
       targetEquivalentActions: kinetic.actions
     };
   }

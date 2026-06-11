@@ -29,6 +29,7 @@ import { analyzeAssetsWithFallbackResult } from '../services/assetAnalyzer';
 import { matchSlotsWithFallback } from '../services/slotMatcher';
 import { runDirectorAgent, buildGapResolutionOptions } from '../services/directorAgent';
 import { translateCategoryEquivalents } from '../services/directorAgent/categoryEquivalentTranslator';
+import { deriveSourceIdentityBanlist } from '../services/directorAgent/sourceIdentityBanlist';
 import { parseContentBrief } from '../services/productIntelligence/contentBriefParser';
 import { analyzeProductIntelligence } from '../services/productIntelligence/productIntelligenceAnalyzer';
 import { enrichSourceVideoWithFineScan } from '../services/structAdapter/fineScanMotifAdapter';
@@ -1046,6 +1047,7 @@ structRouter.post('/diagnose', async (req, res) => {
         productIntelligence,
         motifBySegmentId,
         motionTokensBySegmentId,
+        warnings,
       });
     } catch (resolutionError) {
       slotResolutions = undefined;
@@ -1714,6 +1716,8 @@ async function buildSlotResolutions(input: {
   /** Per-segment kinetic motif + motion tokens derived from the fine scan (assembly/cascade beats). */
   motifBySegmentId?: Map<string, ViralMotifAnnotation>;
   motionTokensBySegmentId?: Map<string, MotionToken[]>;
+  /** Collects non-fatal warnings (e.g. a degraded source-leak banlist) for the caller to surface. */
+  warnings?: string[];
 }): Promise<Record<string, SlotGapResolution>> {
   const { graph, matches, assetCards, contentBrief, productIntelligence, motifBySegmentId, motionTokensBySegmentId } =
     input;
@@ -1723,6 +1727,20 @@ async function buildSlotResolutions(input: {
   // productIntelligence (when present) grounds the vocab in the product's real benefits/
   // sensory cues/usage rituals so the per-slot actions are specific, not category-generic.
   const vocab = await translateCategoryEquivalents({ contentBrief, productIntelligence, assetCards });
+
+  // Source-leak guardrail: derive the SCANNED source video's identity terms (e.g. macbook/laptop/键盘, or a
+  // beverage source's 冰块/柠檬) ONCE from the structure graph so the per-slot prompts strip them — the same
+  // banlist the orchestrated director uses. Best-effort: the synthesized UI graph can carry thin source
+  // evidence (the derivation throws on an empty banlist); on failure we degrade to [] and warn rather than
+  // 500 the diagnosis. This replaces the previously hardcoded `sourceBannedTerms: []` that left the leak
+  // sanitizers inert (see containsSourceSpecificTerm / safePromptText in gapResolutionOptionsBuilder).
+  let sourceBannedTerms: readonly string[] = [];
+  try {
+    sourceBannedTerms = (await deriveSourceIdentityBanlist({ structureGraph: graph })).terms;
+  } catch (e) {
+    input.warnings?.push(`源身份禁忌词派生失败，已降级为不过滤（可能残留源词）：${errorMessage(e)}`);
+  }
+
   const matchBySlot = new Map(matches.map((m) => [m.slotId, m]));
   const referenceAssetIds = assetCards.map((c) => c.id);
   const out: Record<string, SlotGapResolution> = {};
@@ -1744,9 +1762,10 @@ async function buildSlotResolutions(input: {
       vocab,
       ...(motif ? { motif } : {}),
       ...(motionTokens && motionTokens.length ? { motionTokens } : {}),
-      // Secondary source-leak guard; the vocab translator already forbids cross-category
-      // terms, so this adapter path skips the extra LLM banlist derivation.
-      sourceBannedTerms: [],
+      // Secondary source-leak guard: the scanned source's identity terms (derived once above) so each slot's
+      // sanitizers actually strip them. The vocab translator forbids cross-CATEGORY terms, but it cannot catch
+      // a specific source video's residue (e.g. a stale 由散汇聚 motif) — this banlist does.
+      sourceBannedTerms,
     });
     out[slot.id] = { options, recommendedOptionId };
   }
@@ -2106,6 +2125,7 @@ structRouter.get('/demo', async (_req, res) => {
         matches: matchResult.matches,
         assetCards: cards,
         contentBrief,
+        warnings,
       });
     } catch (resolutionError) {
       slotResolutions = undefined;
