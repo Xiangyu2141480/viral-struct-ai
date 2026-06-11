@@ -84,7 +84,10 @@ function deriveFineScanMotif(
     motionTokens: motionTokens.length ? motionTokens : ['component_cascade', 'chaos_to_order', 'assembly_completion', 'cta_reveal'],
     sanitizedIntent: '由散到聚的级联组装揭示，最后收束到产品与 CTA',
     transferVariables: [],
-    bannedSourceTerms: [],
+    // The SOURCE's own concrete motif phrases (e.g. "部件从散落汇聚组装成产品"). Listing them as banned terms
+    // lets the director's source-leak sanitizers strip any prompt that echoes this source's structure into the
+    // TARGET. This is per-motif; the authoritative atomic banlist is derived separately (deriveSourceIdentityBanlist).
+    bannedSourceTerms: evidence,
     targetCategoryMapping: {
       targetCategory: targetCategory || 'generic',
       preferredEquivalents: [],
@@ -134,9 +137,12 @@ export function enrichSourceVideoWithFineScan(
     if (motif) motifBySegmentId.set(seg.id, motif);
     if (motionTokens.length) motionTokensBySegmentId.set(seg.id, motionTokens);
 
-    const hint = fineScanAbstractHint(detail);
-    const enrichedShot = hint && !seg.shot.includes(hint) ? `${seg.shot}（可迁移结构：${hint}）` : seg.shot;
-    return { ...seg, shot: enrichedShot };
+    // Deliberately do NOT fold the raw fine-scan description into seg.shot. That text is the SOURCE's concrete
+    // language (e.g. "冰块由散汇聚") and, round-tripped through shot/caption, it leaked one case video's
+    // structure into another's TARGET prompts. The transferable signal travels via the kinetic motif +
+    // motionTokens above (product-neutral); any source caption already in seg.shot is stripped downstream by
+    // the source-identity banlist (deriveSourceIdentityBanlist). See fineScanAbstractHint (kept for display).
+    return seg;
   });
 
   return {

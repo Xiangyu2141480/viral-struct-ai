@@ -424,7 +424,21 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     set({ analyzing: true, lastError: null });
     try {
       const { sourceVideo, warnings } = await analyzeSampleApi(input);
-      set({ sourceVideo: coalesceSameRoleSegments(sourceVideo), mode: 'live', warnings: warnings ?? [] });
+      // Switching the analyzed case video must RESET all per-segment fine-scan state. segmentDetails is keyed
+      // by canonical segment ids (s1..s7) that collide across different case videos, so a previous case video's
+      // fine-scan motifs/descriptions would otherwise be applied positionally to THIS video in
+      // enrichSourceVideoWithFineScan — leaking one case's structure (e.g. 由散汇聚) into another's prompts.
+      // Mirror scanSample's reset. See fineScanMotifAdapter.enrichSourceVideoWithFineScan.
+      set({
+        sourceVideo: coalesceSameRoleSegments(sourceVideo),
+        mode: 'live',
+        warnings: warnings ?? [],
+        segmentDetails: {},
+        fineScanStages: {},
+        boundaryScanStages: {},
+        hyperframesStages: {},
+        hyperframesPreviews: {},
+      });
       void get().refreshAssetManagerCoverage();
     } catch (e) {
       set({ lastError: '样例解析失败 · ' + errMsg(e) });
