@@ -325,8 +325,6 @@ structRouter.post('/sample/analyze', withUploadGuard(upload.single('video')), as
 
     const defaultedFields: string[] = [];
     const sourceVideo = graphToSourceVideo(structure.structureGraph, { videoId, title, defaultedFields });
-    warnings.push('播放数据（点击率/完播/点赞）非真实测量，仅结构与转场为真实分析结果');
-    if (defaultedFields.length) warnings.push('部分节奏/包装字段未检测，已留空');
 
     res.json({ sourceVideo, warnings });
   } catch (error) {
@@ -488,9 +486,6 @@ structRouter.post('/scan', withUploadGuard(upload.single('video')), (req, res) =
         warnings: [
           ...warnings,
           ...persistWarnings,
-          '结构来自真实 rough scan（VLM 逐镜头解析），非启发式模板',
-          '播放数据（点击率/完播/点赞）非真实测量',
-          ...(defaultedFields.length ? ['部分节奏/包装字段未检测，已留空'] : []),
         ],
         startedAt,
         finishedAt: Date.now(),

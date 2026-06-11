@@ -115,7 +115,8 @@ export async function runFineScan(
 }
 
 export interface FineScanBatchResult {
-  /** Per-block detail, keyed by block id (== source segment id). */
+  /** Per-block detail, keyed by the rough block id (e.g. "block_001"). NOTE: the UI segment
+   *  ids are "seg_<blockId>", so the web store re-keys these onto segment ids on receipt. */
   details: Record<string, FineBlockDetail>;
   warnings: string[];
 }

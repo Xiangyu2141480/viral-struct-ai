@@ -57,8 +57,8 @@ interface FillMethod {
 
 const FILL_METHODS: FillMethod[] = [
   { id: 'reshoot', label: '补拍建议', icon: 'image', hint: '去拍真素材 · 质感最高' },
-  { id: 'hyperframes', label: 'HyperFrames 补全', icon: 'layers', hint: '复用现有素材 · 成片时合成' },
   { id: 'aigc', label: 'AIGC 补全', icon: 'sparkle', hint: 'AI 生成 · 成片时产出' },
+  { id: 'hyperframes', label: 'HyperFrames 补全', icon: 'layers', hint: '复用现有素材 · 成片时合成' },
 ];
 
 // Generation state for the (untouched) transition-fill studio below.
@@ -115,8 +115,9 @@ const GapFillStudio = ({
   // Preselect the REAL Director-recommended channel (falls back to strategy guess,
   // then reshoot) — NOT a strategy-only guess. If a method was already applied,
   // open on that one so the chosen state is reflected.
-  const recommended: FillMethod['id'] =
-    d.recommended ?? (d.strategy === 'aigc' ? 'aigc' : d.strategy === 'hyperframes' ? 'hyperframes' : 'reshoot');
+  // Product decision: AIGC is the promoted channel — it gets the 推荐 badge and is the
+  // preselected (blue) default. (The Director's per-slot pick is no longer used here.)
+  const recommended: FillMethod['id'] = 'aigc';
   const [method, setMethod] = useState<FillMethod['id']>(d.chosenMethod ?? recommended);
   const [reshootFile, setReshootFile] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -213,7 +214,7 @@ const GapFillStudio = ({
                 flexDirection: 'column', alignItems: 'flex-start', gap: 3, padding: '8px 9px',
                 background: active ? 'var(--accent-dim)' : 'var(--surface)',
                 borderColor: active ? 'var(--accent-line)' : 'var(--border)',
-                color: active ? 'var(--accent)' : 'var(--text-2)',
+                color: active ? 'var(--accent)' : (fm.id === 'hyperframes' ? 'var(--text-mute)' : 'var(--text-2)'),
                 position: 'relative', textAlign: 'left', height: '100%',
               }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 600 }}>
@@ -1447,6 +1448,18 @@ export const ScreenCompile = ({ onBack }: { onBack: () => void }) => {
           <span className="eyebrow">版本 · {currentVersion.name}</span>
         </div>
         <div className="panel-body">
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            padding: '9px 12px', marginBottom: 12,
+            background: 'var(--st-weakly-bg)', border: '1px solid var(--st-weakly-line)',
+            borderRadius: 6, color: 'var(--text-2)', fontSize: 11.5,
+          }}>
+            <Icon name="diagnose" size={13} />
+            <span>
+              <b style={{ color: 'var(--st-weakly)' }}>多版本预设暂未开放</b>
+              <span style={{ marginLeft: 6, color: 'var(--text-dim)' }}>高点击 / 高转化 / 高质感版正在开发，将于后续版本上线。</span>
+            </span>
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
             {versions.map(ver => {
               const active = ver.id === selectedVersionId;

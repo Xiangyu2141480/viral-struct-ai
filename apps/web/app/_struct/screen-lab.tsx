@@ -425,6 +425,22 @@ export const ScreenLab = () => {
         </div>
       </div>
 
+      {/* Feature availability notice — the lab is not open yet */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '11px 14px', marginBottom: 14,
+        background: 'var(--st-weakly-bg)', border: '1px solid var(--st-weakly-line)',
+        borderRadius: 8, color: 'var(--text-2)', fontSize: 12,
+      }}>
+        <Icon name="diagnose" size={14} />
+        <span>
+          <b style={{ color: 'var(--st-weakly)' }}>功能开发中 · 暂未开放</b>
+          <span style={{ marginLeft: 8, color: 'var(--text-dim)' }}>
+            结构实验室仍在打磨，将于后续版本开放；下方为示意布局。
+          </span>
+        </span>
+      </div>
+
       {/* Honesty banner — the per-structure numbers are demo, not genuine predictions */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 10,

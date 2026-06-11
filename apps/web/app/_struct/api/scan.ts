@@ -52,7 +52,8 @@ export interface FineScanAllStatus {
   status: 'running' | 'done' | 'error';
   stage?: string;
   total?: number;
-  /** Per-segment-id (== block id) detail once done. */
+  /** Per-rough-block-id detail once done (keys are the rough block ids, e.g. "block_001";
+   *  the store re-keys these onto the UI segment ids "seg_<blockId>"). */
   details?: Record<string, FineBlockDetail>;
   warnings?: string[];
   error?: string;
