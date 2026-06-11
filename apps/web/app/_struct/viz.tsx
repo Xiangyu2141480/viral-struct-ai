@@ -190,6 +190,7 @@ export const MigrationFlow = () => {
   const mats = useProjectStore((s) => s.materials);
   const diagnosis = useProjectStore((s) => s.diagnosis);
   const matching = useProjectStore((s) => s.matching);
+  const matchRequested = useProjectStore((s) => s.matchRequested);
   const uploading = useProjectStore((s) => s.uploading);
   const stateOf = (id: string): StateKey => diagnosis[id]?.state ?? 'missing';
 
@@ -208,6 +209,18 @@ export const MigrationFlow = () => {
         <span className="migrate-analyzing-orb" />
         <span className="migrate-analyzing-text">正在解析匹配中</span>
         <span className="migrate-analyzing-sub mono">素材 → 源结构槽位对齐中…</span>
+      </div>
+    );
+  }
+
+  // Gate: the migration flow only renders after the user clicks 「素材匹配」 — the connections are
+  // generated on demand, not auto-drawn on upload.
+  if (!matchRequested) {
+    return (
+      <div className="migrate migrate-analyzing" style={{ height: CONTAINER_H }}>
+        <span className="migrate-analyzing-orb" style={{ opacity: 0.4 }} />
+        <span className="migrate-analyzing-text">点击「素材匹配」生成迁移流向</span>
+        <span className="migrate-analyzing-sub mono">素材 → 源结构槽位 · 一键智能匹配</span>
       </div>
     );
   }

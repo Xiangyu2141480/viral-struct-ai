@@ -393,18 +393,18 @@ export const ScreenSource = ({ onNext }: { onNext: () => void }) => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                   <button
                     className="btn primary"
-                    disabled={isFineScanning || fineScanningAll}
-                    onClick={() => { if (seg.id) void fineScanSegment(idx, seg.id).catch(() => {}); }}
-                  >
-                    <Icon name="sparkle" size={12} /> {isFineScanning ? (stageLabel || '精扫描中…') : fine ? '重新精扫描此段' : '深度分析 · 精扫描此段'}
-                  </button>
-                  <button
-                    className="btn"
                     disabled={fineScanningAll || isFineScanning}
                     onClick={() => { void fineScanAll().catch(() => {}); }}
                     title="一个进程并发精扫描全部段落，比逐段点击快很多"
                   >
                     <Icon name="sparkle" size={12} /> {fineScanningAll ? (fineScanAllStage || '全部精扫描中…') : '精扫描全部段落（并发）'}
+                  </button>
+                  <button
+                    className="btn"
+                    disabled={isFineScanning || fineScanningAll}
+                    onClick={() => { if (seg.id) void fineScanSegment(idx, seg.id).catch(() => {}); }}
+                  >
+                    <Icon name="sparkle" size={12} /> {isFineScanning ? (stageLabel || '精扫描中…') : fine ? '重新精扫描此段' : '深度分析 · 精扫描此段'}
                   </button>
                   {!fine && !isFineScanning && !fineScanningAll && (
                     <span className="mono dim" style={{ fontSize: 10.5 }}>视觉峰值 + 逐峰 VLM · 字幕行为 / 动作节拍 / 转场 / 可迁移母题（约 30–60 秒）</span>
@@ -450,11 +450,12 @@ interface ClipCardProps {
   isProductAnchor: boolean;
   onAssign: (slot: string | null) => void;
   onSetProductImage?: () => void;
+  onDelete?: () => void;
   affordanceAsset?: NormalizedAssetCard;
 }
 
 /** One clip sub-card inside an asset's clip strip. Carries its own slot control. */
-const ClipCard = ({ clip, segments, isProductAnchor, onAssign, onSetProductImage, affordanceAsset }: ClipCardProps) => {
+const ClipCard = ({ clip, segments, isProductAnchor, onAssign, onSetProductImage, onDelete, affordanceAsset }: ClipCardProps) => {
   const targetSeg = clip.slot ? segments.find((s) => s.id === clip.slot) : null;
   const range = fmtClipRange(clip.startSec, clip.endSec);
   const dur = typeof clip.durationSec === 'number' ? `${clip.durationSec.toFixed(1)}s` : null;
@@ -527,6 +528,16 @@ const ClipCard = ({ clip, segments, isProductAnchor, onAssign, onSetProductImage
           </button>
         )}
         <AssetAffordanceChips asset={affordanceAsset} />
+        {onDelete && (
+          <button
+            className="btn ghost"
+            style={{ padding: '2px 6px', fontSize: 9.5, justifyContent: 'center', marginTop: 2 }}
+            onClick={onDelete}
+            title="删除该素材"
+          >
+            删除
+          </button>
+        )}
       </div>
     </div>
   );
@@ -539,6 +550,7 @@ interface AssetGroupTileProps {
   productImageUrl: string | null;
   onAssign: (clipId: string, slot: string | null) => void;
   onSetProductImage: (clip: Material) => void;
+  onDelete: (clipId: string) => void;
   findAffordance: (id: string) => NormalizedAssetCard | undefined;
 }
 
@@ -550,6 +562,7 @@ const AssetGroupTile = ({
   productImageUrl,
   onAssign,
   onSetProductImage,
+  onDelete,
   findAffordance,
 }: AssetGroupTileProps) => {
   const isMultiClip = clips.length > 1;
@@ -596,6 +609,7 @@ const AssetGroupTile = ({
             isProductAnchor={!!productImageUrl && clip.url === productImageUrl}
             onAssign={(slot) => onAssign(clip.id, slot)}
             onSetProductImage={() => onSetProductImage(clip)}
+            onDelete={() => onDelete(clip.id)}
             affordanceAsset={findAffordance(clip.id)}
           />
         ))}
@@ -627,6 +641,9 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
   const loadLibrary = useProjectStore((s) => s.loadLibrary);
   const uploading = useProjectStore((s) => s.uploading);
   const applyAssignments = useProjectStore((s) => s.applyAssignments);
+  const requestMatching = useProjectStore((s) => s.requestMatching);
+  const deleteMaterial = useProjectStore((s) => s.deleteMaterial);
+  const matchRequested = useProjectStore((s) => s.matchRequested);
   const setSlot = useProjectStore((s) => s.setSlot);
   const productImageUrl = useProjectStore((s) => s.productImageUrl);
   const setProductImageUrl = useProjectStore((s) => s.setProductImageUrl);
@@ -722,6 +739,14 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
     if (typeof clip.url !== 'string' || clip.url.length === 0) return;
     setProductImageUrl(clip.url);
     showToast('已设为产品主图 · 将锚定 AIGC 生成');
+  };
+
+  const handleDeleteMaterial = (clipId: string) => {
+    void deleteMaterial(clipId).then(() => showToast('素材已删除 · 如需流向请重新点「素材匹配」')).catch(() => {});
+  };
+
+  const handleRequestMatching = () => {
+    void requestMatching().then(() => showToast('已开始素材匹配 · 生成迁移流向')).catch(() => {});
   };
 
   // GROUP materials by parent asset (parentAssetId ?? id). Each group = one uploaded
@@ -975,6 +1000,15 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
                 <span className="mono dim" style={{ fontSize: 10.5 }}>auto-classified · 已识别主体并推荐槽位</span>
               </div>
               <div style={{ display: 'flex', gap: 6 }}>
+                <button
+                  className="btn primary"
+                  disabled={!productReady || materials.length === 0 || matching}
+                  style={{ padding: '3px 9px', fontSize: 10.5 }}
+                  onClick={handleRequestMatching}
+                  title="对已上传素材做槽位匹配，生成下方的结构迁移流向图"
+                >
+                  <Icon name="sparkle" size={11} /> {matching ? '匹配中…' : matchRequested ? '重新匹配' : '素材匹配'}
+                </button>
                 <button className="btn" disabled={!productReady} style={{ padding: '3px 9px', fontSize: 10.5 }} onClick={() => setUploadOpen(true)}>
                   <Icon name="upload" size={11} /> 上传
                 </button>
@@ -1036,6 +1070,7 @@ export const ScreenMaterials = ({ onNext, onBack }: { onNext: () => void; onBack
                   productImageUrl={productImageUrl}
                   onAssign={handleClipAssign}
                   onSetProductImage={handleSetProductImage}
+                  onDelete={handleDeleteMaterial}
                   findAffordance={findAffordance}
                 />
               ))}

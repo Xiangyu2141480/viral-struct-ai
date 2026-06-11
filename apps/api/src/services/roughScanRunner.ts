@@ -13,6 +13,7 @@ import { mkdir, readFile, stat } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import ffmpegStatic from 'ffmpeg-static';
 import type { ViralStructureGraph } from '@viral-struct/shared';
 import { ViralStructureGraphSchema } from '@viral-struct/shared';
 import { probeVideo } from './assetManager/mediaProbeService';
@@ -40,7 +41,9 @@ export function resolvePython(): string {
 }
 
 function resolveFfmpeg(): string {
-  return process.env.FFMPEG_PATH?.trim() || 'ffmpeg';
+  // Prefer an explicit override, else the bundled ffmpeg-static binary (so scans work
+  // without a system ffmpeg on PATH), else bare 'ffmpeg' as a last resort.
+  return process.env.FFMPEG_PATH?.trim() || (ffmpegStatic as string | null) || 'ffmpeg';
 }
 
 export interface ScanProgress {

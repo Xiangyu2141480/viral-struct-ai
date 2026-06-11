@@ -139,6 +139,8 @@ interface ProjectState {
   diagnosisPhaseHint: string;
   compilePhaseHint: string;
   matching: boolean;
+  /** True once the user clicked 「素材匹配」 — gates the migration-flow connection diagram. */
+  matchRequested: boolean;
   diagnosing: boolean;
   compiling: boolean;
   nlApplying: boolean;
@@ -176,6 +178,10 @@ interface ProjectState {
   addMaterials: (files: File[]) => Promise<void>;
   setSlot: (materialId: string, slot: string | null) => void;
   applyAssignments: (assignments: Record<string, string | null>) => Promise<void>;
+  /** Remove an uploaded material by id (and re-gate the migration flow). */
+  deleteMaterial: (materialId: string) => Promise<void>;
+  /** Run the real slot matcher and reveal the migration flow (gated behind the 素材匹配 button). */
+  requestMatching: () => Promise<void>;
   updateProduct: (product: TargetProduct) => void;
   parseProductDescription: (rawInput: string) => Promise<void>;
   runDiagnosis: () => Promise<void>;
@@ -365,6 +371,7 @@ const initialState = {
   diagnosisPhaseHint: '',
   compilePhaseHint: '',
   matching: false,
+  matchRequested: false,
   diagnosing: false,
   compiling: false,
   nlApplying: false,
@@ -512,9 +519,21 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
           continue;
         }
         if (s.status === 'error') throw new Error(s.error || '批量精扫描失败');
+        // The batch keys details by the rough block id (e.g. "block_001"), but the UI
+        // segmentDetails is keyed by segment id ("seg_<blockId>"). Re-key each returned
+        // detail onto its segment (match by id, or by suffix) — mirroring how the
+        // per-segment path stores under segmentId. Without this the batch results never
+        // land on a segment and the fine-scan detail silently appears empty.
         const details = s.details ?? {};
+        const segs = get().sourceVideo.segments;
+        const remapped: Record<string, FineBlockDetail> = {};
+        for (const [blockId, detail] of Object.entries(details)) {
+          const seg = segs.find((sv) => sv.id === blockId || sv.id.endsWith(blockId));
+          if (seg) remapped[seg.id] = detail;
+          else console.warn('[fineScanAll] batch detail for block', blockId, 'matched no segment — dropped');
+        }
         set((st) => ({
-          segmentDetails: { ...st.segmentDetails, ...details },
+          segmentDetails: { ...st.segmentDetails, ...remapped },
           fineScanningAll: false,
           fineScanAllStage: '',
           warnings: s.warnings ?? [],
@@ -700,6 +719,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         mode: 'live',
         warnings: warnings ?? [],
         assetPhaseHint: '素材解析接口已返回',
+        // Re-gate the migration flow: the user explicitly clicks 「素材匹配」 to generate the connections.
+        matchRequested: false,
       });
       void get().refreshAssetManagerCoverage();
     } catch (e) {
@@ -708,18 +729,34 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     } finally {
       set({ uploading: false });
     }
-    // Upload OK → run the REAL slot matcher so the migration connections reflect actual matching
-    // (each material → its best real segment, unmatched → no line), not the upload's uniform guess.
-    // applyAssignments owns its own `matching` loading state + error reporting.
-    if (get().sourceVideo.segments.length > 0) {
-      await get().applyAssignments({}).catch(() => {});
-    }
   },
 
   setSlot: (materialId, slot) =>
     set((state) => ({
       materials: state.materials.map((m) => (m.id === materialId ? { ...m, slot } : m)),
     })),
+
+  deleteMaterial: async (materialId) => {
+    set((state) => {
+      const removed = state.materials.find((m) => m.id === materialId);
+      const materials = state.materials.filter((m) => m.id !== materialId);
+      // If the deleted material was the product-image anchor, drop the anchor.
+      const productImageUrl = removed && removed.url === state.productImageUrl ? null : state.productImageUrl;
+      // Material set changed → re-gate the migration flow until the user re-matches.
+      return { materials, productImageUrl, matchRequested: false };
+    });
+    void get().refreshAssetManagerCoverage();
+  },
+
+  requestMatching: async () => {
+    // Only unlock the gate when matching is actually possible (materials + a scanned source).
+    if (get().materials.length === 0 || get().sourceVideo.segments.length === 0) return;
+    set({ matchRequested: true });
+    // Run the REAL slot matcher so the migration connections reflect actual matching
+    // (each material → its best real segment, unmatched → no line). applyAssignments owns
+    // its own `matching` loading state + error reporting.
+    await get().applyAssignments({}).catch(() => {});
+  },
 
   applyAssignments: async (assignments) => {
     set({ matching: true, lastError: null, assetPhaseHint: '正在请求素材槽位匹配接口' });
@@ -1042,6 +1079,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         productImageUrl: resolveProductImageUrl(cleared, get().productImageUrl),
         mode: 'live',
         warnings: warnings ?? [],
+        // Library load runs the matcher below → reveal the migration flow (don't gate behind 素材匹配).
+        matchRequested: true,
       });
       void get().refreshAssetManagerCoverage();
     } catch (e) {
@@ -1070,6 +1109,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         appliedSlots: {},
         mode: 'live',
         warnings: bundle.warnings ?? [],
+        // The demo is a complete pre-matched case → reveal the migration flow immediately.
+        matchRequested: true,
       });
       void get().refreshAssetManagerCoverage();
     } catch (e) {
@@ -1124,6 +1165,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         segmentDetails: rec.segmentDetails ?? {},
         mode: 'live',
         materials: [],
+        // No materials yet → re-gate the migration flow until the user matches.
+        matchRequested: false,
         diagnosis: {},
         appliedSlots: {},
         timeline: null,
