@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+SC:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<style>
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;background:#05070D;overflow:hidden;}
+  ::selection{background:rgba(34,211,238,.25);}
+  ::view-transition-group(*){animation-duration:.62s;animation-timing-function:cubic-bezier(.34,1.16,.36,1);}
+  ::view-transition-old(root),::view-transition-new(root){animation-duration:.46s;animation-timing-function:cubic-bezier(.4,0,.2,1);}
+  @keyframes vsaiFlow{to{stroke-dashoffset:-32;}}
+  @keyframes vsaiPulse{0%,100%{opacity:.55;}50%{opacity:1;}}
+</style>
+</helmet>
+<div data-stage style="position:fixed;inset:0;background:#05070D;overflow:hidden;">
+  <div data-deck style="position:absolute;top:50%;left:50%;width:1920px;height:1080px;transform-origin:center center;transform:translate(-50%,-50%);background:radial-gradient(135% 95% at 50% -8%, #0C1426 0%, #070A12 52%, #05070D 100%);color:#EFF3FC;font-family:'Manrope','PingFang SC','Noto Sans SC',sans-serif;-webkit-font-smoothing:antialiased;">
+    <div style="position:absolute;inset:0;background:radial-gradient(58% 46% at 50% 16%, rgba(34,211,238,.07), transparent 70%);pointer-events:none;"></div>
+
+    <div data-slides style="position:absolute;inset:0;">
+
+      <!-- ============ SLIDE 1 · TITLE ============ -->
+      <section data-slide data-kind="title" data-screen-label="01 Title" data-notes="开场:我们不复制爆款,而是把爆款的结构编译出来、迁移到新品类。这条流水线从样例视频一路到可执行时间线。" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:120px;text-align:center;">
+        <div data-pipe style="position:relative;width:820px;height:132px;margin-bottom:56px;">
+          <svg viewBox="0 0 820 132" width="820" height="132" style="position:absolute;inset:0;overflow:visible;">
+            <path data-pipe-line d="M58,84 C 170,26 250,30 330,52 C 420,76 452,104 552,82 C 656,58 700,30 762,50" fill="none" stroke="#2FD6E6" stroke-width="2" stroke-linecap="round" stroke-dasharray="2 10" opacity=".62"></path>
+          </svg>
+          <div data-pipe-node style="position:absolute;left:50.5px;top:76.5px;width:15px;height:15px;border-radius:50%;background:#A78BFA;box-shadow:0 0 16px rgba(167,139,250,.9);"></div>
+          <div data-pipe-node style="position:absolute;left:322.5px;top:44.5px;width:15px;height:15px;border-radius:50%;background:#22D3EE;box-shadow:0 0 16px rgba(34,211,238,.9);"></div>
+          <div data-pipe-node style="position:absolute;left:544.5px;top:74.5px;width:15px;height:15px;border-radius:50%;background:#34D399;box-shadow:0 0 16px rgba(52,211,153,.9);"></div>
+          <div data-pipe-node style="position:absolute;left:754.5px;top:42.5px;width:15px;height:15px;border-radius:50%;background:#FBBF24;box-shadow:0 0 16px rgba(251,191,36,.9);"></div>
+          <div data-pipe-label style="position:absolute;left:-2px;top:100px;width:120px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:14px;color:#9AA6BD;letter-spacing:.05em;">Sample</div>
+          <div data-pipe-label style="position:absolute;left:270px;top:4px;width:120px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:14px;color:#9AA6BD;letter-spacing:.05em;">Structure</div>
+          <div data-pipe-label style="position:absolute;left:492px;top:98px;width:120px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:14px;color:#9AA6BD;letter-spacing:.05em;">Assets</div>
+          <div data-pipe-label style="position:absolute;left:702px;top:2px;width:120px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:14px;color:#9AA6BD;letter-spacing:.05em;">Timeline</div>
+        </div>
+        <h1 data-t-title style="margin:0;font-weight:800;font-size:104px;line-height:1.0;letter-spacing:-.022em;color:#F4F7FF;white-space:nowrap;">Viral Struct <span style="color:#22D3EE;">AI</span></h1>
+        <div data-t-sub style="margin-top:22px;font-size:30px;font-weight:500;letter-spacing:.01em;color:#AEB9CF;white-space:nowrap;">爆款结构迁移引擎 · 从样例拆解到时间线重组</div>
+        <div data-t-tag style="margin-top:40px;display:inline-flex;align-items:center;gap:12px;padding:13px 26px;border-radius:999px;border:1px solid rgba(34,211,238,.34);background:rgba(34,211,238,.08);box-shadow:0 0 40px rgba(34,211,238,.12);">
+          <span style="width:7px;height:7px;border-radius:50%;background:#22D3EE;box-shadow:0 0 10px #22D3EE;"></span>
+          <span style="font-size:21px;font-weight:600;color:#CFE9F0;white-space:nowrap;">不是复制爆款,而是<span style="color:#22D3EE;">编译爆款结构</span></span>
+        </div>
+        <div data-t-auth style="position:absolute;bottom:118px;left:0;right:0;display:flex;flex-direction:column;gap:10px;align-items:center;">
+          <div style="font-size:19px;color:#8A96AD;letter-spacing:.04em;">崔翔宇 · 严平川 · 张思源</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#4E586C;letter-spacing:.06em;">github.com/Xiangyu2141480/viral-struct-ai</div>
+        </div>
+      </section>
+      <!-- ============ SLIDE · PROBLEM ============ -->
+      <section data-slide data-kind="problem" data-screen-label="Problem" data-notes="痛点:爆款可遇不可求。照搬脚本、镜头、元素,既违和又有 IP 风险。我们换一条路 —— 迁移可复用的结构,而不是复制画面。" style="position:absolute;inset:0;display:flex;flex-direction:column;padding:88px 132px 110px;">
+        <div style="display:flex;align-items:center;gap:14px;">
+          <span style="width:18px;height:3px;border-radius:2px;background:#FF4D6D;box-shadow:0 0 12px rgba(255,77,109,.7);"></span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:14px;letter-spacing:.34em;color:#7C8AA3;">PROBLEM</span>
+        </div>
+        <h2 style="margin:20px 0 0;font-weight:700;font-size:62px;line-height:1.1;letter-spacing:-.01em;color:#F1F5FE;">爆款可遇不可求,<span style="color:#FF6B85;">照搬</span>爆款不可复用</h2>
+
+        <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:40px;margin-top:6px;">
+          <div data-build="1" style="flex:0 1 560px;align-self:stretch;display:flex;flex-direction:column;justify-content:center;padding:40px 44px;border:1.5px dashed rgba(255,77,109,.34);border-radius:20px;background:rgba(255,77,109,.045);">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:28px;">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:14px;letter-spacing:.16em;color:#FF6B85;">普通做法 · 照搬画面</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:20px;">
+              <div style="display:flex;align-items:center;gap:16px;font-size:25px;color:#8A93A6;"><span style="color:#FF4D6D;font-size:19px;">✕</span>照搬脚本</div>
+              <div style="display:flex;align-items:center;gap:16px;font-size:25px;color:#8A93A6;"><span style="color:#FF4D6D;font-size:19px;">✕</span>照搬镜头</div>
+              <div style="display:flex;align-items:center;gap:16px;font-size:25px;color:#8A93A6;"><span style="color:#FF4D6D;font-size:19px;">✕</span>照搬元素</div>
+              <div style="display:flex;align-items:center;gap:16px;font-size:25px;color:#8A93A6;"><span style="color:#FF4D6D;font-size:19px;">✕</span>违和感 + IP 风险</div>
+            </div>
+          </div>
+
+          <div data-build="2" style="flex:0 0 96px;display:flex;flex-direction:column;align-items:center;gap:10px;color:#22D3EE;">
+            <svg width="92" height="24" viewBox="0 0 92 24" fill="none"><path d="M2 12 H78" stroke="#22D3EE" stroke-width="2" stroke-dasharray="2 8" stroke-linecap="round"/><path d="M72 5 L86 12 L72 19" stroke="#22D3EE" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.1em;color:#5E81A8;">迁移结构</span>
+          </div>
+
+          <div data-build="2" style="flex:0 1 560px;align-self:stretch;display:flex;flex-direction:column;justify-content:center;padding:40px 44px;border:1px solid rgba(34,211,238,.34);border-radius:20px;background:linear-gradient(160deg,rgba(34,211,238,.09),rgba(167,139,250,.05));box-shadow:0 0 56px rgba(34,211,238,.1);">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:28px;">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:14px;letter-spacing:.16em;color:#7DE7F2;">我们的做法 · 迁移结构</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:20px;">
+              <div style="display:flex;align-items:center;gap:16px;font-size:25px;color:#DCE4F0;"><span style="width:9px;height:9px;border-radius:50%;background:#22D3EE;box-shadow:0 0 10px #22D3EE;"></span>抽象结构</div>
+              <div style="display:flex;align-items:center;gap:16px;font-size:25px;color:#DCE4F0;"><span style="width:9px;height:9px;border-radius:50%;background:#A78BFA;box-shadow:0 0 10px #A78BFA;"></span>迁移节奏</div>
+              <div style="display:flex;align-items:center;gap:16px;font-size:25px;color:#DCE4F0;"><span style="width:9px;height:9px;border-radius:50%;background:#34D399;box-shadow:0 0 10px #34D399;"></span>重写表达</div>
+              <div style="display:flex;align-items:center;gap:16px;font-size:25px;color:#DCE4F0;"><span style="width:9px;height:9px;border-radius:50%;background:#FBBF24;box-shadow:0 0 10px #FBBF24;"></span>适配新品类</div>
+            </div>
+          </div>
+        </div>
+
+        <div data-build="3" style="text-align:center;font-size:30px;font-weight:500;color:#AEB9CF;">可迁移的是<span style="color:#22D3EE;font-weight:700;">结构</span>,不是<span style="color:#5A6478;text-decoration:line-through;text-decoration-color:rgba(255,77,109,.6);">画面</span></div>
+      </section>
+      <!--SLOT-A-->
+
+      <!-- ============ SLIDE · CORE INSIGHT ============ -->
+      <section data-slide data-kind="insight" data-screen-label="Core Insight" data-notes="核心洞察:表层画面有版权、不可照搬;真正可迁移的是中间那层创作语法 —— role、subtype、motionToken、packaging。" style="position:absolute;inset:0;display:flex;flex-direction:column;padding:88px 132px 110px;">
+        <div style="display:flex;align-items:center;gap:14px;">
+          <span style="width:18px;height:3px;border-radius:2px;background:#22D3EE;box-shadow:0 0 12px rgba(34,211,238,.7);"></span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:14px;letter-spacing:.34em;color:#7C8AA3;">CORE INSIGHT</span>
+        </div>
+        <h2 style="margin:20px 0 0;font-weight:700;font-size:62px;line-height:1.1;letter-spacing:-.01em;color:#F1F5FE;">表层画面可以剥离,<span style="color:#22D3EE;">里层结构</span>才可迁移</h2>
+
+        <div style="flex:1;display:flex;align-items:center;justify-content:center;gap:64px;margin-top:8px;">
+          <div style="flex:0 0 720px;display:flex;flex-direction:column;align-items:stretch;gap:18px;">
+            <!-- Surface -->
+            <div data-build="1" style="position:relative;display:flex;align-items:center;gap:24px;padding:24px 28px;border:1.5px dashed rgba(154,166,189,.4);border-radius:16px;background:rgba(154,166,189,.05);">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:15px;letter-spacing:.06em;color:#8A96AD;width:182px;">SURFACE · 表层</span>
+              <span style="font-size:21px;color:#7E8AA0;">画面 · 商品 · 品牌元素</span>
+              <span style="margin-left:auto;font-size:13px;font-family:'JetBrains Mono',monospace;color:#6B7689;padding:5px 11px;border:1px solid rgba(154,166,189,.3);border-radius:999px;">可剥离</span>
+            </div>
+            <div data-build="2" style="text-align:center;color:#3F4A5E;font-size:20px;line-height:.6;">↓</div>
+            <!-- Creative Grammar (Magic Move source) -->
+            <div data-build="2" style="position:relative;padding:26px 28px;border:1px solid rgba(34,211,238,.32);border-radius:16px;background:linear-gradient(180deg,rgba(34,211,238,.08),rgba(167,139,250,.05));box-shadow:0 0 48px rgba(34,211,238,.1);">
+              <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:15px;letter-spacing:.06em;color:#CFE9F0;">CREATIVE GRAMMAR · 创作语法</span>
+                <span style="margin-left:auto;font-size:13px;font-family:'JetBrains Mono',monospace;color:#22D3EE;padding:5px 11px;border:1px solid rgba(34,211,238,.45);border-radius:999px;background:rgba(34,211,238,.08);">可迁移</span>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:14px;">
+                <span data-vt="tok-role" style="display:inline-flex;align-items:center;padding:10px 18px;border-radius:13px;background:rgba(255,77,109,.13);border:1px solid rgba(255,77,109,.45);color:#FF8098;font-family:'JetBrains Mono',monospace;font-size:20px;box-shadow:0 0 22px rgba(255,77,109,.16);">role</span>
+                <span data-vt="tok-subtype" style="display:inline-flex;align-items:center;padding:10px 18px;border-radius:13px;background:rgba(167,139,250,.13);border:1px solid rgba(167,139,250,.45);color:#C4B0FF;font-family:'JetBrains Mono',monospace;font-size:20px;box-shadow:0 0 22px rgba(167,139,250,.16);">subtype</span>
+                <span data-vt="tok-motion" style="display:inline-flex;align-items:center;padding:10px 18px;border-radius:13px;background:rgba(34,211,238,.13);border:1px solid rgba(34,211,238,.45);color:#7DE7F2;font-family:'JetBrains Mono',monospace;font-size:20px;box-shadow:0 0 22px rgba(34,211,238,.16);">motionToken</span>
+                <span data-vt="tok-pkg" style="display:inline-flex;align-items:center;padding:10px 18px;border-radius:13px;background:rgba(251,191,36,.13);border:1px solid rgba(251,191,36,.45);color:#FFD66B;font-family:'JetBrains Mono',monospace;font-size:20px;box-shadow:0 0 22px rgba(251,191,36,.16);">packaging</span>
+              </div>
+            </div>
+            <div data-build="3" style="text-align:center;color:#3F4A5E;font-size:20px;line-height:.6;">↓</div>
+            <!-- Execution -->
+            <div data-build="3" style="display:flex;align-items:center;gap:24px;padding:24px 28px;border:1px solid rgba(52,211,153,.3);border-radius:16px;background:rgba(52,211,153,.05);">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:15px;letter-spacing:.06em;color:#7FE3C0;width:182px;">EXECUTION · 执行层</span>
+              <span style="font-size:21px;color:#A9D9C6;">目标品类表达 · 真实素材 · 时间线</span>
+            </div>
+          </div>
+
+          <div data-build="4" style="flex:0 0 360px;display:flex;flex-direction:column;gap:18px;">
+            <div style="font-size:23px;line-height:1.5;color:#C4CEE0;">把视频看成<span style="color:#22D3EE;font-weight:600;">结构对象</span>,而不是一堆画面。</div>
+            <div style="font-size:19px;line-height:1.6;color:#7E8AA0;">表层有版权限制,结构语法却能跨品类复用 —— 这正是「迁移」成立的前提。</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ SLIDE · STRUCTURE FORMULA (Magic Move target) ============ -->
+      <section data-slide data-kind="formula" data-screen-label="Structure Definition" data-notes="结构被定义成一个可计算的协议:role 决定这段干什么,subtype 决定结构怎么走,motionToken 是运动语法,packaging 是画面包装。" style="position:absolute;inset:0;display:flex;flex-direction:column;padding:88px 132px 110px;">
+        <div style="display:flex;align-items:center;gap:14px;">
+          <span style="width:18px;height:3px;border-radius:2px;background:#22D3EE;box-shadow:0 0 12px rgba(34,211,238,.7);"></span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:14px;letter-spacing:.34em;color:#7C8AA3;">STRUCTURE DEFINITION</span>
+        </div>
+
+        <div style="margin-top:38px;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:18px 20px;font-family:'JetBrains Mono',monospace;font-size:44px;color:#EFF3FC;">
+          <span style="font-weight:700;">结构</span>
+          <span style="color:#4E586C;">=</span>
+          <span data-vt="tok-role" style="display:inline-flex;align-items:center;padding:8px 18px;border-radius:14px;background:rgba(255,77,109,.13);border:1px solid rgba(255,77,109,.45);color:#FF8098;box-shadow:0 0 30px rgba(255,77,109,.2);">role</span>
+          <span style="color:#4E586C;">×</span>
+          <span data-vt="tok-subtype" style="display:inline-flex;align-items:center;padding:8px 18px;border-radius:14px;background:rgba(167,139,250,.13);border:1px solid rgba(167,139,250,.45);color:#C4B0FF;box-shadow:0 0 30px rgba(167,139,250,.2);">subtype</span>
+          <span style="color:#4E586C;">×</span>
+          <span data-vt="tok-motion" style="display:inline-flex;align-items:center;padding:8px 18px;border-radius:14px;background:rgba(34,211,238,.13);border:1px solid rgba(34,211,238,.45);color:#7DE7F2;box-shadow:0 0 30px rgba(34,211,238,.2);">motionToken</span>
+          <span style="color:#4E586C;">×</span>
+          <span data-vt="tok-pkg" style="display:inline-flex;align-items:center;padding:8px 18px;border-radius:14px;background:rgba(251,191,36,.13);border:1px solid rgba(251,191,36,.45);color:#FFD66B;box-shadow:0 0 30px rgba(251,191,36,.2);">packaging</span>
+        </div>
+
+        <div style="flex:1;display:flex;align-items:center;gap:56px;margin-top:18px;">
+          <div data-build="1" style="flex:0 0 760px;border:1px solid rgba(255,255,255,.09);border-radius:18px;background:rgba(10,15,26,.72);overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.4);">
+            <div style="display:flex;align-items:center;gap:8px;padding:15px 20px;border-bottom:1px solid rgba(255,255,255,.07);">
+              <span style="width:11px;height:11px;border-radius:50%;background:#FF5F57;"></span>
+              <span style="width:11px;height:11px;border-radius:50%;background:#FEBC2E;"></span>
+              <span style="width:11px;height:11px;border-radius:50%;background:#28C840;"></span>
+              <span style="margin-left:12px;font-family:'JetBrains Mono',monospace;font-size:14px;color:#6B7689;">ShotSlot.ts</span>
+            </div>
+            <pre style="margin:0;padding:26px 30px;font-family:'JetBrains Mono',monospace;font-size:20px;line-height:1.85;color:#C4CEE0;"><span style="color:#7C8AA3;">type</span> <span style="color:#7DE7F2;">ShotSlot</span> = {
+  role:        <span style="color:#FF8098;">"hook"</span> | <span style="color:#FF8098;">"selling_point"</span> | <span style="color:#FF8098;">"cta"</span>;
+  subtype:     <span style="color:#C4B0FF;">"kinetic_reveal"</span> | <span style="color:#C4B0FF;">"assembly"</span>;
+  motionToken: <span style="color:#7DE7F2;">"chaos_to_order"</span> | <span style="color:#7DE7F2;">"cta_reveal"</span>;
+  packaging:   <span style="color:#FFD66B;">"subtitle"</span> | <span style="color:#FFD66B;">"card"</span>;
+};</pre>
+          </div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:16px;">
+            <div data-build="2" style="border-left:2px solid #FF4D6D;padding:6px 0 6px 18px;"><span style="font-family:'JetBrains Mono',monospace;color:#FF8098;font-size:19px;">role</span> <span style="color:#AEB9CF;font-size:20px;">— 这一段在「干什么」</span></div>
+            <div data-build="2" style="border-left:2px solid #A78BFA;padding:6px 0 6px 18px;"><span style="font-family:'JetBrains Mono',monospace;color:#C4B0FF;font-size:19px;">subtype</span> <span style="color:#AEB9CF;font-size:20px;">— 结构怎么走</span></div>
+            <div data-build="3" style="border-left:2px solid #22D3EE;padding:6px 0 6px 18px;"><span style="font-family:'JetBrains Mono',monospace;color:#7DE7F2;font-size:19px;">motionToken</span> <span style="color:#AEB9CF;font-size:20px;">— 运动语法</span></div>
+            <div data-build="3" style="border-left:2px solid #FBBF24;padding:6px 0 6px 18px;"><span style="font-family:'JetBrains Mono',monospace;color:#FFD66B;font-size:19px;">packaging</span> <span style="color:#AEB9CF;font-size:20px;">— 画面包装</span></div>
+            <div data-build="4" style="margin-top:8px;font-size:22px;line-height:1.5;color:#C4CEE0;">结构协议,让「感觉」变成<span style="color:#22D3EE;font-weight:600;">可计算对象</span>。</div>
+          </div>
+        </div>
+      </section>
+      <!-- ============ SLIDE · DEMO CASE (migration flow) ============ -->
+      <section data-slide data-kind="case" data-screen-label="Demo Case" data-notes="主案例:MacBook Neo 的发布片结构,迁移到康师傅冰红茶。左边是抽象结构功能,中间划掉的是不复制的源画面,右边是目标品类的等价表达。流光代表结构在迁移。" style="position:absolute;inset:0;display:flex;flex-direction:column;padding:80px 132px 104px;">
+        <div style="display:flex;align-items:center;gap:14px;">
+          <span style="width:18px;height:3px;border-radius:2px;background:#22D3EE;box-shadow:0 0 12px rgba(34,211,238,.7);"></span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:14px;letter-spacing:.34em;color:#7C8AA3;">DEMO CASE</span>
+        </div>
+        <h2 style="margin:18px 0 0;font-weight:700;font-size:54px;line-height:1.12;letter-spacing:-.01em;color:#F1F5FE;">主案例:<span style="font-family:'Manrope',sans-serif;">MacBook Neo</span> <span style="color:#22D3EE;">→</span> 康师傅冰红茶</h2>
+
+        <div style="display:flex;align-items:center;gap:24px;margin:26px 0 14px;padding:0 24px;font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:.12em;color:#5A6478;">
+          <div style="flex:0 0 280px;">源片结构功能</div>
+          <div style="flex:0 0 300px;text-align:center;">不复制的画面 · 迁移路径</div>
+          <div style="flex:1;">目标品类等价表达</div>
+        </div>
+
+        <div style="flex:1;display:flex;flex-direction:column;gap:14px;">
+          <div data-build="1" style="display:flex;align-items:center;gap:24px;padding:16px 24px;border-radius:14px;background:rgba(255,255,255,.022);border:1px solid rgba(255,255,255,.055);">
+            <div style="flex:0 0 280px;display:flex;align-items:center;gap:12px;"><span style="width:9px;height:9px;border-radius:50%;background:#FF4D6D;box-shadow:0 0 10px #FF4D6D;"></span><span style="font-family:'JetBrains Mono',monospace;font-size:20px;color:#FF8098;">高冲击 hook</span></div>
+            <div style="flex:0 0 300px;display:flex;flex-direction:column;align-items:center;gap:5px;"><span style="font-size:15px;color:#5A6478;text-decoration:line-through;text-decoration-color:rgba(255,77,109,.4);">电脑 / 键盘</span><svg width="240" height="14" viewBox="0 0 240 14" style="overflow:visible;"><path d="M4 7 H222" stroke="rgba(255,255,255,.1)" stroke-width="2" stroke-linecap="round"></path><path d="M4 7 H222" stroke="#FF4D6D" stroke-width="2" stroke-linecap="round" stroke-dasharray="14 18" style="animation:vsaiFlow .8s linear infinite;filter:drop-shadow(0 0 5px #FF4D6D);"></path><path d="M216 2 L228 7 L216 12" stroke="#FF4D6D" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg></div>
+            <div style="flex:1;font-size:23px;color:#E2E8F2;">冰雾 · 冷凝水 · 冰块炸裂</div>
+          </div>
+
+          <div data-build="2" style="display:flex;align-items:center;gap:24px;padding:16px 24px;border-radius:14px;background:rgba(255,255,255,.022);border:1px solid rgba(255,255,255,.055);">
+            <div style="flex:0 0 280px;display:flex;align-items:center;gap:12px;"><span style="width:9px;height:9px;border-radius:50%;background:#A78BFA;box-shadow:0 0 10px #A78BFA;"></span><span style="font-family:'JetBrains Mono',monospace;font-size:20px;color:#C4B0FF;">产品 reveal</span></div>
+            <div style="flex:0 0 300px;display:flex;flex-direction:column;align-items:center;gap:5px;"><span style="font-size:15px;color:#5A6478;text-decoration:line-through;text-decoration-color:rgba(167,139,250,.4);">机身亮相</span><svg width="240" height="14" viewBox="0 0 240 14" style="overflow:visible;"><path d="M4 7 H222" stroke="rgba(255,255,255,.1)" stroke-width="2" stroke-linecap="round"></path><path d="M4 7 H222" stroke="#A78BFA" stroke-width="2" stroke-linecap="round" stroke-dasharray="14 18" style="animation:vsaiFlow .8s linear infinite;filter:drop-shadow(0 0 5px #A78BFA);"></path><path d="M216 2 L228 7 L216 12" stroke="#A78BFA" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg></div>
+            <div style="flex:1;font-size:23px;color:#E2E8F2;">瓶身标签锁定特写</div>
+          </div>
+
+          <div data-build="3" style="display:flex;align-items:center;gap:24px;padding:16px 24px;border-radius:14px;background:rgba(34,211,238,.05);border:1px solid rgba(34,211,238,.22);">
+            <div style="flex:0 0 280px;display:flex;align-items:center;gap:12px;"><span style="width:9px;height:9px;border-radius:50%;background:#22D3EE;box-shadow:0 0 10px #22D3EE;"></span><span style="font-family:'JetBrains Mono',monospace;font-size:20px;color:#7DE7F2;">kinetic assembly</span></div>
+            <div style="flex:0 0 300px;display:flex;flex-direction:column;align-items:center;gap:5px;"><span style="font-size:15px;color:#5A6478;text-decoration:line-through;text-decoration-color:rgba(34,211,238,.4);">键盘碎片组装</span><svg width="240" height="14" viewBox="0 0 240 14" style="overflow:visible;"><path d="M4 7 H222" stroke="rgba(255,255,255,.1)" stroke-width="2" stroke-linecap="round"></path><path d="M4 7 H222" stroke="#22D3EE" stroke-width="2" stroke-linecap="round" stroke-dasharray="14 18" style="animation:vsaiFlow .8s linear infinite;filter:drop-shadow(0 0 6px #22D3EE);"></path><path d="M216 2 L228 7 L216 12" stroke="#22D3EE" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg></div>
+            <div style="flex:1;font-size:23px;color:#FFFFFF;font-weight:500;">冰块 · 柠檬 · 茶滴汇聚成型</div>
+          </div>
+
+          <div data-build="4" style="display:flex;align-items:center;gap:24px;padding:16px 24px;border-radius:14px;background:rgba(255,255,255,.022);border:1px solid rgba(255,255,255,.055);">
+            <div style="flex:0 0 280px;display:flex;align-items:center;gap:12px;"><span style="width:9px;height:9px;border-radius:50%;background:#34D399;box-shadow:0 0 10px #34D399;"></span><span style="font-family:'JetBrains Mono',monospace;font-size:20px;color:#6EE7B7;">功能介绍</span></div>
+            <div style="flex:0 0 300px;display:flex;flex-direction:column;align-items:center;gap:5px;"><span style="font-size:15px;color:#5A6478;text-decoration:line-through;text-decoration-color:rgba(52,211,153,.4);">芯片 / 屏幕 / 接口</span><svg width="240" height="14" viewBox="0 0 240 14" style="overflow:visible;"><path d="M4 7 H222" stroke="rgba(255,255,255,.1)" stroke-width="2" stroke-linecap="round"></path><path d="M4 7 H222" stroke="#34D399" stroke-width="2" stroke-linecap="round" stroke-dasharray="14 18" style="animation:vsaiFlow .8s linear infinite;filter:drop-shadow(0 0 5px #34D399);"></path><path d="M216 2 L228 7 L216 12" stroke="#34D399" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg></div>
+            <div style="flex:1;font-size:23px;color:#E2E8F2;">冰爽 · 茶香 · 解腻 · 适合分享</div>
+          </div>
+
+          <div data-build="5" style="display:flex;align-items:center;gap:24px;padding:16px 24px;border-radius:14px;background:rgba(255,255,255,.022);border:1px solid rgba(255,255,255,.055);">
+            <div style="flex:0 0 280px;display:flex;align-items:center;gap:12px;"><span style="width:9px;height:9px;border-radius:50%;background:#FBBF24;box-shadow:0 0 10px #FBBF24;"></span><span style="font-family:'JetBrains Mono',monospace;font-size:20px;color:#FFD66B;">CTA 收口</span></div>
+            <div style="flex:0 0 300px;display:flex;flex-direction:column;align-items:center;gap:5px;"><span style="font-size:15px;color:#5A6478;text-decoration:line-through;text-decoration-color:rgba(251,191,36,.4);">购买卡片</span><svg width="240" height="14" viewBox="0 0 240 14" style="overflow:visible;"><path d="M4 7 H222" stroke="rgba(255,255,255,.1)" stroke-width="2" stroke-linecap="round"></path><path d="M4 7 H222" stroke="#FBBF24" stroke-width="2" stroke-linecap="round" stroke-dasharray="14 18" style="animation:vsaiFlow .8s linear infinite;filter:drop-shadow(0 0 5px #FBBF24);"></path><path d="M216 2 L228 7 L216 12" stroke="#FBBF24" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path></svg></div>
+            <div style="flex:1;font-size:23px;color:#E2E8F2;">产品定格 + 行动号召</div>
+          </div>
+        </div>
+
+        <div data-build="6" style="text-align:center;font-size:29px;font-weight:500;color:#AEB9CF;margin-top:8px;"><span style="font-family:'Manrope',sans-serif;">MacBook</span> 的画面不能复制,但<span style="color:#22D3EE;font-weight:700;">结构能力可以迁移</span></div>
+      </section>
+      <!-- ============ SLIDE · PIPELINE + 7-AGENT WALK ============ -->
+      <section data-slide data-kind="pipeline" data-screen-label="Pipeline" data-notes="protocol-first 全链路:7 个 Agent 把样例视频证据,一步步编译成可执行时间线。按 → 沿轨道走过每一个 Agent。" style="position:absolute;inset:0;display:flex;flex-direction:column;padding:80px 110px 96px;">
+        <div style="display:flex;align-items:center;gap:14px;">
+          <span style="width:18px;height:3px;border-radius:2px;background:#22D3EE;box-shadow:0 0 12px rgba(34,211,238,.7);"></span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:14px;letter-spacing:.34em;color:#7C8AA3;">PIPELINE · PROTOCOL-FIRST</span>
+        </div>
+        <h2 style="margin:16px 0 0;font-weight:700;font-size:50px;line-height:1.12;letter-spacing:-.01em;color:#F1F5FE;">从视频证据,到可执行时间线</h2>
+
+        <div data-pipewrap style="position:relative;margin:30px 4px 0;height:112px;">
+          <!-- ① 三段式分层带 -->
+          <div data-band style="position:absolute;top:0;left:0;width:28.57%;height:104px;border-radius:14px;border-top:1px solid rgba(167,139,250,.42);background:linear-gradient(180deg,rgba(167,139,250,.09),rgba(167,139,250,0) 75%);pointer-events:none;"><div style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.16em;color:#C4B0FF;padding:9px 0 0 16px;">PERCEPTION</div></div>
+          <div data-band style="position:absolute;top:0;left:28.57%;width:57.14%;height:104px;border-radius:14px;border-top:1px solid rgba(34,211,238,.42);background:linear-gradient(180deg,rgba(34,211,238,.09),rgba(34,211,238,0) 75%);pointer-events:none;"><div style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.16em;color:#7DE7F2;padding:9px 0 0 16px;">TRANSFER · ORCHESTRATION</div></div>
+          <div data-band style="position:absolute;top:0;left:85.71%;width:14.29%;height:104px;border-radius:14px;border-top:1px solid rgba(52,211,153,.42);background:linear-gradient(180deg,rgba(52,211,153,.09),rgba(52,211,153,0) 75%);pointer-events:none;"><div style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.16em;color:#6EE7B7;padding:9px 0 0 14px;">AUTHORING &amp; RENDER</div></div>
+          <div data-rail-active style="position:absolute;top:32px;left:0;width:0;height:70px;border-radius:14px;background:transparent;border:1px solid transparent;opacity:0;pointer-events:none;transition:left .55s cubic-bezier(.34,1.1,.4,1),width .55s cubic-bezier(.34,1.1,.4,1),opacity .4s ease,background .45s ease,border-color .45s ease,box-shadow .45s ease;"></div>
+          <div data-rail style="position:relative;display:flex;align-items:flex-start;margin-top:42px;">
+            <div style="position:absolute;top:9px;left:7.1%;right:7.1%;height:2px;background:rgba(255,255,255,.12);"></div>
+            <div data-node style="flex:1;position:relative;display:flex;flex-direction:column;align-items:center;gap:14px;transition:opacity .4s ease;"><div data-dot style="width:18px;height:18px;border-radius:50%;background:#080B12;border:2px solid #A78BFA;box-shadow:0 0 10px rgba(167,139,250,.5);transition:all .4s ease;"></div><div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#9AA6BD;text-align:center;">VideoAnalysis</div></div>
+            <div data-node style="flex:1;position:relative;display:flex;flex-direction:column;align-items:center;gap:14px;transition:opacity .4s ease;"><div data-dot style="width:18px;height:18px;border-radius:50%;background:#080B12;border:2px solid #22D3EE;box-shadow:0 0 10px rgba(34,211,238,.5);transition:all .4s ease;"></div><div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#9AA6BD;text-align:center;">ViralStructureGraph</div></div>
+            <div data-node style="flex:1;position:relative;display:flex;flex-direction:column;align-items:center;gap:14px;transition:opacity .4s ease;"><div data-dot style="width:18px;height:18px;border-radius:50%;background:#080B12;border:2px solid #34D399;box-shadow:0 0 10px rgba(52,211,153,.5);transition:all .4s ease;"></div><div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#9AA6BD;text-align:center;">AssetCard[]</div></div>
+            <div data-node style="flex:1;position:relative;display:flex;flex-direction:column;align-items:center;gap:14px;transition:opacity .4s ease;"><div data-dot style="width:18px;height:18px;border-radius:50%;background:#080B12;border:2px solid #FBBF24;box-shadow:0 0 10px rgba(251,191,36,.5);transition:all .4s ease;"></div><div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#9AA6BD;text-align:center;">SlotMatch[]</div></div>
+            <div data-node style="flex:1;position:relative;display:flex;flex-direction:column;align-items:center;gap:14px;transition:opacity .4s ease;"><div data-dot style="width:18px;height:18px;border-radius:50%;background:#080B12;border:2px solid #FF4D6D;box-shadow:0 0 10px rgba(255,77,109,.5);transition:all .4s ease;"></div><div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#9AA6BD;text-align:center;">Diagnosis</div></div>
+            <div data-node style="flex:1;position:relative;display:flex;flex-direction:column;align-items:center;gap:14px;transition:opacity .4s ease;"><div data-dot style="width:18px;height:18px;border-radius:50%;background:#080B12;border:2px solid #22D3EE;box-shadow:0 0 10px rgba(34,211,238,.5);transition:all .4s ease;"></div><div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#9AA6BD;text-align:center;">OrchestratedTimeline</div></div>
+            <div data-node style="flex:1;position:relative;display:flex;flex-direction:column;align-items:center;gap:14px;transition:opacity .4s ease;"><div data-dot style="width:18px;height:18px;border-radius:50%;background:#080B12;border:2px solid #34D399;box-shadow:0 0 10px rgba(52,211,153,.5);transition:all .4s ease;"></div><div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#9AA6BD;text-align:center;">AuthoredTimeline</div></div>
+          </div>
+        </div>
+
+        <div data-detail style="position:relative;flex:1;margin-top:40px;">
+          <!-- overview (w=0) :: 三幕地图 -->
+          <div data-overview style="position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;gap:28px;transition:opacity .45s ease;">
+            <div style="display:flex;gap:18px;align-items:stretch;">
+              <div style="flex:2.05;padding:26px 28px;border:1px solid rgba(167,139,250,.22);border-radius:16px;background:rgba(167,139,250,.05);">
+                <div style="font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:.16em;color:#C4B0FF;margin-bottom:14px;">PERCEPTION · 感知</div>
+                <div style="font-size:23px;line-height:1.45;color:#C8D2E2;">看懂样例与素材 —— 视频理解 + 结构抽象</div>
+              </div>
+              <div style="flex:3.3;padding:26px 28px;border:1px solid rgba(34,211,238,.22);border-radius:16px;background:rgba(34,211,238,.05);">
+                <div style="font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:.16em;color:#7DE7F2;margin-bottom:14px;">TRANSFER · ORCHESTRATION · 迁移编排</div>
+                <div style="font-size:23px;line-height:1.45;color:#C8D2E2;">素材理解 → 槽位匹配 → 缺口诊断 → 导演编排</div>
+              </div>
+              <div style="flex:2.4;padding:26px 28px;border:1px solid rgba(52,211,153,.22);border-radius:16px;background:rgba(52,211,153,.05);">
+                <div style="font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:.16em;color:#6EE7B7;margin-bottom:14px;">AUTHORING &amp; RENDER · 成片</div>
+                <div style="font-size:23px;line-height:1.45;color:#C8D2E2;">作者化 + 安全校验，产出可执行时间线</div>
+              </div>
+            </div>
+            <div style="text-align:center;font-family:'JetBrains Mono',monospace;font-size:14px;letter-spacing:.06em;color:#6B7689;">按 →　沿脊柱逐个进入 7 个 Agent，查看每步技术重点</div>
+          </div>
+          <!-- agent cards (w=1..7) -->
+          <div data-agent style="position:absolute;inset:0;opacity:0;pointer-events:none;display:flex;flex-direction:column;justify-content:flex-start;gap:20px;transition:opacity .45s ease;">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:15px;letter-spacing:.18em;color:#C4B0FF;">AGENT 1 · VIDEO UNDERSTANDING</div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#C8D2E2;padding:8px 14px;border:1px solid rgba(255,255,255,.1);border-radius:10px;background:rgba(255,255,255,.02);white-space:nowrap;">源视频</span>
+              <span style="color:#3F4A5E;font-size:16px;">→</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#C4B0FF;padding:8px 14px;border:1px solid rgba(167,139,250,.3);border-radius:10px;background:rgba(167,139,250,.06);white-space:nowrap;">ffmpeg 5fps 预览</span>
+              <span style="color:#3F4A5E;font-size:16px;">→</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#C4B0FF;padding:8px 14px;border:1px solid rgba(167,139,250,.3);border-radius:10px;background:rgba(167,139,250,.06);white-space:nowrap;">粗扫 VLM</span>
+              <span style="color:#3F4A5E;font-size:16px;">→</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#C4B0FF;padding:8px 14px;border:1px solid rgba(167,139,250,.3);border-radius:10px;background:rgba(167,139,250,.06);white-space:nowrap;">精扫 · 4 并行通道</span>
+              <span style="color:#3F4A5E;font-size:16px;">→</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#C8D2E2;padding:8px 14px;border:1px solid rgba(255,255,255,.1);border-radius:10px;background:rgba(255,255,255,.02);white-space:nowrap;">VideoAnalysis · actionBeats[]</span>
+            </div>
+            <div style="border-left:3px solid #A78BFA;background:rgba(167,139,250,.04);border-radius:12px;padding:16px 30px;flex:1;display:flex;flex-direction:column;justify-content:flex-start;">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:15px;letter-spacing:.2em;color:#C4B0FF;margin-bottom:16px;">技术路线 · TECH ROUTE</div>
+              <div style="flex:1;display:flex;align-items:center;align-content:center;gap:14px;flex-wrap:wrap;">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:18px;color:#C4B0FF;padding:14px 22px;border:1px solid rgba(167,139,250,.32);border-radius:10px;background:rgba(167,139,250,.06);white-space:nowrap;">粗扫 Rough Scan · VLM</span>
+                <span style="color:#3F4A5E;font-size:24px;">→</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:18px;color:#C8D2E2;padding:14px 22px;border:1px solid rgba(255,255,255,.12);border-radius:10px;background:rgba(255,255,255,.02);white-space:nowrap;">per-block 切片</span>
+                <span style="color:#3F4A5E;font-size:24px;">→</span>
+                <div style="display:flex;flex-direction:column;gap:9px;padding:14px 16px;border:1px dashed rgba(167,139,250,.4);border-radius:12px;">
+                  <div style="font-family:'JetBrains Mono',monospace;font-size:14px;letter-spacing:.1em;color:#C4B0FF;">精扫 FINE SCAN · per-block 4 并行通道</div>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:17px;color:#9AA6BD;padding:11px 16px;border:1px solid rgba(167,139,250,.22);border-radius:9px;background:rgba(167,139,250,.04);white-space:nowrap;">块级语义 VLM · fine_structure_scan</span>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:17px;color:#9AA6BD;padding:11px 16px;border:1px solid rgba(167,139,250,.22);border-radius:9px;background:rgba(167,139,250,.04);white-space:nowrap;">视觉峰值 · DIS+MOG2+find_peaks · 无 VLM</span>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:17px;color:#9AA6BD;padding:11px 16px;border:1px solid rgba(167,139,250,.22);border-radius:9px;background:rgba(167,139,250,.04);white-space:nowrap;">per-peak 微观 VLM · peak_micro_scan</span>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:17px;color:#9AA6BD;padding:11px 16px;border:1px solid rgba(167,139,250,.22);border-radius:9px;background:rgba(167,139,250,.04);white-space:nowrap;">硬切 scene-detect</span>
+                </div>
+                <span style="color:#3F4A5E;font-size:24px;">→</span>
+                <div style="display:flex;flex-direction:column;gap:9px;padding:14px 16px;border:1px dashed rgba(167,139,250,.4);border-radius:12px;">
+                  <div style="font-family:'JetBrains Mono',monospace;font-size:14px;letter-spacing:.1em;color:#C4B0FF;">转场扫描 BOUNDARY</div>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:17px;color:#9AA6BD;padding:11px 16px;border:1px solid rgba(167,139,250,.22);border-radius:9px;background:rgba(167,139,250,.04);white-space:nowrap;">boundaryCandidates 精修</span>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:17px;color:#9AA6BD;padding:11px 16px;border:1px solid rgba(167,139,250,.22);border-radius:9px;background:rgba(167,139,250,.04);white-space:nowrap;">ruptures PELT 变点</span>
+                </div>
+                <span style="color:#3F4A5E;font-size:24px;">→</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:18px;color:#C4B0FF;padding:14px 22px;border:1px solid rgba(167,139,250,.32);border-radius:10px;background:rgba(167,139,250,.06);white-space:nowrap;">聚合 actionBeats[]</span>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:14px;padding:14px 20px;border-radius:12px;border-left:3px solid #A78BFA;background:rgba(167,139,250,.06);"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.12em;color:#C4B0FF;">GUARDRAIL</span><span style="font-size:20px;color:#C8D2E2;">不逐帧硬扫,用候选峰值提高信噪比</span></div>
+          </div>
+          <div data-agent style="position:absolute;inset:0;opacity:0;pointer-events:none;display:flex;flex-direction:column;justify-content:flex-start;gap:20px;transition:opacity .45s ease;">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:15px;letter-spacing:.18em;color:#7DE7F2;">AGENT 2 · STRUCTURE ABSTRACTION</div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#C8D2E2;padding:8px 14px;border:1px solid rgba(255,255,255,.1);border-radius:10px;background:rgba(255,255,255,.02);white-space:nowrap;">VideoAnalysis</span>
+              <span style="color:#3F4A5E;font-size:16px;">→</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#7DE7F2;padding:8px 14px;border:1px solid rgba(34,211,238,.3);border-radius:10px;background:rgba(34,211,238,.06);white-space:nowrap;">角色 · 镜头位 · 验收</span>
+              <span style="color:#3F4A5E;font-size:16px;">→</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#7DE7F2;padding:8px 14px;border:1px solid rgba(34,211,238,.3);border-radius:10px;background:rgba(34,211,238,.06);white-space:nowrap;">母题 · motionToken · 节奏拓扑</span>
+              <span style="color:#3F4A5E;font-size:16px;">→</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#C8D2E2;padding:8px 14px;border:1px solid rgba(255,255,255,.1);border-radius:10px;background:rgba(255,255,255,.02);white-space:nowrap;">ViralStructureGraph</span>
+            </div>
+            <div style="border-left:3px solid #22D3EE;background:rgba(34,211,238,.04);border-radius:12px;padding:16px 30px;flex:1;display:flex;flex-direction:column;justify-content:flex-start;">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:15px;letter-spacing:.2em;color:#7DE7F2;margin-bottom:16px;">技术路线 · TECH ROUTE</div>
+              <div style="flex:1;display:flex;align-items:center;align-content:center;gap:14px;flex-wrap:wrap;">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:18px;color:#C8D2E2;padding:14px 22px;border:1px solid rgba(255,255,255,.12);border-radius:10px;background:rgba(255,255,255,.02);white-space:nowrap;">VideoAnalysis</span>
+                <span style="color:#3F4A5E;font-size:24px;">→</span>
+                <div style="display:flex;flex-direction:column;gap:11px;padding-left:18px;border-left:2px solid rgba(34,211,238,.4);">
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:17px;color:#9AA6BD;padding:12px 18px;border:1px solid rgba(34,211,238,.22);border-radius:9px;background:rgba(34,211,238,.04);white-space:nowrap;">段落角色标注 · <span style="color:#7DE7F2;">SegmentRole</span></span>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:17px;color:#9AA6BD;padding:12px 18px;border:1px solid rgba(34,211,238,.22);border-radius:9px;background:rgba(34,211,238,.04);white-space:nowrap;">镜头位 + 验收标准 · <span style="color:#7DE7F2;">shotSlots · acceptanceCriteria</span></span>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:17px;color:#9AA6BD;padding:12px 18px;border:1px solid rgba(34,211,238,.22);border-radius:9px;background:rgba(34,211,238,.04);white-space:nowrap;">运动母题抽象 · <span style="color:#7DE7F2;">motif → motionToken</span></span>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:17px;color:#9AA6BD;padding:12px 18px;border:1px solid rgba(34,211,238,.22);border-radius:9px;background:rgba(34,211,238,.04);white-space:nowrap;">节奏 · 转场 · 拓扑 · <span style="color:#7DE7F2;">rhythm · boundaries · edges</span></span>
+                </div>
+                <span style="color:#3F4A5E;font-size:24px;">→</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:18px;color:#7DE7F2;padding:14px 22px;border:1px solid rgba(34,211,238,.32);border-radius:10px;background:rgba(34,211,238,.06);white-space:nowrap;">ViralStructureGraph</span>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:14px;padding:14px 20px;border-radius:12px;border-left:3px solid #22D3EE;background:rgba(34,211,238,.06);"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.12em;color:#7DE7F2;">GUARDRAIL</span><span style="font-size:20px;color:#C8D2E2;">抽取「结构语法」,不复制源片画面 / 品牌 / 产品专属元素</span></div>
+          </div>
+          <div data-agent style="position:absolute;inset:0;opacity:0;pointer-events:none;display:flex;flex-direction:column;justify-content:flex-start;gap:20px;transition:opacity .45s ease;">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:15px;letter-spacing:.18em;color:#6EE7B7;">AGENT 3 · ASSET UNDERSTANDING</div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#C8D2E2;padding:8px 14px;border:1px solid rgba(255,255,255,.1);border-radius:10px;background:rgba(255,255,255,.02);white-space:nowrap;">图 / 视频 / 长视频</span>
+              <span style="color:#3F4A5E;font-size:16px;">→</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#6EE7B7;padding:8px 14px;border:1px solid rgba(52,211,153,.3);border-radius:10px;background:rgba(52,211,153,.06);white-space:nowrap;">keyframes + 切片</span>
+              <span style="color:#3F4A5E;font-size:16px;">→</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#6EE7B7;padding:8px 14px;border:1px solid rgba(52,211,153,.3);border-radius:10px;background:rgba(52,211,153,.06);white-space:nowrap;">quality · affordance 评估</span>
+              <span style="color:#3F4A5E;font-size:16px;">→</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#C8D2E2;padding:8px 14px;border:1px solid rgba(255,255,255,.1);border-radius:10px;background:rgba(255,255,255,.02);white-space:nowrap;">AssetCard[] · asset-supply-v1</span>
+            </div>
+            <div style="border-left:3px solid #34D399;background:rgba(52,211,153,.04);border-radius:12px;padding:16px 30px;flex:1;display:flex;flex-direction:column;justify-content:flex-start;">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:15px;letter-spacing:.2em;color:#6EE7B7;margin-bottom:16px;">技术路线 · TECH ROUTE</div>
+              <div style="flex:1;display:flex;align-items:center;align-content:center;gap:14px;flex-wrap:wrap;">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:18px;color:#C8D2E2;padding:14px 22px;border:1px solid rgba(255,255,255,.12);border-radius:10px;background:rgba(255,255,255,.02);white-space:nowrap;">图 / 视频 / 长视频</span>
+                <span style="color:#3F4A5E;font-size:24px;">→</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:18px;color:#6EE7B7;padding:14px 22px;border:1px solid rgba(52,211,153,.32);border-radius:10px;background:rgba(52,211,153,.06);white-space:nowrap;">keyframes 抽取</span>
+                <span style="color:#3F4A5E;font-size:24px;">→</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:18px;color:#6EE7B7;padding:14px 22px;border:1px solid rgba(52,211,153,.32);border-radius:10px;background:rgba(52,211,153,.06);white-space:nowrap;">切片 · videoSegments</span>
+                <span style="color:#3F4A5E;font-size:24px;">→</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:18px;color:#6EE7B7;padding:14px 22px;border:1px solid rgba(52,211,153,.32);border-radius:10px;background:rgba(52,211,153,.06);white-space:nowrap;">quality · affordance 评估</span>
+                <span style="color:#3F4A5E;font-size:24px;">→</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:18px;color:#C8D2E2;padding:14px 22px;border:1px solid rgba(255,255,255,.12);border-radius:10px;background:rgba(255,255,255,.02);white-space:nowrap;">AssetCard · asset-supply-v1</span>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:14px;padding:14px 20px;border-radius:12px;border-left:3px solid #34D399;background:rgba(52,211,153,.06);"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.12em;color:#6EE7B7;">GUARDRAIL</span><span style="font-size:20px;color:#C8D2E2;">避免一个长视频被误复用到所有槽位</span></div>
+          </div>
+          <div data-agent style="position:absolute;inset:0;opacity:0;pointer-events:none;display:flex;flex-direction:column;justify-content:flex-start;gap:20px;transition:opacity .45s ease;">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:15px;letter-spacing:.18em;color:#FFD66B;">AGENT 4 · SLOT MATCHER</div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#C8D2E2;padding:8px 14px;border:1px solid rgba(255,255,255,.1);border-radius:10px;background:rgba(255,255,255,.02);white-space:nowrap;">ShotSlot × AssetCard</span>
+              <span style="color:#3F4A5E;font-size:16px;">→</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#FFD66B;padding:8px 14px;border:1px solid rgba(251,191,36,.3);border-radius:10px;background:rgba(251,191,36,.06);white-space:nowrap;">matchSlotsLLM judge</span>
+              <span style="color:#3F4A5E;font-size:16px;">→</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#FFD66B;padding:8px 14px;border:1px solid rgba(251,191,36,.3);border-radius:10px;background:rgba(251,191,36,.06);white-space:nowrap;">异常 → 规则法兜底</span>
+              <span style="color:#3F4A5E;font-size:16px;">→</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#C8D2E2;padding:8px 14px;border:1px solid rgba(255,255,255,.1);border-radius:10px;background:rgba(255,255,255,.02);white-space:nowrap;">SlotMatch[]</span>
+            </div>
+            <div style="border-left:3px solid #FBBF24;background:rgba(251,191,36,.04);border-radius:12px;padding:16px 30px;flex:1;display:flex;flex-direction:column;justify-content:flex-start;">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:15px;letter-spacing:.2em;color:#FFD66B;margin-bottom:16px;">技术路线 · TECH ROUTE</div>
+              <div style="flex:1;display:flex;align-items:center;align-content:center;gap:14px;flex-wrap:wrap;">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:18px;color:#C8D2E2;padding:14px 22px;border:1px solid rgba(255,255,255,.12);border-radius:10px;background:rgba(255,255,255,.02);white-space:nowrap;">ShotSlot × AssetCard</span>
+                <span style="color:#3F4A5E;font-size:24px;">→</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:18px;color:#FFD66B;padding:14px 22px;border:1px solid rgba(251,191,36,.32);border-radius:10px;background:rgba(251,191,36,.06);white-space:nowrap;">matchSlotsLLM judge</span>
+                <span style="color:#3F4A5E;font-size:24px;">→</span>
+                <div style="display:flex;flex-direction:column;gap:11px;padding-left:18px;border-left:2px solid rgba(251,191,36,.4);">
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:17px;color:#9AA6BD;padding:12px 18px;border:1px solid rgba(251,191,36,.22);border-radius:9px;background:rgba(251,191,36,.04);white-space:nowrap;">成功 · quality 阈值 0.85 / 0.45</span>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:17px;color:#9AA6BD;padding:12px 18px;border:1px solid rgba(251,191,36,.22);border-radius:9px;background:rgba(251,191,36,.04);white-space:nowrap;">异常 · 规则法加权打分（兜底）</span>
+                </div>
+                <span style="color:#3F4A5E;font-size:24px;">→</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:18px;color:#FFD66B;padding:14px 22px;border:1px solid rgba(251,191,36,.32);border-radius:10px;background:rgba(251,191,36,.06);white-space:nowrap;">SlotMatch[]</span>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:14px;padding:14px 20px;border-radius:12px;border-left:3px solid #FBBF24;background:rgba(251,191,36,.06);"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.12em;color:#FFD66B;">GUARDRAIL</span><span style="font-size:20px;color:#C8D2E2;">判断功能支撑,不做关键词相关匹配</span></div>
+          </div>
+          <div data-agent style="position:absolute;inset:0;opacity:0;pointer-events:none;display:flex;flex-direction:column;justify-content:flex-start;gap:20px;transition:opacity .45s ease;">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:15px;letter-spacing:.18em;color:#FF8098;">AGENT 5 · GAP DIAGNOSIS & REPAIR</div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#C8D2E2;padding:8px 14px;border:1px solid rgba(255,255,255,.1);border-radius:10px;background:rgba(255,255,255,.02);white-space:nowrap;">SlotMatch[]</span>
+              <span style="color:#3F4A5E;font-size:16px;">→</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#FF8098;padding:8px 14px;border:1px solid rgba(255,77,109,.3);border-radius:10px;background:rgba(255,77,109,.06);white-space:nowrap;">decideFillStatus</span>
+              <span style="color:#3F4A5E;font-size:16px;">→</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#FF8098;padding:8px 14px;border:1px solid rgba(255,77,109,.3);border-radius:10px;background:rgba(255,77,109,.06);white-space:nowrap;">缺口三通道 · 降级阶梯</span>
+              <span style="color:#3F4A5E;font-size:16px;">→</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#C8D2E2;padding:8px 14px;border:1px solid rgba(255,255,255,.1);border-radius:10px;background:rgba(255,255,255,.02);white-space:nowrap;">MaterialGap[] + brief</span>
+            </div>
+            <div style="border-left:3px solid #FF4D6D;background:rgba(255,77,109,.04);border-radius:12px;padding:16px 30px;flex:1;display:flex;flex-direction:column;justify-content:flex-start;">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:15px;letter-spacing:.2em;color:#FF8098;margin-bottom:16px;">技术路线 · TECH ROUTE</div>
+              <div style="flex:1;display:flex;align-items:center;align-content:center;gap:14px;flex-wrap:wrap;">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:18px;color:#C8D2E2;padding:14px 22px;border:1px solid rgba(255,255,255,.12);border-radius:10px;background:rgba(255,255,255,.02);white-space:nowrap;">SlotMatch[]</span>
+                <span style="color:#3F4A5E;font-size:24px;">→</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:18px;color:#FF8098;padding:14px 22px;border:1px solid rgba(255,77,109,.32);border-radius:10px;background:rgba(255,77,109,.06);white-space:nowrap;">decideFillStatus</span>
+                <span style="color:#3F4A5E;font-size:24px;">→</span>
+                <div style="display:flex;flex-direction:column;gap:11px;padding-left:18px;border-left:2px solid rgba(255,77,109,.4);">
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:17px;color:#9AA6BD;padding:12px 18px;border:1px solid rgba(255,77,109,.22);border-radius:9px;background:rgba(255,77,109,.04);white-space:nowrap;">hyperframes · 真素材增强（matched/partial）</span>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:17px;color:#9AA6BD;padding:12px 18px;border:1px solid rgba(255,77,109,.22);border-radius:9px;background:rgba(255,77,109,.04);white-space:nowrap;">aigc · job-card（gap 合格）</span>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:17px;color:#9AA6BD;padding:12px 18px;border:1px solid rgba(255,77,109,.22);border-radius:9px;background:rgba(255,77,109,.04);white-space:nowrap;">reshoot · 提供但从不自动选</span>
+                </div>
+                <span style="color:#3F4A5E;font-size:24px;">→</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:18px;color:#FF8098;padding:14px 22px;border:1px solid rgba(255,77,109,.32);border-radius:10px;background:rgba(255,77,109,.06);white-space:nowrap;">MissingMaterialBrief</span>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:14px;padding:14px 20px;border-radius:12px;border-left:3px solid #FF4D6D;background:rgba(255,77,109,.06);"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.12em;color:#FF8098;">GUARDRAIL</span><span style="font-size:20px;color:#C8D2E2;">AIGC 是缺口补全,不是默认替代真实素材(plan-only)</span></div>
+          </div>
+          <div data-agent style="position:absolute;inset:0;opacity:0;pointer-events:none;display:flex;flex-direction:column;justify-content:flex-start;gap:20px;transition:opacity .45s ease;">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:15px;letter-spacing:.18em;color:#7DE7F2;">AGENT 6 · DIRECTOR</div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#C8D2E2;padding:8px 14px;border:1px solid rgba(255,255,255,.1);border-radius:10px;background:rgba(255,255,255,.02);white-space:nowrap;">Graph · Intelligence · Assets</span>
+              <span style="color:#3F4A5E;font-size:16px;">→</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#7DE7F2;padding:8px 14px;border:1px solid rgba(34,211,238,.3);border-radius:10px;background:rgba(34,211,238,.06);white-space:nowrap;">品类等价翻译 ∥ 源禁忌词</span>
+              <span style="color:#3F4A5E;font-size:16px;">→</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#7DE7F2;padding:8px 14px;border:1px solid rgba(34,211,238,.3);border-radius:10px;background:rgba(34,211,238,.06);white-space:nowrap;">源泄漏门 + 结构压缩</span>
+              <span style="color:#3F4A5E;font-size:16px;">→</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#C8D2E2;padding:8px 14px;border:1px solid rgba(255,255,255,.1);border-radius:10px;background:rgba(255,255,255,.02);white-space:nowrap;">OrchestratedTimeline · planOnly</span>
+            </div>
+            <div style="border-left:3px solid #22D3EE;background:rgba(34,211,238,.04);border-radius:12px;padding:16px 30px;flex:1;display:flex;flex-direction:column;justify-content:flex-start;">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:15px;letter-spacing:.2em;color:#7DE7F2;margin-bottom:16px;">技术路线 · TECH ROUTE</div>
+              <div style="flex:1;display:flex;align-items:center;align-content:center;gap:14px;flex-wrap:wrap;">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:18px;color:#C8D2E2;padding:14px 22px;border:1px solid rgba(255,255,255,.12);border-radius:10px;background:rgba(255,255,255,.02);white-space:nowrap;">Graph · Intel · Assets</span>
+                <span style="color:#3F4A5E;font-size:24px;">→</span>
+                <div style="display:flex;flex-direction:column;gap:10px;padding-left:18px;border-left:2px solid rgba(34,211,238,.4);">
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:17px;color:#9AA6BD;padding:12px 18px;border:1px solid rgba(34,211,238,.22);border-radius:9px;background:rgba(34,211,238,.04);white-space:nowrap;">translateCategoryEquivalents · 强制 LLM</span>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:17px;color:#9AA6BD;padding:12px 18px;border:1px solid rgba(34,211,238,.22);border-radius:9px;background:rgba(34,211,238,.04);white-space:nowrap;">deriveSourceIdentityBanlist · 强制 LLM</span>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#8FB6FF;padding-left:2px;">∥ 数据独立 · 可并行</span>
+                </div>
+                <span style="color:#3F4A5E;font-size:24px;">→</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:18px;color:#7DE7F2;padding:14px 22px;border:1px solid rgba(34,211,238,.32);border-radius:10px;background:rgba(34,211,238,.06);white-space:nowrap;">源泄漏门 + 结构压缩 27→6-8</span>
+                <span style="color:#3F4A5E;font-size:24px;">→</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:18px;color:#7DE7F2;padding:14px 22px;border:1px solid rgba(34,211,238,.32);border-radius:10px;background:rgba(34,211,238,.06);white-space:nowrap;">OrchestratedTimeline · planOnly</span>
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:14px;padding:14px 20px;border-radius:12px;border-left:3px solid #22D3EE;background:rgba(34,211,238,.06);"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.12em;color:#7DE7F2;">GUARDRAIL</span><span style="font-size:20px;color:#C8D2E2;">迁移结构方法,不复制源片元素(创作导演,不是文案生成器)</span></div>
+          </div>
+          <div data-agent style="position:absolute;inset:0;opacity:0;pointer-events:none;display:flex;flex-direction:column;justify-content:flex-start;gap:20px;transition:opacity .45s ease;">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:15px;letter-spacing:.18em;color:#6EE7B7;">AGENT 7 · VIDEO SAFETY</div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <span style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#C8D2E2;padding:8px 14px;border:1px solid rgba(255,255,255,.1);border-radius:10px;background:rgba(255,255,255,.02);white-space:nowrap;">OrchestratedTimeline</span>
+              <span style="color:#3F4A5E;font-size:16px;">→</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#6EE7B7;padding:8px 14px;border:1px solid rgba(52,211,153,.3);border-radius:10px;background:rgba(52,211,153,.06);white-space:nowrap;">authorTimeline · LLM/mock</span>
+              <span style="color:#3F4A5E;font-size:16px;">→</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#6EE7B7;padding:8px 14px;border:1px solid rgba(52,211,153,.3);border-radius:10px;background:rgba(52,211,153,.06);white-space:nowrap;">三渲染通道 · /produce</span>
+              <span style="color:#3F4A5E;font-size:16px;">→</span>
+              <span style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#C8D2E2;padding:8px 14px;border:1px solid rgba(255,255,255,.1);border-radius:10px;background:rgba(255,255,255,.02);white-space:nowrap;">AuthoredTimeline + Report</span>
+            </div>
+            <div style="border-left:3px solid #34D399;background:rgba(52,211,153,.04);border-radius:12px;padding:16px 30px;flex:1;display:flex;flex-direction:column;justify-content:flex-start;">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:15px;letter-spacing:.2em;color:#6EE7B7;margin-bottom:16px;">技术路线 · TECH ROUTE</div>
+              <div style="flex:1;display:flex;align-items:center;align-content:center;gap:14px;flex-wrap:wrap;">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:18px;color:#C8D2E2;padding:14px 22px;border:1px solid rgba(255,255,255,.12);border-radius:10px;background:rgba(255,255,255,.02);white-space:nowrap;">authorTimeline · LLM/mock</span>
+                <span style="color:#3F4A5E;font-size:24px;">→</span>
+                <div style="display:flex;flex-direction:column;gap:10px;padding-left:18px;border-left:2px solid rgba(52,211,153,.4);">
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:17px;color:#9AA6BD;padding:12px 18px;border:1px solid rgba(52,211,153,.22);border-radius:9px;background:rgba(52,211,153,.04);white-space:nowrap;">真素材 matched · 直接 -i</span>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:17px;color:#9AA6BD;padding:12px 18px;border:1px solid rgba(52,211,153,.22);border-radius:9px;background:rgba(52,211,153,.04);white-space:nowrap;">Wan2.7 · AIGC r2v/i2v/videoedit/t2v</span>
+                  <span style="font-family:'JetBrains Mono',monospace;font-size:17px;color:#9AA6BD;padding:12px 18px;border:1px solid rgba(52,211,153,.22);border-radius:9px;background:rgba(52,211,153,.04);white-space:nowrap;">HyperFrames · 动效卡 HTML+GSAP</span>
+                </div>
+                <span style="color:#3F4A5E;font-size:24px;">→</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:18px;color:#6EE7B7;padding:14px 22px;border:1px solid rgba(52,211,153,.32);border-radius:10px;background:rgba(52,211,153,.06);white-space:nowrap;">ffmpeg 合成 · libass 烧字幕 + concat</span>
+                <span style="color:#3F4A5E;font-size:24px;">→</span>
+                <span style="font-family:'JetBrains Mono',monospace;font-size:18px;color:#C8D2E2;padding:14px 22px;border:1px solid rgba(255,255,255,.12);border-radius:10px;background:rgba(255,255,255,.02);white-space:nowrap;">AuthoredTimeline + Report</span>
+              </div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#6B7689;margin-top:14px;">未解析 beat → 强制 HONEST_SUBSTITUTE 替代卡 · /produce 才真渲染</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:14px;padding:14px 20px;border-radius:12px;border-left:3px solid #34D399;background:rgba(52,211,153,.06);"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.12em;color:#6EE7B7;">GUARDRAIL</span><span style="font-size:20px;color:#C8D2E2;">不伪造成片,不复制源片,不编造营销事实</span></div>
+          </div>
+        </div>
+      </section>
+      <!-- ============ SLIDE · HONEST DIAGNOSIS ============ -->
+      <section data-slide data-kind="honest" data-screen-label="Honest Diagnosis" data-notes="SlotMatcher 判的是功能支撑,不是关键词相关。素材相关 ≠ 素材可用。雷达图显示 7 维覆盖里哪些是缺口。诊断分是离线启发式估算,不是真实测量。" style="position:absolute;inset:0;display:flex;flex-direction:column;padding:80px 132px 96px;">
+        <div style="display:flex;align-items:center;gap:14px;">
+          <span style="width:18px;height:3px;border-radius:2px;background:#FBBF24;box-shadow:0 0 12px rgba(251,191,36,.7);"></span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:14px;letter-spacing:.34em;color:#7C8AA3;">SLOTMATCHER · 诚实诊断</span>
+        </div>
+        <h2 style="margin:16px 0 0;font-weight:700;font-size:50px;line-height:1.1;letter-spacing:-.01em;color:#F1F5FE;">素材相关 <span style="color:#FF4D6D;">≠</span> 素材可用</h2>
+
+        <div style="flex:1;display:flex;gap:64px;align-items:center;margin-top:6px;">
+          <div data-build="1" data-chart="bars" style="flex:1;display:flex;flex-direction:column;gap:24px;">
+            <div style="display:flex;align-items:center;gap:20px;"><div style="flex:0 0 300px;"><div style="font-family:'JetBrains Mono',monospace;font-size:18px;color:#6EE7B7;">matched</div><div style="font-size:15px;color:#7E8AA0;margin-top:3px;">直接支撑槽位</div></div><div data-bar="0.92" style="flex:1;height:10px;border-radius:6px;background:rgba(255,255,255,.06);position:relative;overflow:hidden;"><div data-fill style="position:absolute;left:0;top:0;bottom:0;width:0;background:linear-gradient(90deg,#34D399,#6EE7B7);border-radius:6px;box-shadow:0 0 14px rgba(52,211,153,.5);"></div></div><div style="flex:0 0 52px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:20px;color:#6EE7B7;"><span data-countup="92">0</span></div></div>
+            <div style="display:flex;align-items:center;gap:20px;"><div style="flex:0 0 300px;"><div style="font-family:'JetBrains Mono',monospace;font-size:18px;color:#FFD66B;">partial_asset_support</div><div style="font-size:15px;color:#7E8AA0;margin-top:3px;">需裁切 / 包装</div></div><div data-bar="0.66" style="flex:1;height:10px;border-radius:6px;background:rgba(255,255,255,.06);position:relative;overflow:hidden;"><div data-fill style="position:absolute;left:0;top:0;bottom:0;width:0;background:linear-gradient(90deg,#FBBF24,#FFD66B);border-radius:6px;box-shadow:0 0 14px rgba(251,191,36,.5);"></div></div><div style="flex:0 0 52px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:20px;color:#FFD66B;"><span data-countup="66">0</span></div></div>
+            <div style="display:flex;align-items:center;gap:20px;"><div style="flex:0 0 300px;"><div style="font-family:'JetBrains Mono',monospace;font-size:18px;color:#7DE7F2;">needs_hyperframes</div><div style="font-size:15px;color:#7E8AA0;margin-top:3px;">需动效补全</div></div><div data-bar="0.51" style="flex:1;height:10px;border-radius:6px;background:rgba(255,255,255,.06);position:relative;overflow:hidden;"><div data-fill style="position:absolute;left:0;top:0;bottom:0;width:0;background:linear-gradient(90deg,#22D3EE,#7DE7F2);border-radius:6px;box-shadow:0 0 14px rgba(34,211,238,.5);"></div></div><div style="flex:0 0 52px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:20px;color:#7DE7F2;"><span data-countup="51">0</span></div></div>
+            <div style="display:flex;align-items:center;gap:20px;"><div style="flex:0 0 300px;"><div style="font-family:'JetBrains Mono',monospace;font-size:18px;color:#FF8098;">missing_generation</div><div style="font-size:15px;color:#7E8AA0;margin-top:3px;">需补拍或生成</div></div><div data-bar="0.24" style="flex:1;height:10px;border-radius:6px;background:rgba(255,255,255,.06);position:relative;overflow:hidden;"><div data-fill style="position:absolute;left:0;top:0;bottom:0;width:0;background:linear-gradient(90deg,#FF4D6D,#FF8098);border-radius:6px;box-shadow:0 0 14px rgba(255,77,109,.5);"></div></div><div style="flex:0 0 52px;text-align:right;font-family:'JetBrains Mono',monospace;font-size:20px;color:#FF8098;"><span data-countup="24">0</span></div></div>
+            <div style="display:flex;gap:22px;margin-top:4px;font-family:'JetBrains Mono',monospace;font-size:13px;color:#6B7689;"><span>阈值 ≥75 覆盖</span><span>≥50 偏弱</span><span>&lt;50 缺口</span></div>
+          </div>
+
+          <div data-build="2" style="flex:0 0 340px;display:flex;flex-direction:column;align-items:center;">
+            <div data-chart="radar" data-radar="[0.9,0.62,0.86,0.5,0.44,0.4,0.56]" style="position:relative;width:300px;height:300px;">
+              <svg viewBox="0 0 340 340" width="300" height="300" style="overflow:visible;">
+                <g data-radar-grid></g>
+                <polygon data-radar-ceiling points="" fill="none" stroke="rgba(255,255,255,.2)" stroke-width="1.5" stroke-dasharray="3 5"></polygon>
+                <polygon data-radar-cov points="" fill="rgba(34,211,238,.16)" stroke="#22D3EE" stroke-width="2"></polygon>
+              </svg>
+              <div style="position:absolute;left:50%;top:-2px;transform:translateX(-50%);font-family:'JetBrains Mono',monospace;font-size:12px;color:#7E8AA0;">hook</div>
+              <div style="position:absolute;right:6px;top:28%;font-family:'JetBrains Mono',monospace;font-size:12px;color:#7E8AA0;">pain</div>
+              <div style="position:absolute;right:0;bottom:30%;font-family:'JetBrains Mono',monospace;font-size:12px;color:#7E8AA0;">selling</div>
+              <div style="position:absolute;right:14%;bottom:-2px;font-family:'JetBrains Mono',monospace;font-size:12px;color:#FF8098;">usage</div>
+              <div style="position:absolute;left:14%;bottom:-2px;font-family:'JetBrains Mono',monospace;font-size:12px;color:#FF8098;">comparison</div>
+              <div style="position:absolute;left:0;bottom:30%;font-family:'JetBrains Mono',monospace;font-size:12px;color:#7E8AA0;">proof</div>
+              <div style="position:absolute;left:6px;top:28%;font-family:'JetBrains Mono',monospace;font-size:12px;color:#7E8AA0;">cta</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:18px;margin-top:14px;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#8A96AD;">
+              <span style="display:flex;align-items:center;gap:7px;"><span style="width:14px;height:0;border-top:1.5px dashed rgba(255,255,255,.4);"></span>需求天花板</span>
+              <span style="display:flex;align-items:center;gap:7px;"><span style="width:14px;height:9px;background:rgba(34,211,238,.4);border:1px solid #22D3EE;border-radius:2px;"></span>实际覆盖</span>
+            </div>
+            <div style="margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:11.5px;color:#5A6478;letter-spacing:.04em;">⚠ 离线启发式估算 · 非真实测量</div>
+          </div>
+        </div>
+
+        <div data-build="3" style="display:flex;gap:14px;flex-wrap:wrap;margin-top:4px;">
+          <span style="font-size:19px;color:#9AA6BD;">产品可见 <span style="color:#FF4D6D;">≠</span> 使用演示</span>
+          <span style="color:#3F4A5E;">·</span>
+          <span style="font-size:19px;color:#9AA6BD;">手拿瓶子 <span style="color:#FF4D6D;">≠</span> 开盖动作</span>
+          <span style="color:#3F4A5E;">·</span>
+          <span style="font-size:19px;color:#9AA6BD;">单瓶产品 <span style="color:#FF4D6D;">≠</span> 社交证明</span>
+          <span style="color:#3F4A5E;">·</span>
+          <span style="font-size:19px;color:#9AA6BD;">尾帧缺失 <span style="color:#FF4D6D;">≠</span> CTA lockup</span>
+        </div>
+        <div data-build="4" style="display:flex;align-items:center;gap:14px;margin-top:20px;padding:14px 22px;border-radius:12px;border-left:3px solid #FBBF24;background:rgba(251,191,36,.06);"><span style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.12em;color:#FFD66B;">GUARDRAIL</span><span style="font-size:21px;color:#C8D2E2;">判断功能支撑,不做关键词相关匹配</span></div>
+      </section>
+      <!-- ============ SLIDE · ENGINEERING ============ -->
+      <section data-slide data-kind="eng" data-screen-label="Engineering" data-notes="工程化保障:monorepo、Zod schema、异步任务、断点续跑、fail-fast、secret scan。verify.sh 一键校验 —— 类型、测试、构建全绿。" style="position:absolute;inset:0;display:flex;flex-direction:column;padding:80px 132px 96px;">
+        <div style="display:flex;align-items:center;gap:14px;">
+          <span style="width:18px;height:3px;border-radius:2px;background:#34D399;box-shadow:0 0 12px rgba(52,211,153,.7);"></span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:14px;letter-spacing:.34em;color:#7C8AA3;">ENGINEERING</span>
+        </div>
+        <h2 style="margin:16px 0 0;font-weight:700;font-size:54px;line-height:1.1;letter-spacing:-.01em;color:#F1F5FE;">工程化保障:可运行、可测试、可失败定位</h2>
+
+        <div style="flex:1;display:flex;gap:48px;align-items:center;margin-top:8px;">
+          <div data-build="1" style="flex:1;display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div style="padding:22px 24px;border:1px solid rgba(255,255,255,.08);border-radius:14px;background:rgba(255,255,255,.02);"><div style="font-family:'JetBrains Mono',monospace;font-size:19px;color:#7DE7F2;">Monorepo</div><div style="font-size:16px;color:#8A96AD;margin-top:6px;">pnpm + Turbo 统一编排</div></div>
+            <div style="padding:22px 24px;border:1px solid rgba(255,255,255,.08);border-radius:14px;background:rgba(255,255,255,.02);"><div style="font-family:'JetBrains Mono',monospace;font-size:19px;color:#C4B0FF;">Zod Schema</div><div style="font-size:16px;color:#8A96AD;margin-top:6px;">protocol-first 强类型契约</div></div>
+            <div style="padding:22px 24px;border:1px solid rgba(255,255,255,.08);border-radius:14px;background:rgba(255,255,255,.02);"><div style="font-family:'JetBrains Mono',monospace;font-size:19px;color:#6EE7B7;">Async Job Harness</div><div style="font-size:16px;color:#8A96AD;margin-top:6px;">长任务异步可观测</div></div>
+            <div style="padding:22px 24px;border:1px solid rgba(255,255,255,.08);border-radius:14px;background:rgba(255,255,255,.02);"><div style="font-family:'JetBrains Mono',monospace;font-size:19px;color:#FFD66B;">Resume Fingerprint</div><div style="font-size:16px;color:#8A96AD;margin-top:6px;">断点续跑,不重复计算</div></div>
+            <div style="padding:22px 24px;border:1px solid rgba(255,255,255,.08);border-radius:14px;background:rgba(255,255,255,.02);"><div style="font-family:'JetBrains Mono',monospace;font-size:19px;color:#FF8098;">Fail-fast</div><div style="font-size:16px;color:#8A96AD;margin-top:6px;">早失败、可定位</div></div>
+            <div style="padding:22px 24px;border:1px solid rgba(255,255,255,.08);border-radius:14px;background:rgba(255,255,255,.02);"><div style="font-family:'JetBrains Mono',monospace;font-size:19px;color:#7DE7F2;">Secret Scan</div><div style="font-size:16px;color:#8A96AD;margin-top:6px;">密钥扫描,守住边界</div></div>
+          </div>
+
+          <div data-build="2" style="flex:0 0 560px;border:1px solid rgba(255,255,255,.09);border-radius:18px;background:rgba(8,12,20,.8);overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.4);">
+            <div style="display:flex;align-items:center;gap:8px;padding:14px 18px;border-bottom:1px solid rgba(255,255,255,.07);"><span style="width:11px;height:11px;border-radius:50%;background:#FF5F57;"></span><span style="width:11px;height:11px;border-radius:50%;background:#FEBC2E;"></span><span style="width:11px;height:11px;border-radius:50%;background:#28C840;"></span><span style="margin-left:10px;font-family:'JetBrains Mono',monospace;font-size:13px;color:#6B7689;">verify.sh</span></div>
+            <div style="padding:26px 28px;font-family:'JetBrains Mono',monospace;font-size:19px;line-height:2;">
+              <div style="color:#C4CEE0;"><span style="color:#34D399;">$</span> pnpm typecheck&nbsp;&nbsp;<span style="color:#6EE7B7;">✓ 类型正确</span></div>
+              <div style="color:#C4CEE0;"><span style="color:#34D399;">$</span> pnpm test&nbsp;&nbsp;<span style="color:#6EE7B7;">✓ 回归通过</span></div>
+              <div style="color:#C4CEE0;"><span style="color:#34D399;">$</span> pnpm build&nbsp;&nbsp;<span style="color:#6EE7B7;">✓ 可发布</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div data-build="3" style="display:flex;align-items:center;gap:40px;margin-top:6px;">
+          <div style="display:flex;align-items:baseline;gap:10px;"><span data-countup="7" style="font-family:'Manrope',sans-serif;font-weight:700;font-size:40px;color:#7DE7F2;">0</span><span style="font-size:18px;color:#8A96AD;">个 Agent</span></div>
+          <div style="width:1px;height:34px;background:rgba(255,255,255,.1);"></div>
+          <div style="display:flex;align-items:baseline;gap:10px;"><span data-countup="71" data-pre="~" style="font-family:'Manrope',sans-serif;font-weight:700;font-size:40px;color:#6EE7B7;">0</span><span style="font-size:18px;color:#8A96AD;">TS 测试</span></div>
+          <div style="width:1px;height:34px;background:rgba(255,255,255,.1);"></div>
+          <div style="display:flex;align-items:baseline;gap:10px;"><span data-countup="19" data-pre="~" style="font-family:'Manrope',sans-serif;font-weight:700;font-size:40px;color:#FFD66B;">0</span><span style="font-size:18px;color:#8A96AD;">Python 测试</span></div>
+          <div style="margin-left:auto;display:flex;gap:10px;">
+            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#7DE7F2;padding:7px 13px;border:1px solid rgba(34,211,238,.4);border-radius:999px;background:rgba(34,211,238,.07);">implemented</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#6EE7B7;padding:7px 13px;border:1px solid rgba(52,211,153,.4);border-radius:999px;background:rgba(52,211,153,.07);">verified</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ SLIDE · AI METHODOLOGY ============ -->
+      <section data-slide data-kind="method" data-screen-label="AI Methodology" data-notes="AI 是开发助手,不是替代者。我们负责问题定义、系统设计、结果验证和整合,Codex 负责在限定边界内实现。" style="position:absolute;inset:0;display:flex;flex-direction:column;padding:80px 132px 100px;">
+        <div style="display:flex;align-items:center;gap:14px;">
+          <span style="width:18px;height:3px;border-radius:2px;background:#A78BFA;box-shadow:0 0 12px rgba(167,139,250,.7);"></span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:14px;letter-spacing:.34em;color:#7C8AA3;">AI METHODOLOGY</span>
+        </div>
+        <h2 style="margin:16px 0 0;font-weight:700;font-size:58px;line-height:1.1;letter-spacing:-.01em;color:#F1F5FE;">AI 是开发助手,不是替代者</h2>
+
+        <div data-build="1" style="flex:1;display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;align-content:center;margin-top:8px;">
+          <div style="padding:26px 28px;border:1px solid rgba(255,255,255,.08);border-radius:16px;background:rgba(255,255,255,.02);"><div style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#7DE7F2;">01 · 赛题拆解</div><div style="font-size:21px;color:#E2E8F2;margin-top:10px;">P0 / P1 / 评分点</div></div>
+          <div style="padding:26px 28px;border:1px solid rgba(167,139,250,.22);border-radius:16px;background:rgba(167,139,250,.05);"><div style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#C4B0FF;">02 · 架构设计</div><div style="font-size:21px;color:#FFFFFF;margin-top:10px;">protocol-first 路线</div></div>
+          <div style="padding:26px 28px;border:1px solid rgba(255,255,255,.08);border-radius:16px;background:rgba(255,255,255,.02);"><div style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#6EE7B7;">03 · 任务拆分</div><div style="font-size:21px;color:#E2E8F2;margin-top:10px;">SlotMatcher / Director / Fine Scan</div></div>
+          <div style="padding:26px 28px;border:1px solid rgba(255,255,255,.08);border-radius:16px;background:rgba(255,255,255,.02);"><div style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#7DE7F2;">04 · Codex 实现</div><div style="font-size:21px;color:#E2E8F2;margin-top:10px;">限定文件与验收标准</div></div>
+          <div style="padding:26px 28px;border:1px solid rgba(255,255,255,.08);border-radius:16px;background:rgba(255,255,255,.02);"><div style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#6EE7B7;">05 · 人工验证</div><div style="font-size:21px;color:#E2E8F2;margin-top:10px;">test / build / secret scan</div></div>
+          <div style="padding:26px 28px;border:1px solid rgba(255,255,255,.08);border-radius:16px;background:rgba(255,255,255,.02);"><div style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#FFD66B;">06 · 迭代优化</div><div style="font-size:21px;color:#E2E8F2;margin-top:10px;">partial 过松 / 转场粗糙</div></div>
+        </div>
+
+        <div data-build="2" style="text-align:center;font-size:27px;font-weight:500;color:#AEB9CF;margin-top:6px;">Codex 辅助实现;我们负责<span style="color:#22D3EE;font-weight:700;">问题定义、系统设计、结果验证和整合</span></div>
+      </section>
+
+      <!-- ============ SLIDE · SCORING COVERAGE ============ -->
+      <section data-slide data-kind="scoring" data-screen-label="Scoring Coverage" data-notes="评分点覆盖:从基础闭环(样例解析→结构→迁移→缺口)到加分项(可视化、人机协同、工程质量)。补全是 plan-only,其余 implemented / verified。" style="position:absolute;inset:0;display:flex;flex-direction:column;padding:78px 132px 92px;">
+        <div style="display:flex;align-items:center;gap:14px;">
+          <span style="width:18px;height:3px;border-radius:2px;background:#22D3EE;box-shadow:0 0 12px rgba(34,211,238,.7);"></span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:14px;letter-spacing:.34em;color:#7C8AA3;">SCORING COVERAGE</span>
+        </div>
+        <h2 style="margin:14px 0 0;font-weight:700;font-size:50px;line-height:1.1;letter-spacing:-.01em;color:#F1F5FE;">评分点覆盖:从基础闭环到加分项</h2>
+
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:center;margin-top:6px;">
+          <div style="display:flex;align-items:center;gap:24px;padding:0 22px 12px;font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:.1em;color:#5A6478;"><div style="flex:0 0 260px;">比赛评分项</div><div style="flex:1;">项目实现</div><div style="flex:0 0 150px;text-align:right;">状态</div></div>
+          <div data-build="1" style="display:flex;align-items:center;gap:24px;padding:15px 22px;border-top:1px solid rgba(255,255,255,.07);"><div style="flex:0 0 260px;font-size:21px;color:#E2E8F2;">样例输入与解析</div><div style="flex:1;font-family:'JetBrains Mono',monospace;font-size:17px;color:#9AA6BD;">Rough / Fine Scan</div><div style="flex:0 0 150px;text-align:right;"><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#7DE7F2;padding:5px 12px;border:1px solid rgba(34,211,238,.4);border-radius:999px;">implemented</span></div></div>
+          <div data-build="1" style="display:flex;align-items:center;gap:24px;padding:15px 22px;border-top:1px solid rgba(255,255,255,.07);"><div style="flex:0 0 260px;font-size:21px;color:#E2E8F2;">结构拆解</div><div style="flex:1;font-family:'JetBrains Mono',monospace;font-size:17px;color:#9AA6BD;">ViralStructureGraph</div><div style="flex:0 0 150px;text-align:right;"><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#7DE7F2;padding:5px 12px;border:1px solid rgba(34,211,238,.4);border-radius:999px;">implemented</span></div></div>
+          <div data-build="1" style="display:flex;align-items:center;gap:24px;padding:15px 22px;border-top:1px solid rgba(255,255,255,.07);"><div style="flex:0 0 260px;font-size:21px;color:#E2E8F2;">结构迁移生成</div><div style="flex:1;font-family:'JetBrains Mono',monospace;font-size:17px;color:#9AA6BD;">Director Agent</div><div style="flex:0 0 150px;text-align:right;"><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#7DE7F2;padding:5px 12px;border:1px solid rgba(34,211,238,.4);border-radius:999px;">implemented</span></div></div>
+          <div data-build="2" style="display:flex;align-items:center;gap:24px;padding:15px 22px;border-top:1px solid rgba(255,255,255,.07);"><div style="flex:0 0 260px;font-size:21px;color:#E2E8F2;">素材缺口识别</div><div style="flex:1;font-family:'JetBrains Mono',monospace;font-size:17px;color:#9AA6BD;">SlotMatcher / Gap</div><div style="flex:0 0 150px;text-align:right;"><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#7DE7F2;padding:5px 12px;border:1px solid rgba(34,211,238,.4);border-radius:999px;">implemented</span></div></div>
+          <div data-build="2" style="display:flex;align-items:center;gap:24px;padding:15px 22px;border-top:1px solid rgba(255,255,255,.07);"><div style="flex:0 0 260px;font-size:21px;color:#E2E8F2;">素材缺口补全</div><div style="flex:1;font-family:'JetBrains Mono',monospace;font-size:17px;color:#9AA6BD;">reshoot / HF / AIGC</div><div style="flex:0 0 150px;text-align:right;"><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#FFD66B;padding:5px 12px;border:1px solid rgba(251,191,36,.4);border-radius:999px;">plan-only</span></div></div>
+          <div data-build="2" style="display:flex;align-items:center;gap:24px;padding:15px 22px;border-top:1px solid rgba(255,255,255,.07);"><div style="flex:0 0 260px;font-size:21px;color:#E2E8F2;">迁移过程可视化</div><div style="flex:1;font-family:'JetBrains Mono',monospace;font-size:17px;color:#9AA6BD;">UI timeline / report</div><div style="flex:0 0 150px;text-align:right;"><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#7DE7F2;padding:5px 12px;border:1px solid rgba(34,211,238,.4);border-radius:999px;">implemented</span></div></div>
+          <div data-build="3" style="display:flex;align-items:center;gap:24px;padding:15px 22px;border-top:1px solid rgba(255,255,255,.07);"><div style="flex:0 0 260px;font-size:21px;color:#E2E8F2;">人机协同</div><div style="flex:1;font-family:'JetBrains Mono',monospace;font-size:17px;color:#9AA6BD;">NL edit / patch</div><div style="flex:0 0 150px;text-align:right;"><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#7DE7F2;padding:5px 12px;border:1px solid rgba(34,211,238,.4);border-radius:999px;">implemented</span></div></div>
+          <div data-build="3" style="display:flex;align-items:center;gap:24px;padding:15px 22px;border-top:1px solid rgba(255,255,255,.07);border-bottom:1px solid rgba(255,255,255,.07);"><div style="flex:0 0 260px;font-size:21px;color:#E2E8F2;">工程质量</div><div style="flex:1;font-family:'JetBrains Mono',monospace;font-size:17px;color:#9AA6BD;">typecheck / test / build</div><div style="flex:0 0 150px;text-align:right;"><span style="font-family:'JetBrains Mono',monospace;font-size:12.5px;color:#6EE7B7;padding:5px 12px;border:1px solid rgba(52,211,153,.4);border-radius:999px;">verified</span></div></div>
+        </div>
+      </section>
+
+      <!-- ============ SLIDE · ECOSYSTEM & FUTURE ============ -->
+      <section data-slide data-kind="ecosystem" data-screen-label="Ecosystem & Future" data-notes="迁移引擎不是孤立 demo:结构协议层可作为字节创作生态的中间层——剪映模板、即梦生成、抖音创作、巨量广告共享同一套可迁移结构;豆包/火山方舟已是我们的模型底座。未来三点:一次抽象多处复用、诚实诊断作为 AIGC 信任层、从单条到规模化批量改写。注意 plan-only、不夸大已落地。" style="position:absolute;inset:0;display:flex;flex-direction:column;padding:74px 110px 80px;">
+        <div style="display:flex;align-items:center;gap:14px;">
+          <span style="width:18px;height:3px;border-radius:2px;background:#22D3EE;box-shadow:0 0 12px rgba(34,211,238,.7);"></span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:14px;letter-spacing:.34em;color:#7C8AA3;">ECOSYSTEM · 字节生态适配 &amp; 未来</span>
+        </div>
+        <h2 style="margin:16px 0 0;font-weight:700;font-size:50px;line-height:1.1;letter-spacing:-.01em;color:#F1F5FE;">结构迁移引擎 × <span style="color:#22D3EE;">字节跳动产品线</span></h2>
+
+        <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:30px;margin-top:14px;">
+          <!-- product line cards -->
+          <div style="display:flex;gap:16px;align-items:stretch;">
+            <div data-build="1" style="flex:1;display:flex;flex-direction:column;justify-content:flex-start;gap:15px;padding:26px 24px;border:1px solid rgba(34,211,238,.22);border-top:3px solid #22D3EE;border-radius:16px;background:rgba(34,211,238,.05);">
+              <div><div style="display:flex;align-items:baseline;gap:9px;"><span style="font-family:'Manrope',sans-serif;font-size:26px;font-weight:700;color:#F1F5FE;">剪映</span><span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#7DE7F2;">CapCut</span></div></div>
+              <div><div style="font-size:21px;font-weight:700;color:#F1F5FE;">爆款一键改款</div></div>
+              <div style="display:flex;flex-direction:column;gap:13px;"><div style="font-size:15px;line-height:1.55;color:#7C8AA3;"><span style="color:#6B7689;">现在 ·</span> 人工挑模板、换品类要重剪。</div><div style="font-size:15px;line-height:1.6;color:#C8D2E2;"><span style="color:#7DE7F2;">接入后 ·</span> 自动拆结构、按功能重配,套版成片。</div></div>
+            </div>
+            <div data-build="1" style="flex:1;display:flex;flex-direction:column;justify-content:flex-start;gap:15px;padding:26px 24px;border:1px solid rgba(167,139,250,.22);border-top:3px solid #A78BFA;border-radius:16px;background:rgba(167,139,250,.05);">
+              <div><div style="display:flex;align-items:baseline;gap:9px;"><span style="font-family:'Manrope',sans-serif;font-size:26px;font-weight:700;color:#F1F5FE;">即梦</span><span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#C4B0FF;">Dreamina</span></div></div>
+              <div><div style="font-size:21px;font-weight:700;color:#F1F5FE;">按缺口补生成</div></div>
+              <div style="display:flex;flex-direction:column;gap:13px;"><div style="font-size:15px;line-height:1.55;color:#7C8AA3;"><span style="color:#6B7689;">现在 ·</span> 整条生成、难控易跑偏。</div><div style="font-size:15px;line-height:1.6;color:#C8D2E2;"><span style="color:#C4B0FF;">接入后 ·</span> 只补缺口、其余用真素材,不伪造。</div></div>
+            </div>
+            <div data-build="1" style="flex:1;display:flex;flex-direction:column;justify-content:flex-start;gap:15px;padding:26px 24px;border:1px solid rgba(52,211,153,.22);border-top:3px solid #34D399;border-radius:16px;background:rgba(52,211,153,.05);">
+              <div><div style="display:flex;align-items:baseline;gap:9px;"><span style="font-family:'Manrope',sans-serif;font-size:26px;font-weight:700;color:#F1F5FE;">抖音</span><span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#6EE7B7;">Douyin</span></div></div>
+              <div><div style="font-size:21px;font-weight:700;color:#F1F5FE;">爆款拆解助手</div></div>
+              <div style="display:flex;flex-direction:column;gap:13px;"><div style="font-size:15px;line-height:1.55;color:#7C8AA3;"><span style="color:#6B7689;">现在 ·</span> 只看数据、说不清结构。</div><div style="font-size:15px;line-height:1.6;color:#C8D2E2;"><span style="color:#6EE7B7;">接入后 ·</span> 拆解爆款结构,给出可照做的迁移步骤。</div></div>
+            </div>
+            <div data-build="1" style="flex:1;display:flex;flex-direction:column;justify-content:flex-start;gap:15px;padding:26px 24px;border:1px solid rgba(251,191,36,.22);border-top:3px solid #FBBF24;border-radius:16px;background:rgba(251,191,36,.05);">
+              <div><div style="display:flex;align-items:baseline;gap:9px;"><span style="font-family:'Manrope',sans-serif;font-size:26px;font-weight:700;color:#F1F5FE;">巨量引擎</span><span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#FFD66B;">Ocean</span></div></div>
+              <div><div style="font-size:21px;font-weight:700;color:#F1F5FE;">广告批量套版</div></div>
+              <div style="display:flex;flex-direction:column;gap:13px;"><div style="font-size:15px;line-height:1.55;color:#7C8AA3;"><span style="color:#6B7689;">现在 ·</span> 逐条人工改、产能受限。</div><div style="font-size:15px;line-height:1.6;color:#C8D2E2;"><span style="color:#FFD66B;">接入后 ·</span> 一套结构批量套版,自动诊断缺口。</div></div>
+            </div>
+            <div data-build="1" style="flex:1;display:flex;flex-direction:column;justify-content:flex-start;gap:15px;padding:26px 24px;border:1px solid rgba(255,77,109,.22);border-top:3px solid #FF4D6D;border-radius:16px;background:rgba(255,77,109,.05);">
+              <div><div style="display:flex;align-items:baseline;gap:9px;"><span style="font-family:'Manrope',sans-serif;font-size:26px;font-weight:700;color:#F1F5FE;">豆包</span><span style="font-family:'JetBrains Mono',monospace;font-size:13px;color:#FF8098;">Doubao · Ark</span></div></div>
+              <div><div style="font-size:21px;font-weight:700;color:#F1F5FE;">视频结构理解</div></div>
+              <div style="display:flex;flex-direction:column;gap:13px;"><div style="font-size:15px;line-height:1.55;color:#7C8AA3;"><span style="color:#6B7689;">现在 ·</span> 懂画面、不懂创作结构。</div><div style="font-size:15px;line-height:1.6;color:#C8D2E2;"><span style="color:#FF8098;">接入后 ·</span> 结构理解沉淀为平台能力组件,即接即用。</div></div>
+            </div>
+          </div>
+
+          <!-- future inspiration -->
+          <div data-build="2" style="padding:20px 26px;border:1px solid rgba(255,255,255,.08);border-radius:14px;background:rgba(255,255,255,.02);">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:.16em;color:#7DE7F2;margin-bottom:15px;">未来适配启发 · FUTURE</div>
+            <div style="display:flex;gap:30px;">
+              <div style="flex:1;display:flex;flex-direction:column;gap:7px;">
+                <div style="display:flex;align-items:center;gap:10px;"><span style="width:8px;height:8px;border-radius:50%;background:#22D3EE;box-shadow:0 0 10px rgba(34,211,238,.8);"></span><span style="font-size:19px;font-weight:600;color:#F1F5FE;">创作中间层</span></div>
+                <div style="font-size:16px;line-height:1.5;color:#9AA6BD;">一次结构抽象,多处复用 —— 模板 / 生成 / 广告共享同一协议。</div>
+              </div>
+              <div style="flex:1;display:flex;flex-direction:column;gap:7px;">
+                <div style="display:flex;align-items:center;gap:10px;"><span style="width:8px;height:8px;border-radius:50%;background:#A78BFA;box-shadow:0 0 10px rgba(167,139,250,.8);"></span><span style="font-size:19px;font-weight:600;color:#F1F5FE;">信任与合规层</span></div>
+                <div style="font-size:16px;line-height:1.5;color:#9AA6BD;">诚实诊断 + plan-only,让 AIGC 创作 IP 安全、不编造、可审计。</div>
+              </div>
+              <div style="flex:1;display:flex;flex-direction:column;gap:7px;">
+                <div style="display:flex;align-items:center;gap:10px;"><span style="width:8px;height:8px;border-radius:50%;background:#34D399;box-shadow:0 0 10px rgba(52,211,153,.8);"></span><span style="font-size:19px;font-weight:600;color:#F1F5FE;">规模化迁移</span></div>
+                <div style="font-size:16px;line-height:1.5;color:#9AA6BD;">从单条到批量,人审把关 + 确定性兜底,稳态产线。</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ SLIDE · SUMMARY ============ -->
+      <section data-slide data-kind="summary" data-screen-label="Summary" data-notes="收尾:从模仿爆款,到编译爆款结构。三大差异化 —— 结构解耦、素材诚实诊断、工程化 AI 协作。欢迎提问。" style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:96px 132px;text-align:center;">
+        <div style="display:flex;align-items:center;gap:14px;position:absolute;top:80px;left:132px;">
+          <span style="width:18px;height:3px;border-radius:2px;background:#22D3EE;box-shadow:0 0 12px rgba(34,211,238,.7);"></span>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:14px;letter-spacing:.34em;color:#7C8AA3;">SUMMARY</span>
+        </div>
+        <h2 style="margin:0;font-weight:700;font-size:62px;line-height:1.14;letter-spacing:-.015em;color:#F4F7FF;">从「模仿爆款」<span style="color:#5A6478;">→</span> 到<span style="color:#22D3EE;">「编译爆款结构」</span></h2>
+
+        <div data-build="1" style="display:flex;gap:24px;margin-top:50px;">
+          <div style="flex:1;max-width:380px;padding:30px 30px;border:1px solid rgba(34,211,238,.22);border-radius:18px;background:rgba(34,211,238,.05);text-align:left;"><div style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#7DE7F2;">01</div><div style="font-size:25px;font-weight:600;color:#F1F5FE;margin-top:12px;">结构解耦</div><div style="font-size:18px;line-height:1.55;color:#9AA6BD;margin-top:10px;">迁移 role / subtype / motionToken,而非复制画面</div></div>
+          <div style="flex:1;max-width:380px;padding:30px 30px;border:1px solid rgba(251,191,36,.22);border-radius:18px;background:rgba(251,191,36,.05);text-align:left;"><div style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#FFD66B;">02</div><div style="font-size:25px;font-weight:600;color:#F1F5FE;margin-top:12px;">素材诚实诊断</div><div style="font-size:18px;line-height:1.55;color:#9AA6BD;margin-top:10px;">SlotMatcher 判功能,MaterialGap 暴缺口</div></div>
+          <div style="flex:1;max-width:380px;padding:30px 30px;border:1px solid rgba(52,211,153,.22);border-radius:18px;background:rgba(52,211,153,.05);text-align:left;"><div style="font-family:'JetBrains Mono',monospace;font-size:14px;color:#6EE7B7;">03</div><div style="font-size:25px;font-weight:600;color:#F1F5FE;margin-top:12px;">工程化 AI 协作</div><div style="font-size:18px;line-height:1.55;color:#9AA6BD;margin-top:10px;">可解释、可验证、可降级的创作链路</div></div>
+        </div>
+
+        <div data-build="2" style="margin-top:42px;font-size:25px;font-weight:500;color:#AEB9CF;max-width:1100px;">把「看起来有效的爆款视频」,变成<span style="color:#22D3EE;font-weight:700;">可复用、可编辑、可迁移</span>的创作结构</div>
+        <div data-build="3" style="margin-top:34px;font-size:34px;font-weight:700;color:#22D3EE;letter-spacing:.02em;">欢迎提问</div>
+      </section>
+
+    </div>
+
+    <!-- ============ CHROME ============ -->
+    <div data-vt="vt-wordmark" style="position:absolute;left:64px;bottom:50px;display:flex;align-items:center;gap:12px;z-index:5;">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 2.6 20.4 7.3v9.4L12 21.4 3.6 16.7V7.3z" stroke="#4E586C" stroke-width="1.3" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.4" fill="#22D3EE"/></svg>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:.2em;color:#5A6478;">VIRAL STRUCT AI</span>
+    </div>
+    <div data-progress data-vt="vt-progress" style="position:absolute;right:64px;bottom:50px;display:flex;align-items:center;gap:16px;z-index:5;">
+      <div data-seg style="display:flex;gap:6px;"></div>
+      <span data-count style="font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:.12em;color:#5A6478;">01 / 03</span>
+    </div>
+    <div data-hint data-vt="vt-hint" style="position:absolute;left:50%;bottom:48px;transform:translateX(-50%);display:flex;align-items:center;gap:10px;padding:9px 18px;border:1px solid rgba(255,255,255,.1);border-radius:999px;background:rgba(10,16,28,.62);backdrop-filter:blur(8px);font-family:'JetBrains Mono',monospace;font-size:12.5px;letter-spacing:.05em;color:#8A96AD;z-index:6;transition:opacity .6s;">→ / 空格 推进 · ← 回退 · F 全屏</div>
+    <div data-notes-panel style="position:absolute;left:50%;bottom:104px;transform:translateX(-50%);max-width:1040px;display:none;padding:16px 24px;border:1px solid rgba(251,191,36,.28);border-radius:14px;background:rgba(20,16,8,.86);backdrop-filter:blur(8px);font-size:18px;line-height:1.55;color:#E7D9B6;z-index:7;"></div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;motion&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;full&quot;,&quot;off&quot;],&quot;default&quot;:&quot;full&quot;,&quot;tsType&quot;:&quot;'full'|'off'&quot;},&quot;hints&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  componentDidMount(){
+    const scope=(this.base&&this.base.querySelectorAll)?this.base:document;
+    this.scope=scope;
+    this.deck=scope.querySelector('[data-deck]');
+    this.slides=[...scope.querySelectorAll('[data-slide]')];
+    if(!this.slides.length) return;
+    this.idx=0; this.step=0; this._busy=false;
+    this.reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+    this.motion=(this.props.motion??'full')!=='off' && !this.reduced;
+    this.applyVT();
+    this.buildProgress();
+    this.applyHints();
+    this.fit(); this._rs=()=>this.fit(); addEventListener('resize',this._rs);
+    this._kd=(e)=>this.onKey(e); addEventListener('keydown',this._kd,true);
+    this.deck.addEventListener('click',()=>{ if(document.fullscreenElement) this.next(); });
+    let start=0; try{const v=localStorage.getItem('vsai.idx'); if(v!=null) start=Math.min(this.slides.length-1,Math.max(0,+v));}catch(e){}
+    this.slides.forEach(s=>{ s.style.display='none'; });
+    this.idx=start;
+    const s0=this.slides[this.idx]; s0.style.display='flex'; this.step=0; this.prep(s0,0);
+    this.updateChrome();
+    this.whenGsap(()=>this.intro(s0));
+    this._hintT=setTimeout(()=>this.hideHint(),6500);
+  }
+  componentWillUnmount(){ removeEventListener('resize',this._rs); removeEventListener('keydown',this._kd,true); clearTimeout(this._hintT); }
+  componentDidUpdate(){ this.motion=(this.props.motion??'full')!=='off' && !this.reduced; this.applyHints(); }
+
+  whenGsap(cb){ if(window.gsap) return cb(); let n=0; const t=setInterval(()=>{ if(window.gsap||n++>80){clearInterval(t);cb();} },50); }
+  fit(){ const s=Math.min(innerWidth/1920, innerHeight/1080); this.deck.style.transform='translate(-50%,-50%) scale('+s+')'; }
+  applyVT(){ this.scope.querySelectorAll('[data-vt]').forEach(el=>{ el.style.viewTransitionName=el.getAttribute('data-vt'); }); }
+  applyHints(){ const show=(this.props.hints??true)!==false; const h=this.scope.querySelector('[data-hint]'); const p=this.scope.querySelector('[data-progress]'); if(h&&!this._hintGone) h.style.display=show?'':'none'; if(p) p.style.display=show?'':'none'; }
+  buildProgress(){ const seg=this.scope.querySelector('[data-seg]'); if(!seg) return; seg.innerHTML=''; this.slides.forEach(()=>{ const d=document.createElement('span'); d.style.cssText='display:block;width:16px;height:3px;border-radius:2px;background:rgba(255,255,255,.16);transition:background .4s,box-shadow .4s;'; seg.appendChild(d); }); this._segs=[...seg.children]; }
+  updateChrome(){
+    const c=this.scope.querySelector('[data-count]'); if(c) c.textContent=String(this.idx+1).padStart(2,'0')+' / '+String(this.slides.length).padStart(2,'0');
+    if(this._segs) this._segs.forEach((d,i)=>{ d.style.background=i<=this.idx?'#22D3EE':'rgba(255,255,255,.16)'; d.style.boxShadow=i===this.idx?'0 0 10px rgba(34,211,238,.85)':'none'; });
+    try{localStorage.setItem('vsai.idx',this.idx);}catch(e){}
+    const note=this.scope.querySelector('[data-notes-panel]'); if(note&&note.style.display!=='none') note.textContent=this.slides[this.idx].getAttribute('data-notes')||'';
+  }
+  maxStep(s){ let m=0; s.querySelectorAll('[data-build]').forEach(e=>{ m=Math.max(m,+e.getAttribute('data-build')||0); }); return m; }
+  prep(s,step){ s.querySelectorAll('[data-build]').forEach(e=>{ const b=+e.getAttribute('data-build')||0; if(b<=step){ e.style.opacity=''; e.style.transform=''; } else { e.style.opacity='0'; e.style.transform='translateY(16px)'; } }); }
+
+  intro(s){ this.updateChrome(); if(s.getAttribute('data-kind')==='title'){ this.titleIntro(s); } else { this.enterBase(s); if(s.getAttribute('data-kind')==='pipeline') this.whenGsap(()=>this.pipeIntro(s)); } }
+  enterBase(s){ if(!this.motion||!window.gsap) return; const els=[...s.children].filter(e=>!e.hasAttribute('data-build')); gsap.fromTo(els,{opacity:0,y:18},{opacity:1,y:0,duration:.7,ease:'power3.out',stagger:.07,clearProps:'transform,opacity'}); }
+  titleIntro(s){
+    if(!this.motion||!window.gsap) return;
+    const q=sel=>s.querySelector(sel), qa=sel=>[...s.querySelectorAll(sel)];
+    const title=q('[data-t-title]'),sub=q('[data-t-sub]'),tag=q('[data-t-tag]'),auth=q('[data-t-auth]');
+    const line=q('[data-pipe-line]'),nodes=qa('[data-pipe-node]'),labels=qa('[data-pipe-label]');
+    gsap.set([title,sub,tag,auth],{opacity:0,y:24}); gsap.set(nodes,{scale:0,transformOrigin:'center center'}); gsap.set(labels,{opacity:0,y:6});
+    let len=0; if(line){ try{len=line.getTotalLength();}catch(e){len=900;} gsap.set(line,{strokeDasharray:len,strokeDashoffset:len}); }
+    const tl=gsap.timeline();
+    tl.to(title,{opacity:1,y:0,duration:.95,ease:'power3.out'})
+      .to(sub,{opacity:1,y:0,duration:.7,ease:'power3.out'},'-=.55');
+    if(line) tl.to(line,{strokeDashoffset:0,duration:1.15,ease:'power2.inOut'},'-=.35');
+    tl.to(nodes,{scale:1,duration:.5,ease:'back.out(2.4)',stagger:.12},'-=.78')
+      .to(labels,{opacity:1,y:0,duration:.5,ease:'power2.out',stagger:.12},'-=.5')
+      .to(tag,{opacity:1,y:0,duration:.65,ease:'power3.out'},'-=.15')
+      .to(auth,{opacity:1,y:0,duration:.65,ease:'power3.out'},'-=.4');
+  }
+
+  next(){
+    if(this._busy) return; const s=this.slides[this.idx];
+    if(s.getAttribute('data-kind')==='pipeline'){ if(this.pipeStep(1)) return; this.go(this.idx+1,1); return; }
+    if(this.step<this.maxStep(s)) this.advanceReveal();
+    else this.go(this.idx+1,1);
+  }
+  prev(){
+    if(this._busy) return; const s=this.slides[this.idx];
+    if(s.getAttribute('data-kind')==='pipeline'){ if(this.pipeStep(-1)) return; this.go(this.idx-1,-1); return; }
+    if(this.step>0) this.retreatReveal();
+    else this.go(this.idx-1,-1);
+  }
+  pipeColors(){ return ['#A78BFA','#22D3EE','#34D399','#FBBF24','#FF4D6D','#22D3EE','#34D399']; }
+  pipeStep(dir){
+    const N=7, w=this.step|0, nw=w+dir;
+    if(nw<0||nw>N) return false;
+    this.step=nw; this.pipeRender(this.slides[this.idx],nw); this.updateChrome(); return true;
+  }
+  pipeRender(s,w){
+    const rail=s.querySelector('[data-rail]'), pill=s.querySelector('[data-rail-active]');
+    const nodes=[...s.querySelectorAll('[data-node]')], cards=[...s.querySelectorAll('[data-agent]')];
+    const ov=s.querySelector('[data-overview]'), cols=this.pipeColors();
+    nodes.forEach((n,i)=>{ const dot=n.querySelector('[data-dot]'); const active=(w>0&&i===w-1);
+      n.style.opacity=(w===0||active)?'1':'.3';
+      if(dot){ if(active){ dot.style.background=cols[i]; dot.style.transform='scale(1.3)'; dot.style.boxShadow='0 0 20px '+cols[i]; } else { dot.style.background='#080B12'; dot.style.transform='scale(1)'; dot.style.boxShadow='0 0 10px '+cols[i]+'80'; } }
+    });
+    cards.forEach((c,i)=>{ const on=(w>0&&i===w-1); c.style.opacity=on?'1':'0'; c.style.pointerEvents=on?'auto':'none';
+      if(on&&this.motion&&window.gsap){ gsap.fromTo([...c.children],{opacity:0,y:14},{opacity:1,y:0,duration:.5,ease:'power3.out',stagger:.08,clearProps:'transform'}); } });
+    if(w===0){ if(ov){ov.style.opacity='1';ov.style.pointerEvents='auto';} if(pill) pill.style.opacity='0'; }
+    else if(pill){ if(ov){ov.style.opacity='0';ov.style.pointerEvents='none';}
+      const i=w-1, colW=rail.clientWidth/7, c=cols[i];
+      pill.style.opacity='1'; pill.style.left=(i*colW)+'px'; pill.style.width=colW+'px';
+      pill.style.borderColor=c; pill.style.background=c+'12'; pill.style.boxShadow='0 0 44px '+c+'30, inset 0 0 26px '+c+'12';
+    }
+  }
+  pipeIntro(s){
+    if(!this.motion||!window.gsap) return;
+    const bands=[...s.querySelectorAll('[data-band]')];
+    if(bands.length) gsap.fromTo(bands,{scaleX:.12,opacity:0,transformOrigin:'center center'},{scaleX:1,opacity:1,duration:.55,ease:'power3.out',stagger:.08,clearProps:'transform'});
+  }
+  advanceReveal(){
+    this.step++; const s=this.slides[this.idx];
+    const els=[...s.querySelectorAll('[data-build="'+this.step+'"]')];
+    if(this.motion&&window.gsap) gsap.fromTo(els,{opacity:0,y:16},{opacity:1,y:0,duration:.6,ease:'power3.out',stagger:.07,clearProps:'transform'});
+    else els.forEach(e=>{e.style.opacity='';e.style.transform='';});
+    els.forEach(e=>this.runCharts(e));
+    this.updateChrome();
+  }
+  retreatReveal(){
+    const s=this.slides[this.idx];
+    const els=[...s.querySelectorAll('[data-build="'+this.step+'"]')];
+    if(this.motion&&window.gsap) gsap.to(els,{opacity:0,y:10,duration:.26,ease:'power2.in'});
+    else els.forEach(e=>e.style.opacity='0');
+    this.step--; this.updateChrome();
+  }
+  go(n,dir){
+    n=Math.max(0,Math.min(this.slides.length-1,n)); if(n===this.idx) return;
+    const from=this.slides[this.idx], to=this.slides[n];
+    const swap=()=>{ from.style.display='none'; to.style.display='flex'; this.idx=n;
+      if(to.getAttribute('data-kind')==='pipeline'){ this.step=dir<0?7:0; this.pipeRender(to,this.step); }
+      else { this.step=dir<0?this.maxStep(to):0; this.prep(to,this.step); if(dir<0) to.querySelectorAll('[data-build]').forEach(e=>this.runCharts(e)); }
+      this.updateChrome(); };
+    if(this.motion&&document.startViewTransition){
+      this._busy=true; this.deck.setAttribute('data-dir',dir<0?'back':'fwd');
+      const t=document.startViewTransition(swap);
+      t.finished.finally(()=>{ this._busy=false; if(dir>0) this.afterEnter(to); });
+    } else { swap(); this.afterEnter(to); }
+  }
+  afterEnter(to){ /* base shown via VT cross-fade; charts in base run now */ to.querySelectorAll('[data-build="0"]').forEach(e=>this.runCharts(e)); const baseCharts=[...to.querySelectorAll('[data-chart],[data-countup]')].filter(e=>!e.closest('[data-build]')); baseCharts.forEach(e=>this.runCharts(e)); if(to.getAttribute('data-kind')==='pipeline') this.whenGsap(()=>this.pipeIntro(to)); }
+
+  runCharts(el){
+    const list=[]; if(el.matches&&el.matches('[data-chart],[data-countup]')) list.push(el);
+    el.querySelectorAll&&el.querySelectorAll('[data-chart],[data-countup]').forEach(x=>list.push(x));
+    list.forEach(t=>{ if(t.__charted) return; t.__charted=true; if(t.hasAttribute('data-countup')) this.countup(t); const c=t.getAttribute('data-chart'); if(c==='bars') this.bars(t); if(c==='radar') this.radar(t); });
+  }
+  countup(t){
+    const to=parseFloat(t.getAttribute('data-countup'))||0, dec=+(t.getAttribute('data-dec')||0), suf=t.getAttribute('data-suf')||'', pre=t.getAttribute('data-pre')||'';
+    if(!this.motion||!window.gsap){ t.textContent=pre+to.toFixed(dec)+suf; return; }
+    const o={v:0}; gsap.to(o,{v:to,duration:1.2,ease:'power2.out',onUpdate:()=>{ t.textContent=pre+o.v.toFixed(dec)+suf; }});
+  }
+  bars(t){
+    const bars=[...t.querySelectorAll('[data-bar]')];
+    if(!this.motion||!window.gsap){ bars.forEach(b=>{ const f=b.querySelector('[data-fill]')||b; f.style.width=(parseFloat(b.getAttribute('data-bar'))*100)+'%'; }); return; }
+    bars.forEach((b,i)=>{ const f=b.querySelector('[data-fill]')||b; f.style.width='0%'; const v=parseFloat(b.getAttribute('data-bar')); gsap.to(f,{width:(v*100)+'%',duration:1,ease:'power3.out',delay:i*.08}); });
+  }
+  radar(t){
+    const cov=t.querySelector('[data-radar-cov]'), ceil=t.querySelector('[data-radar-ceiling]'), grid=t.querySelector('[data-radar-grid]');
+    const vals=JSON.parse(t.getAttribute('data-radar')||'[]'), n=vals.length||7, cx=170,cy=170,R=140;
+    const pt=(i,r)=>{ const a=-Math.PI/2+i*2*Math.PI/n; return [cx+r*R*Math.cos(a), cy+r*R*Math.sin(a)]; };
+    if(grid&&!grid.childNodes.length){ let g='';
+      [1,.66,.33].forEach(rr=>{ const p=[]; for(let i=0;i<n;i++){const[x,y]=pt(i,rr);p.push(x.toFixed(1)+','+y.toFixed(1));} g+='<polygon points="'+p.join(' ')+'" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="1"></polygon>'; });
+      for(let i=0;i<n;i++){const[x,y]=pt(i,1); g+='<line x1="170" y1="170" x2="'+x.toFixed(1)+'" y2="'+y.toFixed(1)+'" stroke="rgba(255,255,255,.07)" stroke-width="1"></line>';}
+      grid.innerHTML=g;
+    }
+    if(ceil){ const p=[]; for(let i=0;i<n;i++){const[x,y]=pt(i,.96);p.push(x.toFixed(1)+','+y.toFixed(1));} ceil.setAttribute('points',p.join(' ')); }
+    if(cov){ const p=[]; for(let i=0;i<n;i++){const[x,y]=pt(i,vals[i]||0);p.push(x.toFixed(1)+','+y.toFixed(1));} cov.setAttribute('points',p.join(' '));
+      if(this.motion&&window.gsap){ gsap.fromTo(cov,{scale:0,svgOrigin:'170 170'},{scale:1,duration:1,ease:'back.out(1.4)'}); gsap.fromTo(ceil,{opacity:0},{opacity:1,duration:.6,delay:.1}); } }
+  }
+
+  onKey(e){
+    const k=e.key;
+    if(k==='ArrowRight'||k===' '||k==='PageDown'||k==='ArrowDown'){ e.preventDefault(); this.hideHint(); this.next(); }
+    else if(k==='ArrowLeft'||k==='PageUp'||k==='ArrowUp'){ e.preventDefault(); this.hideHint(); this.prev(); }
+    else if(k==='Home'){ e.preventDefault(); this.go(0,-1); }
+    else if(k==='End'){ e.preventDefault(); this.go(this.slides.length-1,1); }
+    else if(k==='f'||k==='F'){ e.preventDefault(); this.toggleFs(); }
+    else if(k==='n'||k==='N'){ e.preventDefault(); this.toggleNotes(); }
+    else if(k==='a'||k==='A'){ e.preventDefault(); this.revealAll(); }
+  }
+  toggleFs(){ const el=this.scope.querySelector('[data-stage]')||document.documentElement; if(!document.fullscreenElement){ (el.requestFullscreen||el.webkitRequestFullscreen||(()=>{})).call(el); } else { document.exitFullscreen&&document.exitFullscreen(); } }
+  toggleNotes(){ const n=this.scope.querySelector('[data-notes-panel]'); if(!n) return; const on=n.style.display==='none'; n.style.display=on?'block':'none'; if(on) n.textContent=this.slides[this.idx].getAttribute('data-notes')||''; }
+  revealAll(){ const s=this.slides[this.idx]; const m=this.maxStep(s); for(let i=this.step+1;i<=m;i++){ s.querySelectorAll('[data-build="'+i+'"]').forEach(e=>{e.style.opacity='';e.style.transform='';this.runCharts(e);}); } this.step=m; this.updateChrome(); }
+  hideHint(){ const h=this.scope.querySelector('[data-hint]'); if(h){ h.style.opacity='0'; this._hintGone=true; setTimeout(()=>{h.style.display='none';},700); } }
+}
+</script>
+</body>
+</html>
